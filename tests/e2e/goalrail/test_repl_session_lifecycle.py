@@ -4,7 +4,7 @@ Migrated to use the mock LLM server. These tests run real
 ``goalrail`` subprocesses under pexpect and exercise the user-visible
 flow: session creation, runner binding, streaming text rendering,
 resume, and runner recovery. The mock LLM server provides
-deterministic responses so no real Databricks credentials are required.
+deterministic responses so no real provider credentials are required.
 """
 
 from __future__ import annotations
@@ -186,7 +186,7 @@ def _repl_env(
     env["GOALRAIL_SESSIONS_ADAPTER_DEBUG"] = "1"
     # Localhost test servers do not need auth, but setting the
     # remote-token env forces the CLI's --server runner path to use
-    # token-bound runner ids, matching the Databricks Apps shape.
+    # token-bound runner ids, matching the hosted app shape.
     env["GOALRAIL_REMOTE_AUTH_TOKEN"] = _LOCAL_REMOTE_AUTH_TOKEN
     # Ensure mock LLM base URL is set.
     env["OPENAI_BASE_URL"] = f"{mock_llm_server_url}/v1"

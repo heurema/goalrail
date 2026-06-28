@@ -2,11 +2,9 @@
 Tests for ``_build_copilot_spawn_env`` in ``goalrail/runtime/workflow.py``.
 
 The spawn-env builder maps ``spec`` fields to the ``HARNESS_COPILOT_*`` env
-vars the copilot harness wrap reads at first-turn time. Like the cursor builder,
-copilot has NO Databricks-gateway path: only an explicit ``api_key`` auth maps
-to ``HARNESS_COPILOT_GITHUB_TOKEN`` (the GitHub token), a stored ``copilot:``
-block or an ambient ``GH_TOKEN`` is the no-auth fallback, and a ``DatabricksAuth``
-profile is deliberately ignored. Mirrors ``test_cursor_spawn_env.py``.
+vars the copilot harness wrap reads at first-turn time. Only an explicit
+``api_key`` auth maps to ``HARNESS_COPILOT_GITHUB_TOKEN`` (the GitHub token);
+a stored ``copilot:`` block or an ambient ``GH_TOKEN`` is the no-auth fallback.
 
 This is a unit test — no subprocess spawn. End-to-end verification of the
 spawn-env → wrap → executor path lives in the harness e2e tests.
@@ -23,7 +21,6 @@ from goalrail.runtime.workflow import _build_copilot_spawn_env
 from goalrail.spec.types import (
     AgentSpec,
     ApiKeyAuth,
-    DatabricksAuth,
     ExecutorSpec,
     LLMConfig,
 )
@@ -32,7 +29,7 @@ from goalrail.spec.types import (
 @pytest.fixture(autouse=True)
 def _isolate_global_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     """Isolate the global config to an empty tmp dir and clear ambient GitHub
-    tokens so the no-auth / DatabricksAuth cases are deterministic."""
+    tokens so the no-auth cases are deterministic."""
     monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(tmp_path))
     monkeypatch.setenv("GOALRAIL_DISABLE_KEYRING", "1")
     for var in ("COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"):
@@ -44,7 +41,7 @@ def _make_spec(
     *,
     model: str | None = "claude-haiku-4.5",
     name: str = "test-copilot",
-    auth: ApiKeyAuth | DatabricksAuth | None = None,
+    auth: ApiKeyAuth | None = None,
 ) -> AgentSpec:
     """Build a minimal copilot :class:`AgentSpec` for the spawn-env tests."""
     config: dict[str, object] = {"harness": "copilot"}
@@ -70,12 +67,6 @@ def test_model_and_name_threaded() -> None:
 def test_api_key_auth_maps_to_github_token() -> None:
     env = _build_copilot_spawn_env(_make_spec(auth=ApiKeyAuth(api_key="gho_fromspec")))
     assert env["HARNESS_COPILOT_GITHUB_TOKEN"] == "gho_fromspec"
-
-
-def test_databricks_auth_is_ignored() -> None:
-    # A Databricks profile has no copilot equivalent and must not produce a token.
-    env = _build_copilot_spawn_env(_make_spec(auth=DatabricksAuth(profile="oss")))
-    assert "HARNESS_COPILOT_GITHUB_TOKEN" not in env
 
 
 def test_no_auth_falls_back_to_ambient_token(monkeypatch: pytest.MonkeyPatch) -> None:

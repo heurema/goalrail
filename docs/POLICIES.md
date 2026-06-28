@@ -81,7 +81,7 @@ prompt: You are a coding assistant with access to GitHub.
 
 executor:
   harness: claude-sdk
-  model: databricks-claude-sonnet-4-6
+  model: anthropic/claude-sonnet-4-6
 
 tools:
   github:
@@ -366,13 +366,13 @@ Classifies user messages as TRIVIAL or COMPLEX using the server LLM. Denies triv
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `expensive_models` | string[] | (required) | Model IDs to gate, e.g. `["databricks-claude-opus-4-6"]` |
+| `expensive_models` | string[] | (required) | Model IDs to gate, e.g. `["anthropic/claude-opus-4-6"]` |
 | `classification_prompt` | string | (builtin default) | System instructions for the classifier |
 
 ```yaml
 # server_config.yaml
 llm:
-  model: databricks-gpt-5-4-mini
+  model: openai/gpt-5-4-mini
 
 policies:
   deny_trivial_opus:
@@ -380,7 +380,7 @@ policies:
     handler: goalrail.policies.builtins.routing.deny_trivial_to_expensive_model
     factory_params:
       expensive_models:
-        - databricks-claude-opus-4-6
+        - anthropic/claude-opus-4-6
 ```
 
 ---

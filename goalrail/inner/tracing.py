@@ -32,7 +32,7 @@ Span hierarchy for a typical turn::
     └── llm_call  (CHAT_MODEL)
 
 Requirements:
-    ``mlflow`` must be installed (``pip install 'goalrail[tracing]'``).
+    ``mlflow`` must be installed separately.
 """
 
 from __future__ import annotations
@@ -89,7 +89,7 @@ def _mlflow() -> ModuleType:
     except ImportError as exc:
         raise ImportError(
             "MLflow tracing requires the 'mlflow' package. "
-            "Install it with: pip install 'goalrail[tracing]'"
+            "Install it explicitly in the runtime environment: pip install mlflow"
         ) from exc
     return mlflow
 

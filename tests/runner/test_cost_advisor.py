@@ -45,9 +45,9 @@ from goalrail.spec.types import AgentSpec, ExecutorSpec
 _TIERS_YAML: dict[str, Any] = {  # type: ignore[explicit-any]  # YAML-shaped config payload
     "mode": "optimize",
     "tiers": {
-        "cheap": ["databricks-claude-haiku-4-5"],
-        "medium": ["databricks-claude-sonnet-4-6"],
-        "expensive": ["databricks-claude-opus-4-8"],
+        "cheap": ["anthropic/claude-haiku-4-5"],
+        "medium": ["anthropic/claude-sonnet-4-6"],
+        "expensive": ["anthropic/claude-opus-4-8"],
     },
 }
 _ANCHOR = "2026-06-10T00:00:00+00:00"
@@ -72,7 +72,7 @@ def _orchestrator_spec(*, cost_optimize: Any = None) -> AgentSpec:  # type: igno
 
 
 def _verdict(
-    *, tier: str = "expensive", model: str = "databricks-claude-opus-4-8"
+    *, tier: str = "expensive", model: str = "anthropic/claude-opus-4-8"
 ) -> AdvisorVerdict:
     """Build an unapplied verdict (as the judge produces it).
 
@@ -237,7 +237,7 @@ async def test_optimize_applies_model_persists_applied_verdict_and_note() -> Non
     """Optimize on a claude-sdk brain, no user pin: the verdict model is
     applied, the label persists with applied=True, and the note is injected."""
     capture = _PatchCapture()
-    judge = _ScriptedJudge(_verdict(tier="expensive", model="databricks-claude-opus-4-8"))
+    judge = _ScriptedJudge(_verdict(tier="expensive", model="anthropic/claude-opus-4-8"))
     result = await _run(
         spec=_orchestrator_spec(cost_optimize=_TIERS_YAML),
         judge=judge,
@@ -246,12 +246,12 @@ async def test_optimize_applies_model_persists_applied_verdict_and_note() -> Non
     assert result is not None
     # apply_model is the verdict model — this is what the runner stamps on
     # the harness body; None here would mean the brain never switched.
-    assert result.apply_model == "databricks-claude-opus-4-8"
+    assert result.apply_model == "anthropic/claude-opus-4-8"
     assert result.verdict.applied is True
     # The note announces the applied model + tier.
     assert result.note_item is not None
     note_text = result.note_item["content"][0]["text"]
-    assert note_text == "[Cost advisor: this turn runs on databricks-claude-opus-4-8 (expensive)]"
+    assert note_text == "[Cost advisor: this turn runs on anthropic/claude-opus-4-8 (expensive)]"
 
     # Exactly one label PATCH, carrying a v3 verdict that round-trips with
     # applied=True (proves persisted state matches the applied decision).
@@ -259,7 +259,7 @@ async def test_optimize_applies_model_persists_applied_verdict_and_note() -> Non
     labels = capture.requests[0]["labels"]
     parsed = parse_verdict(labels)
     assert parsed is not None
-    assert parsed.model == "databricks-claude-opus-4-8"
+    assert parsed.model == "anthropic/claude-opus-4-8"
     assert parsed.tier == "expensive"
     assert parsed.applied is True
 
@@ -274,7 +274,7 @@ async def test_optimize_user_pin_beats_advisor() -> None:
         spec=_orchestrator_spec(cost_optimize=_TIERS_YAML),
         judge=judge,
         transport=httpx.MockTransport(capture.handler),
-        user_model_override="databricks-claude-sonnet-4-6",  # the user's /model pin
+        user_model_override="anthropic/claude-sonnet-4-6",  # the user's /model pin
     )
     assert result is not None
     # Application is suppressed — the brain runs on the user's pin (the
@@ -346,7 +346,7 @@ async def test_override_on_escalates_advise_to_optimize() -> None:
     assert result is not None
     # on → optimize: an advise spec now applies. apply_model proves the
     # override flipped the behavior, not just the label.
-    assert result.apply_model == "databricks-claude-opus-4-8"
+    assert result.apply_model == "anthropic/claude-opus-4-8"
     parsed = parse_verdict(capture.requests[0]["labels"])
     assert parsed is not None
     assert parsed.applied is True
@@ -424,9 +424,9 @@ def test_parse_advisor_config_happy_path() -> None:
     config = parse_advisor_config({"cost_optimize": _TIERS_YAML})
     assert config == AdvisorConfig(
         tiers={
-            "cheap": ("databricks-claude-haiku-4-5",),
-            "medium": ("databricks-claude-sonnet-4-6",),
-            "expensive": ("databricks-claude-opus-4-8",),
+            "cheap": ("anthropic/claude-haiku-4-5",),
+            "medium": ("anthropic/claude-sonnet-4-6",),
+            "expensive": ("anthropic/claude-opus-4-8",),
         },
         mode="optimize",
     )
@@ -435,7 +435,7 @@ def test_parse_advisor_config_happy_path() -> None:
 def test_parse_advisor_config_defaults_mode_optimize() -> None:
     """Omitting ``mode`` defaults to optimize (apply)."""
     config = parse_advisor_config(
-        {"cost_optimize": {"tiers": {"cheap": ["databricks-claude-haiku-4-5"]}}}
+        {"cost_optimize": {"tiers": {"cheap": ["anthropic/claude-haiku-4-5"]}}}
     )
     assert config is not None
     assert config.mode == "optimize"
@@ -460,13 +460,10 @@ def test_parse_advisor_config_fail_loud(marker: Any, match: str) -> None:  # typ
 
 
 @pytest.mark.asyncio
-async def test_default_judge_build_threads_brain_databricks_profile(
+async def test_default_judge_build_threads_brain_connection(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """When no judge is injected, the production judge is built with the
-    brain's resolved Databricks profile so the judge call rides the same
-    gateway as the brain (a bare ``databricks-*`` judge model would
-    otherwise misroute to the openai adapter and fail open every turn)."""
+    """When no judge is injected, the production judge gets the brain connection."""
     captured: dict[str, Any] = {}  # type: ignore[explicit-any]  # build_llm_judge kwargs
 
     class _NullJudge:
@@ -481,15 +478,11 @@ async def test_default_judge_build_threads_brain_databricks_profile(
         return _NullJudge()
 
     monkeypatch.setattr("goalrail.runner.cost_advisor.build_llm_judge", _capture_build)
-    monkeypatch.setattr(
-        # The profile resolver reads the user-level provider config; stub it
-        # so the test is hermetic on any box.
-        "goalrail.runner.cost_advisor._databricks_profile_for_spec",
-        lambda spec: "brain-profile",
-    )
+    spec = _orchestrator_spec(cost_optimize=_TIERS_YAML)
+    spec.executor.connection = {"base_url": "https://gateway.example.com/v1", "api_key": "tok"}
     async with _client(_raising_transport()) as client:
         result = await maybe_run_advisor(
-            spec=_orchestrator_spec(cost_optimize=_TIERS_YAML),
+            spec=spec,
             conversation_id="conv_x",
             turn_content=_TURN_CONTENT,
             server_client=client,
@@ -497,10 +490,10 @@ async def test_default_judge_build_threads_brain_databricks_profile(
             harness="claude-sdk",
         )
     assert result is None
-    # The brain's profile reached the judge builder — a missing key means
-    # the advisor stopped threading it and the judge falls back to ambient
-    # credential resolution (the misroute regression).
-    assert captured["databricks_profile"] == "brain-profile"
+    assert captured["connection"] == {
+        "base_url": "https://gateway.example.com/v1",
+        "api_key": "tok",
+    }
 
 
 # ── routing_decision_event: the turn-start transcript chip ───────────────────
@@ -515,7 +508,7 @@ def test_routing_decision_event_shape_applied() -> None:
     this type + item type), so the chip never persists or streams."""
     verdict = AdvisorVerdict(
         tier="expensive",
-        model="databricks-claude-opus-4-8",
+        model="anthropic/claude-opus-4-8",
         applied=True,
         rationale="multi-file refactor needs deep reasoning",
         turn_anchor=_ANCHOR,
@@ -526,7 +519,7 @@ def test_routing_decision_event_shape_applied() -> None:
     assert item["type"] == "routing_decision"
     # Every render field is carried through verbatim — a dropped field
     # would render a chip missing its model, tier, or rationale.
-    assert item["model"] == "databricks-claude-opus-4-8"
+    assert item["model"] == "anthropic/claude-opus-4-8"
     assert item["tier"] == "expensive"
     assert item["applied"] is True
     assert item["rationale"] == "multi-file refactor needs deep reasoning"
@@ -539,14 +532,14 @@ def test_routing_decision_event_shadow_carries_applied_false() -> None:
     falsely claim the brain ran on the router's pick."""
     verdict = AdvisorVerdict(
         tier="cheap",
-        model="databricks-claude-haiku-4-5",
+        model="anthropic/claude-haiku-4-5",
         applied=False,
         rationale="trivial question",
         turn_anchor=_ANCHOR,
     )
     item = routing_decision_event(verdict)["item"]
     assert item["applied"] is False
-    assert item["model"] == "databricks-claude-haiku-4-5"
+    assert item["model"] == "anthropic/claude-haiku-4-5"
 
 
 def test_routing_decision_event_item_parses_as_routing_decision_data() -> None:
@@ -556,7 +549,7 @@ def test_routing_decision_event_item_parses_as_routing_decision_data() -> None:
     silently at relay time where it would just drop the frame."""
     verdict = AdvisorVerdict(
         tier="medium",
-        model="databricks-claude-sonnet-4-6",
+        model="anthropic/claude-sonnet-4-6",
         applied=True,
         rationale="moderate knowledge work",
         turn_anchor=_ANCHOR,
@@ -565,7 +558,7 @@ def test_routing_decision_event_item_parses_as_routing_decision_data() -> None:
     data = parse_item_data("routing_decision", item)
     # Round-trips through the entity model: proves the relay's
     # parse_item_data("routing_decision", item) will succeed and persist.
-    assert data.model == "databricks-claude-sonnet-4-6"
+    assert data.model == "anthropic/claude-sonnet-4-6"
     assert data.tier == "medium"
     assert data.applied is True
     assert data.rationale == "moderate knowledge work"

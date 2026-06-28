@@ -30,7 +30,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 const { registerLocalhostCors } = require("./localhost_cors");
-const { normalizeUrl, expandDatabricksWorkspaceUrl, WORKSPACE_UI_PATH } = require("./url");
+const { normalizeUrl } = require("./url");
 
 /** Absolute path to the bundled setup page (the "connect to server" form). */
 const SETUP_PAGE = path.join(__dirname, "..", "setup", "index.html");
@@ -133,7 +133,7 @@ const LNA_PERMISSIONS = new Set(["local-network-access", "loopback-network"]);
  * app at launch. Details in signing/entitlements.mac.plist.
  * @type {string | null}
  */
-const WEBAUTHN_KEYCHAIN_ACCESS_GROUP = "8RMX4WU6F8.dev.goalrail.desktop";
+const WEBAUTHN_KEYCHAIN_ACCESS_GROUP = null;
 
 /**
  * Enable the macOS WebAuthn platform authenticator so passkey
@@ -327,9 +327,8 @@ function registerPermissions() {
  * True when an origin is the CURRENT top-level page of some open, pinned
  * shell window — i.e. a page the user navigated to in-window from a server
  * they explicitly connected to. Auth flows redirect the window's main
- * frame through SSO/IdP origins that can't be known in advance (e.g.
- * ``abc.aws.databricksapps.com`` → an SSO domain that probes a localhost
- * helper), and this is what lets those pages reach localhost while the
+ * frame through SSO/IdP origins that can't be known in advance, and this is
+ * what lets those pages reach localhost while the
  * user is actually on them. The reachable set stays narrow because
  * in-window navigation only starts from the pinned server (links and
  * window.open go to the external browser — see setWindowOpenHandler);
@@ -575,29 +574,6 @@ function rememberRecentServer(settings, url) {
   ].slice(0, MAX_RECENT_SERVERS);
 }
 
-/**
- * CSS that hides the Databricks workspace navigation chrome around a
- * workspace-hosted Goalrail SPA.
- *
- * On a workspace the SPA is mounted as a workspace *page*, so Databricks wraps
- * it in its top-nav shell (the dark bar with the workspace switcher). In a
- * dedicated desktop window that chrome is just noise. We promote Goalrail's
- * own root — ``.goalrail-app``, the wrapper ap-web's embed entry sets
- * (``ap-web/src/embed.tsx``) — to a full-viewport overlay so it paints over
- * the workspace bar. Keying on Goalrail's wrapper (defined in THIS repo)
- * rather than the monolith-owned, unstable workspace nav markup keeps this
- * from silently breaking when Databricks reshuffles its chrome; on a
- * standalone (non-embed) build there is no ``.goalrail-app``, so the rule is
- * a harmless no-op.
- */
-const WORKSPACE_CHROME_HIDE_CSS = `
-  .goalrail-app {
-    position: fixed !important;
-    inset: 0 !important;
-    z-index: 2147483647 !important;
-  }
-`;
-
 // ---------------------------------------------------------------------------
 // Window + navigation
 // ---------------------------------------------------------------------------
@@ -832,24 +808,6 @@ function createWindow(targetUrl, opts = {}) {
       void win.loadFile(SETUP_PAGE, { search: params.toString() });
     },
   );
-
-  // Databricks workspace-hosted Goalrail renders inside the workspace's
-  // top-nav chrome (the SPA is a workspace page). On a dedicated desktop
-  // window, hide it by overlaying Goalrail's own root — see
-  // WORKSPACE_CHROME_HIDE_CSS. Re-applied on every full load (a server switch
-  // is a fresh document); the SPA's own client-side routing keeps the same
-  // document, so the injected stylesheet persists across in-app navigation.
-  win.webContents.on("did-finish-load", () => {
-    let pathname = "";
-    try {
-      pathname = new URL(win.webContents.getURL()).pathname;
-    } catch {
-      return;
-    }
-    if (pathname.startsWith(WORKSPACE_UI_PATH)) {
-      void win.webContents.insertCSS(WORKSPACE_CHROME_HIDE_CSS);
-    }
-  });
 
   win.on("closed", () => {
     windows.delete(win);
@@ -1358,9 +1316,7 @@ function registerIpc() {
       throw new Error("set-server-url is only available to the setup page");
     }
     const normalized = normalizeUrl(url); // throws → rejects → setup page shows error
-    // Bare Databricks workspace URLs serve a 404 at the root; expand them to
-    // the Goalrail UI mount so the user can paste just the workspace host.
-    const target = await expandDatabricksWorkspaceUrl(normalized);
+    const target = normalized;
     const win = BrowserWindow.fromWebContents(event.sender) ?? activeWindow();
     // Multi-server windows connect without touching the saved server —
     // the connection lives and dies with the window.

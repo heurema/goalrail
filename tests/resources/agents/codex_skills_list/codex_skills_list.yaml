@@ -17,4 +17,4 @@ skills:
   - codex_e2e_xyz_greet_a3f9c2
 executor:
   harness: codex
-  model: databricks-gpt-5-4-mini
+  model: openai/gpt-5-4-mini

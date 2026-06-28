@@ -70,7 +70,7 @@ def executor_block_yaml(tmp_path: Path) -> Path:
         "name": "executor_example",
         "prompt": "Assistant with a fixed executor.",
         "executor": {
-            "model": "databricks-claude-sonnet-4",
+            "model": "anthropic/claude-sonnet-4-20250514",
             "harness": "claude-sdk",
             "profile": "test-profile",
         },
@@ -92,7 +92,7 @@ def function_tools_yaml(tmp_path: Path) -> Path:
     config = {
         "name": "tool_user",
         "prompt": "Use tools when helpful.",
-        "executor": {"model": "databricks-claude-sonnet-4"},
+        "executor": {"model": "anthropic/claude-sonnet-4-20250514"},
         "tools": {
             "get_current_time": {
                 "type": "function",
@@ -121,7 +121,7 @@ def policies_yaml(tmp_path: Path) -> Path:
         "name": "policy_example",
         "prompt": "I have policies.",
         "executor": {
-            "model": "databricks-gpt-5-mini",
+            "model": "openai/gpt-5-mini",
             "harness": "openai-agents",
         },
         "policies": {
@@ -153,7 +153,7 @@ def os_env_yaml(tmp_path: Path) -> Path:
         "name": "os_env_example",
         "prompt": "I touch the filesystem.",
         "executor": {
-            "model": "databricks-claude-sonnet-4",
+            "model": "anthropic/claude-sonnet-4-20250514",
             "harness": "claude-sdk",
         },
         "os_env": {
@@ -184,12 +184,12 @@ def mcp_tool_yaml(tmp_path: Path) -> Path:
     config = {
         "name": "mcp_example",
         "prompt": "I use MCP.",
-        "executor": {"harness": "claude-sdk", "model": "databricks-claude-sonnet-4"},
+        "executor": {"harness": "claude-sdk", "model": "anthropic/claude-sonnet-4-20250514"},
         "tools": {
             "glean": {
                 "type": "mcp",
                 "command": ".venv/bin/python",
-                "args": ["-m", "goalrail.inner.databricks_mcps.glean"],
+                "args": ["-m", "tests.resources.examples._shared.sleep_mcp_server"],
             },
         },
     }
@@ -225,24 +225,24 @@ def mcp_http_tool_yaml(tmp_path: Path) -> Path:
 
 
 @pytest.fixture()
-def mcp_databricks_server_yaml(tmp_path: Path) -> Path:
+def mcp_named_server_yaml(tmp_path: Path) -> Path:
     """
-    Goalrail YAML with the ``databricks_server`` MCP shape —
-    goalrail has no resolver for it, so the adapter rejects.
+    Goalrail YAML with a provider-specific named MCP shape. Goalrail has no
+    resolver for named MCP references, so the adapter rejects it.
     """
     config = {
-        "name": "mcp_db_example",
-        "prompt": "I use a named Databricks MCP.",
+        "name": "mcp_named_example",
+        "prompt": "I use a named MCP.",
         "executor": {"harness": "claude-sdk"},
         "tools": {
-            "uc": {
+            "named": {
                 "type": "mcp",
-                "databricks_server": "unity-catalog",
+                "provider_server": "catalog",
                 "profile": "test-profile",
             },
         },
     }
-    path = tmp_path / "mcp_db.yaml"
+    path = tmp_path / "mcp_named.yaml"
     path.write_text(yaml.dump(config))
     return path
 
@@ -259,7 +259,7 @@ def cancellable_tool_yaml(tmp_path: Path) -> Path:
         "name": "cancellable_example",
         "prompt": "I can sleep.",
         "executor": {
-            "model": "databricks-claude-sonnet-4",
+            "model": "anthropic/claude-sonnet-4-20250514",
             "harness": "claude-sdk",
         },
         "tools": {
@@ -340,7 +340,7 @@ def test_agent_def_to_agent_spec_accepts_claude_harness_alias(tmp_path: Path) ->
                 "name": "alias_agent",
                 "prompt": "hi",
                 "executor": {
-                    "model": "databricks-claude-sonnet-4",
+                    "model": "anthropic/claude-sonnet-4-20250514",
                     "harness": "claude",
                 },
             }
@@ -374,7 +374,7 @@ def test_agent_def_to_agent_spec_executor_block(
     spec = agent_def_to_agent_spec(agent_def)
 
     assert spec.llm is not None
-    assert spec.llm.model == "databricks-claude-sonnet-4"
+    assert spec.llm.model == "anthropic/claude-sonnet-4-20250514"
     assert spec.executor.type == GOALRAIL_EXECUTOR_TYPE
     # harness / profile land in executor.config (typed dict),
     # NOT setattr-added attributes. This is the shared wire
@@ -401,7 +401,7 @@ def test_agent_def_to_agent_spec_unknown_model_raises(
             {
                 "name": "kimi",
                 "prompt": "You are Kimi.",
-                "executor": {"model": "databricks/databricks-kimi-k2-6"},
+                "executor": {"model": "vendor/unknown-kimi-k2-6"},
             }
         )
     )
@@ -442,19 +442,16 @@ def test_agent_def_to_agent_spec_function_tool(
     assert tool.language == GOALRAIL_TOOL_LANGUAGE
 
 
-def test_agent_def_to_agent_spec_translates_catalog_path_tool(tmp_path: Path) -> None:
+def test_catalog_path_tool_is_rejected(tmp_path: Path) -> None:
     """
-    ``catalog_path`` Unity Catalog tools translate into
-    ``LocalToolInfo`` with ``runtime=UC_FUNCTION``.
+    ``catalog_path`` tools are no longer part of the Goalrail tool schema.
 
-    Failure meaning: UC tools are silently dropped or rejected
-    instead of being carried through to the runner for execution
-    via the SQL Statement Execution API.
+    Failure meaning: removed catalog-path tool definitions still enter the
+    runtime path instead of failing loudly at load time.
 
     :param tmp_path: Pytest temporary directory for the YAML fixture.
     """
     from goalrail.inner.loader import load_agent_def
-    from goalrail.spec.types import ToolRuntime
 
     yaml_path = tmp_path / "uc.yaml"
     yaml_path.write_text(
@@ -462,7 +459,7 @@ def test_agent_def_to_agent_spec_translates_catalog_path_tool(tmp_path: Path) ->
             {
                 "name": "uc_agent",
                 "prompt": "Use UC functions.",
-                "executor": {"model": "databricks-claude-sonnet-4"},
+                "executor": {"model": "claude-sonnet-4-6"},
                 "tools": {
                     "classify": {
                         "type": "function",
@@ -474,22 +471,8 @@ def test_agent_def_to_agent_spec_translates_catalog_path_tool(tmp_path: Path) ->
         ),
     )
 
-    agent_def = load_agent_def(yaml_path)
-    spec = agent_def_to_agent_spec(agent_def)
-
-    # UC tool translated into a LocalToolInfo with UC_FUNCTION runtime.
-    uc_tools = [t for t in spec.local_tools if t.catalog_path is not None]
-    assert len(uc_tools) == 1, (
-        f"Expected exactly 1 UC tool, got {len(uc_tools)}. "
-        f"If 0, the UC tool was silently dropped during translation."
-    )
-    tool = uc_tools[0]
-    assert tool.name == "classify"
-    assert tool.catalog_path == "main.default.classify"
-    assert tool.warehouse_id == "wh-abc"
-    assert tool.runtime == ToolRuntime.UC_FUNCTION
-    # path is None for UC tools (no server-side callable).
-    assert tool.path is None
+    with pytest.raises(ValueError, match="no longer supported"):
+        load_agent_def(yaml_path)
 
 
 def test_function_tool_parameters_derived_from_callable_signature(
@@ -703,7 +686,7 @@ def test_load_mcp_stdio_yaml_translates_to_mcp_server(mcp_tool_yaml: Path) -> No
 
     What breaks if this fails: the adapter regresses to the
     old fail-loud rejection, making agents with MCPs
-    (e.g. databricks_coding_agent's glean/google) unusable
+    (e.g. coding_agent's glean/google) unusable
     under the Goalrail integration path.
     """
     spec = load(mcp_tool_yaml)
@@ -715,7 +698,7 @@ def test_load_mcp_stdio_yaml_translates_to_mcp_server(mcp_tool_yaml: Path) -> No
     # Command + args carry through verbatim so the subprocess
     # spawn matches what legacy spec ran.
     assert mcp.command == ".venv/bin/python"
-    assert mcp.args == ["-m", "goalrail.inner.databricks_mcps.glean"]
+    assert mcp.args == ["-m", "tests.resources.examples._shared.sleep_mcp_server"]
     # HTTP fields must stay None / empty on the stdio branch.
     assert mcp.url is None
     assert mcp.headers == {}
@@ -778,24 +761,20 @@ def test_mcp_stdio_yaml_reverse_trip_recovers_mcp_tool(mcp_tool_yaml: Path) -> N
     # Transport fields round-trip: command + args must match the
     # originally-declared subprocess, not some lossy approximation.
     assert tool.command == ".venv/bin/python"
-    assert tool.args == ["-m", "goalrail.inner.databricks_mcps.glean"]
+    assert tool.args == ["-m", "tests.resources.examples._shared.sleep_mcp_server"]
 
 
-def test_load_mcp_databricks_server_yaml_raises(mcp_databricks_server_yaml: Path) -> None:
+def test_load_mcp_named_server_yaml_raises(mcp_named_server_yaml: Path) -> None:
     """
-    Goalrail MCP tools using the ``databricks_server=<name>``
-    shape fail loud — Goalrail' MCPServerConfig doesn't
-    resolve named Databricks servers. The translator needs a
-    concrete ``url`` or ``command`` to emit a functional config.
+    Goalrail MCP tools using provider-specific named-server shapes fail loud.
+    The translator needs a concrete ``url`` or ``command`` to emit a functional
+    config.
 
-    What breaks if this fails: specs with
-    ``databricks_server: unity-catalog`` would silently translate
-    to an MCPServerConfig with neither url nor command — the
-    validator would then reject the spec at load, but with a
-    less-helpful message than the pinpoint fail here.
+    What breaks if this fails: specs with a provider-specific named MCP would
+    silently translate to an MCPServerConfig with neither url nor command.
     """
-    with pytest.raises(GoalrailError, match="databricks_server"):
-        load(mcp_databricks_server_yaml)
+    with pytest.raises(GoalrailError, match="neither 'url' nor 'command'"):
+        load(mcp_named_server_yaml)
 
 
 def test_load_cancellable_function_yaml_rejected_post_step_c(
@@ -938,7 +917,7 @@ def test_cancellable_function_parameters_forward_trip_preserves_input_schema() -
         name="round_tripper",
         prompt="p",
         executor=GoalrailExecutorSpec(
-            model="databricks-gpt-5-mini",
+            model="openai/gpt-5-mini",
             harness="openai-agents",
         ),
         tools={
@@ -992,7 +971,7 @@ def test_function_tool_parameters_round_trip_preserves_input_schema(
         name="round_tripper",
         prompt="p",
         executor=GoalrailExecutorSpec(
-            model="databricks-gpt-5-mini",
+            model="openai/gpt-5-mini",
             harness="openai-agents",
         ),
         tools={
@@ -1088,7 +1067,7 @@ def test_os_env_round_trips_through_translator() -> None:
         prompt="p",
         tools={},
         executor=GoalrailExecutorSpec(
-            model="databricks-claude-sonnet-4",
+            model="anthropic/claude-sonnet-4-20250514",
             harness="claude-sdk",
             profile="test-profile",
         ),
@@ -1135,7 +1114,7 @@ def test_inline_agent_tool_inherit_resolves_to_parent_os_env() -> None:
         name="supervisor",
         prompt="",
         executor=GoalrailExecutorSpec(
-            model="databricks-gpt-5-mini",
+            model="openai/gpt-5-mini",
             harness="openai-agents",
             profile="test-profile",
         ),
@@ -1145,7 +1124,7 @@ def test_inline_agent_tool_inherit_resolves_to_parent_os_env() -> None:
                 name="worker",
                 prompt="",
                 executor=GoalrailExecutorSpec(
-                    model="databricks-claude-opus-4",
+                    model="anthropic/claude-opus-4",
                     harness="claude-sdk",
                 ),
                 # The sentinel the loader produces for
@@ -1192,7 +1171,7 @@ def test_inline_agent_tool_concrete_os_env_not_overridden_by_parent() -> None:
         name="supervisor",
         prompt="",
         executor=GoalrailExecutorSpec(
-            model="databricks-gpt-5-mini",
+            model="openai/gpt-5-mini",
             harness="openai-agents",
         ),
         os_env=parent_os_env,
@@ -1238,7 +1217,7 @@ def test_inline_agent_tool_inherit_with_no_parent_os_env_yields_none() -> None:
         name="supervisor",
         prompt="",
         executor=GoalrailExecutorSpec(
-            model="databricks-gpt-5-mini",
+            model="openai/gpt-5-mini",
             harness="openai-agents",
         ),
         # No os_env on the parent.
@@ -1376,7 +1355,7 @@ def test_terminals_thread_through_translator() -> None:
         prompt="p",
         tools={},
         executor=GoalrailExecutorSpec(
-            model="databricks-gpt-5-mini",
+            model="openai/gpt-5-mini",
             harness="openai-agents",
         ),
         terminals={
@@ -1419,7 +1398,7 @@ def test_terminals_none_when_parent_has_no_terminals() -> None:
         prompt="p",
         tools={},
         executor=GoalrailExecutorSpec(
-            model="databricks-gpt-5-mini",
+            model="openai/gpt-5-mini",
             harness="openai-agents",
         ),
         # No terminals.
@@ -1473,7 +1452,7 @@ def test_inline_agent_tool_inherits_parent_terminals() -> None:
         name="supervisor",
         prompt="p",
         executor=GoalrailExecutorSpec(
-            model="databricks-gpt-5-mini",
+            model="openai/gpt-5-mini",
             harness="openai-agents",
         ),
         terminals={"bash": TerminalEnvSpec(command="bash")},
@@ -1511,11 +1490,11 @@ def test_inline_agent_tool_inherits_parent_terminals() -> None:
 @pytest.mark.parametrize(
     "model,expected_harness",
     [
-        ("databricks-claude-sonnet-4", "claude-sdk"),
-        ("databricks-claude-opus-4-7", "claude-sdk"),
         ("anthropic/claude-sonnet-4-20250514", "claude-sdk"),
-        ("databricks-gpt-5-4", "openai-agents"),
-        ("databricks-gpt-5-mini", "openai-agents"),
+        ("anthropic/claude-opus-4-7", "claude-sdk"),
+        ("anthropic/claude-sonnet-4-20250514", "claude-sdk"),
+        ("openai/gpt-5-4", "openai-agents"),
+        ("openai/gpt-5-mini", "openai-agents"),
         ("openai/gpt-4o", "openai-agents"),
         ("gpt-4-turbo", "openai-agents"),
     ],
@@ -1573,7 +1552,7 @@ def test_harness_auto_pick_doesnt_override_explicit_declaration() -> None:
         prompt="",
         tools={},
         executor=GoalrailExecutorSpec(
-            model="databricks-claude-sonnet-4",
+            model="anthropic/claude-sonnet-4-20250514",
             harness="openai-agents",
         ),
     )
@@ -1636,7 +1615,7 @@ def test_inline_agent_tool_without_executor_inherits_parent_harness() -> None:
         name="supervisor",
         prompt="",
         executor=GoalrailExecutorSpec(
-            model="databricks-gpt-5-mini",
+            model="openai/gpt-5-mini",
             harness="openai-agents",
             profile="test-profile",
         ),
@@ -1671,7 +1650,7 @@ def test_inline_agent_tool_explicit_harness_wins_over_parent() -> None:
         name="supervisor",
         prompt="",
         executor=GoalrailExecutorSpec(
-            model="databricks-gpt-5-mini",
+            model="openai/gpt-5-mini",
             harness="openai-agents",
         ),
         tools={
@@ -1679,7 +1658,7 @@ def test_inline_agent_tool_explicit_harness_wins_over_parent() -> None:
                 name="worker",
                 prompt="",
                 executor=GoalrailExecutorSpec(
-                    model="databricks-claude-opus-4-7",
+                    model="anthropic/claude-opus-4-7",
                     harness="claude-sdk",
                 ),
             ),
@@ -1705,13 +1684,13 @@ def test_inline_agent_tool_falls_through_to_model_auto_pick() -> None:
     parent = AgentDef(
         name="supervisor",
         prompt="",
-        executor=GoalrailExecutorSpec(model="databricks-gpt-5-mini"),
+        executor=GoalrailExecutorSpec(model="openai/gpt-5-mini"),
         tools={
             "worker": AgentTool(
                 name="worker",
                 prompt="",
                 executor=GoalrailExecutorSpec(
-                    model="databricks-claude-opus-4-7",
+                    model="anthropic/claude-opus-4-7",
                 ),
             ),
         },
@@ -1793,7 +1772,7 @@ def _build_agent_def_with_raw_yaml(
         name="polled",
         prompt="p",
         executor=GoalrailExecutorSpec(
-            model="databricks-gpt-5-mini",
+            model="openai/gpt-5-mini",
             harness="openai-agents",
         ),
     )
@@ -1979,17 +1958,15 @@ def test_function_policy_callable_alias_with_factory_params() -> None:
     }
 
 
-def test_databricks_slash_model_without_profile_leaves_connection_none() -> None:
+def test_slash_model_without_profile_leaves_connection_none() -> None:
     """
     When no profile is declared, the translator leaves
-    :attr:`LLMConfig.connection` as ``None`` and the
-    :class:`DatabricksAdapter` performs its own auto-resolution from
-    ``~/.databrickscfg`` at call time.
+    :attr:`LLMConfig.connection` as ``None``. Runtime provider resolution is a
+    harness/provider responsibility, not a spec-translation side effect.
 
-    **What breaks if this fails**: users who rely on ambient
-    ``DATABRICKS_HOST`` / ``DATABRICKS_TOKEN`` or the default profile
-    (no ``--profile`` flag) suddenly get a spec-load error because the
-    translator tries to resolve a profile that was never set.
+    **What breaks if this fails**: a plain model declaration with no profile
+    suddenly gets a spec-load error because the translator tries to resolve a
+    profile that was never set.
     """
     from goalrail.inner.datamodel import AgentDef
     from goalrail.inner.datamodel import ExecutorSpec as GoalrailExecutorSpec
@@ -1998,14 +1975,14 @@ def test_databricks_slash_model_without_profile_leaves_connection_none() -> None
         name="slash_model_no_profile",
         prompt="You are helpful.",
         executor=GoalrailExecutorSpec(
-            model="databricks/databricks-gpt-5-mini",
+            model="openai/gpt-5-mini",
             harness="openai-agents",
             profile=None,
         ),
     )
     spec = agent_def_to_agent_spec(agent_def, raw_yaml=None)
     assert spec.llm is not None
-    # No profile → no connection injection; adapter auto-resolves at call time.
+    # No profile -> no connection injection.
     assert spec.llm.connection is None
 
 
@@ -2106,7 +2083,7 @@ def test_executor_extra_field_propagates_to_llm_config() -> None:
     """
     agent_def, raw_yaml = _build_agent_def_with_raw_yaml()
     raw_yaml["executor"] = {
-        "model": "databricks-gpt-5-mini",
+        "model": "openai/gpt-5-mini",
         "harness": "openai-agents",
         "extra": {"max_turns": 3, "temperature": 0.1},
     }
@@ -2141,13 +2118,12 @@ def test_use_responses_false_propagates_to_executor_config() -> None:
 
     What breaks if this fails: ``_build_openai_agents_sdk_spawn_env`` finds
     ``spec.executor.config.get("use_responses")`` is ``None``, so it skips
-    setting ``HARNESS_OPENAI_AGENTS_USE_RESPONSES``. The harness subprocess
-    then defaults to ``use_responses=True`` (Responses API), which Databricks
-    does not support for models like Kimi K2 — the REPL shows no response.
+    setting ``HARNESS_OPENAI_AGENTS_USE_RESPONSES`` and the subprocess uses
+    the wrong API surface.
     """
     agent_def, raw_yaml = _build_agent_def_with_raw_yaml()
     raw_yaml["executor"] = {
-        "model": "databricks-kimi-k2-6",
+        "model": "openai/gpt-5-mini",
         "harness": "openai-agents",
         "use_responses": False,
     }
@@ -2164,7 +2140,7 @@ def test_use_responses_true_propagates_to_executor_config() -> None:
     """
     agent_def, raw_yaml = _build_agent_def_with_raw_yaml()
     raw_yaml["executor"] = {
-        "model": "databricks-gpt-5-4-mini",
+        "model": "openai/gpt-5-4-mini",
         "harness": "openai-agents",
         "use_responses": True,
     }
@@ -2183,7 +2159,7 @@ def test_use_responses_absent_omits_key_from_executor_config() -> None:
     """
     agent_def, raw_yaml = _build_agent_def_with_raw_yaml()
     raw_yaml["executor"] = {
-        "model": "databricks-gpt-5-4-mini",
+        "model": "openai/gpt-5-4-mini",
         "harness": "openai-agents",
     }
     spec = agent_def_to_agent_spec(agent_def, raw_yaml=raw_yaml)
@@ -2238,7 +2214,7 @@ def test_self_clone_string_shorthand_loader_produces_selfagent_tool(
                 "name": "code_assistant",
                 "prompt": "You are a coding assistant.",
                 "executor": {
-                    "model": "databricks-claude-sonnet-4-6",
+                    "model": "anthropic/claude-sonnet-4-6",
                     "harness": "claude-sdk",
                 },
                 "tools": {
@@ -2276,7 +2252,7 @@ def test_self_clone_dict_form_loader_produces_selfagent_tool(
                 "name": "code_assistant",
                 "prompt": "You are a coding assistant.",
                 "executor": {
-                    "model": "databricks-claude-sonnet-4-6",
+                    "model": "anthropic/claude-sonnet-4-6",
                     "harness": "claude-sdk",
                 },
                 "tools": {
@@ -2319,7 +2295,7 @@ def test_self_clone_dict_form_rejects_conflicting_overrides(
                 "name": "code_assistant",
                 "prompt": "You are a coding assistant.",
                 "executor": {
-                    "model": "databricks-claude-sonnet-4-6",
+                    "model": "anthropic/claude-sonnet-4-6",
                     "harness": "claude-sdk",
                 },
                 "tools": {
@@ -2368,7 +2344,7 @@ def test_agent_def_to_agent_spec_self_clone_propagates_parent_config(
                 "name": "code_assistant",
                 "prompt": "You are a coding assistant.",
                 "executor": {
-                    "model": "databricks-claude-sonnet-4-6",
+                    "model": "anthropic/claude-sonnet-4-6",
                     "harness": "claude-sdk",
                 },
                 "tools": {
@@ -2397,7 +2373,7 @@ def test_agent_def_to_agent_spec_self_clone_propagates_parent_config(
     assert sub.instructions == "You are a coding assistant."
     # Parent's model + harness propagate.
     assert sub.llm is not None
-    assert sub.llm.model == "databricks-claude-sonnet-4-6"
+    assert sub.llm.model == "anthropic/claude-sonnet-4-6"
     assert sub.executor.type == GOALRAIL_EXECUTOR_TYPE
     assert sub.executor.config["harness"] == "claude-sdk"
 
@@ -2430,7 +2406,7 @@ def test_agent_def_to_agent_spec_self_clone_recursion_guard(
                 "name": "code_assistant",
                 "prompt": "You are a coding assistant.",
                 "executor": {
-                    "model": "databricks-claude-sonnet-4-6",
+                    "model": "anthropic/claude-sonnet-4-6",
                     "harness": "claude-sdk",
                 },
                 "tools": {
@@ -2445,51 +2421,6 @@ def test_agent_def_to_agent_spec_self_clone_recursion_guard(
     # Recursion guard: clone has no self-clone of its own.
     assert sub.tools.agents == []
     assert len(sub.sub_agents) == 0
-
-
-def test_compat_yaml_executor_auth_is_not_dropped(tmp_path: Path) -> None:
-    """
-    ``executor.auth:`` declared in an goalrail-compat YAML is preserved
-    on the resulting :class:`ExecutorSpec`, not silently dropped.
-
-    Regression target: ``_translate_executor_from_def`` previously never
-    called ``_parse_executor_auth``, so a YAML with
-    ``executor.auth: {type: databricks, profile: oss}`` produced a spec
-    with ``executor.auth = None``, causing it to fall through to the
-    global config default (wrong credentials silently).
-
-    Uses ``load_goalrail_yaml`` — the real production entry point — so
-    the ``raw_yaml`` dict is passed through correctly (same as the real
-    CLI path does).
-
-    :param tmp_path: Temporary directory for the test YAML.
-    """
-    from goalrail.spec._goalrail_compat import load_goalrail_yaml
-    from goalrail.spec.types import DatabricksAuth
-
-    yaml_path = tmp_path / "agent_with_auth.yaml"
-    yaml_path.write_text(
-        yaml.dump(
-            {
-                "name": "databricks_agent",
-                "prompt": "You are a coding assistant.",
-                "executor": {
-                    "model": "databricks-claude-sonnet-4-6",
-                    "harness": "claude-sdk",
-                    "auth": {"type": "databricks", "profile": "oss"},
-                },
-            }
-        )
-    )
-
-    spec = load_goalrail_yaml(yaml_path)
-
-    # auth must survive the compat translation — not silently dropped.
-    assert isinstance(spec.executor.auth, DatabricksAuth), (
-        "executor.auth was not parsed from the compat YAML; "
-        "the agent would silently fall through to global config credentials."
-    )
-    assert spec.executor.auth.profile == "oss"
 
 
 def test_compat_yaml_executor_api_key_auth_is_not_dropped(tmp_path: Path) -> None:

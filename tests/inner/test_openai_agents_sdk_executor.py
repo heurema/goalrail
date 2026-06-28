@@ -9,7 +9,6 @@ from dataclasses import dataclass
 from typing import Any
 from unittest.mock import patch
 
-import databricks.sdk.config as _sdk_config_mod
 import pytest
 
 from goalrail.inner.executor import (
@@ -497,13 +496,11 @@ class TestOpenAIAgentsSDKExecutor(unittest.TestCase):
 
         _run(_t())
 
-    def test_databricks_client_default_model_uses_databricks_model(self):
+    def test_gateway_client_without_model_uses_executor_default_model(self):
         async def _t():
             _FakeRunner.last_calls = []
             _FakeRunner.next_result = _FakeResult(events=[], final_output="done")
-            client = types.SimpleNamespace(
-                base_url="https://profile-host.example.com/ai-gateway/openai/v1"
-            )
+            client = types.SimpleNamespace(base_url="https://gateway.example.com/openai/v1")
             executor = OpenAIAgentsSDKExecutor(client=client)
             with patch(
                 "goalrail.inner.openai_agents_sdk_executor._ensure_agents_sdk",
@@ -521,11 +518,11 @@ class TestOpenAIAgentsSDKExecutor(unittest.TestCase):
             self.assertEqual(events[-1].response, "done")
             self.assertEqual(
                 _FakeRunner.last_calls[0]["agent"].model,
-                "databricks-gpt-5-5",
+                "gpt-5.3-codex",
             )
             self.assertEqual(
                 _FakeRunner.last_calls[0]["run_config"].kwargs["model"],
-                "databricks-gpt-5-5",
+                "gpt-5.3-codex",
             )
 
         _run(_t())
@@ -731,7 +728,7 @@ class TestOpenAIAgentsSDKExecutor(unittest.TestCase):
 
         input_file blocks with data: URIs are normalised to input_text before
         reaching the SDK runner (the openai-agents chatcmpl_converter and the
-        Databricks endpoint don't support the ``file`` content block type).
+        Some OpenAI-compatible endpoints don't support the ``file`` content block type).
         The key invariant is that the content arrives as a proper list, not a
         json.dumps'd string.
         """
@@ -1429,75 +1426,17 @@ class TestOpenAIAgentsSDKExecutor(unittest.TestCase):
         _run(_t())
 
 
-# ── _get_openai_async_client: --profile priority ──────────────
-#
-# Function-based tests for the profile-precedence fix. When a
-# user passes ``--profile X``, the resolved Databricks credentials
-# must win over any ``OPENAI_API_KEY`` / ``OPENAI_BASE_URL`` the
-# shell happens to have set — otherwise an old export silently
-# redirects the call to ``api.openai.com`` and the user's
-# requested workspace is ignored.
+# ── _get_openai_async_client: gateway/env precedence ──────────────
 
 
-def test_get_openai_client_profile_uses_callback_auth(monkeypatch):
-    """Explicit ``profile`` uses httpx callback auth, not a static ``api_key``.
-
-    Verifies that when a Databricks profile is provided, the client
-    is constructed with an ``http_client`` carrying a
-    ``_DatabricksBearerAuth`` that refreshes tokens per-request,
-    and that the ``api_key`` is a placeholder (not the real token).
-
-    :param monkeypatch: Pytest monkeypatch fixture.
-    """
+def test_get_openai_client_gateway_auth_command_uses_callback_auth(monkeypatch):
+    """Explicit gateway auth uses httpx callback auth, not a static env key."""
     import httpx
 
     from goalrail.inner.openai_agents_sdk_executor import _get_openai_async_client
 
     monkeypatch.setenv("OPENAI_API_KEY", "should-not-be-used")
     monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
-
-    class _FakeConfig:
-        host = "https://profile-host.example.com"
-        profile = "dev"
-
-        def authenticate(self):
-            return {"Authorization": "Bearer fresh-tok"}
-
-    monkeypatch.setattr(_sdk_config_mod, "Config", lambda **_kw: _FakeConfig())
-
-    captured: dict[str, Any] = {}
-
-    class _StubAsyncOpenAI:
-        def __init__(self, **kwargs):
-            captured.update(kwargs)
-
-    import openai as _openai_mod
-
-    with patch.object(_openai_mod, "AsyncOpenAI", _StubAsyncOpenAI, create=True):
-        _get_openai_async_client(profile="dev")
-
-    assert captured["base_url"] == "https://profile-host.example.com/ai-gateway/openai/v1"
-    assert captured["api_key"] != "should-not-be-used"
-    assert isinstance(captured["http_client"], httpx.AsyncClient)
-
-
-def test_get_openai_client_host_override_uses_ucode_auth_command(monkeypatch):
-    """ucode host override uses ucode auth command without profile lookup.
-
-    :param monkeypatch: Pytest monkeypatch fixture.
-    """
-    import httpx
-
-    import goalrail.inner.databricks_executor as db_exec
-    from goalrail.inner.openai_agents_sdk_executor import _get_openai_async_client
-
-    monkeypatch.setenv("OPENAI_API_KEY", "should-not-be-used")
-    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
-    monkeypatch.setattr(
-        db_exec,
-        "_resolve_databricks_auth",
-        lambda _profile: (_ for _ in ()).throw(AssertionError("profile lookup used")),
-    )
 
     captured: dict[str, Any] = {}
 
@@ -1509,22 +1448,17 @@ def test_get_openai_client_host_override_uses_ucode_auth_command(monkeypatch):
 
     with patch.object(_openai_mod, "AsyncOpenAI", _StubAsyncOpenAI, create=True):
         _get_openai_async_client(
-            profile="missing-profile",
-            host_override="https://example.databricks.com/",
-            base_url_override="https://example.databricks.com/ai-gateway/codex/v1",
-            databricks_auth_command="printf token",
+            base_url_override="https://gateway.example.com/openai/v1",
+            gateway_auth_command="printf token",
         )
 
-    assert captured["base_url"] == "https://example.databricks.com/ai-gateway/codex/v1"
+    assert captured["base_url"] == "https://gateway.example.com/openai/v1"
     assert captured["api_key"] != "should-not-be-used"
     assert isinstance(captured["http_client"], httpx.AsyncClient)
 
 
-def test_get_openai_client_host_override_requires_base_url(monkeypatch):
-    """ucode host override fails loud when ucode omits the base URL.
-
-    :param monkeypatch: Pytest monkeypatch fixture.
-    """
+def test_get_openai_client_gateway_auth_requires_base_url(monkeypatch):
+    """Gateway auth fails loud when the base URL is omitted."""
     from goalrail.inner.openai_agents_sdk_executor import _get_openai_async_client
 
     monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
@@ -1532,42 +1466,19 @@ def test_get_openai_client_host_override_requires_base_url(monkeypatch):
 
     with pytest.raises(OSError, match="GATEWAY_BASE_URL"):
         _get_openai_async_client(
-            profile="missing-profile",
-            host_override="https://example.databricks.com/",
-            databricks_auth_command="printf token",
-        )
-
-
-def test_get_openai_client_host_override_requires_auth_command(monkeypatch):
-    """ucode host override fails loud when ucode omits the auth command.
-
-    :param monkeypatch: Pytest monkeypatch fixture.
-    """
-    from goalrail.inner.openai_agents_sdk_executor import _get_openai_async_client
-
-    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-
-    with pytest.raises(OSError, match="GATEWAY_AUTH_COMMAND"):
-        _get_openai_async_client(
-            profile="missing-profile",
-            host_override="https://example.databricks.com/",
-            base_url_override="https://example.databricks.com/ai-gateway/codex/v1",
+            gateway_auth_command="printf token",
         )
 
 
 def test_get_openai_client_api_key_falls_back_to_env_base_url(monkeypatch):
     """A spec-level api_key with NO override honors ambient ``OPENAI_BASE_URL``.
 
-    Regression for the residual gateway 401 (continuation-turn daemon
-    spawns): the api_key is frequently a gateway credential (e.g. a
-    Databricks AI Gateway PAT detected from ``OPENAI_API_KEY``), and the
-    companion base_url can be dropped on the daemon → runner → harness
-    propagation chain (the spec-auth bake omits it when ``OPENAI_BASE_URL``
-    is absent at materialization time; a reused local daemon may predate the
-    env var). Without the ambient fallback, the gateway PAT is sent to
-    ``api.openai.com`` and 401s. The runner inherits ``OPENAI_BASE_URL``, so
-    honoring it here keeps the gateway target present on every turn.
+    Regression for residual gateway 401s on continuation-turn daemon spawns:
+    the api_key may be a gateway credential, and the companion base_url can
+    be dropped on the daemon -> runner -> harness propagation chain. Without
+    the ambient fallback, the gateway key is sent to ``api.openai.com`` and
+    401s. The runner inherits ``OPENAI_BASE_URL``, so honoring it here keeps
+    the gateway target present on every turn.
 
     :param monkeypatch: Pytest monkeypatch fixture.
     """
@@ -1584,13 +1495,13 @@ def test_get_openai_client_api_key_falls_back_to_env_base_url(monkeypatch):
     import openai as _openai_mod
 
     with patch.object(_openai_mod, "AsyncOpenAI", _StubAsyncOpenAI, create=True):
-        _get_openai_async_client(api_key="dapi-gateway-token", base_url_override=None)
+        _get_openai_async_client(api_key="gateway-token", base_url_override=None)
 
-    assert captured["api_key"] == "dapi-gateway-token"
+    assert captured["api_key"] == "gateway-token"
     assert captured["base_url"] == "https://gateway.example.com/ai-gateway/openai/v1", (
         "A spec-level api_key with no base_url override must fall back to the "
         "ambient OPENAI_BASE_URL the runner inherits; routing to api.openai.com "
-        "(base_url=None) sends a gateway PAT to OpenAI and 401s."
+        "(base_url=None) sends a gateway key to OpenAI and 401s."
     )
 
 
@@ -1617,7 +1528,7 @@ def test_get_openai_client_api_key_override_wins_over_env_base_url(monkeypatch):
 
     with patch.object(_openai_mod, "AsyncOpenAI", _StubAsyncOpenAI, create=True):
         _get_openai_async_client(
-            api_key="dapi-gateway-token",
+            api_key="gateway-token",
             base_url_override="https://spec-gateway.example.com/openai/v1",
         )
 
@@ -1652,8 +1563,8 @@ def test_get_openai_client_api_key_no_env_defaults_to_openai(monkeypatch):
     assert captured["base_url"] is None
 
 
-def test_get_openai_client_no_profile_honors_env_vars(monkeypatch):
-    """Without an explicit profile, the env-var branch still works.
+def test_get_openai_client_no_explicit_auth_honors_env_vars(monkeypatch):
+    """Without explicit auth, the env-var branch still works.
 
     :param monkeypatch: Pytest monkeypatch fixture.
     """
@@ -1671,172 +1582,18 @@ def test_get_openai_client_no_profile_honors_env_vars(monkeypatch):
     import openai as _openai_mod
 
     with patch.object(_openai_mod, "AsyncOpenAI", _StubAsyncOpenAI, create=True):
-        _get_openai_async_client(profile=None)
+        _get_openai_async_client()
 
     assert captured["base_url"] == "https://env-host.example.com/v1"
     assert captured["api_key"] == "env-key"
     assert "http_client" not in captured
 
 
-def test_get_openai_client_invalid_profile_raises_auth_error(monkeypatch):
-    """An invalid profile raises ``DatabricksAuthError`` with login instructions.
+def test_run_turn_error_uses_exception_message_not_cause(monkeypatch):
+    """``run_turn`` surfaces the exception message, not raw ``__cause__`` text."""
 
-    :param monkeypatch: Pytest monkeypatch fixture.
-    """
-    import pytest
-
-    import goalrail.inner.databricks_executor as db_exec
-    from goalrail.inner.databricks_executor import DatabricksAuthError
-    from goalrail.inner.openai_agents_sdk_executor import _get_openai_async_client
-
-    def _failing_config(**_kw):
-        raise ValueError("no credentials")
-
-    monkeypatch.setattr(_sdk_config_mod, "Config", _failing_config)
-    monkeypatch.setattr(db_exec, "_read_databrickscfg", lambda _p: None)
-    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    monkeypatch.delenv("DATABRICKS_CONFIG_PROFILE", raising=False)
-
-    with pytest.raises(DatabricksAuthError, match="databricks auth login -p dogfood"):
-        _get_openai_async_client(profile="dogfood")
-
-
-def test_get_openai_client_invalid_profile_with_env_fallback_warns(monkeypatch, caplog):
-    """Profile auth failure with OPENAI_BASE_URL available warns and falls through.
-
-    When ``_get_openai_async_client`` is called with a named profile that
-    cannot be resolved (``DatabricksAuthError``), but ``OPENAI_BASE_URL``
-    is set, the function must:
-
-      1. Log a warning mentioning the profile name and the fallback.
-      2. Return a client configured from OPENAI_BASE_URL, NOT re-raise.
-
-    This preserves backward compatibility for CI environments (OIDC tokens
-    injected via OPENAI_BASE_URL) that specify a profile in the agent spec
-    but rely on env-var credentials at runtime.
-
-    :param monkeypatch: Pytest monkeypatch fixture.
-    :param caplog: Pytest log capture fixture.
-    """
-    import logging
-
-    import goalrail.inner.databricks_executor as db_exec
-    from goalrail.inner.openai_agents_sdk_executor import _get_openai_async_client
-
-    def _failing_config(**_kw):
-        raise ValueError("no credentials")
-
-    monkeypatch.setattr(_sdk_config_mod, "Config", _failing_config)
-    monkeypatch.setattr(db_exec, "_read_databrickscfg", lambda _p: None)
-    monkeypatch.setenv("OPENAI_BASE_URL", "https://example.databricks.com/serving-endpoints")
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    monkeypatch.delenv("DATABRICKS_CONFIG_PROFILE", raising=False)
-
-    with caplog.at_level(logging.WARNING):
-        client = _get_openai_async_client(profile="dogfood")
-
-    # Should not raise — fell through to OPENAI_BASE_URL.
-    # A warning must be emitted so the fallback is not silent.
-    assert any(
-        "dogfood" in record.message and "OPENAI_BASE_URL" in record.message
-        for record in caplog.records
-    ), (
-        f"Expected a warning mentioning 'dogfood' and 'OPENAI_BASE_URL'. "
-        f"Got: {[r.message for r in caplog.records]}"
-    )
-
-    # Client must use OPENAI_BASE_URL, not the (failed) profile host.
-    assert client.base_url.host == "example.databricks.com", (
-        f"Expected client to use OPENAI_BASE_URL host 'example.databricks.com', "
-        f"got {client.base_url.host!r}. The profile-failure fallthrough may be broken."
-    )
-
-
-def test_get_openai_client_missing_databricks_sdk_raises_actionable_error(monkeypatch):
-    """Missing ``databricks-sdk`` with no env-var fallback gives an actionable error.
-
-    When a Databricks-hosted model is requested, ``databricks-sdk`` is not
-    installed, and no ``OPENAI_API_KEY``/``OPENAI_BASE_URL`` fallback is
-    available, the function must raise ``ImportError`` with install
-    instructions — not crash with an opaque traceback.
-
-    Regression test for https://github.com/heurema/goalrail/issues/123.
-
-    :param monkeypatch: Pytest monkeypatch fixture.
-    """
-    import pytest
-
-    import goalrail.inner.databricks_executor as db_exec
-    from goalrail.inner.openai_agents_sdk_executor import _get_openai_async_client
-
-    def _import_error(*_args, **_kw):
-        raise ImportError("No module named 'databricks.sdk'")
-
-    monkeypatch.setattr(db_exec, "_resolve_databricks_auth", _import_error)
-    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    monkeypatch.delenv("DATABRICKS_CONFIG_PROFILE", raising=False)
-
-    with pytest.raises(ImportError, match="pip install"):
-        _get_openai_async_client(profile=None, model="databricks-gpt-5")
-
-
-def test_get_openai_client_missing_databricks_sdk_with_env_falls_through(monkeypatch, caplog):
-    """Missing ``databricks-sdk`` with OPENAI_API_KEY set falls through gracefully.
-
-    When ``databricks-sdk`` is absent but env-var credentials are available,
-    the function should log a warning and return a client configured from the
-    env vars — not crash.
-
-    Regression test for https://github.com/heurema/goalrail/issues/123.
-
-    :param monkeypatch: Pytest monkeypatch fixture.
-    :param caplog: Pytest log capture fixture.
-    """
-    import logging
-
-    import goalrail.inner.databricks_executor as db_exec
-    from goalrail.inner.openai_agents_sdk_executor import _get_openai_async_client
-
-    def _import_error(*_args, **_kw):
-        raise ImportError("No module named 'databricks.sdk'")
-
-    monkeypatch.setattr(db_exec, "_resolve_databricks_auth", _import_error)
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
-    monkeypatch.delenv("DATABRICKS_CONFIG_PROFILE", raising=False)
-
-    with caplog.at_level(logging.WARNING):
-        client = _get_openai_async_client(profile="dev", model="databricks-gpt-5")
-
-    assert any("databricks-sdk" in record.message for record in caplog.records), (
-        f"Expected a warning about missing databricks-sdk. "
-        f"Got: {[r.message for r in caplog.records]}"
-    )
-    assert client is not None
-
-
-def test_run_turn_auth_error_yields_actionable_message(monkeypatch):
-    """``run_turn`` yields the actionable ``DatabricksAuthError`` message,
-    not the raw ``__cause__`` string.
-
-    When the agents SDK raises a ``DatabricksAuthError`` (e.g. from
-    ``_DatabricksBearerAuth.auth_flow`` when the OAuth refresh token has
-    expired), the ``ExecutorError.message`` must be the high-level
-    "Run: databricks auth login -p X" guidance — not the underlying SDK
-    exception text like "token expired".
-
-    :param monkeypatch: Pytest monkeypatch fixture.
-    """
-    from goalrail.inner.databricks_executor import DatabricksAuthError
-
-    # DatabricksAuthError carries the actionable message; its __cause__ is
-    # the raw SDK exception that is NOT suitable to show the user.
     raw_sdk_exc = ValueError("token expired")
-    auth_error = DatabricksAuthError(
-        "Databricks authentication failed for profile 'dev'. Run: databricks auth login -p dev"
-    )
+    auth_error = RuntimeError("Gateway authentication failed. Run the configured login command.")
     auth_error.__cause__ = raw_sdk_exc
 
     _FakeRunner.last_calls = []
@@ -1863,19 +1620,10 @@ def test_run_turn_auth_error_yields_actionable_message(monkeypatch):
         f"Expected exactly 1 ExecutorError, got {len(error_events)}. Events: {events!r}"
     )
 
-    # The message must be the DatabricksAuthError text (actionable), not
-    # the __cause__ text ("token expired"). If str(exc.__cause__) were used
-    # instead of str(exc), this assertion would fail with "token expired".
-    assert "databricks auth login -p dev" in error_events[0].message, (
-        f"Expected actionable 'databricks auth login' guidance in message, "
-        f"got: {error_events[0].message!r}. "
-        f"If 'token expired' appears instead, auth_msg is reading exc.__cause__ "
-        f"rather than str(exc)."
-    )
+    assert "Gateway authentication failed" in error_events[0].message
     assert "token expired" not in error_events[0].message, (
         f"Raw SDK exception text leaked into the user-facing error message: "
-        f"{error_events[0].message!r}. This means auth_msg is using "
-        f"str(exc.__cause__) instead of str(exc)."
+        f"{error_events[0].message!r}."
     )
 
 
@@ -2468,7 +2216,7 @@ def test_turn_usage_cached_tokens_multi_call_sums_across_responses() -> None:
 
 
 # ── Empty-turn retry / fail-loud ────────────────────────────────────
-# The Databricks gateway occasionally returns a completed turn with no
+# Some OpenAI-compatible gateways can return a completed turn with no
 # text, no tool calls, and no output items. ``run_turn`` retries such a
 # turn once (``_EMPTY_TURN_MAX_ATTEMPTS``) and, if still empty AND the
 # gateway billed zero output tokens, surfaces a loud retryable
@@ -2508,8 +2256,8 @@ def _nonempty_raw_response() -> _FakeRawResponse:
     return _FakeRawResponse(usage=_FakeUsage(input_tokens=10, output_tokens=1))
 
 
-def _make_databricks_executor() -> OpenAIAgentsSDKExecutor:
-    """An executor whose client points at the Databricks gateway base URL.
+def _make_gateway_executor() -> OpenAIAgentsSDKExecutor:
+    """An executor whose client points at a gateway base URL.
 
     Matches the production path the empty-output bug occurs on.
     """
@@ -2546,7 +2294,7 @@ def test_empty_turn_retries_then_succeeds() -> None:
                 raw_responses=[_nonempty_raw_response()],
             ),
         ]
-        executor = _make_databricks_executor()
+        executor = _make_gateway_executor()
         with patch(
             "goalrail.inner.openai_agents_sdk_executor._ensure_agents_sdk",
             return_value=_fake_agents_sdk(),
@@ -2599,7 +2347,7 @@ def test_empty_turn_retry_exhausted_yields_retryable_error() -> None:
             _FakeResult(events=[], final_output="", raw_responses=[_empty_raw_response()]),
             _FakeResult(events=[], final_output="", raw_responses=[_empty_raw_response()]),
         ]
-        executor = _make_databricks_executor()
+        executor = _make_gateway_executor()
         with patch(
             "goalrail.inner.openai_agents_sdk_executor._ensure_agents_sdk",
             return_value=_fake_agents_sdk(),
@@ -2657,7 +2405,7 @@ def test_tool_call_without_text_is_not_retried() -> None:
                 raw_responses=[_nonempty_raw_response()],
             ),
         ]
-        executor = _make_databricks_executor()
+        executor = _make_gateway_executor()
         with patch(
             "goalrail.inner.openai_agents_sdk_executor._ensure_agents_sdk",
             return_value=_fake_agents_sdk(),
@@ -2708,7 +2456,7 @@ def test_reasoning_only_turn_is_treated_as_empty() -> None:
                 raw_responses=[_nonempty_raw_response()],
             ),
         ]
-        executor = _make_databricks_executor()
+        executor = _make_gateway_executor()
         with patch(
             "goalrail.inner.openai_agents_sdk_executor._ensure_agents_sdk",
             return_value=_fake_agents_sdk(),
@@ -2753,7 +2501,7 @@ def test_empty_turn_with_output_tokens_is_not_errored() -> None:
             _FakeResult(events=[], final_output="", raw_responses=[_nonempty_raw_response()]),
             _FakeResult(events=[], final_output="", raw_responses=[_nonempty_raw_response()]),
         ]
-        executor = _make_databricks_executor()
+        executor = _make_gateway_executor()
         with patch(
             "goalrail.inner.openai_agents_sdk_executor._ensure_agents_sdk",
             return_value=_fake_agents_sdk(),
@@ -2827,7 +2575,7 @@ def test_empty_turn_retry_rewinds_sdk_session() -> None:
 
         fake_sdk = _fake_agents_sdk()
         fake_sdk.Runner = types.SimpleNamespace(run_streamed=_runner)
-        executor = _make_databricks_executor()
+        executor = _make_gateway_executor()
         with patch(
             "goalrail.inner.openai_agents_sdk_executor._ensure_agents_sdk",
             return_value=fake_sdk,

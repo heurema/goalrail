@@ -607,8 +607,7 @@ class HarnessProcessManager:
             e.g. ``"claude-sdk"``.
         :param env: Per-spawn environment variable overrides
             merged on top of ``os.environ`` for the subprocess,
-            e.g. ``{"HARNESS_CLAUDE_SDK_GATEWAY": "true",
-            "HARNESS_CLAUDE_SDK_DATABRICKS_PROFILE": "<your-profile>"}``.
+            e.g. ``{"HARNESS_CLAUDE_SDK_GATEWAY": "true"}``.
             Caller-supplied keys win on conflicts. ``None`` inherits
             ``os.environ`` minus the runner-auth secrets stripped by
             ``_build_harness_spawn_env``. Used by AP's

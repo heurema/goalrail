@@ -37,6 +37,8 @@ from opentelemetry.trace import (
 
 from goalrail.runtime import telemetry
 
+pytest.importorskip("mlflow")
+
 _RESP_HEX = "d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3"
 _RESP_ID = f"resp_{_RESP_HEX}"
 

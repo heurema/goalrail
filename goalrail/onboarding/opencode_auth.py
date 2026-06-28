@@ -27,7 +27,7 @@ from goalrail.onboarding.harness_install import OPENCODE_KEY, harness_cli_instal
 # provider id matches OpenCode's own id (the ``auth.json`` key and the
 # ``provider/model`` prefix in ``opencode models``). Not exhaustive (OpenCode
 # resolves many providers from models.dev); this is the set worth surfacing in
-# setup, including the ``OPENAI_*`` pair the Databricks-gateway path uses.
+# setup, including common OpenAI-compatible provider env vars.
 _ENV_PROVIDER_VARS: tuple[tuple[str, str, str], ...] = (
     ("openai", "OpenAI", "OPENAI_API_KEY"),
     ("anthropic", "Anthropic", "ANTHROPIC_API_KEY"),

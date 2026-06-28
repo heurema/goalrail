@@ -5,15 +5,13 @@ Tests for ``_build_antigravity_spawn_env`` in
 The spawn-env builder maps ``spec.executor`` fields to ``HARNESS_ANTIGRAVITY_*``
 env vars the antigravity harness wrap reads at first-turn time. Auth is
 Gemini-native (a direct API key, or Vertex AI) — the SDK has no
-OpenAI-compatible base_url, so there is deliberately no gateway / Databricks
-path here.
+OpenAI-compatible base_url.
 
 Unit test — no subprocess spawn, no real httpx.
 """
 
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -29,7 +27,6 @@ from goalrail.runtime.workflow import (
 from goalrail.spec.types import (
     AgentSpec,
     ApiKeyAuth,
-    DatabricksAuth,
     ExecutorSpec,
     LLMConfig,
 )
@@ -66,7 +63,7 @@ def _make_spec(
     *,
     model: str | None = "gemini-3-pro",
     profile: str | None = None,
-    auth: ApiKeyAuth | DatabricksAuth | None = None,
+    auth: ApiKeyAuth | None = None,
     config_extra: dict[str, object] | None = None,
 ) -> AgentSpec:
     """Build a minimal antigravity :class:`AgentSpec` for spawn-env tests."""
@@ -143,37 +140,14 @@ def test_vertex_config_threads_project_and_location() -> None:
     assert env["HARNESS_ANTIGRAVITY_LOCATION"] == "us-central1"
 
 
-def test_databricks_auth_ignored_with_warning(caplog: pytest.LogCaptureFixture) -> None:
-    """``DatabricksAuth`` is unsupported: no env var emitted, and a warning logged."""
-    with caplog.at_level(logging.WARNING, logger=wf.__name__):
-        env = _build_antigravity_spawn_env(
-            _make_spec(model="gemini-3-pro", auth=DatabricksAuth(profile="dev"))
-        )
-    # No Databricks profile var — antigravity has no Databricks/gateway path.
-    assert "HARNESS_ANTIGRAVITY_DATABRICKS_PROFILE" not in env
-    assert "HARNESS_ANTIGRAVITY_API_KEY" not in env
-    # The user is told their Databricks auth was ignored rather than silently
-    # dropped (which would look like the key "didn't take").
-    assert any("Databricks" in rec.message for rec in caplog.records)
-
-
 def test_legacy_profile_is_ignored() -> None:
-    """An ``executor.config['profile']`` does not produce any Databricks var."""
+    """An ``executor.config['profile']`` does not produce provider env vars."""
     env = _build_antigravity_spawn_env(_make_spec(model="gemini-3-pro", profile="my-profile"))
-    assert "HARNESS_ANTIGRAVITY_DATABRICKS_PROFILE" not in env
     # Only the model var — a legacy profile is meaningless for this harness.
     assert env == {"HARNESS_ANTIGRAVITY_MODEL": "gemini-3-pro"}
 
 
-def test_databricks_model_prefix_not_auto_routed() -> None:
-    """A ``databricks-`` model no longer auto-selects a Databricks profile."""
-    env = _build_antigravity_spawn_env(_make_spec(model="databricks-gpt-5-5", profile=None))
-    # The old builder set DEFAULT here; antigravity has no Databricks path now.
-    assert "HARNESS_ANTIGRAVITY_DATABRICKS_PROFILE" not in env
-    assert env == {"HARNESS_ANTIGRAVITY_MODEL": "databricks-gpt-5-5"}
-
-
-def test_no_auth_non_databricks_model_is_minimal() -> None:
+def test_no_auth_gemini_model_is_minimal() -> None:
     """A plain Gemini model with no auth yields only the model var.
 
     The wrap then falls back to the SDK's ambient
@@ -246,23 +220,6 @@ def test_stored_key_used_and_global_auth_ignored(
     _write_antigravity_config(_isolate_global_config, "env:GEMINI_KEY_SRC")
     env = _build_antigravity_spawn_env(_make_spec(model="gemini-3-pro", auth=None))
     assert env["HARNESS_ANTIGRAVITY_API_KEY"] == "AIza_stored_123"
-
-
-def test_databricks_auth_does_not_adopt_stored_key(
-    monkeypatch: pytest.MonkeyPatch, _isolate_global_config: Path
-) -> None:
-    """An explicit ``DatabricksAuth`` never adopts the stored Gemini key.
-
-    The stored-key fallback applies ONLY to a spec with no auth at all; a
-    databricks-routed spec has explicitly chosen a non-Gemini credential, so
-    pulling the Gemini key would mis-authenticate the run.
-    """
-    monkeypatch.setenv("GEMINI_KEY_SRC", "AIza_stored_123")
-    _write_antigravity_config(_isolate_global_config, "env:GEMINI_KEY_SRC")
-    env = _build_antigravity_spawn_env(
-        _make_spec(model="gemini-3-pro", auth=DatabricksAuth(profile="oss"))
-    )
-    assert "HARNESS_ANTIGRAVITY_API_KEY" not in env
 
 
 def test_ambient_gemini_key_adopted_when_no_config(

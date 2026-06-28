@@ -2,9 +2,9 @@
 
 The desktop shell's setup page (``ap-web/electron/setup/index.html``) is the
 user-facing "connect to a server" screen. This exercises it in a real browser:
-the scheme-defaulting this change added means a bare (or ``/goalrail``)
-Databricks workspace URL now connects over https on the first click instead of
-tripping the unencrypted-http warning that the old http:// default produced.
+the scheme-defaulting this change added means a bare remote Goalrail URL now
+connects over https on the first click instead of tripping the unencrypted-http
+warning that the old http:// default produced.
 
 The setup page and the Electron main process share one module
 (``ap-web/electron/src/url.js``), loaded here as ``window.goalrailUrl``, so the
@@ -66,11 +66,11 @@ def test_bare_workspace_url_connects_without_http_warning(page: Page) -> None:
     """
     _open_setup_page(page)
 
-    page.fill("#url", "dbc-x.cloud.databricks.com/goalrail")
+    page.fill("#url", "goalrail.example.com/app")
     page.click("#connect")
 
     page.wait_for_function("() => window.__connectCalls.length === 1")
-    assert page.evaluate("() => window.__connectCalls") == ["dbc-x.cloud.databricks.com/goalrail"]
+    assert page.evaluate("() => window.__connectCalls") == ["goalrail.example.com/app"]
     expect(page.locator("#err")).to_have_text("")
 
 
@@ -83,7 +83,7 @@ def test_explicit_http_remote_still_warns_then_proceeds(page: Page) -> None:
     """
     _open_setup_page(page)
 
-    page.fill("#url", "http://example.databricks.com")
+    page.fill("#url", "http://goalrail.example")
     page.click("#connect")
 
     # First click: warned, not connected.
@@ -93,7 +93,7 @@ def test_explicit_http_remote_still_warns_then_proceeds(page: Page) -> None:
     # Second click on the same value: proceeds past the warning.
     page.click("#connect")
     page.wait_for_function("() => window.__connectCalls.length === 1")
-    assert page.evaluate("() => window.__connectCalls") == ["http://example.databricks.com"]
+    assert page.evaluate("() => window.__connectCalls") == ["http://goalrail.example"]
 
 
 def test_loopback_connects_over_http_without_warning(page: Page) -> None:
@@ -122,12 +122,10 @@ def test_shared_url_module_defaults_scheme_in_browser(page: Page) -> None:
     """
     _open_setup_page(page)
 
-    # Remote host → https; the guide's /goalrail suffix is preserved.
+    # Remote host -> https; the app suffix is preserved.
     assert (
-        page.evaluate(
-            "() => window.goalrailUrl.normalizeUrl('dbc-x.cloud.databricks.com/goalrail')"
-        )
-        == "https://dbc-x.cloud.databricks.com/goalrail"
+        page.evaluate("() => window.goalrailUrl.normalizeUrl('goalrail.example.com/app')")
+        == "https://goalrail.example.com/app"
     )
     # Loopback stays http for local dev.
     assert (

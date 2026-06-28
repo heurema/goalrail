@@ -605,9 +605,9 @@ def test_build_codex_remote_args_passes_transport_verbatim(
             None,
             [
                 "-c",
-                'model="databricks-gpt-5-5"',
+                'model="openai/gpt-5-5"',
                 "-c",
-                'model_provider="goalrail_databricks"',
+                'model_provider="goalrail_enterprisegateway"',
                 "--remote",
                 "ws://127.0.0.1:9876",
             ],
@@ -618,9 +618,9 @@ def test_build_codex_remote_args_passes_transport_verbatim(
             "thread_host",
             [
                 "-c",
-                'model="databricks-gpt-5-5"',
+                'model="openai/gpt-5-5"',
                 "-c",
-                'model_provider="goalrail_databricks"',
+                'model_provider="goalrail_enterprisegateway"',
                 "resume",
                 "--remote",
                 "ws://127.0.0.1:9876",
@@ -654,8 +654,8 @@ def test_build_codex_remote_args_emits_config_overrides_before_subcommand(
             thread_id=thread_id,
             remote_url="ws://127.0.0.1:9876",
             config_overrides=(
-                'model="databricks-gpt-5-5"',
-                'model_provider="goalrail_databricks"',
+                'model="openai/gpt-5-5"',
+                'model_provider="goalrail_enterprisegateway"',
             ),
         )
         == expected
@@ -8562,7 +8562,7 @@ async def test_ensure_local_codex_resume_rollout_synthesizes_goalrail_history(
             external_session_id=thread_id,
             codex_home=codex_home,
             workspace=workspace.resolve(),
-            model_provider="goalrail_databricks",
+            model_provider="goalrail_enterprisegateway",
             codex_path=None,
         )
 
@@ -8591,7 +8591,7 @@ async def test_ensure_local_codex_resume_rollout_synthesizes_goalrail_history(
     # when model_provider is absent (verified against codex 0.136.0).
     assert records[0]["payload"]["timestamp"] == records[0]["timestamp"]
     assert records[0]["payload"]["cli_version"] == "0.0.0"
-    assert records[0]["payload"]["model_provider"] == "goalrail_databricks"
+    assert records[0]["payload"]["model_provider"] == "goalrail_enterprisegateway"
     assert records[1]["payload"]["turn_id"] == "turn_1"
     assert records[1]["payload"]["cwd"] == str(workspace.resolve())
     assert records[2]["payload"] == {
@@ -8687,7 +8687,7 @@ async def test_ensure_local_codex_resume_rollout_preserves_existing_rollout(
             external_session_id=thread_id,
             codex_home=codex_home,
             workspace=(tmp_path / "workspace").resolve(),
-            model_provider="goalrail_databricks",
+            model_provider="goalrail_enterprisegateway",
             codex_path=None,
         )
 
@@ -8756,7 +8756,7 @@ async def test_ensure_local_codex_resume_rollout_rejects_malformed_tool_history(
                 external_session_id="019e96aa-0be2-7343-8d3b-6f914d60936b",
                 codex_home=tmp_path / "codex-home",
                 workspace=(tmp_path / "workspace").resolve(),
-                model_provider="goalrail_databricks",
+                model_provider="goalrail_enterprisegateway",
                 codex_path=None,
             )
 
@@ -8794,7 +8794,7 @@ async def test_ensure_local_codex_resume_rollout_rejects_unsafe_thread_id(
                 external_session_id="../../etc/passwd",
                 codex_home=tmp_path / "codex-home",
                 workspace=(tmp_path / "workspace").resolve(),
-                model_provider="goalrail_databricks",
+                model_provider="goalrail_enterprisegateway",
                 codex_path=None,
             )
 

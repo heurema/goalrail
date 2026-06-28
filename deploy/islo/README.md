@@ -139,14 +139,14 @@ the relevant server instead — name them in `GOALRAIL_ISLO_SANDBOX_ENV`
 before `create`:
 
 ```bash
-export GOALRAIL_ISLO_SANDBOX_ENV=DATABRICKS_HOST,DATABRICKS_TOKEN
+export GOALRAIL_ISLO_SANDBOX_ENV=GOALRAIL_SERVER_URL,GOALRAIL_AUTH_TOKEN
 goalrail sandbox create --provider islo
 ```
 
 The in-sandbox host mints a fresh bearer token from those credentials on
-every connect and reconnect. For a Databricks-fronted server, inject
-`DATABRICKS_HOST` plus either `DATABRICKS_TOKEN` (a PAT) or
-`DATABRICKS_CLIENT_ID` / `DATABRICKS_CLIENT_SECRET` (an OAuth service
+every connect and reconnect. For a externally authenticated server, inject
+`GOALRAIL_SERVER_URL` plus either `GOALRAIL_AUTH_TOKEN` (a PAT) or
+`GOALRAIL_CLIENT_ID` / `GOALRAIL_CLIENT_SECRET` (an OAuth service
 principal — re-minting keeps a long-lived sandbox connected past any
 single token's expiry).
 

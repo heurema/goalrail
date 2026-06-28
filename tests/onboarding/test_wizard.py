@@ -37,15 +37,14 @@ def test_save_yaml_uses_goalrail_config_home(
     assert not (legacy_home / ".goalrail" / "agents").exists()
 
 
-def test_global_auth_prompt_uses_goalrail_product_name(
+def test_global_auth_prompt_points_to_goalrail_config(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The interactive setup prompt should use the public Goalrail name."""
+    """The interactive setup prompt points users at the Goalrail config file."""
     console = Mock()
     prompt_values = iter(["sk-test", ""])
 
     monkeypatch.setattr(wizard_mod, "console", console)
-    monkeypatch.setattr(wizard_mod, "_list_databricks_profiles", list)
     monkeypatch.setattr(wizard_mod, "_arrow_menu", lambda options: 0)
     monkeypatch.setattr(
         wizard_mod,
@@ -57,5 +56,6 @@ def test_global_auth_prompt_uses_goalrail_product_name(
 
     printed = " ".join(str(call.args[0]) for call in console.print.call_args_list if call.args)
     assert auth == {"type": "api_key", "api_key": "sk-test"}
-    assert "How will Goalrail authenticate with the LLM?" in printed
+    assert "Configure an OpenAI-compatible API key" in printed
+    assert "~/.goalrail/config.yaml" in printed
     assert "goalrail authenticate" not in printed

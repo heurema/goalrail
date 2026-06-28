@@ -24,23 +24,23 @@ _POOL_ENV_PREFIX = "GOALRAIL_TEST_MODEL_POOL_"
 # Interchangeable same-tier models (mini is its own pool so spreading
 # never downgrades a test). Keys are the env-override suffixes.
 _DEFAULT_POOLS: dict[str, tuple[str, ...]] = {
-    "GPT": ("databricks-gpt-5-4", "databricks-gpt-5-5"),
-    "GPT_MINI": ("databricks-gpt-5-4-mini", "databricks-gpt-5-mini"),
-    "CLAUDE": ("databricks-claude-sonnet-4-6", "databricks-claude-opus-4-6"),
+    "GPT": ("openai/gpt-5-4", "openai/gpt-5-5"),
+    "GPT_MINI": ("openai/gpt-5-4-mini", "openai/gpt-5-mini"),
+    "CLAUDE": ("anthropic/claude-sonnet-4-6", "anthropic/claude-opus-4-6"),
 }
 
 # Per-provider rotation order for llm_flaky reruns. Crosses tiers:
 # the goal is "pass on ANY model", not workload parity.
 _RETRY_CHAINS: dict[str, tuple[str, ...]] = {
     "openai": (
-        "databricks-gpt-5-4",
-        "databricks-gpt-5-5",
-        "databricks-gpt-5-4-mini",
-        "databricks-gpt-5-mini",
+        "openai/gpt-5-4",
+        "openai/gpt-5-5",
+        "openai/gpt-5-4-mini",
+        "openai/gpt-5-mini",
     ),
     "anthropic": (
-        "databricks-claude-sonnet-4-6",
-        "databricks-claude-opus-4-6",
+        "anthropic/claude-sonnet-4-6",
+        "anthropic/claude-opus-4-6",
     ),
 }
 
@@ -130,7 +130,7 @@ def _retry_chain(model: str, pool_key: str) -> tuple[str, ...]:
     *model* itself, which must stay in the chain so rotation has a
     stable index to start from.
 
-    :param model: The resolved base model, e.g. ``"databricks-gpt-5-4"``.
+    :param model: The resolved base model, e.g. ``"openai/gpt-5-4"``.
     :param pool_key: The model's balance-pool key, e.g. ``"GPT"``.
     """
     chain = list(_RETRY_CHAINS[_POOL_PROVIDER[pool_key]])
@@ -156,7 +156,7 @@ def resolve_model(
     provider retry chain when *attempt* > 0; ``model_pinned`` skips both.
 
     :param model: Model as written in the test / spec / probe,
-        e.g. ``"databricks-gpt-5-4"``.
+        e.g. ``"openai/gpt-5-4"``.
     :param key: Hash key for spreading; defaults to the running test's
         nodeid. Pass an explicit key for session-scoped resolutions
         that must not depend on which test runs first.
@@ -164,7 +164,7 @@ def resolve_model(
         test's rerunfailures attempt.
     :param spread: ``False`` for explicitly-chosen models (marker pins):
         skips spreading but keeps retry rotation.
-    :returns: The model name to use, e.g. ``"databricks-gpt-5-5"``.
+    :returns: The model name to use, e.g. ``"openai/gpt-5-5"``.
     """
     pool_key = _pool_key_of(model)
     if pool_key is None:

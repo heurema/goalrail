@@ -270,8 +270,8 @@ class _UnclassifiedExceptionHarness(HarnessApp):
     ``the harness HTTP client``) get a clean
     ``[llm] <code>: <message>`` instead of a bare
     ``httpx.ReadError``. See the 2026-04-29 12-shell user repro
-    where Databricks gateway 429s broke the inner SDK's stream
-    and the terminal event emission failed silently.
+    where gateway 429s broke the inner SDK's stream and the
+    terminal event emission failed silently.
     """
 
     async def run_turn(self, request: CreateResponseRequest, ctx: TurnContext) -> None:

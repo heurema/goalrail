@@ -3589,9 +3589,8 @@ export function Composer({
         return true;
       }
       case "/model": {
-        // The command guard checks only the "/model" token, so both bare
-        // gateway ids ("databricks-gpt-5-4") and provider-prefixed ids
-        // ("anthropic/claude-opus-4-8") reach here as the argument.
+        // The command guard checks only the "/model" token, so provider-prefixed
+        // ids such as "anthropic/claude-opus-4-8" reach here as the argument.
         if (!showModel) return false;
         const target = arg.trim();
         if (!target) {

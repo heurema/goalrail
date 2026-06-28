@@ -11,8 +11,8 @@ and the module probed without it.
 Supports both server-managed hosts (``host_type="managed"`` sessions)
 and the CLI bootstrap flow. The one unsupported primitive is
 ``forward_local_port``: CW Sandbox has no local→sandbox path, so the
-Databricks App OAuth flow doesn't apply — managed hosts authenticate
-with a server-minted launch token instead.
+interactive browser login flow doesn't apply — managed hosts
+authenticate with a server-minted launch token instead.
 
 Notes that shape this launcher:
 

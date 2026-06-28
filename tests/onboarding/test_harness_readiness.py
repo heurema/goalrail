@@ -71,8 +71,8 @@ def test_sdk_and_unknown_harnesses_are_never_gated(
     They run in-process (or are unknown to the daemon) and resolve any
     credential at runtime, so the daemon must not block them. A ``False``
     here is a false negative that would break a launch authenticating via
-    an env key, a Databricks profile, or the spec's ``executor.auth`` —
-    none of which the daemon can see.
+    an env key or the spec's ``executor.auth`` — neither of which the daemon
+    can see.
     """
     _no_clis_installed(monkeypatch)
     assert harness_is_configured(harness) is True
@@ -199,7 +199,7 @@ def test_configured_harness_map_gates_only_cli_harnesses(
     SDK spellings (incl. the ``openai-agents-sdk`` workflow spelling and
     the ``claude`` alias) stay True; the native + pi spellings flip to
     False. A misclassified spelling would warn the wrong agents in the
-    picker — e.g. an SDK agent authenticating via a Databricks profile
+    picker — e.g. an SDK agent authenticating via a spec-provided credential
     flagged "needs setup" when it launches fine.
     """
     _no_clis_installed(monkeypatch)

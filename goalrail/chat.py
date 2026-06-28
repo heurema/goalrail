@@ -57,7 +57,6 @@ from goalrail.conversation_browser import open_conversation_link_if_enabled
 from goalrail.errors import GoalrailError
 from goalrail.harness_aliases import canonicalize_harness
 from goalrail.inner import _proc
-from goalrail.inner.databricks_executor import _DatabricksBearerAuth, _read_databrickscfg
 from goalrail.native_coding_agents import native_coding_agent_for_wrapper_label
 from goalrail.spec import load as load_spec
 from goalrail.spec._goalrail_compat import GOALRAIL_EXECUTOR_TYPE
@@ -104,7 +103,7 @@ _REMOTE_RUNNER_STOP_GRACE_SECONDS = 8.0
 # (a spec with no executor block) launches cleanly instead of
 # failing the strict goalrail validator with a cryptic
 # "executor.config.harness: required" error.
-_DEFAULT_AD_HOC_MODEL = "databricks-gpt-5-4"
+_DEFAULT_AD_HOC_MODEL = "gpt-5.4"
 
 # How many of the NEWEST transcript items ``_persisted_turn_text``
 # fetches when reconciling a headless ``-p`` turn against the durable
@@ -115,10 +114,9 @@ _DEFAULT_AD_HOC_MODEL = "databricks-gpt-5-4"
 # tracks the end of the conversation, not its start.
 _RECONCILE_ITEMS_LIMIT = 100
 
-# Optional bearer token for remote goalrail servers that sit
-# behind an auth proxy (for example Databricks Apps). When set, the
-# CLI sends ``Authorization: Bearer <value>`` on every HTTP request it
-# makes to the remote server.
+# Optional bearer token for remote goalrail servers that sit behind an auth
+# proxy. When set, the CLI sends ``Authorization: Bearer <value>`` on every
+# HTTP request it makes to the remote server.
 _REMOTE_AUTH_TOKEN_ENV = "GOALRAIL_REMOTE_AUTH_TOKEN"
 
 # Env-var override name. ``GOALRAIL_MODEL=foo`` lets a user
@@ -150,7 +148,7 @@ def _default_cli_model() -> str:
     legacy and Goalrail paths agree on the env-var contract.
 
     :returns: The default model identifier, e.g.
-        ``"databricks-gpt-5-4"`` or whatever the user pinned in
+        ``"gpt-5.4"`` or whatever the user pinned in
         ``GOALRAIL_MODEL``.
     """
     return os.environ.get(_GOALRAIL_MODEL_ENV_VAR, _DEFAULT_AD_HOC_MODEL)
@@ -171,7 +169,7 @@ class ChatOverrides:
         ``executor.config.harness`` for ``spec_version`` bundles (the
         only location that format's parser reads).
     :param model: ``--model`` value, e.g.
-        ``"databricks-claude-sonnet-4-6"``. ``None`` unchanged.
+        ``"claude-sonnet-4-6"``. ``None`` unchanged.
     :param system_prompt: ``--system-prompt`` value — overrides the
         YAML's top-level ``prompt`` field (mapped to
         ``AgentSpec.instructions`` by the adapter). ``None``
@@ -277,13 +275,13 @@ def run_chat(
     :param target: Path to an agent directory/bundle, or a server URL.
     :param client_tools: Optional client-side tool set name.
     :param server_url: Optional server URL to use with a local
-        agent path, e.g. ``"https://example.databricksapps.com"``.
+        agent path, e.g. ``"https://goalrail.example.com"``.
         ``None`` starts a local server for path targets.
     :param harness: CLI ``--harness`` override, e.g. ``"claude-sdk"``.
         Applied only to local-mode targets (YAML path / directory);
         ignored for remote server URLs.
     :param model: CLI ``--model`` override, e.g.
-        ``"databricks-claude-sonnet-4-6"``. Local-mode only.
+        ``"claude-sonnet-4-6"``. Local-mode only.
     :param prompt: CLI ``-p`` / ``--prompt`` — send one user turn,
         print the response, and exit.
     :param system_prompt: CLI ``--system-prompt`` — overrides the
@@ -607,15 +605,6 @@ def _remote_headers(
       1. explicit ``GOALRAIL_REMOTE_AUTH_TOKEN`` env var
       2. stored OIDC token from ``~/.goalrail/auth_tokens.json``
          (populated by ``goalrail login``)
-      3. stored Databricks Apps pointer record for ``server_url``
-         (populated by ``goalrail login <apps-url>``) — mints a
-         fresh workspace OAuth token via the SDK
-      4. ambient Databricks CLI / ``~/.databrickscfg`` credentials
-         (the SDK's default resolution; no profile is threaded)
-
-    This lets ``goalrail run --server <apps-url>`` work against
-    Databricks Apps after a one-time ``goalrail login <apps-url>``,
-    without forcing the user to manually copy a bearer into an env var.
 
     :param server_url: Optional remote server URL for looking up
         stored OIDC tokens, e.g. ``"http://localhost:6767"``.
@@ -631,56 +620,16 @@ def _remote_headers(
         oidc_token = load_token(server_url)
         if oidc_token:
             return {"Authorization": f"Bearer {oidc_token}"}
-        record_token = _stored_databricks_record_token(server_url)
-        if record_token:
-            return {"Authorization": f"Bearer {record_token}"}
-    creds = _read_databrickscfg(None)
-    if creds is None or not creds.token:
-        return {}
-    return {"Authorization": f"Bearer {creds.token}"}
+    return {}
 
 
-def _stored_databricks_record_token(server_url: str) -> str | None:
-    """Mint a workspace token from a stored Databricks Apps record.
-
-    ``goalrail login <apps-url>`` stores a pointer record naming the
-    workspace that fronts the app; this resolves it to a fresh bearer
-    via the Databricks CLI's host-keyed OAuth cache. One-shot — callers
-    that issue many requests should use :class:`_DatabricksTokenAuth`,
-    which reuses the SDK config across requests.
-
-    :param server_url: The remote server URL, e.g.
-        ``"https://myapp-123.aws.databricksapps.com"``.
-    :returns: A bearer token, or ``None`` when no pointer record is
-        stored or the workspace credentials don't resolve.
+class _RemoteTokenAuth(httpx.Auth):
     """
-    from goalrail.cli_auth import load_databricks_workspace_host
-    from goalrail.inner.databricks_executor import (
-        DatabricksAuthError,
-        _resolve_databricks_auth,
-    )
-
-    workspace_host = load_databricks_workspace_host(server_url)
-    if workspace_host is None:
-        return None
-    try:
-        auth, _host = _resolve_databricks_auth(host=workspace_host)
-        return auth.current_token()
-    except (DatabricksAuthError, ImportError, ValueError):
-        return None
-
-
-class _DatabricksTokenAuth(httpx.Auth):
-    """
-    httpx Auth that authenticates via the Databricks SDK, refreshing
-    OAuth tokens transparently.
+    httpx Auth that authenticates with a static env token or stored OIDC token.
 
     Resolution order:
       1. static env-var token (``GOALRAIL_REMOTE_AUTH_TOKEN``)
       2. stored OIDC token (from ``goalrail login``)
-      3. Databricks SDK credentials — resolved ONCE and reused, so the
-         SDK serves the cached token from memory and only re-runs the
-         Databricks CLI near expiry (not on every request).
     """
 
     def __init__(
@@ -694,60 +643,12 @@ class _DatabricksTokenAuth(httpx.Auth):
         self._server_url = server_url
         raw = os.environ.get(_REMOTE_AUTH_TOKEN_ENV)
         self._static_token = raw.strip() if raw else None
-        # Lazily-resolved, then reused, SDK auth (one Config → one token
-        # cache). Resolving per request rebuilt Config and shelled out to
-        # the Databricks CLI (~0.5s) every time — a heavy tax on the
-        # long-lived transcript-forwarder client that posts reply items.
-        self._sdk_auth: _DatabricksBearerAuth | None = None
-        self._sdk_auth_resolved = False
-
-    def _sdk_token(self) -> str | None:
-        """
-        Return a bearer token from the reused SDK auth, or ``None``.
-
-        Resolves Databricks SDK auth on first use and reuses it, so
-        repeat requests hit the SDK's in-memory token cache instead of
-        re-shelling to the Databricks CLI. A stored Databricks Apps
-        pointer record for the server (from ``goalrail login
-        <apps-url>``) takes precedence over profile/ambient resolution
-        — the record names the exact workspace the Apps edge accepts
-        tokens from.
-
-        :returns: Bearer token string, or ``None`` when no Databricks
-            credentials resolve.
-        """
-        from goalrail.cli_auth import load_databricks_workspace_host
-        from goalrail.inner.databricks_executor import (
-            DatabricksAuthError,
-            _resolve_databricks_auth,
-        )
-
-        if not self._sdk_auth_resolved:
-            workspace_host = (
-                load_databricks_workspace_host(self._server_url) if self._server_url else None
-            )
-            try:
-                if workspace_host is not None:
-                    self._sdk_auth, _host = _resolve_databricks_auth(host=workspace_host)
-                else:
-                    self._sdk_auth, _host = _resolve_databricks_auth()
-            except (DatabricksAuthError, ImportError, ValueError):
-                self._sdk_auth = None
-            self._sdk_auth_resolved = True
-        if self._sdk_auth is None:
-            return None
-        try:
-            return self._sdk_auth.current_token()
-        except DatabricksAuthError:
-            return None
 
     def auth_flow(self, request: httpx.Request) -> Generator[httpx.Request, httpx.Response, None]:
         """
         Inject an ``Authorization`` header before each request.
 
-        Static env-var token takes precedence, then stored OIDC token,
-        then the reused Databricks SDK auth (which refreshes expired
-        OAuth tokens transparently).
+        Static env-var token takes precedence, then stored OIDC token.
 
         :param request: The outgoing httpx request.
         :yields: The request with auth header set.
@@ -765,9 +666,6 @@ class _DatabricksTokenAuth(httpx.Auth):
                 request.headers["Authorization"] = f"Bearer {oidc_token}"
                 yield request
                 return
-        token = self._sdk_token()
-        if token:
-            request.headers["Authorization"] = f"Bearer {token}"
         yield request
 
 
@@ -778,9 +676,7 @@ def _server_headers(
     """
     Build non-auth HTTP headers for a Goalrail server client.
 
-    Auth is handled separately via :func:`_server_auth` which
-    returns an ``httpx.Auth`` that refreshes the Databricks OAuth
-    token on every request.
+    Auth is handled separately via :func:`_server_auth`.
 
     :param runner_id: Optional runner UUID, e.g.
         ``"runner_0123456789abcdef"``. Accepted for callers that
@@ -799,10 +695,9 @@ def _server_auth(
     """
     Build an httpx Auth for a remote Goalrail server client.
 
-    Returns a :class:`_DatabricksTokenAuth` when any credential
-    source is available (env var, stored ``goalrail login`` record,
-    or ambient Databricks credentials). Returns ``None`` for local
-    servers that don't need auth, so the caller can pass it straight
+    Returns a :class:`_RemoteTokenAuth` when any credential source is
+    available (env var or stored ``goalrail login`` record). Returns ``None``
+    for local servers that don't need auth, so the caller can pass it straight
     to ``GoalrailClient(auth=...)``.
 
     :param server_url: Optional remote server URL for looking up
@@ -811,17 +706,13 @@ def _server_auth(
     """
     raw = os.environ.get(_REMOTE_AUTH_TOKEN_ENV)
     if raw and raw.strip():
-        return _DatabricksTokenAuth(server_url=server_url)
-    # Check stored `goalrail login` records: a session JWT or a
-    # Databricks Apps pointer record.
+        return _RemoteTokenAuth(server_url=server_url)
+    # Check stored `goalrail login` records: a session JWT.
     if server_url:
-        from goalrail.cli_auth import load_databricks_workspace_host, load_token
+        from goalrail.cli_auth import load_token
 
-        if load_token(server_url) or load_databricks_workspace_host(server_url):
-            return _DatabricksTokenAuth(server_url=server_url)
-    creds = _read_databrickscfg(None)
-    if creds is not None and creds.token:
-        return _DatabricksTokenAuth(server_url=server_url)
+        if load_token(server_url):
+            return _RemoteTokenAuth(server_url=server_url)
     return None
 
 
@@ -1116,7 +1007,7 @@ def _run_claude_native_resume_redirect(
     Hand a claude-native conversation back to ``goalrail claude``.
 
     :param base_url: Goalrail server base URL, e.g.
-        ``"https://example.databricksapps.com"``.
+        ``"https://goalrail.example.com"``.
     :param conversation_id: Goalrail conversation id, e.g.
         ``"conv_abc123"``.
     :param auto_open_conversation: Browser-open preference for the wrapper.
@@ -1150,7 +1041,7 @@ def _run_codex_native_resume_redirect(
     Hand a codex-native conversation back to ``goalrail codex``.
 
     :param base_url: Goalrail server base URL, e.g.
-        ``"https://example.databricksapps.com"``.
+        ``"https://goalrail.example.com"``.
     :param conversation_id: Goalrail conversation id, e.g.
         ``"conv_abc123"``.
     :param auto_open_conversation: Browser-open preference for the wrapper.
@@ -1864,7 +1755,7 @@ def _wait_for_remote_runner(
     """Wait until the remote server sees the local runner tunnel.
 
     :param base_url: Remote server base URL with no trailing slash,
-        e.g. ``"https://example.databricksapps.com"``.
+        e.g. ``"https://goalrail.example.com"``.
     :param runner_id: Runner id the local process advertises, e.g.
         ``"runner_0123456789abcdef"``.
     :param headers: Auth headers for the remote server.
@@ -2662,7 +2553,7 @@ def _resolve_resume_target(
 
     :param base_url: Server base URL the SDK should target for
         the lookup, e.g. ``"http://127.0.0.1:9123"`` or
-        ``"https://example.databricksapps.com"``.
+        ``"https://goalrail.example.com"``.
     :param agent_name: The agent's registered name from the
         YAML's ``name:`` field.
     :param resume_conversation_id: An explicit
@@ -2761,7 +2652,7 @@ def _run_picker(
 
     :param base_url: Server base URL,
         e.g. ``"http://127.0.0.1:9123"`` or
-        ``"https://example.databricksapps.com"``.
+        ``"https://goalrail.example.com"``.
     :param agent_name: Agent's registered name.
     :param headers: Optional auth headers for the server,
         e.g. ``{"Authorization": "Bearer <token>"}``. Required
@@ -2812,7 +2703,7 @@ def _resolve_latest_conversation_id(
 
     :param base_url: Server base URL,
         e.g. ``"http://127.0.0.1:9123"`` or
-        ``"https://example.databricksapps.com"``.
+        ``"https://goalrail.example.com"``.
     :param agent_name: The agent's registered name from the
         YAML's ``name:`` field.
     :param headers: Optional auth headers for the server,
@@ -2995,8 +2886,7 @@ def _spec_declares_harness_or_model(raw: _YamlMapping) -> bool:
     """
     True when the YAML's ``executor:`` block has harness or model.
 
-    Either signal is enough for the spec-adapter's harness auto-pick
-    (``databricks-claude-*`` → ``claude-sdk``, etc.) — the
+    Either signal is enough for the spec-adapter's harness auto-pick; the
     default-model fallback only kicks in when BOTH are absent.
 
     Recognizes the harness in either shape: a flat ``executor.harness``
@@ -3087,7 +2977,7 @@ def _effective_openai_auth_model(
     :param raw: Parsed top-level YAML mapping.
     :param executor_block: Parsed ``executor`` mapping from ``raw``.
     :param overrides: CLI overrides that will be applied.
-    :returns: Effective model string, e.g. ``"databricks-gpt-5-4-mini"``,
+    :returns: Effective model string, e.g. ``"gpt-5.4-mini"``,
         or ``None`` when neither CLI nor YAML names a model.
     """
     if overrides.model is not None:
@@ -3133,7 +3023,7 @@ def _should_inject_openai_env_auth_for_executor(
     # family, or the legacy global ``auth:`` block — is the user's explicit
     # setup choice; an ambient env key must NOT be baked over it (a shell
     # with OPENAI_API_KEY exported would silently hijack the configured
-    # Databricks/gateway routing). Configured sources reach the runner via
+    # gateway routing). Configured sources reach the runner via
     # GOALRAIL_CONFIG_HOME, so skipping injection loses nothing. The env
     # bake remains only for users whose SOLE credential is the env key.
     from goalrail.onboarding.provider_config import (
@@ -3204,8 +3094,8 @@ def _apply_overrides_to_raw(raw: _YamlMapping, overrides: ChatOverrides) -> None
     # When neither harness nor model is declared — after overrides —
     # inject the ad-hoc default. Gated on harness absence so a YAML
     # like ``claude_code_agent.yaml`` (declares harness, no model)
-    # doesn't get silently paired with the gpt-5-4 default, which
-    # the Databricks FM API rejects for Claude-typed entities.
+    # doesn't get silently paired with the gpt default, which Claude-typed
+    # harnesses cannot use.
     # Uses ``_spec_declares_harness_or_model`` — must agree with the
     # ``needs_fallback`` gate in :func:`_materialize_override_bundle`.
     # Uses ``_default_cli_model`` (env-var-aware) instead of
@@ -3530,16 +3420,6 @@ def _start_local_server(
         # one. Surprises here ("why is my magic URL wrong?") are worse
         # than discarding an out-of-date setting.
         child_env["GOALRAIL_ACCOUNTS_BASE_URL"] = f"http://127.0.0.1:{port}"
-    # Propagate executor.profile from the spec as DATABRICKS_CONFIG_PROFILE
-    # (spec self-containment: the YAML's own declaration is the only thing
-    # that selects a Databricks workspace here — there is no CLI override).
-    # This ensures the Goalrail server and its runner subprocess resolve credentials
-    # for the right Databricks workspace (LLM calls, compaction, etc.).
-    if "DATABRICKS_CONFIG_PROFILE" not in child_env:
-        _spec = load_spec(agent_path)
-        if _spec.executor.profile:
-            child_env["DATABRICKS_CONFIG_PROFILE"] = _spec.executor.profile
-
     try:
         server_proc = subprocess.Popen(
             [

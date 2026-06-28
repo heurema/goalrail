@@ -209,8 +209,7 @@ def _wrap_legacy(
     :param fn: The legacy callable.
     :param configured_phases: When set, every wrapper invocation
         will add ``"configured_phases"`` to the legacy context
-        dict so legacy callables that read it (e.g. the
-        Databricks ``google_policy``) see the same value
+        dict so legacy callables that read it see the same value
         goalrail-native would. ``None`` means the key is
         omitted from the legacy context.
     :returns: A ``(ctx, context)``-shaped wrapper that calls
@@ -407,13 +406,11 @@ def _legacy_content(ctx: EvaluationContext) -> Any:
       via
       :func:`goalrail.inner.mcp_tools._extract_call_result_payload`
       — when an MCP server emits a single JSON-formatted text
-      block (the common shape for the Databricks Google /
-      Glean MCP tools and any FastMCP-based server returning a
-      structured payload), native goalrail hands the policy
+      block (a common shape for MCP tools returning structured
+      payloads), native goalrail hands the policy
       a dict, not a string. Mirror that here so legacy
       callables that branch on ``isinstance(content, dict)``
-      (e.g. the Databricks ``google_policy``'s
-      file-id tracking on ``tool_result``) keep working.
+      keep working.
       JSON-parse the goalrail string; on parse failure pass
       the raw string through (matches native fallback).
 

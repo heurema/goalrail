@@ -52,8 +52,7 @@ report (#6) calls out as undertested.
 Uses the same fixture pattern as
 ``test_run_goalrail_resumption.py`` and
 ``test_run_goalrail_instructions.py``: ``openai-agents`` honors
-``OPENAI_BASE_URL`` directly so the test needs no
-``~/.databrickscfg`` patching.
+``OPENAI_BASE_URL`` directly.
 """
 
 from __future__ import annotations

@@ -63,12 +63,8 @@ executor:
   # Model is OPTIONAL — omit to use the configured provider's default.
   # Pin one directly on the executor when needed:
   # model: anthropic/claude-sonnet-4-20250514   # LiteLLM provider/model
-  # model: databricks-claude-opus-4-7           # or a serving-endpoint name
   # connection:                                 # provider credentials
   #   api_key: ${ANTHROPIC_API_KEY}
-  # auth:                                        # or Databricks profile auth
-  #   type: databricks
-  #   profile: oss
 
   timeout: 3600        # Task deadline in seconds (default: 3600)
   max_iterations: 1000 # Max LLM calls per task (default: 1000)

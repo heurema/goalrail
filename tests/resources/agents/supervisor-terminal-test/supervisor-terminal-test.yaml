@@ -28,7 +28,7 @@ prompt: |
   unless the user asks.
 
 executor:
-  model: databricks-claude-sonnet-4-6
+  model: anthropic/claude-sonnet-4-6
   harness: claude-sdk
   profile: test-profile
 
@@ -57,6 +57,6 @@ tools:
       terminal config to you, so ``bash`` is available. Reply
       with one short line summarizing what you did.
     executor:
-      model: databricks-claude-sonnet-4-6
+      model: anthropic/claude-sonnet-4-6
       harness: claude-sdk
       profile: test-profile

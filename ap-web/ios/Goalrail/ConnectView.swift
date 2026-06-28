@@ -133,10 +133,9 @@ struct ConnectView: View {
     Task {
       do {
         let normalized = try ServerURL.normalize(serverURL, allowsInsecureHTTP: allowsInsecureHTTP)
-        let expanded = await WorkspaceURLExpander.expandIfNeeded(normalized)
         await MainActor.run {
           isConnecting = false
-          onConnect(expanded)
+          onConnect(normalized)
         }
       } catch {
         await MainActor.run {

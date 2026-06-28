@@ -67,12 +67,16 @@ def test_set_version_rewrites_every_location(repo_copy: Path) -> None:
 
 def test_set_version_preserves_unrelated_version_literals(repo_copy: Path) -> None:
     root_pyproject = repo_copy / "pyproject.toml"
+    current = root_pyproject.read_text()
+    root_pyproject.write_text(
+        current.replace('"ftfy>=6.0",', '"ftfy>=6.0",\n    "unrelated-lib==0.3.0.dev0",')
+    )
     before = root_pyproject.read_text()
-    # Real third-party floor that shares the old version digits — must
-    # survive a bump untouched (anchored-on-name replacement, not blind).
-    assert '"databricks-mcp>=0.1.0",' in before
+    # A third-party literal that shares the current project version must survive
+    # a bump untouched (anchored-on-name replacement, not blind).
+    assert '"unrelated-lib==0.3.0.dev0",' in before
     update_versions.set_version(repo_copy, "9.9.9")
-    assert '"databricks-mcp>=0.1.0",' in root_pyproject.read_text()
+    assert '"unrelated-lib==0.3.0.dev0",' in root_pyproject.read_text()
 
 
 def test_check_detects_version_drift(repo_copy: Path) -> None:

@@ -14,11 +14,10 @@ is more stable (matches main's failure set exactly with no
 ordering flakes) but slower; bump up if your host has more
 cores.
 
-Pass ``--profile <name>`` to route through a Databricks workspace
-instead of api.openai.com: ``OPENAI_BASE_URL`` is set to
-``<host>/serving-endpoints`` for the spawned server, agent bundle
-``llm.model`` values are rewritten via :data:`_DATABRICKS_MODEL_MAP`,
-and ``--llm-api-key`` is treated as a Databricks bearer.
+Set ``GOALRAIL_E2E_OPENAI_BASE_URL`` to route through an
+OpenAI-compatible gateway instead of the provider default. In that
+mode, ``OPENAI_BASE_URL`` is set for the spawned server and agent
+bundle ``llm.model`` values are rewritten via :data:`_GATEWAY_MODEL_MAP`.
 
 These tests are excluded from the default ``pytest`` run via
 ``--ignore=tests/e2e`` in ``pyproject.toml``.
@@ -56,7 +55,7 @@ from tests._helpers.compat import (
 )
 from tests._model_pools import current_attempt, resolve_model
 from tests.e2e._harness_probes import skip_if_harness_cli_missing
-from tests.e2e.helpers import HEALTH_TIMEOUT_S, POLL_INTERVAL_S, lookup_databricks_host
+from tests.e2e.helpers import HEALTH_TIMEOUT_S, POLL_INTERVAL_S, lookup_gateway_base_url
 
 
 @pytest.fixture(autouse=True)
@@ -162,21 +161,21 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _CODER_DIR = _REPO_ROOT / "tests" / "resources" / "examples" / "coder"
 _ARCHER_DIR = _REPO_ROOT / "tests" / "resources" / "examples" / "archer"
 
-# OpenAI model name -> nearest-equivalent Databricks foundation-model
-# name. Intentionally lossy (e.g. ``gpt-4o`` and ``openai/gpt-4o`` both
-# map to ``databricks-gpt-5-4``) — the e2e harness only needs the
-# routing to resolve, not exact-model parity.
-_DATABRICKS_MODEL_MAP: dict[str, str] = {
-    "gpt-5.4": "databricks-gpt-5-4",
-    "gpt-5.4-mini": "databricks-gpt-5-4-mini",
-    "gpt-4o": "databricks-gpt-5-4",
-    "gpt-4o-mini": "databricks-gpt-5-4-mini",
+# OpenAI model name -> nearest-equivalent gateway model name.
+# Intentionally lossy (e.g. ``gpt-4o`` and ``openai/gpt-4o`` both
+# map to ``openai/gpt-5-4``) — the e2e harness only needs routing
+# to resolve, not exact-model parity.
+_GATEWAY_MODEL_MAP: dict[str, str] = {
+    "gpt-5.4": "openai/gpt-5-4",
+    "gpt-5.4-mini": "openai/gpt-5-4-mini",
+    "gpt-4o": "openai/gpt-5-4",
+    "gpt-4o-mini": "openai/gpt-5-4-mini",
     # openai-coder's reviewer sub-agent ships with gpt-4.1-mini;
     # without this entry the bundle uploads unrewritten and the
-    # Databricks serving endpoint 404s on the model name.
-    "gpt-4.1-mini": "databricks-gpt-5-4-mini",
-    "claude-sonnet-4-20250514": "databricks-claude-sonnet-4-6",
-    "openai/gpt-4o": "databricks-gpt-5-4",
+    # Some gateways reject this raw model name.
+    "gpt-4.1-mini": "openai/gpt-5-4-mini",
+    "claude-sonnet-4-20250514": "anthropic/claude-sonnet-4-6",
+    "openai/gpt-4o": "openai/gpt-5-4",
 }
 
 # Test-only fixtures live under tests/resources/agents/ to keep
@@ -230,32 +229,23 @@ def wait_for_server(base_url: str, timeout: float = 20.0) -> None:
 
 
 @pytest.fixture(scope="session")
-def databricks_workspace_host(
-    request: pytest.FixtureRequest,
-) -> str | None:
+def gateway_base_url(request: pytest.FixtureRequest) -> str | None:
     """
-    Resolve the Databricks workspace host from ``--profile``, or
-    ``None`` when ``--profile`` is empty (api.openai.com path).
+    Resolve the optional OpenAI-compatible gateway base URL for e2e tests.
 
-    :param request: pytest request — reads ``--profile``.
-    :returns: Host URL with trailing ``/`` stripped, or ``None``.
-    :raises pytest.UsageError: When ``--profile`` names a missing
-        section or one without a ``host`` key.
+    :param request: pytest request, used only to reject the removed
+        profile-based e2e path.
+    :returns: Base URL with trailing ``/`` stripped, or ``None``.
+    :raises pytest.UsageError: When ``--profile`` is supplied. The e2e suite
+        no longer supports profile-based gateway routing.
     """
-    # The flag is registered at tests/conftest.py with default="",
-    # so getoption("--profile") always returns a string.
     profile: str = request.config.getoption("--profile")
-    if not profile:
-        return None
-    host = lookup_databricks_host(profile)
-    if host is None:
+    if profile:
         raise pytest.UsageError(
-            f"Databricks profile {profile!r} is missing from "
-            f"~/.databrickscfg or has no ``host`` entry. "
-            f"Either pass ``--profile`` for a profile that exists "
-            f"or add the section to your databrickscfg."
+            "--profile is no longer supported for e2e gateway routing; "
+            "set GOALRAIL_E2E_OPENAI_BASE_URL and pass a matching --llm-api-key."
         )
-    return host
+    return lookup_gateway_base_url()
 
 
 @pytest.fixture(scope="session")
@@ -497,7 +487,7 @@ def get_mock_requests(
 @pytest.fixture(scope="session")
 def openai_judge_api_key(
     llm_api_key: str,
-    databricks_workspace_host: str | None,
+    gateway_base_url: str | None,
 ) -> str:
     """
     OpenAI key for tests that hit ``api.openai.com`` directly.
@@ -505,38 +495,30 @@ def openai_judge_api_key(
     Some tests use ``mlflow.genai.judges.make_judge`` (or build an
     OpenAI client without ``OPENAI_BASE_URL`` overrides) to grade
     the agent's output. Those calls go straight to
-    ``api.openai.com``, which under ``--profile`` rejects the
-    Databricks bearer with HTTP 401 ``invalid_issuer``. We
-    deliberately do NOT translate these tests' specs to Databricks
-    models — Databricks is preferred for testing because it's free,
-    so we'd rather skip the judge tests under ``--profile`` than
-    re-route them and pay for OpenAI tokens on every run.
+    ``api.openai.com``. When ``GOALRAIL_E2E_OPENAI_BASE_URL`` is set,
+    the suite's primary key may belong to that gateway rather than to
+    api.openai.com, so judge tests require an explicit OpenAI key.
 
     Resolution order:
-    1. No ``--profile`` → ``--llm-api-key`` is the OpenAI key, use it.
-    2. ``--profile`` set + ``OPENAI_API_KEY`` in env (real ``sk-...``)
-       → use the explicit key. Caller invoked pytest without
-       ``env -u OPENAI_API_KEY``, signaling intent to pay for the
-       judge calls.
-    3. ``--profile`` set + no ``OPENAI_API_KEY`` → skip the test.
+    1. No gateway URL → ``--llm-api-key`` is the OpenAI key, use it.
+    2. Gateway URL set + ``OPENAI_API_KEY`` in env (real ``sk-...``)
+       → use the explicit key.
+    3. Gateway URL set + no ``OPENAI_API_KEY`` → skip the test.
 
-    :param llm_api_key: The ``--llm-api-key`` value (Databricks
-        token under ``--profile``, OpenAI key otherwise).
-    :param databricks_workspace_host: Workspace host URL, or
-        ``None`` when ``--profile`` is empty.
+    :param llm_api_key: The ``--llm-api-key`` value.
+    :param gateway_base_url: Gateway base URL, or ``None``.
     :returns: An OpenAI key safe to use against ``api.openai.com``.
     """
-    if databricks_workspace_host is None:
+    if gateway_base_url is None:
         return llm_api_key
     explicit = os.environ.get("OPENAI_API_KEY")
     if explicit and explicit.startswith("sk-"):
         return explicit
     pytest.skip(
         "test uses an LLM judge that hits api.openai.com directly. "
-        "Under --profile, --llm-api-key is a Databricks token which "
-        "OpenAI rejects (401 invalid_issuer). Pass OPENAI_API_KEY in "
-        "env (don't strip it via env -u) to opt in and pay for the "
-        "judge calls."
+        "With GOALRAIL_E2E_OPENAI_BASE_URL, --llm-api-key may be a "
+        "gateway key. Pass OPENAI_API_KEY in env to opt in and pay "
+        "for the judge calls."
     )
 
 
@@ -570,7 +552,7 @@ def live_server(
     request: pytest.FixtureRequest,
     llm_api_key: str,
     using_mock_llm: bool,
-    databricks_workspace_host: str | None,
+    gateway_base_url: str | None,
     tmp_path_factory: pytest.TempPathFactory,
     live_runner_id: str,
     mock_llm_server_url: str | None,
@@ -580,17 +562,15 @@ def live_server(
 
     The server runs on a random high port. The fixture waits
     for the health endpoint before yielding, and kills the
-    process on teardown. When ``--profile`` is set, the spawned
-    server's ``OPENAI_BASE_URL`` is pointed at the workspace's
-    serving-endpoints; bundles' ``llm.model`` get rewritten by
-    :func:`upload_agent` (see :data:`_DATABRICKS_MODEL_MAP`).
+    process on teardown. When ``GOALRAIL_E2E_OPENAI_BASE_URL`` is set,
+    the spawned server's ``OPENAI_BASE_URL`` is pointed at that gateway;
+    bundles' ``llm.model`` get rewritten by
+    :func:`upload_agent` (see :data:`_GATEWAY_MODEL_MAP`).
     When running in mock mode (no ``--llm-api-key``), the server's
     ``OPENAI_BASE_URL`` is pointed at the mock LLM server.
 
-    :param llm_api_key: The API key for the LLM (a Databricks
-        bearer under ``--profile``, otherwise an OpenAI key, or
-        ``"mock-key"`` in mock mode).
-    :param databricks_workspace_host: Workspace host URL or ``None``.
+    :param llm_api_key: The API key for the LLM, or ``"mock-key"`` in mock mode.
+    :param gateway_base_url: Gateway base URL or ``None``.
     :param tmp_path_factory: Pytest temp path factory for the DB.
     :param live_runner_id: Runner id the server subprocess should
         advertise and tests should bind sessions to.
@@ -615,15 +595,11 @@ def live_server(
     # the worktree root (tests/e2e/conftest.py → parents[2]).
     # Seed the plain claude-sdk chat agent as a built-in so fork/switch
     # e2e tests can rebind a session INTO it (the route only binds
-    # built-ins). Materialize a profile-aware copy: under ``--profile`` the
-    # built-in is gateway-wired (model mapped + profile stamped) like the
-    # source agent, so the post-switch turn authenticates through the
-    # Databricks gateway. CI has no Claude OAuth, so seeding the on-disk
-    # OAuth spec verbatim would 401 the switched-to agent.
+    # built-ins). Materialize a gateway-aware copy when a gateway base URL is
+    # configured; CI has no Claude OAuth, so mock mode injects explicit auth.
     builtin_sdk_chat_spec = _materialize_builtin_sdk_chat_spec(
         tmp_path_factory.mktemp("e2e_builtin_agents"),
-        databricks_workspace_host=databricks_workspace_host,
-        profile=request.config.getoption("--profile") or None,
+        gateway_base_url=gateway_base_url,
         mock_llm_server_url=mock_llm_server_url if using_mock_llm else None,
     )
     env = {
@@ -640,12 +616,8 @@ def live_server(
         # The OpenAI SDK appends /responses to the base URL, so
         # include /v1 in the base so the SDK hits /v1/responses.
         env["OPENAI_BASE_URL"] = f"{mock_llm_server_url}/v1"
-    elif databricks_workspace_host is not None:
-        env["OPENAI_BASE_URL"] = f"{databricks_workspace_host}/serving-endpoints"
-        # Thread --profile so claude-sdk and other harnesses that read
-        # ~/.databrickscfg directly pick the right profile. Without it
-        # ClaudeSDKExecutor falls through and 403s.
-        env["DATABRICKS_CONFIG_PROFILE"] = request.config.getoption("--profile")
+    elif gateway_base_url is not None:
+        env["OPENAI_BASE_URL"] = gateway_base_url
     # The CLI exposes ``--database-uri`` but not an env var, so the
     # DB path must be on the command line. Absolute path prevents
     # the server from writing into the CWD (which was previously
@@ -670,7 +642,7 @@ def live_server(
     # Prompt-policy classifiers run server-side through
     # ``RuntimeCaps.llm``. Without a server ``llm:`` block the
     # classifier's OpenAI client defaults to api.openai.com and
-    # 401s under ``--profile``. Point it at the same gateway the
+    # 401s when only a gateway-specific key is available. Point it at the same gateway the
     # agent executors use so prompt-policy e2e tests can classify.
     server_args = [
         # Compat-aware: the test process's python normally, the pinned old
@@ -703,7 +675,7 @@ def live_server(
             )
         )
         server_args.extend(["--config", str(server_cfg)])
-    elif databricks_workspace_host is not None:
+    elif gateway_base_url is not None:
         server_cfg = tmp_path_factory.mktemp("e2e_server_cfg") / "server.yaml"
         server_cfg.write_text(
             yaml.safe_dump(
@@ -711,9 +683,9 @@ def live_server(
                     "llm": {
                         # Stable key: session-scoped server must not
                         # depend on which test boots it first.
-                        "model": resolve_model("databricks-gpt-5-4-mini", key="live-server"),
+                        "model": resolve_model("openai/gpt-5-4-mini", key="live-server"),
                         "connection": {
-                            "base_url": f"{databricks_workspace_host}/serving-endpoints",
+                            "base_url": gateway_base_url,
                             "api_key": llm_api_key,
                         },
                     }
@@ -850,8 +822,8 @@ def upload_agent(
     client: httpx.Client,
     agent_dir: Path,
     *,
-    rewrite_model_for_databricks: bool = False,
-    databricks_profile: str | None = None,
+    rewrite_models_for_gateway: bool = False,
+    gateway_profile: str | None = None,
 ) -> str:
     """
     Upload an agent bundle via multipart ``POST /v1/sessions``.
@@ -862,24 +834,20 @@ def upload_agent(
 
     :param client: HTTP client pointed at the server.
     :param agent_dir: Path to the agent directory.
-    :param rewrite_model_for_databricks: When True, rewrite any
+    :param rewrite_models_for_gateway: When True, rewrite any
         ``model:`` key (at any YAML depth) via
-        :data:`_DATABRICKS_MODEL_MAP` before tarballing. Covers
+        :data:`_GATEWAY_MODEL_MAP` before tarballing. Covers
         ``llm.model`` in ``config.yaml`` bundles and
         ``executor.model`` (including nested ``tools.<name>.executor.model``)
         in single-file goalrail YAMLs.
-    :param databricks_profile: When set, stamp this profile onto
-        every ``executor`` block that lacks one during the rewrite.
-        Native (no-harness) agents otherwise reach the gateway with
-        no profile and 401; harness agents that already carry a
-        profile are left untouched. Only applied when
-        ``rewrite_model_for_databricks`` is True.
+    :param gateway_profile: Deprecated compatibility parameter. Profile-based
+        e2e routing has been removed; the value is ignored.
     :returns: The agent name.
     """
+    del gateway_profile
     bundle = build_agent_bundle(
         agent_dir,
-        rewrite_model_for_databricks=rewrite_model_for_databricks,
-        databricks_profile=databricks_profile,
+        rewrite_models_for_gateway=rewrite_models_for_gateway,
     )
     import json as _json
 
@@ -931,7 +899,7 @@ def register_inline_agent(
     :param name: Agent name (also the model field on later turns).
     :param harness: Executor harness identifier, e.g. ``"claude-sdk"``.
     :param model: Model identifier the executor receives.
-    :param profile: Databricks profile name baked into the executor.
+    :param profile: Optional provider profile name baked into the executor.
     :param prompt: System prompt for the agent.
     :param mock_llm_base_url: When set, bake an ``auth.type: api_key``
         block into the executor so the harness hits the mock server
@@ -1080,45 +1048,34 @@ def register_dir_agent_with_mock_llm(
 def build_agent_bundle(
     agent_dir: Path,
     *,
-    rewrite_model_for_databricks: bool = False,
-    databricks_profile: str | None = None,
+    rewrite_models_for_gateway: bool = False,
 ) -> bytes:
     """
     Package an agent directory as a gzipped tarball.
 
     :param agent_dir: Agent directory to archive.
-    :param rewrite_model_for_databricks: When True, rewrite model
-        values through :data:`_DATABRICKS_MODEL_MAP` while archiving.
-    :param databricks_profile: When set, stamp this profile onto
-        every ``executor`` block that lacks one during the rewrite.
+    :param rewrite_models_for_gateway: When True, rewrite model
+        values through :data:`_GATEWAY_MODEL_MAP` while archiving.
     :returns: Gzipped tar archive bytes accepted by agent/session
         upload endpoints.
     """
     with io.BytesIO() as buffer:
         with tarfile.open(fileobj=buffer, mode="w:gz") as tar:
-            if rewrite_model_for_databricks:
-                _add_dir_with_model_rewrite(tar, agent_dir, profile=databricks_profile)
+            if rewrite_models_for_gateway:
+                _add_dir_with_model_rewrite(tar, agent_dir)
             else:
                 tar.add(str(agent_dir), arcname=".")
         return buffer.getvalue()
 
 
-def _rewrite_yaml_models(
-    node: Any, profile: str | None = None, spread_key: str | None = None
-) -> bool:
+def _rewrite_yaml_models(node: Any, spread_key: str | None = None) -> bool:
     """
     Walk *node* recursively and rewrite ``model:`` string values
-    via :data:`_DATABRICKS_MODEL_MAP`, then load-balance the result
+    via :data:`_GATEWAY_MODEL_MAP`, then load-balance the result
     through :func:`tests._model_pools.resolve_model`. Values outside
     both the map and the balance pools pass through untouched.
 
-    When *profile* is set, also stamp ``profile:`` onto every
-    ``executor`` block that lacks one — native (no-harness) agents
-    otherwise reach the Databricks gateway with no profile and 401.
-
     :param node: A parsed YAML node (dict, list, or scalar).
-    :param profile: Databricks profile to inject into executor
-        blocks, or ``None`` to skip profile injection.
     :param spread_key: Stable load-balancing key, e.g. the bundle dir
         name; combined with each model value so bundle siblings spread.
         ``None`` falls back to the running test's nodeid.
@@ -1128,37 +1085,30 @@ def _rewrite_yaml_models(
     if isinstance(node, dict):
         for k, v in node.items():
             if k == "model" and isinstance(v, str):
-                mapped = _DATABRICKS_MODEL_MAP.get(v, v)
+                mapped = _GATEWAY_MODEL_MAP.get(v, v)
                 key = f"{spread_key}:{v}" if spread_key is not None else None
                 resolved = resolve_model(mapped, key=key)
                 if resolved != v:
                     node[k] = resolved
                     changed = True
-            if k == "executor" and isinstance(v, dict) and profile and "profile" not in v:
-                v["profile"] = profile
-                changed = True
-            if _rewrite_yaml_models(v, profile, spread_key):
+            if _rewrite_yaml_models(v, spread_key):
                 changed = True
     elif isinstance(node, list):
         for item in node:
-            if _rewrite_yaml_models(item, profile, spread_key):
+            if _rewrite_yaml_models(item, spread_key):
                 changed = True
     return changed
 
 
-def _add_dir_with_model_rewrite(
-    tar: tarfile.TarFile, agent_dir: Path, *, profile: str | None = None
-) -> None:
+def _add_dir_with_model_rewrite(tar: tarfile.TarFile, agent_dir: Path) -> None:
     """
     Add *agent_dir* to *tar*, rewriting any YAML file's ``model:``
-    values via :data:`_DATABRICKS_MODEL_MAP`. Files without a
+    values via :data:`_GATEWAY_MODEL_MAP`. Files without a
     recognized model value are tarred verbatim (preserves comments
     and formatting). Symlinks and non-regular files are skipped.
 
     :param tar: The open tarfile being built.
     :param agent_dir: Path to the agent directory.
-    :param profile: Databricks profile to stamp onto executor blocks
-        that lack one, or ``None`` to skip profile injection.
     :returns: ``None``. The tar is mutated in place.
     """
     for entry in sorted(agent_dir.rglob("*")):
@@ -1174,7 +1124,7 @@ def _add_dir_with_model_rewrite(
         except yaml.YAMLError:
             config = None
         if not isinstance(config, dict) or not _rewrite_yaml_models(
-            config, profile, spread_key=agent_dir.name
+            config, spread_key=agent_dir.name
         ):
             tar.add(str(entry), arcname=rel)
             continue
@@ -1188,22 +1138,20 @@ def _add_dir_with_model_rewrite(
 def _materialize_builtin_sdk_chat_spec(
     dest_dir: Path,
     *,
-    databricks_workspace_host: str | None,
-    profile: str | None,
+    gateway_base_url: str | None,
     mock_llm_server_url: str | None = None,
 ) -> Path:
     """
-    Write a profile-aware copy of ``sdk-chat-builtin.yaml`` to seed as a built-in.
+    Write a gateway-aware copy of ``sdk-chat-builtin.yaml`` to seed as a built-in.
 
     The built-in fork/switch TARGET is seeded via
     ``GOALRAIL_BUILTIN_AGENT_DIRS``, which reads the spec verbatim — it
     does NOT pass through :func:`upload_agent`'s model rewrite. The on-disk
-    spec (``model: claude-sonnet-4-20250514``, no profile) therefore
-    authenticates via the ``claude`` CLI's OAuth session, which hosted CI
-    lacks (the post-switch turn would fail ``NOT LOGGED IN``). Under
-    ``--profile`` we apply the SAME rewrite ``upload_agent`` does — map the
-    model via :data:`_DATABRICKS_MODEL_MAP` and stamp ``executor.profile``
-    — so the seeded built-in is gateway-wired like the source agent.
+    spec (``model: claude-sonnet-4-20250514``) therefore authenticates via
+    the ``claude`` CLI's OAuth session, which hosted CI lacks (the post-switch
+    turn would fail ``NOT LOGGED IN``). When a gateway base URL is configured,
+    we apply the same model rewrite
+    ``upload_agent`` does so the seeded built-in is gateway-compatible.
     Verbatim (local OAuth path) otherwise. The filename is kept as
     ``sdk-chat-builtin.yaml`` so the built-in seeds under the name the e2e
     tests look up, and no ``os_env`` is added (the os_env-reset test relies
@@ -1216,19 +1164,15 @@ def _materialize_builtin_sdk_chat_spec(
 
     :param dest_dir: Directory to write the materialized spec into, e.g. a
         ``tmp_path_factory.mktemp(...)`` dir.
-    :param databricks_workspace_host: Workspace host URL, or ``None`` when
-        ``--profile`` is empty (the api.openai.com / local OAuth path).
-    :param profile: The ``--profile`` value to stamp onto the executor,
-        e.g. ``"default"``; ignored when *databricks_workspace_host* is
-        ``None``.
+    :param gateway_base_url: Gateway base URL, or ``None``.
     :param mock_llm_server_url: Mock LLM server base URL, e.g.
         ``"http://127.0.0.1:12345"``. When set, the built-in's executor
         gets an ``auth`` block pointing at this URL (without ``/v1``).
     :returns: Path to the written ``sdk-chat-builtin.yaml``.
     """
     config = yaml.safe_load(_SDK_CHAT_BUILTIN_SPEC.read_text())
-    if databricks_workspace_host is not None:
-        _rewrite_yaml_models(config, profile, spread_key=_SDK_CHAT_BUILTIN_SPEC.stem)
+    if gateway_base_url is not None:
+        _rewrite_yaml_models(config, spread_key=_SDK_CHAT_BUILTIN_SPEC.stem)
     if mock_llm_server_url is not None:
         # The Anthropic SDK appends /v1/messages to base_url, so do NOT
         # include /v1 here — the mock server serves POST /v1/messages.
@@ -1243,7 +1187,7 @@ def _materialize_builtin_sdk_chat_spec(
 
 
 @pytest.fixture(scope="session")
-def coder_agent(http_client: httpx.Client, databricks_workspace_host: str | None) -> str:
+def coder_agent(http_client: httpx.Client, gateway_base_url: str | None) -> str:
     """
     Upload the coder agent (with reviewer sub-agent) and
     return its name.
@@ -1254,12 +1198,12 @@ def coder_agent(http_client: httpx.Client, databricks_workspace_host: str | None
     return upload_agent(
         http_client,
         _CODER_DIR,
-        rewrite_model_for_databricks=databricks_workspace_host is not None,
+        rewrite_models_for_gateway=gateway_base_url is not None,
     )
 
 
 @pytest.fixture(scope="session")
-def archer_agent(http_client: httpx.Client, databricks_workspace_host: str | None) -> str:
+def archer_agent(http_client: httpx.Client, gateway_base_url: str | None) -> str:
     """
     Upload the archer agent (with fact_checker and summarizer
     sub-agents) and return its name.
@@ -1270,12 +1214,12 @@ def archer_agent(http_client: httpx.Client, databricks_workspace_host: str | Non
     return upload_agent(
         http_client,
         _ARCHER_DIR,
-        rewrite_model_for_databricks=databricks_workspace_host is not None,
+        rewrite_models_for_gateway=gateway_base_url is not None,
     )
 
 
 @pytest.fixture(scope="session")
-def claude_coder_agent(http_client: httpx.Client, databricks_workspace_host: str | None) -> str:
+def claude_coder_agent(http_client: httpx.Client, gateway_base_url: str | None) -> str:
     """
     Upload the claude-coder agent and return its name.
 
@@ -1288,14 +1232,12 @@ def claude_coder_agent(http_client: httpx.Client, databricks_workspace_host: str
     return upload_agent(
         http_client,
         _CLAUDE_CODER_DIR,
-        rewrite_model_for_databricks=databricks_workspace_host is not None,
+        rewrite_models_for_gateway=gateway_base_url is not None,
     )
 
 
 @pytest.fixture(scope="session")
-def sandbox_deps_os_env_agent(
-    http_client: httpx.Client, databricks_workspace_host: str | None
-) -> str:
+def sandbox_deps_os_env_agent(http_client: httpx.Client, gateway_base_url: str | None) -> str:
     """
     Upload the minimal os_env dependency-install test fixture.
 
@@ -1305,31 +1247,32 @@ def sandbox_deps_os_env_agent(
     return upload_agent(
         http_client,
         _SANDBOX_DEPS_OS_ENV_DIR,
-        rewrite_model_for_databricks=databricks_workspace_host is not None,
+        rewrite_models_for_gateway=gateway_base_url is not None,
     )
 
 
 @pytest.fixture(scope="session")
-def databricks_profile_or_none(request: pytest.FixtureRequest) -> str | None:
+def gateway_profile_or_none(request: pytest.FixtureRequest) -> str | None:
     """
-    Return the active ``--profile`` value, or ``None`` when unset.
+    Return ``None``; retained for older e2e fixtures during the gateway rename.
 
-    Non-skipping companion to the per-test ``databricks_profile``
-    fixtures: agent-upload fixtures need the profile to stamp onto
-    native executor blocks but must still build (api.openai.com path)
-    when no profile is set.
-
-    :param request: Pytest fixture request.
-    :returns: The profile name, or ``None``.
+    :param request: Pytest fixture request, used to reject removed profile
+        routing when supplied.
+    :returns: ``None``.
     """
-    return request.config.getoption("--profile") or None
+    if request.config.getoption("--profile"):
+        raise pytest.UsageError(
+            "--profile is no longer supported for e2e gateway routing; "
+            "set GOALRAIL_E2E_OPENAI_BASE_URL and pass a matching --llm-api-key."
+        )
+    return None
 
 
 @pytest.fixture(scope="session")
 def openai_coder_agent(
     http_client: httpx.Client,
-    databricks_workspace_host: str | None,
-    databricks_profile_or_none: str | None,
+    gateway_base_url: str | None,
+    gateway_profile_or_none: str | None,
 ) -> str:
     """
     Upload the openai-coder agent (with reviewer sub-agent
@@ -1341,15 +1284,13 @@ def openai_coder_agent(
     return upload_agent(
         http_client,
         _OPENAI_CODER_DIR,
-        rewrite_model_for_databricks=databricks_workspace_host is not None,
-        databricks_profile=databricks_profile_or_none,
+        rewrite_models_for_gateway=gateway_base_url is not None,
+        gateway_profile=gateway_profile_or_none,
     )
 
 
 @pytest.fixture(scope="session")
-def sys_terminal_test_agent(
-    http_client: httpx.Client, databricks_workspace_host: str | None
-) -> str:
+def sys_terminal_test_agent(http_client: httpx.Client, gateway_base_url: str | None) -> str:
     """
     Upload the ``sys-terminal-test`` agent (goalrail-flavored
     YAML with a ``terminals:`` block) and return its name.
@@ -1365,7 +1306,7 @@ def sys_terminal_test_agent(
     return upload_agent(
         http_client,
         _SYS_TERMINAL_TEST_DIR,
-        rewrite_model_for_databricks=databricks_workspace_host is not None,
+        rewrite_models_for_gateway=gateway_base_url is not None,
     )
 
 
@@ -1745,7 +1686,7 @@ def poll_for_pending_tool_calls(
 @pytest.fixture
 def resume_test_server(
     llm_api_key: str,
-    databricks_workspace_host: str | None,
+    gateway_base_url: str | None,
     tmp_path: Path,
 ) -> Iterator[str]:
     """
@@ -1766,10 +1707,10 @@ def resume_test_server(
 
     No sibling runner is started: in ``--server`` mode the CLI brings its own.
 
-    :param llm_api_key: LLM key from ``--llm-api-key`` (a Databricks bearer
-        under ``--profile``). The native harnesses authenticate the model via
-        their own login, so this only satisfies the server's startup env.
-    :param databricks_workspace_host: Workspace host URL, or ``None``.
+    :param llm_api_key: LLM key from ``--llm-api-key``. The native harnesses
+        authenticate the model via their own login, so this only satisfies the
+        server's startup env.
+    :param gateway_base_url: Gateway base URL, or ``None``.
     :param tmp_path: Per-test temp dir for the DB, artifacts, and server log.
     :returns: The server base URL, e.g. ``"http://127.0.0.1:54321"``.
     :raises RuntimeError: If the server does not pass health within
@@ -1789,8 +1730,8 @@ def resume_test_server(
     # Worktree shadow in normal mode; dropped in compat mode (see the
     # primary live_server fixture above).
     apply_server_env(env, _REPO_ROOT)
-    if databricks_workspace_host is not None:
-        env["OPENAI_BASE_URL"] = f"{databricks_workspace_host}/serving-endpoints"
+    if gateway_base_url is not None:
+        env["OPENAI_BASE_URL"] = gateway_base_url
     # See docstring: an allow-list would reject the CLI's own runner.
     env.pop("GOALRAIL_RUNNER_TUNNEL_TOKEN", None)
 

@@ -1,11 +1,9 @@
 """Server-side YAML config for the non-CLI entrypoints.
 
 The ``goalrail server`` CLI already takes ``-c/--config`` and reads a
-YAML file (see ``goalrail/cli.py``). The hosted entrypoints —
-``deploy/docker/entrypoint.py`` and ``deploy/databricks/src/app.py`` —
-don't go through that CLI; they build the app directly from env vars.
-This module gives those entrypoints the *same* config-file experience a
-laptop gets from ``-c``, so a deployment can keep most of its settings
+YAML file (see ``goalrail/cli.py``). Hosted entrypoints can build the app
+directly from env vars, so this module gives them the *same* config-file
+experience a laptop gets from ``-c``. A deployment can keep most of its settings
 (admins, allowed domains, policy modules, artifact location, host/port,
 database URI) in one file on the persistent volume instead of a pile of
 env vars.

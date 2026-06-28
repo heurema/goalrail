@@ -1048,11 +1048,11 @@ def test_build_runner_env_allowlists_host_env_and_strips_secrets() -> None:
         "HOME": "/home/alice",
         "LANG": "en_US.UTF-8",
         "LC_CTYPE": "UTF-8",
-        "DATABRICKS_CONFIG_PROFILE": "ambient",
-        "DATABRICKS_CONFIG_FILE": "/tmp/databrickscfg",
+        "CUSTOM_PROVIDER_PROFILE": "ambient",
+        "CUSTOM_PROVIDER_CONFIG_FILE": "/tmp/provider.cfg",
         "ANTHROPIC_API_KEY": "sk-harness",
         "IS_SANDBOX": "1",
-        "DATABRICKS_TOKEN": "dapi-secret",
+        "CUSTOM_PROVIDER_TOKEN": "provider-secret",
         "AWS_SECRET_ACCESS_KEY": "aws-secret",
         "SOME_RANDOM_VAR": "x",
         "GOALRAIL_CLAUDE_SDK_NO_SANDBOX": "1",
@@ -1073,10 +1073,6 @@ def test_build_runner_env_allowlists_host_env_and_strips_secrets() -> None:
     assert env["HOME"] == "/home/alice"
     assert env["LANG"] == "en_US.UTF-8"
     assert env["LC_CTYPE"] == "UTF-8"
-    # Databricks config selectors are allowlisted ambient passthrough —
-    # the ambient value reaches the runner unmodified (no flag override).
-    assert env["DATABRICKS_CONFIG_PROFILE"] == "ambient"
-    assert env["DATABRICKS_CONFIG_FILE"] == "/tmp/databrickscfg"
     # Harness credentials forward — they exist FOR the runner's
     # harnesses (laptop: exported keys; managed sandbox: the
     # deployment's injected provider secrets).
@@ -1094,8 +1090,10 @@ def test_build_runner_env_allowlists_host_env_and_strips_secrets() -> None:
     # need it to resolve the user's cluster contexts and namespaces.
     assert env["KUBECONFIG"] == "/home/alice/.kube/config"
     # Non-harness secrets are stripped — the point of the allowlist.
-    assert "DATABRICKS_TOKEN" not in env
+    assert "CUSTOM_PROVIDER_TOKEN" not in env
     assert "AWS_SECRET_ACCESS_KEY" not in env
+    assert "CUSTOM_PROVIDER_PROFILE" not in env
+    assert "CUSTOM_PROVIDER_CONFIG_FILE" not in env
     # Non-allowlisted vars are dropped (allowlist, not denylist).
     assert "SOME_RANDOM_VAR" not in env
     # Runner wiring is layered on.
@@ -1190,20 +1188,19 @@ def test_build_runner_env_passthrough_extends_forwarded_set() -> None:
     assert "UNLISTED_SECRET" not in env
 
 
-def test_build_runner_env_preserves_ambient_databricks_profile() -> None:
+def test_build_runner_env_strips_unlisted_provider_profile_selectors() -> None:
     """
-    Ambient Databricks profile/config-file selectors reach host runners.
+    Ambient provider profile/config-file selectors are stripped by default.
 
-    Databricks SDK resolution honors ``DATABRICKS_CONFIG_PROFILE`` and
-    ``DATABRICKS_CONFIG_FILE``. If the host strips either selector, a
-    native Codex runner can fail to resolve a profile that works in the
-    user's shell.
+    Custom provider routing that needs process env must opt in through
+    ``GOALRAIL_RUNNER_ENV_PASSTHROUGH``; otherwise host-shell profile selectors
+    would leak into every runner subprocess.
     """
     env = _build_runner_env(
         {
             "PATH": "/usr/bin:/bin",
-            "DATABRICKS_CONFIG_PROFILE": "oss",
-            "DATABRICKS_CONFIG_FILE": "/tmp/databrickscfg",
+            "CUSTOM_PROVIDER_PROFILE": "oss",
+            "CUSTOM_PROVIDER_CONFIG_FILE": "/tmp/provider.cfg",
         },
         server_url="http://server",
         runner_id="runner_abc",
@@ -1212,8 +1209,8 @@ def test_build_runner_env_preserves_ambient_databricks_profile() -> None:
         parent_pid=42,
     )
 
-    assert env["DATABRICKS_CONFIG_PROFILE"] == "oss"
-    assert env["DATABRICKS_CONFIG_FILE"] == "/tmp/databrickscfg"
+    assert "CUSTOM_PROVIDER_PROFILE" not in env
+    assert "CUSTOM_PROVIDER_CONFIG_FILE" not in env
 
 
 def test_build_runner_env_propagates_data_dir_paths_not_db_uri() -> None:
@@ -1784,7 +1781,7 @@ def _patch_connect(monkeypatch: pytest.MonkeyPatch, spy: _ConnectSpy) -> None:
 
     Patches ``websockets.asyncio.client.connect`` (the module attribute
     production resolves at call time) with *spy*, and forces
-    ``_make_auth_token_factory`` to return ``None`` so no real Databricks
+    ``_make_auth_token_factory`` to return ``None`` so no real
     credentials/network are touched.
 
     :param monkeypatch: The pytest monkeypatch fixture.
@@ -1800,12 +1797,12 @@ def _patch_connect(monkeypatch: pytest.MonkeyPatch, spy: _ConnectSpy) -> None:
 
 
 def _host(
-    server_url: str = "https://app.example.databricks.com",
+    server_url: str = "https://app.goalrail.example",
 ) -> HostProcess:
     """Build a HostProcess for the fail-loud tests.
 
     :param server_url: Server URL the host connects to, e.g.
-        ``"https://app.example.databricks.com"``.
+        ``"https://app.goalrail.example"``.
     :returns: A configured :class:`HostProcess`.
     """
     identity = HostIdentity(host_id="host_test_connect", name="test-laptop")
@@ -1818,8 +1815,8 @@ async def test_run_retries_on_login_redirect(
 ) -> None:
     """A login-redirect upgrade failure retries with a warning.
 
-    The Databricks Apps OAuth proxy bounces an unauthenticated ``wss://``
-    upgrade to an ``https://.../authorize`` URL; ``websockets`` then raises
+    An OIDC proxy can bounce an unauthenticated ``wss://`` upgrade to an
+    ``https://.../authorize`` URL; ``websockets`` then raises
     ``InvalidURI`` because the redirect scheme isn't ws/wss. This can
     happen transiently during server restarts, so the host must retry
     with backoff rather than dying. The warning still surfaces the single
@@ -1844,9 +1841,7 @@ async def test_run_retries_on_login_redirect(
     # The warning surfaces the login-page cause and the credentials hint —
     # the single remediation message recommending `goalrail login <url>`.
     assert any("login page" in r.message for r in caplog.records)
-    assert any(
-        "goalrail login https://app.example.databricks.com" in r.message for r in caplog.records
-    )
+    assert any("goalrail login https://app.goalrail.example" in r.message for r in caplog.records)
 
 
 async def test_login_redirect_prints_warning_to_terminal(
@@ -1878,7 +1873,7 @@ async def test_login_redirect_prints_warning_to_terminal(
     # regression is back (warning only in the log file).
     assert "login page" in err
     # The exact remedy command, URL included, so the user can copy-paste.
-    assert "goalrail login https://app.example.databricks.com" in err
+    assert "goalrail login https://app.goalrail.example" in err
 
 
 async def test_fresh_host_fails_loud_after_persistent_login_redirects(
@@ -1905,7 +1900,7 @@ async def test_fresh_host_fails_loud_after_persistent_login_redirects(
     message = str(excinfo.value)
     # The fatal message identifies the auth cause and the exact remedy.
     assert "login page" in message
-    assert "goalrail login https://app.example.databricks.com" in message
+    assert "goalrail login https://app.goalrail.example" in message
     # 3 = _LOGIN_REDIRECT_FATAL_ATTEMPTS: enough retries to absorb a
     # one-off proxy blip, then fail. 1 would mean the blip
     # tolerance regressed; more (or no raise at all) would mean the
@@ -2007,12 +2002,11 @@ async def test_auth_rejection_suggests_goalrail_login(
     """401/403 rejections point the user at ``goalrail login``.
 
     Both statuses are auth failures the user can resolve by logging in to
-    an accounts/OIDC-mode server (a Databricks profile token may
-    authenticate at the proxy yet be rejected by the server itself). The
+    an accounts/OIDC-mode server. The
     fatal message must name the exact remedy command, including the
     server URL, so the user can copy-paste it.
     """
-    server_url = "https://app.example.databricks.com"
+    server_url = "https://app.goalrail.example"
     spy = _ConnectSpy([_invalid_status(status)])
     _patch_connect(monkeypatch, spy)
     host = _host(server_url=server_url)
@@ -2087,7 +2081,7 @@ def test_run_host_process_exits_nonzero_on_fatal(
 
     with pytest.raises(SystemExit) as excinfo:
         run_host_process(
-            server_url="https://app.example.databricks.com",
+            server_url="https://app.goalrail.example",
             config_path=tmp_path / "config.yaml",
         )
 
@@ -2117,7 +2111,7 @@ def test_run_host_process_announces_session_log_dir_on_start(
     _patch_connect(monkeypatch, _ConnectSpy([asyncio.CancelledError()]))
 
     run_host_process(
-        server_url="https://app.example.databricks.com",
+        server_url="https://app.goalrail.example",
         config_path=tmp_path / "config.yaml",
     )
 

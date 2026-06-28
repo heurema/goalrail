@@ -9,7 +9,7 @@ either named explicitly via ``executor.auth: {type: provider, name: X}`` or
 selected as the per-family global default — emits the per-harness
 vendor-neutral gateway env vars (``HARNESS_*_GATEWAY_BASE_URL`` / ``_HOST`` /
 ``_AUTH_COMMAND`` / ``HARNESS_*_MODEL`` / the ``HARNESS_*_GATEWAY=true``
-enable flag) the executors also consume from the Databricks producer.
+enable flag).
 
 Each test asserts the EXACT emitted values, so deleting the provider branch
 (or mis-emitting a var) turns the test red. The "backwards-compat" tests
@@ -37,7 +37,6 @@ from goalrail.runtime.workflow import (
 from goalrail.spec.types import (
     AgentSpec,
     ApiKeyAuth,
-    DatabricksAuth,
     ExecutorSpec,
     LLMConfig,
     ProviderAuth,
@@ -50,13 +49,13 @@ def _clear_ambient_keys(monkeypatch: pytest.MonkeyPatch) -> None:
     Clear ambient vendor keys so they cannot leak into the spawn env.
 
     The coding-agent process may have ``ANTHROPIC_API_KEY`` /
-    ``OPENAI_API_KEY`` / ``DATABRICKS_TOKEN`` set; clearing them keeps the
+    ``OPENAI_API_KEY`` set; clearing them keeps the
     tests deterministic (the provider path resolves keys from the config
     file, not the ambient environment).
 
     :param monkeypatch: Pytest monkeypatch fixture.
     """
-    for var in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "DATABRICKS_TOKEN"):
+    for var in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY"):
         monkeypatch.delenv(var, raising=False)
 
 
@@ -92,8 +91,7 @@ def _make_spec(
     *,
     harness: str,
     model: str | None = None,
-    profile: str | None = None,
-    auth: ApiKeyAuth | DatabricksAuth | ProviderAuth | None = None,
+    auth: ApiKeyAuth | ProviderAuth | None = None,
     os_env: object | None = None,
 ) -> AgentSpec:
     """
@@ -103,7 +101,6 @@ def _make_spec(
         e.g. ``"claude-sdk"`` / ``"codex"`` / ``"openai-agents"`` / ``"pi"``.
     :param model: Spec-level model, e.g. ``"my-model"``. ``None`` omits it
         so the provider family's ``models.default`` supplies the model.
-    :param profile: Legacy ``executor.config["profile"]``. ``None`` omits it.
     :param auth: Typed auth on ``spec.executor.auth``. ``None`` omits it, so
         the no-auth global-default provider path applies.
     :returns: A populated :class:`AgentSpec`.
@@ -111,8 +108,6 @@ def _make_spec(
     config: dict[str, object] = {"harness": harness}
     if model is not None:
         config["model"] = model
-    if profile is not None:
-        config["profile"] = profile
     return AgentSpec(
         spec_version=1,
         name=f"test-{harness}",
@@ -191,7 +186,7 @@ def test_claude_sdk_uses_anthropic_global_default(config_home: Path) -> None:
 
     Asserts the exact gateway env vars: base_url, host (origin of base_url),
     the printf auth command carrying the resolved key, the family default
-    model, and the ``DATABRICKS=true`` enable flag. Failure means the
+    model, and the gateway enable flag. Failure means the
     no-auth global-default branch is not selecting the provider, or the
     gateway vars are mis-emitted (the harness would then hit
     api.anthropic.com with no key).
@@ -241,28 +236,43 @@ def test_detected_ambient_key_routes_with_no_config(
     assert env["HARNESS_CLAUDE_SDK_MODEL"]
 
 
-def test_global_databricks_auth_beats_ambient_key(
+def test_configured_provider_beats_ambient_key(
     config_home: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """An explicit global ``auth:`` block wins over an ambient-detected key.
+    """An explicit configured provider wins over an ambient-detected key.
 
-    Regression guard for the databricks/ucode user: ``goalrail setup``
-    writes a global ``auth: {type: databricks, profile: oss}`` block (not a
-    providers: entry). A spec with NO executor.auth must route through that
-    explicit databricks auth, NOT through a stray ``ANTHROPIC_API_KEY`` that
-    ambient detection would otherwise auto-default. Explicit config beats
-    ambient. Failure means a databricks user's turns silently went to their
-    env key instead of Databricks.
+    A spec with NO executor.auth must route through the explicit configured
+    provider, NOT through a stray ``ANTHROPIC_API_KEY`` that ambient detection
+    would otherwise auto-default. Explicit config beats ambient.
     """
-    _write_config(config_home, {"auth": {"type": "databricks", "profile": "oss"}})
+    _write_config(
+        config_home,
+        {
+            "providers": {
+                "configured-anthropic": {
+                    "kind": "key",
+                    "default": True,
+                    "anthropic": _key_family(
+                        "https://configured-anthropic.example.com/v1",
+                        "sk-ant-configured",
+                        "claude-configured-model",
+                    ),
+                }
+            }
+        },
+    )
     monkeypatch.setenv("HOME", str(config_home))
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-shadow")
-    spec = _make_spec(harness="claude-sdk")  # no executor.auth, no providers:
+    spec = _make_spec(harness="claude-sdk")  # no executor.auth
 
     env = _build_claude_sdk_spawn_env(spec, workdir=None)
 
-    # Routed via the global databricks profile, not the ambient key.
-    assert env.get("HARNESS_CLAUDE_SDK_DATABRICKS_PROFILE") == "oss"
+    # Routed via the configured provider, not the ambient key.
+    assert env["HARNESS_CLAUDE_SDK_GATEWAY_BASE_URL"] == (
+        "https://configured-anthropic.example.com/v1"
+    )
+    assert env["HARNESS_CLAUDE_SDK_GATEWAY_AUTH_COMMAND"] == "printf %s sk-ant-configured"
+    assert env["HARNESS_CLAUDE_SDK_MODEL"] == "claude-configured-model"
     # The ambient key never leaked into the spawn env (no provider shadowing).
     assert "sk-ant-shadow" not in repr(env)
 
@@ -294,7 +304,7 @@ def test_openai_agents_uses_openai_global_default(config_home: Path) -> None:
     A ``default: true`` openai provider routes the openai-agents-sdk harness.
 
     Unlike the gateway harnesses, openai-agents takes the API key directly
-    (``HARNESS_OPENAI_AGENTS_API_KEY``) with no ``DATABRICKS`` enable flag.
+    (``HARNESS_OPENAI_AGENTS_API_KEY``) with no gateway enable flag.
     Failure means the openai-agents builder's early-return provider branch is
     not firing, or the key/base_url/model are mis-emitted.
     """
@@ -307,8 +317,8 @@ def test_openai_agents_uses_openai_global_default(config_home: Path) -> None:
     # Static key → passed directly (not as an auth command) for this harness.
     assert env["HARNESS_OPENAI_AGENTS_API_KEY"] == "sk-oai-secret"
     assert env["HARNESS_OPENAI_AGENTS_MODEL"] == "gpt-default-model"
-    # No DATABRICKS enable flag for this harness (executor takes key directly).
-    assert "HARNESS_OPENAI_AGENTS_DATABRICKS" not in env
+    # No gateway enable flag for this harness (executor takes key directly).
+    assert "HARNESS_OPENAI_AGENTS_GATEWAY" not in env
 
 
 def test_pi_uses_anthropic_global_default(config_home: Path) -> None:
@@ -509,14 +519,9 @@ def test_claude_sdk_falls_back_to_catalog_default_model(config_home: Path) -> No
     assert env["HARNESS_CLAUDE_SDK_GATEWAY_BASE_URL"] == "https://api.anthropic.com"
     assert env["HARNESS_CLAUDE_SDK_MODEL"] == catalog_default
     # The generic provider routes through the vendor-neutral GATEWAY
-    # transport: enable flag + a real bearer-token command are emitted,
-    # and crucially NO Databricks-branded transport var leaks (the
-    # "inherited wart" this rename removed). The only Databricks-named
-    # var that may ever appear is the profile, which is absent here
-    # because this is a key provider, not a databricks-kind one.
+    # transport: enable flag + a real bearer-token command are emitted.
     assert env["HARNESS_CLAUDE_SDK_GATEWAY"] == "true"
     assert env["HARNESS_CLAUDE_SDK_GATEWAY_AUTH_COMMAND"] == "printf %s sk-ant-secret"
-    assert not any(k.startswith("HARNESS_CLAUDE_SDK_DATABRICKS") for k in env)
 
 
 def test_codex_falls_back_to_catalog_default_model(config_home: Path) -> None:
@@ -613,17 +618,6 @@ def test_goose_spawn_env_forwards_model_and_no_gateway(config_home: Path) -> Non
     # Unlike qwen, goose emits no gateway/provider env (uses goose configure).
     assert not any(k.startswith("HARNESS_GOOSE_GATEWAY") for k in env)
     assert "OPENAI_API_KEY" not in env and "GOOSE_PROVIDER" not in env
-
-
-def test_goose_spawn_env_drops_databricks_model(config_home: Path) -> None:
-    """A ``databricks-*`` model isn't a valid Goose model id, so it's dropped
-    (provider/model then come from the user's goose config)."""
-    _write_config(config_home, _openai_default_config())
-    spec = _make_spec(harness="goose", model="databricks-claude-opus-4-8")
-
-    env = _build_goose_spawn_env(spec, workdir=None)
-
-    assert "HARNESS_GOOSE_MODEL" not in env
 
 
 def test_goose_spawn_env_no_model_is_empty(config_home: Path) -> None:
@@ -742,56 +736,6 @@ def test_spec_model_beats_catalog_default(config_home: Path) -> None:
     assert env["HARNESS_CLAUDE_SDK_MODEL"] == "spec-chosen-model"
 
 
-# ── databricks-kind provider routes through the profile/ucode path ──────────
-
-
-def test_databricks_kind_default_routes_through_profile(
-    config_home: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """
-    A ``databricks``-kind default routes via the profile/ucode path.
-
-    A databricks-kind provider carries a ``profile`` (no inline families), so
-    the provider branch must set ``HARNESS_CLAUDE_SDK_DATABRICKS_PROFILE`` to
-    that profile and the enable flag — NOT a raw gateway base_url. ucode
-    enrichment is stubbed to a no-op so the test asserts only the profile
-    wiring this branch owns. Failure means a databricks-kind provider stopped
-    delegating to the existing ucode path (breaking nessie / the Databricks
-    coding agent).
-    """
-    config: dict[str, object] = {
-        "providers": {
-            "dbx": {
-                "kind": "databricks",
-                "default": True,
-                "profile": "my-dbx-profile",
-            }
-        }
-    }
-    _write_config(config_home, config)
-    # Stub ucode enrichment: it would otherwise read ~/.databrickscfg + ucode
-    # state for the profile. We assert the profile wiring this branch owns,
-    # independent of whether ucode state exists on the test machine.
-    import goalrail.runtime.workflow as workflow_mod
-
-    def _noop_ucode(env: dict[str, str], profile: str | None, *, harness_type: str) -> None:
-        # Record the profile passed through so the test can confirm delegation.
-        if profile is not None:
-            env["_TEST_UCODE_PROFILE"] = profile
-
-    monkeypatch.setattr(workflow_mod, "configure_agent_harness_with_ucode", _noop_ucode)
-    spec = _make_spec(harness="claude-sdk")
-
-    env = _build_claude_sdk_spawn_env(spec, workdir=None)
-
-    assert env["HARNESS_CLAUDE_SDK_GATEWAY"] == "true"
-    # The profile is set (not a raw gateway base_url) and delegated to ucode.
-    assert env["HARNESS_CLAUDE_SDK_DATABRICKS_PROFILE"] == "my-dbx-profile"
-    assert env["_TEST_UCODE_PROFILE"] == "my-dbx-profile"
-    # No raw gateway base_url for a databricks-kind provider.
-    assert "HARNESS_CLAUDE_SDK_GATEWAY_BASE_URL" not in env
-
-
 # ── Backwards-compat: no provider configured ───────────────────────────────
 
 
@@ -814,48 +758,8 @@ def test_no_provider_api_key_path_unchanged(config_home: Path) -> None:
     # No provider gateway vars leak in (the provider branch did not fire).
     assert "HARNESS_CLAUDE_SDK_GATEWAY_BASE_URL" not in env
     assert "HARNESS_CLAUDE_SDK_GATEWAY_AUTH_COMMAND" not in env
-    # api_key auth does not trigger Databricks routing.
+    # api_key auth without base_url does not trigger gateway routing.
     assert "HARNESS_CLAUDE_SDK_GATEWAY" not in env
-
-
-def test_no_provider_legacy_profile_path_unchanged(config_home: Path) -> None:
-    """
-    With NO provider configured, the legacy profile path is untouched.
-
-    A codex spec with a legacy ``executor.config["profile"]`` must still emit
-    the ``DATABRICKS=true`` + ``DATABRICKS_PROFILE`` pair and NO provider
-    gateway base_url. Failure means the provider branch hijacked the
-    legacy-profile path (it must only fire for ProviderAuth / no-auth).
-    """
-    _write_config(config_home, {})
-    spec = _make_spec(harness="codex", model="some-model", profile="legacy-profile")
-
-    env = _build_codex_spawn_env(spec, workdir=None)
-
-    assert env["HARNESS_CODEX_GATEWAY"] == "true"
-    assert env["HARNESS_CODEX_DATABRICKS_PROFILE"] == "legacy-profile"
-    # The legacy path never emits a gateway base_url or auth command.
-    assert "HARNESS_CODEX_GATEWAY_BASE_URL" not in env
-    assert "HARNESS_CODEX_GATEWAY_AUTH_COMMAND" not in env
-
-
-def test_legacy_profile_suppresses_global_default_provider(config_home: Path) -> None:
-    """
-    A legacy ``profile`` on the spec suppresses the global-default provider.
-
-    A spec declaring the deprecated ``executor.config["profile"]`` is an
-    explicit spec-level auth declaration: the no-auth global-default provider
-    branch must NOT override it. Failure means a user's global default
-    silently hijacks a spec that pinned a legacy profile.
-    """
-    _write_config(config_home, _openai_default_config())  # global default exists
-    spec = _make_spec(harness="codex", model="some-model", profile="legacy-profile")
-
-    env = _build_codex_spawn_env(spec, workdir=None)
-
-    # The legacy profile wins; the global-default provider is not consulted.
-    assert env["HARNESS_CODEX_DATABRICKS_PROFILE"] == "legacy-profile"
-    assert "HARNESS_CODEX_GATEWAY_BASE_URL" not in env
 
 
 # ── cli-config kind: model_provider pinning ─────────────────────────────────
@@ -868,11 +772,11 @@ def _cli_config_default_config() -> dict[str, object]:
     """
     return {
         "providers": {
-            "codex-databricks": {
+            "codex-openrouter": {
                 "kind": "cli-config",
                 "cli": "codex",
-                "model_provider": "Databricks",
-                "display_name": "Databricks AI Gateway",
+                "model_provider": "OpenRouter",
+                "display_name": "OpenRouter",
                 "default": True,
             }
         }
@@ -895,7 +799,7 @@ def test_codex_cli_config_default_pins_model_provider(config_home: Path) -> None
 
     env = _build_codex_spawn_env(spec, workdir=None)
 
-    assert env["HARNESS_CODEX_MODEL_PROVIDER"] == "Databricks"
+    assert env["HARNESS_CODEX_MODEL_PROVIDER"] == "OpenRouter"
     # No gateway transport: the provider's endpoint/auth come from the
     # bridged config.toml, not from spawn-env vars.
     assert "HARNESS_CODEX_GATEWAY" not in env
@@ -910,7 +814,7 @@ def test_codex_subscription_default_pins_builtin_openai(config_home: Path) -> No
     """A codex ``subscription`` default pins the built-in ``openai`` provider.
 
     The executor bridges the user's ~/.codex/config.toml, whose custom
-    default model_provider (e.g. isaac's Databricks AI Gateway) would
+    default model_provider (e.g. an OpenRouter gateway) would
     otherwise silently hijack a Subscription selection. Failure means
     "Subscription" stops meaning "ChatGPT login" on machines with a custom
     config.toml default.
@@ -945,13 +849,13 @@ def test_openai_agents_cli_config_default_fails_loud(config_home: Path) -> None:
 
 
 _DISMISSIBLE_CODEX_CONFIG_TOML = """
-model_provider = "Databricks"
+model_provider = "OpenRouter"
 
-[model_providers.Databricks]
-name = "Databricks AI Gateway"
-base_url = "https://example.ai-gateway.cloud.databricks.com/codex/v1"
+[model_providers.OpenRouter]
+name = "OpenRouter"
+base_url = "https://openrouter.ai/api/v1"
 
-[model_providers.Databricks.auth]
+[model_providers.OpenRouter.auth]
 command = "jq"
 """
 
@@ -982,7 +886,7 @@ def test_codex_dismissed_config_provider_pins_openai(
     via an explicit openai pin.
     """
     _isolate_home_with_codex_config(config_home, monkeypatch)
-    _write_config(config_home, {"dismissed_detections": ["codex-databricks"]})
+    _write_config(config_home, {"dismissed_detections": ["codex-openrouter"]})
     spec = _make_spec(harness="codex")
 
     env = _build_codex_spawn_env(spec, workdir=None)
@@ -1007,7 +911,7 @@ def test_codex_undismissed_config_provider_routes_via_detection(
 
     env = _build_codex_spawn_env(spec, workdir=None)
 
-    assert env["HARNESS_CODEX_MODEL_PROVIDER"] == "Databricks"
+    assert env["HARNESS_CODEX_MODEL_PROVIDER"] == "OpenRouter"
 
 
 # ── Kimi Code CLI spawn-env ────────────────────────────────────────────────
@@ -1016,8 +920,8 @@ def test_codex_undismissed_config_provider_routes_via_detection(
 def test_kimi_spawn_env_threads_spec_model_only(config_home: Path) -> None:
     """The kimi builder only emits ``HARNESS_KIMI_MODEL`` (when set) and
     ``HARNESS_KIMI_CWD`` (when workdir given). Upstream kimi has no per-spawn
-    provider override, so no HARNESS_KIMI_GATEWAY_* / _DATABRICKS_PROFILE
-    env vars are emitted — provider routing lives in ``~/.kimi/config.toml``."""
+    provider override, so no HARNESS_KIMI_GATEWAY_* env vars are emitted —
+    provider routing lives in ``~/.kimi/config.toml``."""
     _write_config(config_home, {"providers": {}})
     spec = _make_spec(harness="kimi", model="kimi-k2-turbo")
 
@@ -1056,7 +960,6 @@ def test_kimi_no_provider_emits_no_gateway_vars(config_home: Path) -> None:
     assert "HARNESS_KIMI_GATEWAY_BASE_URL" not in env
     assert "HARNESS_KIMI_GATEWAY_API_KEY" not in env
     assert "HARNESS_KIMI_GATEWAY_PROVIDER" not in env
-    assert "HARNESS_KIMI_DATABRICKS_PROFILE" not in env
 
 
 def test_kimi_ignores_global_default_provider(config_home: Path) -> None:
@@ -1082,13 +985,12 @@ def test_kimi_ignores_global_default_provider(config_home: Path) -> None:
     "auth",
     [
         ApiKeyAuth(api_key="sk-secret"),
-        DatabricksAuth(profile="my-profile"),
         ProviderAuth(name="vendor-named"),
     ],
 )
 def test_kimi_declared_auth_raises(
     config_home: Path,
-    auth: ApiKeyAuth | DatabricksAuth | ProviderAuth,
+    auth: ApiKeyAuth | ProviderAuth,
 ) -> None:
     """A kimi spec that declares any ``executor.auth`` fails loud.
 

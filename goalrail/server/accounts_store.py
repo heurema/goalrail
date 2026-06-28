@@ -348,7 +348,7 @@ class SqlAlchemyAccountStore:
     # into ``user_id``. That stamped, redeemed row IS the durable
     # pre-authorization — ``is_email_invited`` just looks for one. This
     # keeps the OSS-only invite feature from adding a table that would
-    # ship (empty, unused) into the hosted / Databricks-Apps schema.
+    # ship empty and unused into hosted schemas.
 
     def redeem_oidc_invite(self, token_id: str, email: str, *, now_epoch_seconds: int) -> bool:
         """Atomically redeem an OIDC invite token and bind it to ``email``.

@@ -37,12 +37,12 @@ class HarnessProbe:
     :param model: The model identifier the inner executor
         receives via the harness's ``HARNESS_<HARNESS>_MODEL``
         env var (or, for AP-level tests, the model field in
-        the agent spec). Must be a real model the Databricks
-        gateway exposes for the user's profile.
+        the agent spec). Must be a real model exposed by the selected
+        provider or gateway.
     :param env_prefix: The env-var prefix the wrap reads
         (e.g. ``HARNESS_CLAUDE_SDK_``). The model-routing env
-        vars are derived as ``{prefix}MODEL``,
-        ``{prefix}GATEWAY``, ``{prefix}DATABRICKS_PROFILE``.
+        vars are derived as ``{prefix}MODEL``, ``{prefix}GATEWAY``,
+        ``{prefix}GATEWAY_BASE_URL``, and ``{prefix}GATEWAY_AUTH_COMMAND``.
         Used by the harness-wrap smoke test that talks
         directly to ``HarnessProcessManager``.
     :param marker: The exact literal string the LLM is asked
@@ -78,44 +78,34 @@ class HarnessProbe:
 HARNESS_PROBES: list[HarnessProbe] = [
     HarnessProbe(
         harness="claude-sdk",
-        model=resolve_model("databricks-claude-opus-4-6", key="probe:claude-sdk"),
+        model=resolve_model("anthropic/claude-opus-4-6", key="probe:claude-sdk"),
         env_prefix="HARNESS_CLAUDE_SDK_",
         marker="CLAUDE_E2E_OK",
         cli_binary="claude",
     ),
     HarnessProbe(
         harness="codex",
-        # Per CLAUDE.md guidance: ``databricks-gpt-5-4-mini`` is
-        # the OpenAI-style model exposed via the Databricks
-        # gateway. Codex's executor speaks the OpenAI Responses
-        # API, so this model lights up via the
-        # ``HARNESS_CODEX_GATEWAY`` route.
-        model=resolve_model("databricks-gpt-5-4-mini", key="probe:codex"),
+        # Codex's executor speaks the OpenAI Responses API.
+        model=resolve_model("openai/gpt-5-4-mini", key="probe:codex"),
         env_prefix="HARNESS_CODEX_",
         marker="CODEX_E2E_OK",
         cli_binary="codex",
     ),
     HarnessProbe(
         harness="pi",
-        # Pi speaks the OpenAI Responses API and the Databricks
-        # gateway exposes Claude through that endpoint too. Per
-        # CLAUDE.md, ``databricks-claude-sonnet-4-6`` is the
-        # default Claude-via-Databricks model the per-harness
-        # pi suite uses.
-        model=resolve_model("databricks-claude-sonnet-4-6", key="probe:pi"),
+        # Pi speaks the OpenAI Responses API and can target compatible
+        # gateway model ids.
+        model=resolve_model("anthropic/claude-sonnet-4-6", key="probe:pi"),
         env_prefix="HARNESS_PI_",
         marker="PI_E2E_OK",
         cli_binary="pi",
     ),
     HarnessProbe(
         harness="openai-agents",
-        # The openai-agents SDK speaks the OpenAI Responses API
-        # via the Databricks gateway; the GPT model is the
-        # natural fit per CLAUDE.md (``databricks-gpt-5-4-mini``
-        # is the OpenAI-style Databricks model). Registry key is
-        # ``openai-agents`` (not ``-sdk``) to match the
+        # The openai-agents SDK speaks the OpenAI Responses API.
+        # Registry key is ``openai-agents`` (not ``-sdk``) to match the
         # Goalrail YAML ``executor.harness`` spelling.
-        model=resolve_model("databricks-gpt-5-4-mini", key="probe:openai-agents"),
+        model=resolve_model("openai/gpt-5-4-mini", key="probe:openai-agents"),
         env_prefix="HARNESS_OPENAI_AGENTS_",
         marker="OPENAI_AGENTS_E2E_OK",
         # Pure-Python ``openai-agents`` package; no CLI binary

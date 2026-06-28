@@ -189,18 +189,18 @@ async def test_create_session_with_model_override_persists(
         json={
             "agent_id": agent["id"],
             "initial_items": [],
-            "model_override": "databricks-claude-sonnet-4-6",
+            "model_override": "anthropic/claude-sonnet-4-6",
         },
     )
     assert resp.status_code == 201, resp.text
     created = resp.json()
     # The create response itself must carry the override — the runner's
     # launch-config fetch consumes this exact snapshot shape.
-    assert created["model_override"] == "databricks-claude-sonnet-4-6"
+    assert created["model_override"] == "anthropic/claude-sonnet-4-6"
 
     get = await client.get(f"/v1/sessions/{created['id']}")
     assert get.status_code == 200
-    assert get.json()["model_override"] == "databricks-claude-sonnet-4-6"
+    assert get.json()["model_override"] == "anthropic/claude-sonnet-4-6"
 
 
 @pytest.mark.parametrize(
@@ -343,7 +343,7 @@ async def test_create_time_model_override_forwards_on_first_event(
         json={
             "agent_id": agent["id"],
             "initial_items": [],
-            "model_override": "databricks-claude-sonnet-4-6",
+            "model_override": "anthropic/claude-sonnet-4-6",
         },
     )
     assert resp.status_code == 201, resp.text
@@ -365,7 +365,7 @@ async def test_create_time_model_override_forwards_on_first_event(
         "Runner client was never POSTed to — _forward_event_to_runner "
         "did not run. Check the runner-stub wiring."
     )
-    assert captured["body"].get("model_override") == "databricks-claude-sonnet-4-6", (
+    assert captured["body"].get("model_override") == "anthropic/claude-sonnet-4-6", (
         f"First-event runner body missing the create-time override; got "
         f"{captured['body'].get('model_override')!r}. The create route "
         f"did not persist model_override before the first turn."

@@ -58,7 +58,7 @@ def _scan_agent_root(root: Path, *, require_config_yaml: bool) -> set[str]:
     :param root: Directory to scan (skipped if it does not exist).
     :param require_config_yaml: When ``True``, a directory counts
         only if it contains ``config.yaml`` (AGENTSPEC bundles —
-        excludes non-agent dirs like ``examples/databricks_apps/``).
+        excludes non-agent dirs like ``examples/gateway_apps/``).
         When ``False``, any directory counts (test-only fixtures
         under ``tests/resources/agents/`` may be single-file
         bundles).

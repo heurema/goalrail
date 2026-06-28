@@ -10,16 +10,14 @@ Wraps a :class:`goalrail.inner.cursor_executor.CursorExecutor`, which
 drives a persistent Cursor SDK (``cursor-sdk``) agent over a local bridge.
 Mirrors the codex / pi wraps' env-var config flow.
 
-Unlike the gateway-backed harnesses, cursor has NO gateway /
-Databricks-profile env vars: the SDK talks only to Cursor's own backend and has
-no custom API base-URL override, so there is nothing for the workflow layer to
-route through the Databricks AI gateway.
+Unlike the gateway-backed harnesses, cursor has NO gateway env vars: the SDK
+talks only to Cursor's own backend and has no custom API base-URL override, so
+there is nothing for the workflow layer to route through a provider gateway.
 
 Env vars read at startup:
 
 - ``HARNESS_CURSOR_MODEL``: Cursor model id, e.g. ``"gpt-5"`` or ``"auto"``.
-  ``None`` resolves to cursor's ``auto`` select. A ``databricks-*`` id (from a
-  spec authored for another harness) is dropped by the executor.
+  ``None`` resolves to cursor's ``auto`` select.
 - ``HARNESS_CURSOR_CWD``: working directory the session operates in.
   ``None`` falls back to ``os_env.cwd`` then the process cwd.
 - ``HARNESS_CURSOR_API_KEY``: Cursor API key, used as the SDK ``api_key``.

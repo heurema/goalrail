@@ -27,11 +27,9 @@ prompt: |
 # NOT in Goalrail's provider config — so this spec declares no ``executor.auth``
 # block.
 #
-# To route through a gateway (Databricks AI gateway / vendor-neutral proxy)
-# instead, either set ``HARNESS_KIMI_GATEWAY_BASE_URL`` +
-# ``HARNESS_KIMI_GATEWAY_API_KEY`` in the shell, or declare a
-# ``executor.auth: {type: databricks, profile: …}`` block and let Goalrail
-# resolve the workspace.
+# To route through a gateway / vendor-neutral proxy instead, set
+# ``HARNESS_KIMI_GATEWAY_BASE_URL`` + ``HARNESS_KIMI_GATEWAY_API_KEY`` in the
+# shell.
 #
 # Kimi owns its own file/shell tools (bash, edit, read, …) and runs them
 # inside its own loop. The harness therefore advertises

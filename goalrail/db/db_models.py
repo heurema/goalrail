@@ -681,9 +681,8 @@ class SqlHost(Base):
         ``~/.goalrail/config.yaml``, e.g. ``"host_a1b2c3d4e5f6..."``.
     :param name: Human-readable name from ``config.yaml``, e.g.
         ``"corey-laptop"``. Displayed in the Web UI host picker.
-    :param owner: User ID from the Databricks auth Bearer token
-        presented during the host's WebSocket handshake, e.g.
-        ``"corey.zumar@databricks.com"``.
+    :param owner: Authenticated user ID presented during the host's
+        WebSocket handshake, e.g. ``"alice@example.com"``.
     :param status: ``"online"`` when the host has an active WebSocket
         connection, ``"offline"`` when disconnected.
     :param created_at: Unix epoch seconds when the host was first

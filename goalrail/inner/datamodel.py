@@ -257,8 +257,8 @@ class Memory:
 class Credentials:
     """Credentials carried by a session.  Tools receive these automatically.
 
-    :param token: Bearer token used for downstream API calls, e.g.
-        a Databricks PAT. ``None`` when the session is unauthenticated.
+    :param token: Bearer token used for downstream API calls. ``None``
+        when the session is unauthenticated.
     :param scopes: Set of opaque capability scopes the token is
         authorised for, e.g. ``{"sql:read", "files:write"}``.
     :param principal: Identifier of the authenticated user, e.g.
@@ -336,15 +336,14 @@ class SessionState(enum.Enum):
 class ExecutorSpec:
     """Which executor/model to use.
 
-    :param model: Model identifier, e.g. ``"databricks-gpt-5-4-mini"``
-        or ``"openai/gpt-4o"``. ``None`` when not specified (a
+    :param model: Model identifier, e.g. ``"openai/gpt-4o"`` or
+        ``"anthropic/claude-sonnet-4-6"``. ``None`` when not specified (a
         harness-specific default is used).
     :param harness: Executor harness selector, e.g. ``"claude-sdk"``,
         ``"open-responses"``, ``"codex"``. ``None`` when the default
         harness for the model applies.
-    :param profile: Credentials profile name (typically a
-        ``~/.databrickscfg`` profile), e.g. ``"<your-profile>"``.
-        ``None`` when no profile override is needed.
+    :param profile: Credentials profile name. ``None`` when no profile
+        override is needed.
     :param auth: Parsed auth block from the YAML (e.g. api_key +
         base_url). Carried through so the goalrail spec translator
         can forward it into the child :class:`ExecutorSpec` without
@@ -354,7 +353,7 @@ class ExecutorSpec:
     model: str | None = None
     harness: str | None = None
     profile: str | None = None
-    auth: object | None = None  # ApiKeyAuth | DatabricksAuth | None
+    auth: object | None = None  # ApiKeyAuth | ProviderAuth | None
 
 
 # ---------------------------------------------------------------------------
@@ -688,17 +687,14 @@ class TerminalEnvSpec:
         e.g. ``{"CODEX_HOME": "/tmp/codex-home"}``.
     :param env_unset: Environment variables to strip from the
         terminal's environment before launching, e.g.
-        ``["DATABRICKS_CONFIG_PROFILE"]``. Applied AFTER ``env``
+        ``["AWS_PROFILE"]``. Applied AFTER ``env``
         is merged, so a listed key is removed unconditionally —
         if the same key also appears in ``env``, the strip wins.
         This is intentional: ``env_unset`` is a leak-prevention
         boundary, not a soft default, so the property "this key
         does not reach the terminal" holds regardless of upstream
         ``env`` composition. Used when ambient host env vars would
-        mis-configure the terminal's child processes (for example,
-        MCP servers that construct Databricks SDK clients and let
-        the SDK's auth resolver pick up the parent's profile
-        instead of the explicit token they were given).
+        mis-configure the terminal's child processes.
     :param inherit_env: Whether the terminal process starts from the
         parent process environment before applying ``env`` / ``env_unset``.
         Defaults to ``True`` for backward compatibility. Set to ``False``

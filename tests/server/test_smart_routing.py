@@ -133,7 +133,7 @@ def test_build_rubric_includes_all_tiers() -> None:
 async def test_llm_routing_client_returns_result() -> None:
     verdict = {
         "tier": "expensive",
-        "model": "databricks-claude-opus-4-8",
+        "model": "anthropic/claude-opus-4-8",
         "rationale": "hard refactor",
     }
     client = LLMRoutingClient(_FakeLLMClient(verdict))
@@ -141,7 +141,7 @@ async def test_llm_routing_client_returns_result() -> None:
     assert tiers is not None
     result = await client.route("refactor auth", tiers)
     assert result is not None
-    assert result.model == "databricks-claude-opus-4-8"
+    assert result.model == "anthropic/claude-opus-4-8"
     assert result.tier == "expensive"
     assert result.rationale == "hard refactor"
 
@@ -158,7 +158,7 @@ async def test_llm_routing_client_clamps_hallucinated_model() -> None:
     assert tiers is not None
     result = await client.route("hard task", tiers)
     assert result is not None
-    assert result.model == "databricks-claude-opus-4-8"
+    assert result.model == "anthropic/claude-opus-4-8"
 
 
 @pytest.mark.asyncio
@@ -207,7 +207,7 @@ class _FakeCaps:
 @pytest.mark.asyncio
 async def test_route_turn_uses_caps_routing_client() -> None:
     expected = RoutingResult(
-        model="databricks-claude-haiku-4-5",
+        model="anthropic/claude-haiku-4-5",
         tier="cheap",
         rationale="trivial",
     )
@@ -217,7 +217,7 @@ async def test_route_turn_uses_caps_routing_client() -> None:
         new=caps,
     ):
         model, v = await route_turn("claude-sdk", "hello")
-    assert model == "databricks-claude-haiku-4-5"
+    assert model == "anthropic/claude-haiku-4-5"
     assert v is not None
     assert v["tier"] == "cheap"
 

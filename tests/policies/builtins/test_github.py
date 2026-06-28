@@ -82,7 +82,7 @@ def test_restricted_read_allowlisted_prefix_agnostic(prefix: str) -> None:
     """A read of an allowlisted repo abstains, for either server prefix.
 
     Proves canonical matching is MCP-agnostic — the same allowlist works against
-    the standard ``mcp__github__*`` and the Databricks ``github__*`` servers.
+    the standard ``mcp__github__*`` and legacy bare ``github__*`` names.
     """
     policy = github_policy(read_all=False, read_repos=[_REPO])
     assert policy(tc(f"{prefix}get_file_contents", {"owner": "octo", "repo": "hello"})) is None

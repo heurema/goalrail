@@ -137,24 +137,16 @@ def test_parse_modal_without_image_defaults_to_official(
     assert fake.image is None
 
 
-def test_parse_non_modal_provider_yields_rejecting_factory() -> None:
+async def test_parse_unknown_provider_rejects_config() -> None:
     """
-    lakebox configs parse (a deployment can stage config before
-    managed-launch support lands), but their factory rejects with a 400
-    naming the provider when a managed session is actually requested.
+    Unknown providers fail at config parse time so a typo does not surface only
+    when the first managed session is requested.
     """
-    cfg = parse_sandbox_config({"provider": "lakebox", "server_url": "https://s.example.com"})
-    assert cfg is not None
-    # A staged provider must not advertise managed launch on /v1/info —
-    # the web UI would offer a sandbox option every create rejects.
-    assert cfg.managed_launch_supported is False
-    # The provider is still parsed onto the config; /v1/info gates on
-    # managed_launch_supported, so the name is not surfaced while staged.
-    assert cfg.provider == "lakebox"
-    with pytest.raises(HTTPException) as exc:
-        cfg.launcher_factory()
-    assert exc.value.status_code == 400
-    assert "lakebox" in exc.value.detail
+    with pytest.raises(ValueError) as exc:
+        parse_sandbox_config(
+            {"provider": "future-provider", "server_url": "https://s.example.com"}
+        )
+    assert "future-provider" in str(exc.value)
 
 
 def test_parse_valid_daytona_config_builds_parameterized_factory(
@@ -867,9 +859,6 @@ def _capability_probe_app(
         # No `sandbox:` section → a managed create would 400; the option
         # must not be advertised and no provider is named.
         (None, False, None),
-        # advertising it would offer a create path that always fails, so
-        # the option is hidden and the provider stays unnamed.
-        ({"provider": "lakebox", "server_url": "https://s.example.com"}, False, None),
         # Daytona has managed-launch support like modal → offered and
         # named so the UI can label it ("Daytona Sandbox").
         ({"provider": "daytona", "server_url": "https://s.example.com"}, True, "daytona"),
@@ -1028,20 +1017,29 @@ async def test_launch_with_injected_custom_launcher(db_uri: str) -> None:
     assert host_store.get_host(result.host_id) is None
 
 
-async def test_launch_unsupported_yaml_provider_rejects_before_provisioning(
+async def test_launch_custom_rejecting_provider_rejects_before_provisioning(
     db_uri: str,
 ) -> None:
     """
-    A staged-but-unimplemented YAML provider (lakebox) fails with a 400
-    naming the provider BEFORE any provisioning happens.
+    An embedding deployment can still inject a rejecting custom launcher; the
+    failure must happen before any host row is registered.
     """
-    config = parse_sandbox_config({"provider": "lakebox", "server_url": "https://s.example.com"})
-    assert config is not None
+
+    def rejecting_factory() -> FakeSandboxLauncher:
+        raise HTTPException(status_code=400, detail="sandbox provider unavailable")
+
+    config = ManagedSandboxConfig(
+        server_url="https://s.example.com",
+        launcher_factory=rejecting_factory,
+        token_ttl_s=3600,
+        managed_launch_supported=False,
+        provider="future-provider",
+    )
     host_store = HostStore(db_uri)
     with pytest.raises(HTTPException) as exc:
         await launch_managed_host(config=config, owner=_OWNER, host_store=host_store)
     assert exc.value.status_code == 400
-    assert "lakebox" in exc.value.detail
+    assert "sandbox provider unavailable" in exc.value.detail
     # No host row was pre-registered.
     assert host_store.list_hosts(_OWNER) == []
 

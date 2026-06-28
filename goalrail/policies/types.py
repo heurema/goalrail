@@ -141,7 +141,7 @@ class EvaluationContext:
     :param model: The model the session is currently using —
         the conversation's ``model_override`` when set (e.g. via
         a mid-session ``/model`` change), else the agent spec's
-        ``llm.model``, e.g. ``"databricks-claude-opus-4-8"`` or
+        ``llm.model``, e.g. ``"anthropic/claude-opus-4-8"`` or
         the native tier alias ``"opus"``. Injected by the engine
         before each policy dispatch (resolved at engine-build
         time) so callables can gate on the active model (e.g. a

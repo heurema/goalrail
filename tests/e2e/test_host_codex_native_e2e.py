@@ -6,13 +6,11 @@ daemon -> create a session bound to that agent and host -> send a
 user message -> poll until an assistant response appears containing a
 marker token.
 
-Run with Databricks credentials (opt-in via env var)::
+Run with provider credentials (opt-in via env var)::
 
     GOALRAIL_E2E_CODEX_NATIVE=1 \
     .venv/bin/python -m pytest tests/e2e/test_host_codex_native_e2e.py \
-        --profile oss \
-        --llm-api-key "$(databricks auth token -p oss \
-            | python -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')" \
+        --llm-api-key "$OPENAI_API_KEY" \
         -v
 """
 

@@ -6,21 +6,17 @@ This proves the "claude" alias is canonicalized to "claude-sdk" through the
 full CLI → harness → LLM path.
 
 No ``--llm-api-key`` needed — the claude-sdk harness reads credentials
-from ``~/.databrickscfg`` via the profile named in the global config's
-``auth:`` block (the supported replacement for the removed ``--profile``
-CLI flag).
+from ``ANTHROPIC_API_KEY``.
 
 Run with:
 
-    pytest tests/e2e/goalrail/test_claude_harness_alias_e2e.py -v --profile oss
+    ANTHROPIC_API_KEY=sk-ant-... pytest tests/e2e/goalrail/test_claude_harness_alias_e2e.py -v
 """
 
 from __future__ import annotations
 
-import configparser
 import os
 import subprocess
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -44,37 +40,17 @@ def _resolve_python() -> Path:
         current = current.parent
 
 
-def _get_profile(request: pytest.FixtureRequest) -> str:
-    """Get the Databricks profile from --profile flag or default to oss.
+def _clean_env() -> dict[str, str]:
+    """Build subprocess env with stale vars removed.
 
-    :param request: Pytest request object.
-    :returns: The profile name.
-    """
-    profile = request.config.getoption("--profile", default=None)
-    return profile or "oss"
-
-
-def _profile_has_token(profile: str) -> bool:
-    """Check if the profile has a token in ~/.databrickscfg.
-
-    :param profile: The Databricks profile name.
-    :returns: True if the profile has a token.
-    """
-    cfg = configparser.ConfigParser()
-    cfg.read(os.path.expanduser("~/.databrickscfg"))
-    return cfg.has_option(profile, "token")
-
-
-def _clean_env(profile: str) -> dict[str, str]:
-    """Build subprocess env with stale vars removed and profile set.
-
-    :param profile: Databricks profile name.
     :returns: Clean environment dict.
     """
     env = dict(os.environ)
+    key = env.get("ANTHROPIC_API_KEY")
+    if not key:
+        pytest.skip("ANTHROPIC_API_KEY is required for claude-sdk alias e2e")
     for var in (
         "ANTHROPIC_API_KEY",
-        "DATABRICKS_TOKEN",
         "CLAUDE_CODE",
         "CLAUDECODE",
         "CLAUDE_CODE_ENTRYPOINT",
@@ -82,37 +58,20 @@ def _clean_env(profile: str) -> dict[str, str]:
         "CODEX",
     ):
         env.pop(var, None)
-    env["DATABRICKS_CONFIG_PROFILE"] = profile
-    # The goalrail CLI no longer accepts ``--profile``; write the
-    # supported replacement — an ``auth:`` block in an isolated
-    # ``GOALRAIL_CONFIG_HOME`` — so the spawned CLI routes the
-    # claude-sdk harness through this Databricks profile.
-    config_home = Path(tempfile.mkdtemp(prefix="goalrail-alias-config-"))
-    (config_home / "config.yaml").write_text(
-        f"auth:\n  type: databricks\n  profile: {profile}\n",
-        encoding="utf-8",
-    )
-    env["GOALRAIL_CONFIG_HOME"] = str(config_home)
+    env["ANTHROPIC_API_KEY"] = key
     repo = str(Path(__file__).resolve().parents[3])
     existing = env.get("PYTHONPATH", "")
     env["PYTHONPATH"] = os.pathsep.join(p for p in (repo, existing) if p)
     return env
 
 
-def test_run_with_claude_alias_produces_output(
-    request: pytest.FixtureRequest,
-) -> None:
+def test_run_with_claude_alias_produces_output() -> None:
     """``goalrail run --harness claude-sdk`` exits 0 with assistant text.
 
     Proves the "claude" alias is canonicalized through the full
     CLI → Goalrail server → harness spawn → LLM call → output path.
 
-    :param request: Pytest request for --profile flag access.
     """
-    profile = _get_profile(request)
-    if not _profile_has_token(profile):
-        pytest.skip(f"No token for profile {profile!r} in ~/.databrickscfg")
-
     python = _resolve_python()
     repo_root = Path(__file__).resolve().parents[3]
     yaml_path = repo_root / "tests" / "resources" / "examples" / "hello_world.yaml"
@@ -130,7 +89,7 @@ def test_run_with_claude_alias_produces_output(
             _PROMPT,
             "--no-session",
         ],
-        env=_clean_env(profile),
+        env=_clean_env(),
         cwd=str(repo_root),
         capture_output=True,
         text=True,

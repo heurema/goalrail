@@ -618,8 +618,8 @@ describe("isRunnerUnavailable503", () => {
   });
 
   it("is false for a non-JSON 503 (gateway / front-door restart)", async () => {
-    // The Databricks Apps front door returns 503 with an HTML body while
-    // the app restarts — must NOT be read as the runner being offline.
+    // Hosted front doors may return 503 with an HTML body while the app
+    // restarts — must NOT be read as the runner being offline.
     const res = {
       ok: false,
       status: 503,

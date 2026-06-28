@@ -26,13 +26,11 @@ Usage::
 
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
 from typing import Any
 
 import httpx
 import pytest
-import yaml
 
 from tests.e2e._harness_probes import cli_unavailable_reason
 from tests.e2e.conftest import (
@@ -129,58 +127,6 @@ def _enumerate_skills_with_retry(
     return text
 
 
-def _materialize_with_profile(
-    src_dir: Path,
-    dst_dir: Path,
-    profile: str,
-) -> Path:
-    """
-    Copy a fixture agent bundle and inject the Databricks profile.
-
-    The fixture YAMLs intentionally omit ``executor.profile`` so the
-    same fixtures work across developers with different
-    ``~/.databrickscfg`` profile names. At test time we materialize
-    a per-test copy with the actual ``--profile`` baked in. Without
-    a profile the codex harness wrap can't authenticate with the
-    Databricks gateway and the agent run fails before skills are
-    even consulted.
-
-    :param src_dir: Path to the fixture under
-        ``tests/resources/agents/codex_skills_*/``.
-    :param dst_dir: Tmp directory to copy into.
-    :param profile: Databricks profile name from
-        ``--profile``, e.g. ``"test-profile"``.
-    :returns: The materialized bundle directory ready for
-        :func:`upload_agent`.
-    """
-    bundle = dst_dir / src_dir.name
-    shutil.copytree(src_dir, bundle)
-    yaml_path = bundle / f"{src_dir.name}.yaml"
-    raw = yaml.safe_load(yaml_path.read_text())
-    raw["executor"]["profile"] = profile
-    yaml_path.write_text(yaml.safe_dump(raw, default_flow_style=False))
-    return bundle
-
-
-@pytest.fixture
-def codex_profile(request: pytest.FixtureRequest) -> str:
-    """
-    Return the ``--profile`` CLI arg, or skip if not provided.
-
-    :param request: Pytest request object.
-    :returns: The Databricks profile name.
-    :raises pytest.skip.Exception: If ``--profile`` was not passed.
-    """
-    profile: str = request.config.getoption("--profile")
-    if not profile:
-        pytest.skip(
-            "codex skills e2e requires --profile <name> "
-            "(e.g. --profile test-profile) so the harness wrap can "
-            "authenticate the Databricks gateway"
-        )
-    return profile
-
-
 @pytest.mark.parametrize(
     "fixture, expected_visible, expected_hidden",
     [
@@ -221,12 +167,10 @@ def codex_profile(request: pytest.FixtureRequest) -> str:
 )
 def test_codex_skills_filter_e2e(
     http_client: httpx.Client,
-    codex_profile: str,
     live_runner_id: str,
     fixture: str,
     expected_visible: list[str],
     expected_hidden: list[str],
-    tmp_path: Path,
 ) -> None:
     """
     Codex's ``skills:`` filter actually controls what the model sees.
@@ -272,8 +216,7 @@ def test_codex_skills_filter_e2e(
         fixture's distinctive names so the user's host
         ``~/.codex/skills/`` doesn't pollute the assertion).
     """
-    bundle = _materialize_with_profile(_FIXTURE_ROOT / fixture, tmp_path, codex_profile)
-    agent = upload_agent(http_client, bundle)
+    agent = upload_agent(http_client, _FIXTURE_ROOT / fixture)
 
     session_id = create_runner_bound_session(
         http_client,

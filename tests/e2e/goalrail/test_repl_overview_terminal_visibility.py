@@ -1,7 +1,7 @@
 """Phase 0 characterization test — terminal visibility in overview.
 
 Migrated to mock LLM: uses canned tool-call responses to trigger
-``sys_terminal_launch`` without real Databricks credentials.
+``sys_terminal_launch`` without real provider credentials.
 
 Uses ``examples/terminal_workers.yaml`` so the REPL hosts a
 terminal-supervisor. Sends a prompt that (via the mock response)

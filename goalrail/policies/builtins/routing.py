@@ -105,7 +105,7 @@ def deny_trivial_to_expensive_model(
     classification failures all pass through (fail open).
 
     :param expensive_models: Model ids that should not be used for
-        trivial tasks, e.g. ``["databricks-claude-opus-4-6",
+        trivial tasks, e.g. ``["anthropic/claude-opus-4-8",
         "openai/o3"]``. Required — the operator must explicitly
         list the models to gate.
     :param classification_prompt: System instructions for the
@@ -250,7 +250,7 @@ POLICY_REGISTRY: list[dict[str, Any]] = [
                     "type": "array",
                     "items": {"type": "string"},
                     "description": (
-                        "Model ids to gate, e.g. ['databricks-claude-opus-4-6', 'openai/o3']."
+                        "Model ids to gate, e.g. ['anthropic/claude-opus-4-8', 'openai/o3']."
                     ),
                 },
                 "classification_prompt": {

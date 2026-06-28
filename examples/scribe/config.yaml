@@ -27,9 +27,9 @@ description: >-
 # Scribe's "brain" runs on the Claude Agent SDK. It does the doc authoring
 # itself and orchestrates the sub-agents. No model is pinned, so the claude-sdk
 # harness runs on whatever Claude provider you configured (`goalrail setup`) —
-# an Anthropic API key, a Claude subscription, an OpenAI-compatible gateway, or
-# a Databricks workspace — resolving that provider's default Claude model (the
-# bundled catalog default is claude-opus-4-8).
+# an Anthropic API key, a Claude subscription, or an OpenAI-compatible gateway —
+# resolving that provider's default Claude model (the bundled catalog default is
+# claude-opus-4-8).
 executor:
   type: goalrail
   config:

@@ -78,7 +78,7 @@ def _read_credentials_from_env(provider: str) -> dict[str, str]:
     For the ``openai`` provider, also picks up ``OPENAI_BASE_URL``
     when set (same convention the OpenAI SDK reads, same behavior
     as the interactive wizard) so onboarding can target an
-    OpenAI-compatible gateway like Databricks serving-endpoints.
+    OpenAI-compatible gateway.
 
     :param provider: Provider name, e.g. ``"anthropic"``.
     :returns: Dict with credential fields from env vars.

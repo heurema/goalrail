@@ -36,7 +36,7 @@ from .helpers import llm_request_event
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
-_EXPENSIVE = ["databricks-claude-opus-4-6", "openai/o3"]
+_EXPENSIVE = ["anthropic/claude-opus-4-6", "openai/o3"]
 
 
 class _FakeResponse:
@@ -97,7 +97,7 @@ class _FakePolicyLLMClient:
 def _llm_request_with_client(
     client: _FakePolicyLLMClient | None,
     *,
-    model: str = "databricks-claude-opus-4-6",
+    model: str = "anthropic/claude-opus-4-6",
     last_user_message: str = "What is 2+2?",
 ) -> dict[str, Any]:
     """
@@ -159,13 +159,13 @@ async def test_trivial_classification_denies() -> None:
     client = _FakePolicyLLMClient(_trivial_response())
     policy = deny_trivial_to_expensive_model(expensive_models=_EXPENSIVE)
 
-    event = _llm_request_with_client(client, model="databricks-claude-opus-4-6")
+    event = _llm_request_with_client(client, model="anthropic/claude-opus-4-6")
     result = await policy(event)
 
     assert result is not None
     assert result["result"] == "DENY"
     assert "trivial" in result["reason"].lower()
-    assert "databricks-claude-opus-4-6" in result["reason"]
+    assert "anthropic/claude-opus-4-6" in result["reason"]
     # Caches the result in session_state.
     assert result["state_updates"][0]["action"] == "set"
     assert result["state_updates"][0]["value"] == "TRIVIAL"

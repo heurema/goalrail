@@ -9,7 +9,7 @@ def test_build_summarization_input_appends_trigger_when_last_role_is_assistant()
     """
     A conversation ending in an assistant message must gain a
     trailing user turn so providers that reject assistant-message
-    prefill (e.g. Databricks Claude) accept the request.
+    prefill accept the request.
     """
     messages = [
         {"role": "user", "content": "hello"},

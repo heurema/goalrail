@@ -65,6 +65,6 @@ def test_message_with_brackets_is_not_treated_as_markup(
 ) -> None:
     """A message containing ``[...]`` is emitted verbatim, not as markup."""
 
-    ui.success("installed [databricks] extra")
+    ui.success("installed [gateway] extra")
     captured = capsys.readouterr()
-    assert "[databricks]" in captured.out
+    assert "[gateway]" in captured.out

@@ -57,9 +57,9 @@ def test_debby_is_two_headed_cross_vendor(debby_spec: AgentSpec) -> None:
 def test_debby_heads_are_unpinned(debby_spec: AgentSpec) -> None:
     """
     Neither head pins a model: each inherits whatever Claude / OpenAI provider
-    the user configured (Anthropic key, subscription, gateway, or Databricks).
+    the user configured (Anthropic key, subscription, gateway, or gateway).
 
-    Un-pinning is load-bearing for OSS — a Databricks-specific model id would
+    Un-pinning is load-bearing for OSS — a gateway-specific model id would
     404 on a plain Anthropic / OpenAI key. Re-introducing a pin re-couples a
     head to one provider, so fail here if a model reappears.
     """

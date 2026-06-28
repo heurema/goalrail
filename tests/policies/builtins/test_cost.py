@@ -45,7 +45,7 @@ _HANDLER = "goalrail.policies.builtins.cost.cost_budget"
 def _tool(
     cost: float | None,
     *,
-    model: str | None = "databricks-claude-opus-4-8",
+    model: str | None = "anthropic/claude-opus-4-8",
     session_state: dict[str, Any] | None = None,
     harness: str | None = None,
 ) -> PolicyEvent:
@@ -56,7 +56,7 @@ def _tool(
         e.g. ``2.5``. ``None`` omits the field entirely (the
         unpriced-session case).
     :param model: Active model under ``context.model``, e.g.
-        ``"databricks-claude-opus-4-8"`` or the tier alias ``"opus"``.
+        ``"anthropic/claude-opus-4-8"`` or the tier alias ``"opus"``.
         Defaults to an expensive (Opus) model; pass ``None`` for the
         undeterminable-model case.
     :param session_state: Optional persisted state, e.g.
@@ -80,7 +80,7 @@ def _tool(
 def _request(
     cost: float | None,
     *,
-    model: str | None = "databricks-claude-opus-4-8",
+    model: str | None = "anthropic/claude-opus-4-8",
     session_state: dict[str, Any] | None = None,
     harness: str | None = None,
 ) -> PolicyEvent:
@@ -95,7 +95,7 @@ def _request(
     :param cost: ``total_cost_usd`` under ``context.usage``, e.g. ``6.0``.
         ``None`` omits the field (unpriced-session case).
     :param model: Active model under ``context.model``, e.g.
-        ``"databricks-claude-opus-4-8"`` or the alias ``"opus"``; ``None``
+        ``"anthropic/claude-opus-4-8"`` or the alias ``"opus"``; ``None``
         for the undeterminable-model case.
     :param session_state: Optional persisted state, e.g.
         ``{_ASK_APPROVED_KEY: 2.0}``. ``None`` means empty.
@@ -204,7 +204,7 @@ def test_over_budget_on_expensive_model_denies() -> None:
     ALLOWed, the budget would never bite on the costly model it targets.
     """
     policy = cost_budget(max_cost_usd=5.0, ask_thresholds_usd=[2.0])
-    result = policy(_tool(6.0, model="databricks-claude-opus-4-8"))
+    result = policy(_tool(6.0, model="anthropic/claude-opus-4-8"))
     assert result["result"] == "DENY"
     assert "6.00" in result["reason"]  # current cost surfaced
     # The high-cost tokens are listed so the user knows which to avoid.
@@ -284,13 +284,13 @@ def test_hard_limit_wins_over_checkpoint_approval() -> None:
     "model,expected",
     [
         # Opus — concrete deployment id and the bare picker alias.
-        ("databricks-claude-opus-4-8", "DENY"),
+        ("anthropic/claude-opus-4-8", "DENY"),
         ("opus", "DENY"),
         # GPT-5 family: the broad "gpt-5" token covers bare gpt-5, the
         # dot-spelled 5.5, and the dash-spelled deployment id.
         ("gpt-5", "DENY"),
         ("gpt-5.5", "DENY"),
-        ("databricks-gpt-5-5", "DENY"),
+        ("openai/gpt-5-5", "DENY"),
         # Fable is the costliest tier (above Opus at 2x its price); both the
         # concrete id and the bare picker alias must be gated, or switching to
         # Fable becomes a budget bypass for a session downgraded off Opus.
@@ -300,20 +300,20 @@ def test_hard_limit_wins_over_checkpoint_approval() -> None:
         # even though they contain the "gpt-5" substring → ALLOW over budget.
         ("gpt-5-mini", "ALLOW"),
         ("gpt-5-nano", "ALLOW"),
-        ("databricks-gpt-5-mini", "ALLOW"),
+        ("openai/gpt-5-mini", "ALLOW"),
         # A non-listed model is treated as cheap → allowed over budget.
-        ("databricks-claude-haiku-4-5", "ALLOW"),
+        ("anthropic/claude-haiku-4-5", "ALLOW"),
         # "gemini" contains the substring "mini" but NOT "-mini"; the
         # leading dash in the exclude token keeps it from being wrongly
         # carved out (it's simply not an expensive token either) → ALLOW.
-        ("databricks-gemini-2-5-pro", "ALLOW"),
+        ("gemini/gemini-2.5-pro", "ALLOW"),
     ],
 )
 def test_default_expensive_set_matches_and_excludes(model: str, expected: str) -> None:
     """The default set blocks Fable/Opus/GPT-5 but exempts -mini/-nano.
 
     Substring + case-insensitive matching must hit the deployment ids in
-    this stack (``databricks-claude-opus-4-8``, ``databricks-gpt-5-5``)
+    this stack (``anthropic/claude-opus-4-8``, ``openai/gpt-5-5``)
     while the cheap ``gpt-5-mini`` / ``gpt-5-nano`` variants — which share
     the ``gpt-5`` substring — are carved back out so they are NOT blocked.
     A miss either way would mis-budget the zero-config default: blocking a
@@ -392,7 +392,7 @@ def test_request_phase_over_budget_on_expensive_model_denies() -> None:
     the user would see model-directed instructions meant for the agent.
     """
     policy = cost_budget(max_cost_usd=5.0)
-    result = policy(_request(6.0, model="databricks-claude-opus-4-8"))
+    result = policy(_request(6.0, model="anthropic/claude-opus-4-8"))
     assert result["result"] == "DENY"
     assert "6.00" in result["reason"]  # current cost surfaced to the user
     # User-facing phrasing only — no tool-call directive leaks through.
@@ -542,7 +542,7 @@ async def test_resolve_from_spec_denies_over_budget_on_expensive_model() -> None
         function=FunctionRef(path=_HANDLER, arguments={"max_cost_usd": 5.0}),
     )
     policy: FunctionPolicy = resolve_function_policy(spec)
-    result = await policy.evaluate(_tool_ctx(6.0, "databricks-claude-opus-4-8"), {})
+    result = await policy.evaluate(_tool_ctx(6.0, "anthropic/claude-opus-4-8"), {})
     assert result.action == PolicyAction.DENY
 
 
@@ -601,7 +601,7 @@ async def test_resolve_from_spec_denies_over_budget_on_request_phase() -> None:
         content="please run the build",
         tool_name=None,
         usage={"total_cost_usd": 6.0},
-        model="databricks-claude-opus-4-8",
+        model="anthropic/claude-opus-4-8",
     )
     result = await policy.evaluate(ctx, {})
     assert result.action == PolicyAction.DENY

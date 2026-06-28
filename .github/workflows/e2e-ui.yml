@@ -46,7 +46,6 @@ env:
   # (OPENAI_BASE_URL=<mock>/v1, OPENAI_API_KEY=mock-key) inside the
   # spawned server subprocess, so ambient real credentials are a no-op.
   ANTHROPIC_API_KEY: ""
-  DATABRICKS_TOKEN: ""
   CODEX: ""
   CLAUDE_CODE: ""
   # Match e2e.yml's proxy choice.

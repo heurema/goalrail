@@ -65,13 +65,13 @@ def test_resolve_openai_picks_up_base_url_when_set(
     """
     For the openai provider, ``OPENAI_BASE_URL`` flows into
     ``credentials["base_url"]`` so onboarding can point at an
-    OpenAI-compatible gateway (e.g. Databricks serving endpoints).
+    OpenAI-compatible gateway.
     """
     monkeypatch.setenv("OPENAI_API_KEY", "sk-openai-test")
-    monkeypatch.setenv("OPENAI_BASE_URL", "https://example.databricks.com/serving-endpoints")
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://goalrail.example/serving-endpoints")
     selection = resolve_provider_from_model("openai/gpt-5.4")
     assert selection.credentials["api_key"] == "sk-openai-test"
-    assert selection.credentials["base_url"] == "https://example.databricks.com/serving-endpoints"
+    assert selection.credentials["base_url"] == "https://goalrail.example/serving-endpoints"
 
 
 def test_resolve_openai_omits_base_url_when_unset(
@@ -96,6 +96,6 @@ def test_resolve_non_openai_provider_ignores_openai_base_url(
     (and other simple providers) must not pick it up.
     """
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
-    monkeypatch.setenv("OPENAI_BASE_URL", "https://example.databricks.com/serving-endpoints")
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://goalrail.example/serving-endpoints")
     selection = resolve_provider_from_model("anthropic/claude-sonnet-4-20250514")
     assert selection.credentials == {"api_key": "sk-ant-test"}

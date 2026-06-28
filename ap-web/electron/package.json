@@ -35,8 +35,6 @@
     "mac": {
       "category": "public.app-category.developer-tools",
       "icon": "icons/icon.icns",
-      "identity": "Databricks, Inc. (8RMX4WU6F8)",
-      "provisioningProfile": "signing/goalrail.provisionprofile",
       "hardenedRuntime": true,
       "entitlements": "signing/entitlements.mac.plist",
       "entitlementsInherit": "signing/entitlements.mac.inherit.plist",

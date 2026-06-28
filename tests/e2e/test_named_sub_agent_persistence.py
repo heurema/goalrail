@@ -25,7 +25,7 @@ come from the mock LLM server's keyed queues.
 
 Each turn is driven through a runner-bound session: the agent
 bundle is registered (``upload_agent`` rewrites the native
-``gpt-5.4`` model to a Databricks-served name and stamps the
+``gpt-5.4`` model to a gateway-served name and stamps the
 ``--profile`` onto the executor blocks), a session is created and
 bound to the live runner, and the user message is posted to
 ``POST /v1/sessions/{id}/events``. The terminal turn is read from
@@ -212,8 +212,8 @@ def _configure_spawn_flow(
 @pytest.fixture(scope="session")
 def named_sub_agent_test_agent(
     http_client: httpx.Client,
-    databricks_workspace_host: str | None,
-    databricks_profile_or_none: str | None,
+    gateway_base_url: str | None,
+    gateway_profile_or_none: str | None,
 ) -> str:
     """
     Upload the named-sub-agent-test fixture (parent + 2 sub-agents).
@@ -224,17 +224,17 @@ def named_sub_agent_test_agent(
     native executors reach the gateway with no profile and 401.
 
     :param http_client: HTTP client pointed at the live server.
-    :param databricks_workspace_host: Workspace host URL when
+    :param gateway_base_url: Workspace host URL when
         ``--profile`` is set, else ``None``.
-    :param databricks_profile_or_none: Active ``--profile`` value,
+    :param gateway_profile_or_none: Active ``--profile`` value,
         stamped onto the native executors so they authenticate.
     :returns: Agent name ``"named-sub-agent-test"``.
     """
     return upload_agent(
         http_client,
         _NAMED_FIXTURE,
-        rewrite_model_for_databricks=databricks_workspace_host is not None,
-        databricks_profile=databricks_profile_or_none,
+        rewrite_models_for_gateway=gateway_base_url is not None,
+        gateway_profile=gateway_profile_or_none,
     )
 
 

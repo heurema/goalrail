@@ -30,7 +30,7 @@ Streaming model:
 
 Authentication is Gemini-native: a direct API key (``api_key``) or Vertex AI
 (``vertex`` + ``project`` + ``location``). The SDK has no OpenAI-compatible
-``base_url``, so there is deliberately no gateway / Databricks routing path.
+``base_url``, so there is deliberately no provider-gateway routing path.
 
 SDK touchpoints are isolated in :meth:`_open_agent`, :meth:`_build_sdk_tools`,
 :meth:`_build_post_tool_hook`, and :meth:`_drive_turn`, and duck-typed to

@@ -574,9 +574,9 @@ def test_stream_exec_pty_skips_shell_merge(monkeypatch: pytest.MonkeyPatch) -> N
     """A PTY already interleaves the streams — no 2>&1 rewrite."""
     state = _install_fake_modal(monkeypatch)
     sandbox = _seed_sandbox(state)
-    ModalSandboxLauncher().stream_exec("sb-1", "databricks auth login", pty=True)
+    ModalSandboxLauncher().stream_exec("sb-1", "goalrail auth status", pty=True)
     assert sandbox.exec_calls == [
-        _ExecCall(argv=["bash", "-lc", "databricks auth login"], pty=True)
+        _ExecCall(argv=["bash", "-lc", "goalrail auth status"], pty=True)
     ]
 
 
@@ -593,7 +593,7 @@ def test_forward_local_port_raises_capability_error() -> None:
     assert ModalSandboxLauncher.supports_local_port_forward is False
     with pytest.raises(SandboxCapabilityError) as exc:
         launcher.forward_local_port("sb-1", 8022)
-    assert "App auth" in str(exc.value)
+    assert "interactive auth" in str(exc.value)
     assert "modal" in str(exc.value)
 
 

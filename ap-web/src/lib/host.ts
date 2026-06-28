@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
  * Standalone ap-web talks to a same-origin server: API calls use relative
  * `/v1/...` paths and the terminal WebSocket is built from
  * `window.location`. When ap-web is embedded as a component library inside
- * another app (e.g. the Databricks monolith), the host injects a config so
+ * another app, the host injects a config so
  * those calls are rebased onto the host's API surface and auth.
  *
  * Default (no config set) preserves the standalone behavior, so importing
@@ -74,11 +74,6 @@ export interface GoalrailHostConfig {
      * Full tooltip content shown for the disabled New Sandbox help icon.
      */
     newSandbox?: ReactNode;
-    /**
-     * Full tooltip content shown for the Databricks git-credentials help icon
-     * in the sandbox repository popover.
-     */
-    databricksGitCredentials?: ReactNode;
   };
 }
 

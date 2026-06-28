@@ -2,7 +2,7 @@
 #
 # Copy to the persistent volume as `/data/config.yaml` (the default the
 # server looks for), or point GOALRAIL_CONFIG at an explicit path. The
-# server (Docker entrypoint, Databricks Apps, and `goalrail server -c`)
+# server (Docker entrypoint, hosted app, and `goalrail server -c`)
 # reads the same keys — so a hosted deploy keeps its settings here just
 # like a laptop does, instead of a pile of env vars.
 #

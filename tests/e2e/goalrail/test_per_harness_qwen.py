@@ -70,9 +70,8 @@ def test_per_harness_qwen_one_shot(
     :param goalrail_repo_root: Cwd for the subprocess so the
         YAML spec and example tool modules resolve on sys.path.
     :param goalrail_credentials_env: Env vars with
-        ``OPENAI_API_KEY`` / ``OPENAI_BASE_URL`` /
-        ``DATABRICKS_CONFIG_PROFILE`` populated from
-        ``--llm-api-key``.
+        ``OPENAI_API_KEY`` / ``OPENAI_BASE_URL`` populated from
+        the e2e credentials fixtures.
     """
     yaml_path = goalrail_repo_root / "tests" / "resources" / "examples" / "hello_world.yaml"
 

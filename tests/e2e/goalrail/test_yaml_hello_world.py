@@ -1,7 +1,7 @@
 """Phase 0 characterization test — YAML-driven agent with tools (mock LLM).
 
 Migrated to mock LLM: uses the session-scoped mock server instead of
-a real Databricks gateway.  Parametrized across every wrapped harness
+a real gateway.  Parametrized across every wrapped harness
 (claude-sdk, codex, pi, openai-agents); rows whose harness CLI binary
 is absent are skipped via :func:`skip_if_harness_cli_missing` so CI
 still picks up openai-agents without needing the ``claude`` / ``codex``

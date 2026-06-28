@@ -4,7 +4,7 @@ Covers :func:`goalrail.inner.codex_executor._provider_codex_config_overrides`
 and :func:`goalrail.codex_native_app_server.resolve_native_codex_launch` —
 the path that makes a native Codex terminal route through a ``configure
 harness`` provider just like the in-process codex harness, instead of only
-the Databricks ucode profile. Providers are constructed via the real config
+Codex's ambient login path. Providers are constructed via the real config
 parser; config + ambient are isolated so resolution is deterministic.
 """
 
@@ -27,7 +27,6 @@ def _isolated(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setenv("HOME", str(tmp_path))
     for var in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "CODEX_HOME"):
         monkeypatch.delenv(var, raising=False)
-    monkeypatch.delenv("DATABRICKS_CONFIG_PROFILE", raising=False)
     return tmp_path
 
 
@@ -175,7 +174,7 @@ def test_resolve_native_codex_launch_subscription_logged_in_uses_cli_login(
     When Codex actually has a stored login, deferring to its own auth is
     correct — the bridged ``auth.json`` authenticates it. The launch still
     pins the built-in ``openai`` provider: the bridged config.toml may set a
-    custom default ``model_provider`` (e.g. isaac's Databricks AI Gateway),
+    custom default ``model_provider`` (e.g. a corporate gateway),
     which would otherwise silently hijack the Subscription selection. Failure
     with extra overrides means we synthesized a provider route over a working
     subscription; failure with NO overrides means the pin regressed and a
@@ -298,37 +297,6 @@ def test_resolve_native_codex_launch_subscription_no_login_no_alternative_uses_l
     assert launch.profile is None
 
 
-def test_resolve_native_codex_launch_databricks_provider_uses_profile(_isolated: Path) -> None:
-    """A databricks provider default → the ucode profile path (its profile)."""
-    _seed(
-        _isolated,
-        {"databricks": {"kind": "databricks", "default": True, "profile": "oss"}},
-    )
-
-    launch = resolve_native_codex_launch(model=None)
-    assert launch.config_overrides == []
-    # Routes via the Databricks profile path, not provider overrides.
-    assert launch.profile == "oss"
-
-
-def test_resolve_native_codex_launch_global_auth_when_no_provider(_isolated: Path) -> None:
-    """No provider configured + a global Databricks ``auth:`` block → ucode.
-
-    With the ``--profile`` flag removed, the global ``auth:`` block in
-    ``config.yaml`` is the only spec-less way to route native Codex through a
-    Databricks profile. Failure means the global auth fallback was skipped and
-    the launch dropped to ambient detection / Codex's own login.
-    """
-    (_isolated / "config.yaml").write_text(
-        yaml.safe_dump({"auth": {"type": "databricks", "profile": "oss"}})
-    )
-
-    launch = resolve_native_codex_launch(model=None)
-    # Routes via the Databricks ucode profile path, not provider overrides.
-    assert launch.config_overrides == []
-    assert launch.profile == "oss"
-
-
 def test_resolve_native_codex_launch_ambient_key_routes(
     _isolated: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -361,11 +329,11 @@ def test_resolve_native_codex_launch_cli_config_default_pins_provider(
     _seed(
         _isolated,
         {
-            "codex-databricks": {
+            "codex-corporategateway": {
                 "kind": "cli-config",
                 "cli": "codex",
-                "model_provider": "Databricks",
-                "display_name": "Databricks AI Gateway",
+                "model_provider": "CorporateGateway",
+                "display_name": "Corporate Gateway",
                 "default": True,
             }
         },
@@ -373,19 +341,19 @@ def test_resolve_native_codex_launch_cli_config_default_pins_provider(
 
     launch = resolve_native_codex_launch(model=None)
 
-    assert launch.config_overrides == ['model_provider="Databricks"']
+    assert launch.config_overrides == ['model_provider="CorporateGateway"']
     assert launch.profile is None
     assert launch.model is None
 
 
 _DISMISSIBLE_CODEX_CONFIG = """
-model_provider = "Databricks"
+model_provider = "CorporateGateway"
 
-[model_providers.Databricks]
-name = "Databricks AI Gateway"
-base_url = "https://example.ai-gateway.cloud.databricks.com/codex/v1"
+[model_providers.CorporateGateway]
+name = "Corporate Gateway"
+base_url = "https://gateway.example/codex/v1"
 
-[model_providers.Databricks.auth]
+[model_providers.CorporateGateway.auth]
 command = "jq"
 """
 
@@ -397,7 +365,7 @@ def test_resolve_native_codex_launch_dismissed_config_provider_pins_openai(
 
     With the detection dismissed and nothing else configured, the launch
     resolves NO provider — but the bridged ~/.codex/config.toml still sets
-    ``model_provider = "Databricks"``, so an unpinned launch would silently
+    ``model_provider = "CorporateGateway"``, so an unpinned launch would silently
     route through the very credential the user removed (the reported bug:
     codex kept answering through the gateway after Remove). The launch must
     pin codex's built-in ``openai`` provider instead.
@@ -407,7 +375,7 @@ def test_resolve_native_codex_launch_dismissed_config_provider_pins_openai(
     codex_dir.mkdir()
     (codex_dir / "config.toml").write_text(_DISMISSIBLE_CODEX_CONFIG)
     (_isolated / "config.yaml").write_text(
-        yaml.safe_dump({"dismissed_detections": ["codex-databricks"]})
+        yaml.safe_dump({"dismissed_detections": ["codex-corporategateway"]})
     )
 
     launch = resolve_native_codex_launch(model=None)
@@ -434,5 +402,5 @@ def test_resolve_native_codex_launch_undismissed_config_provider_routes_via_pin(
 
     launch = resolve_native_codex_launch(model=None)
 
-    assert launch.config_overrides == ['model_provider="Databricks"']
+    assert launch.config_overrides == ['model_provider="CorporateGateway"']
     assert launch.profile is None

@@ -12,8 +12,7 @@ it ensures a local daemon + runner, creates-or-resumes the ``opencode-native-ui`
 session (whose runner auto-creates the ``opencode serve`` + ``opencode attach``
 terminal), and attaches this TTY directly to that runner-owned tmux pane — the
 same web-UI takeover path, driven from the CLI. The provider/gateway comes from
-the runner's ambient env / ``goalrail setup`` config (a profile-bound spec routes
-through the Databricks gateway; otherwise OpenAI-/Anthropic-compatible env vars).
+the runner's ambient env / ``goalrail setup`` config.
 """
 
 from __future__ import annotations

@@ -527,7 +527,7 @@ def _run_with_remote_server(
     Launch Codex on a Goalrail server via a daemon-spawned runner.
 
     :param base_url: Remote Goalrail server base URL, e.g.
-        ``"https://example.databricks.com"``.
+        ``"https://goalrail.example.com"``.
     :param spec_path: Generated Codex wrapper agent spec.
     :param session_id: Optional existing Goalrail session id.
     :param resume_picker: When ``True``, run the Codex-native picker.
@@ -648,7 +648,7 @@ async def _prepare_codex_terminal_via_daemon(
     resource, and attaches to it.
 
     :param base_url: Goalrail server base URL, e.g.
-        ``"https://example.databricks.com"``.
+        ``"https://goalrail.example.com"``.
     :param headers: HTTP auth headers for Goalrail requests.
     :param session_id: Existing session id to resume, or ``None`` for a
         fresh session.
@@ -835,7 +835,7 @@ async def _post_initial_prompt(
     :param session_id: Session id, e.g. ``"conv_abc123"``.
     :param prompt: User prompt text.
     :param auth: Optional refresh-capable HTTP auth for long-lived
-        Databricks-backed sessions.
+        remote sessions.
     :returns: None.
     :raises click.ClickException: If Goalrail rejects the prompt.
     """
@@ -950,7 +950,7 @@ async def _prepare_codex_terminal(
         codex_home = codex_home_for_bridge_dir(bridge_dir)
         clear_bridge_state(bridge_dir)
         # Route across all offerings: a configured provider (configure
-        # harness), the Databricks ucode profile, or Codex's own login —
+        # harness) or Codex's own login —
         # so `goalrail codex` honors the provider selection like the
         # in-process codex harness. Resolved before any rollout synthesis
         # so session_meta can name the provider the launch routes through.
@@ -1618,7 +1618,7 @@ async def _ensure_local_codex_resume_rollout(
         ``Path("/home/me/repo")``. Pass an already-resolved path so
         structural rollout cwd fields match the terminal cwd.
     :param model_provider: Provider id this session's launch routes through,
-        e.g. ``"goalrail_databricks"`` (see
+        e.g. ``"goalrail_provider"`` (see
         :func:`goalrail.codex_native_app_server.codex_session_meta_model_provider`).
         Written into ``session_meta`` so codex's thread-store backfill can
         resolve the provider when it indexes the rollout.
@@ -1787,7 +1787,7 @@ def _codex_rollout_records_from_session_items(
     :param cwd: Working directory to write into structural rollout fields,
         e.g. ``Path("/home/me/repo")``.
     :param model_provider: Provider id for ``session_meta.model_provider``,
-        e.g. ``"goalrail_databricks"``.
+        e.g. ``"goalrail_provider"``.
     :param cli_version: Codex CLI version string for
         ``session_meta.cli_version``, e.g. ``"0.136.0"``.
     :returns: Codex rollout record dictionaries.
@@ -2247,7 +2247,7 @@ async def _launch_codex_terminal(
         as the app-server (and skips the OpenAI-login onboarding
         screen). See :func:`build_codex_remote_args`. Empty for a plain
         Codex-login launch. E.g.
-        ``('model_provider="goalrail_databricks"',)``.
+        ``('model_provider="goalrail_provider"',)``.
     :returns: Launched terminal resource details.
     """
     terminal_args = build_codex_remote_args(

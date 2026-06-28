@@ -21,18 +21,11 @@ deployments need a per-spawn env override (follow-up).
 Env vars read at startup:
 
 - ``HARNESS_CLAUDE_SDK_MODEL``: model identifier, e.g.
-  ``"databricks-claude-opus-4-6"``. ``None`` falls back to
+  ``"claude-opus-4-6"``. ``None`` falls back to
   Claude SDK's own default.
 - ``HARNESS_CLAUDE_SDK_GATEWAY``: ``"1"`` / ``"true"`` to route
   through a vendor-neutral gateway (base URL + bearer-token
-  command + model). The Databricks AI gateway is one producer of
-  this transport; generic ``key`` / ``gateway`` providers are
-  another. Otherwise the SDK uses its built-in API path.
-- ``HARNESS_CLAUDE_SDK_DATABRICKS_PROFILE``: Databricks-specific
-  ``~/.databrickscfg`` profile name, used by the executor for
-  Databricks credential resolution / token refresh when the
-  gateway transport was fed from a Databricks profile, e.g.
-  ``"<your-profile>"``.
+  command + model). Otherwise the SDK uses its built-in API path.
 - ``HARNESS_CLAUDE_SDK_CWD``: working directory the SDK launches
   the Claude CLI in. ``None`` falls back to the subprocess's
   inherited cwd.
@@ -105,7 +98,6 @@ _logger = logging.getLogger(__name__)
 # so misconfigurations surface as a single grep target.
 _ENV_MODEL = "HARNESS_CLAUDE_SDK_MODEL"
 _ENV_GATEWAY = "HARNESS_CLAUDE_SDK_GATEWAY"
-_ENV_DATABRICKS_PROFILE = "HARNESS_CLAUDE_SDK_DATABRICKS_PROFILE"
 _ENV_GATEWAY_HOST = "HARNESS_CLAUDE_SDK_GATEWAY_HOST"
 _ENV_CWD = "HARNESS_CLAUDE_SDK_CWD"
 _ENV_PERMISSION_MODE = "HARNESS_CLAUDE_SDK_PERMISSION_MODE"
@@ -255,10 +247,9 @@ def _build_claude_sdk_executor() -> Executor:
     Construct a :class:`ClaudeSDKExecutor` from env-var config.
 
     Called lazily by the :class:`ExecutorAdapter` on the first
-    turn. Heavyweight init (CLI discovery, eager Databricks
-    credential resolution) happens at this point — operators
-    see the failure surface as a startup error on the first
-    request, not at FastAPI app boot.
+    turn. Heavyweight init (CLI discovery, gateway validation)
+    happens at this point — operators see the failure surface as
+    a startup error on the first request, not at FastAPI app boot.
 
     :returns: A configured :class:`ClaudeSDKExecutor` instance.
     :raises OSError: If ``HARNESS_CLAUDE_SDK_GATEWAY`` is set
@@ -277,7 +268,6 @@ def _build_claude_sdk_executor() -> Executor:
         model=os.environ.get(_ENV_MODEL),
         permission_mode=os.environ.get(_ENV_PERMISSION_MODE, _DEFAULT_PERMISSION_MODE),
         gateway=gateway,
-        databricks_profile=os.environ.get(_ENV_DATABRICKS_PROFILE),
         gateway_host=os.environ.get(_ENV_GATEWAY_HOST) or None,
         base_url_override=os.environ.get(_ENV_GATEWAY_BASE_URL) or None,
         gateway_auth_command=os.environ.get(_ENV_GATEWAY_AUTH_COMMAND) or None,

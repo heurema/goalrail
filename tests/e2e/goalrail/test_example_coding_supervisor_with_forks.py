@@ -67,7 +67,7 @@ def test_coding_supervisor_with_forks_one_shot(
     :param model: Unused — replaced by a per-harness mock key below.
         The real model from :data:`HARNESS_HARNESS_MODELS` would put
         the ``pi`` harness into gateway mode (pi inspects the
-        ``databricks-*`` model name and switches to real-gateway auth,
+        ``gateway-*`` model name and switches to real-gateway auth,
         ignoring the mock's ``OPENAI_BASE_URL``); a ``mock-*`` key keeps
         every harness routed through the mock LLM server.
     """
@@ -87,7 +87,7 @@ def test_coding_supervisor_with_forks_one_shot(
 
     # Per-harness mock key so concurrent harness rows get isolated mock
     # response queues, and so ``pi`` stays in mock mode rather than
-    # gateway-routing a ``databricks-*`` model name.
+    # gateway-routing a ``gateway-*`` model name.
     mock_model = f"mock-coding-supervisor-{harness}"
     # Pre-seed the mock queue with enough canned replies to cover the
     # supervisor turn plus both worker sub-agent turns and any auto-wake.

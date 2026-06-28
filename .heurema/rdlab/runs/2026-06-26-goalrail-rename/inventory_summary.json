@@ -215,7 +215,7 @@
       85
     ],
     [
-      "docs/databricks.md",
+      "docs/removed-provider.md",
       82
     ],
     [
@@ -569,7 +569,7 @@
       "Goalrail": 60,
       "goalrail": 25
     },
-    "docs/databricks.md": {
+    "docs/removed-provider.md": {
       "goalrail": 70,
       "heurema": 10,
       "GOALRAIL": 2

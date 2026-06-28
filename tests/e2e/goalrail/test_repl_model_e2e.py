@@ -2,7 +2,7 @@
 
 Migrated to mock LLM: drives ``/model`` against a mock ``goalrail run``
 REPL and asserts the slash-command surface — show / set / show-after-set
-/ reset — matches the design's contract end-to-end. No real Databricks
+/ reset — matches the design's contract end-to-end. No real gateway
 credentials required.
 """
 
@@ -40,7 +40,7 @@ def test_repl_model_command_show_set_reset(
 ) -> None:
     """Drive /model through its full state machine in the REPL.
 
-    Uses the mock LLM server so no real Databricks credentials are
+    Uses the mock LLM server so no real provider credentials are
     needed. The /model slash commands are handled entirely within the
     REPL process — no LLM turn is required to test the UI state machine.
 

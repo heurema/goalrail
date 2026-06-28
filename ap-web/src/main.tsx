@@ -55,7 +55,6 @@ const _bootProbe: Promise<ServerInfo> = Promise.race([
           accounts_enabled: false,
           login_url: null,
           needs_setup: false,
-          databricks_features: false,
           managed_sandboxes_enabled: false,
           sandbox_provider: null,
           smart_routing_enabled: false,

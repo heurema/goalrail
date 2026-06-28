@@ -824,14 +824,14 @@ async def test_text_json_schema_translated_to_response_format(
 
     Without this translation, the ``text`` kwarg is sent as-is in the
     Chat Completions body and rejected with 400 by providers that don't
-    recognise it (e.g. Databricks). A failure here means the structured
+    recognise it. A failure here means the structured
     output schema is lost or malformed in the Chat Completions path.
     """
     from goalrail.llms.routing import RoutedModel
 
     captured: list[dict[str, Any]] = []
     adapter = _CapturingAdapter(captured)
-    routed = RoutedModel(provider="databricks", model="test-model")
+    routed = RoutedModel(provider="openrouter", model="test-model")
 
     monkeypatch.setattr("goalrail.llms.client.parse_model_string", lambda model: routed)
     monkeypatch.setattr("goalrail.llms.client.get_adapter", lambda provider: adapter)
@@ -847,7 +847,7 @@ async def test_text_json_schema_translated_to_response_format(
     client = Client()
     await client.responses.create(
         input=[{"role": "user", "content": "test"}],
-        model="databricks/test-model",
+        model="openrouter/test-model",
         text={
             "format": {
                 "type": "json_schema",
@@ -897,7 +897,7 @@ async def test_text_without_json_schema_not_translated(
 
     captured: list[dict[str, Any]] = []
     adapter = _CapturingAdapter(captured)
-    routed = RoutedModel(provider="databricks", model="test-model")
+    routed = RoutedModel(provider="openrouter", model="test-model")
 
     monkeypatch.setattr("goalrail.llms.client.parse_model_string", lambda model: routed)
     monkeypatch.setattr("goalrail.llms.client.get_adapter", lambda provider: adapter)
@@ -913,7 +913,7 @@ async def test_text_without_json_schema_not_translated(
     client = Client()
     await client.responses.create(
         input=[{"role": "user", "content": "test"}],
-        model="databricks/test-model",
+        model="openrouter/test-model",
         text={"format": {"type": "text"}},
     )
 

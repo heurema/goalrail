@@ -134,7 +134,7 @@ def _create_bound_session(
     client: httpx.Client,
     *,
     live_runner_id: str,
-    databricks_workspace_host: str | None,
+    gateway_base_url: str | None,
     initial_text: str | None = None,
     mock_llm_server_url: str | None = None,
 ) -> str:
@@ -144,8 +144,8 @@ def _create_bound_session(
     :param client: HTTP client pointed at the live server.
     :param live_runner_id: Runner id registered by the live server,
         e.g. ``"runner_abc123"``.
-    :param databricks_workspace_host: Workspace host URL when the
-        test suite routes LLM calls through Databricks model serving.
+    :param gateway_base_url: Workspace host URL when the
+        test suite routes LLM calls through model serving.
     :param initial_text: Optional first user message to enqueue
         after binding.
     :param mock_llm_server_url: Mock LLM server URL. When set, injects
@@ -158,7 +158,7 @@ def _create_bound_session(
     else:
         bundle = build_agent_bundle(
             _WORKSPACE_WRITER_DIR,
-            rewrite_model_for_databricks=databricks_workspace_host is not None,
+            rewrite_models_for_gateway=gateway_base_url is not None,
         )
     create_resp = client.post(
         "/v1/sessions",
@@ -446,7 +446,7 @@ def fs_ws_client(fs_ws_server: str) -> Iterator[httpx.Client]:
 def test_filesystem_listing_shape(
     http_client: httpx.Client,
     live_runner_id: str,
-    databricks_workspace_host: str | None,
+    gateway_base_url: str | None,
 ) -> None:
     """GET .../filesystem returns a well-formed list envelope.
 
@@ -459,13 +459,13 @@ def test_filesystem_listing_shape(
 
     :param http_client: HTTP client pointed at the live server.
     :param live_runner_id: Runner id registered by the live server.
-    :param databricks_workspace_host: Workspace host URL when the
-        test suite routes LLM calls through Databricks model serving.
+    :param gateway_base_url: Workspace host URL when the
+        test suite routes LLM calls through model serving.
     """
     session_id = _create_bound_session(
         http_client,
         live_runner_id=live_runner_id,
-        databricks_workspace_host=databricks_workspace_host,
+        gateway_base_url=gateway_base_url,
     )
 
     resp = http_client.get(_fs_root_url(session_id))
@@ -485,7 +485,7 @@ def test_filesystem_listing_shape(
 def test_filesystem_user_write_put_round_trip(
     http_client: httpx.Client,
     live_runner_id: str,
-    databricks_workspace_host: str | None,
+    gateway_base_url: str | None,
 ) -> None:
     """User PUT write round-trips: create -> read-back -> overwrite -> read-back.
 
@@ -507,8 +507,8 @@ def test_filesystem_user_write_put_round_trip(
 
     :param http_client: HTTP client pointed at the live server.
     :param live_runner_id: Runner id registered by the live server.
-    :param databricks_workspace_host: Workspace host URL when the
-        test suite routes LLM calls through Databricks model serving.
+    :param gateway_base_url: Workspace host URL when the
+        test suite routes LLM calls through model serving.
     """
     # UUID suffix so parallel workers don't collide on the same path.
     filename = f"e2e_user_write_{uuid.uuid4().hex[:8]}.md"
@@ -518,7 +518,7 @@ def test_filesystem_user_write_put_round_trip(
     session_id = _create_bound_session(
         http_client,
         live_runner_id=live_runner_id,
-        databricks_workspace_host=databricks_workspace_host,
+        gateway_base_url=gateway_base_url,
     )
 
     # 1. Write a brand-new file via the user-facing PUT endpoint.
@@ -585,7 +585,7 @@ def test_filesystem_user_write_put_round_trip(
 def test_filesystem_changes_appear_after_agent_write(
     fs_ws_client: httpx.Client,
     fs_ws_runner_id: str,
-    databricks_workspace_host: str | None,
+    gateway_base_url: str | None,
     mock_llm_server_url: str,
 ) -> None:
     """Agent write surfaces in the directory listing with a non-null status.
@@ -614,8 +614,8 @@ def test_filesystem_changes_appear_after_agent_write(
 
     :param fs_ws_client: HTTP client pointed at the workspace-rooted server.
     :param fs_ws_runner_id: Runner id for the workspace-rooted runner.
-    :param databricks_workspace_host: Workspace host URL when the
-        test suite routes LLM calls through Databricks model serving.
+    :param gateway_base_url: Workspace host URL when the
+        test suite routes LLM calls through model serving.
     :param mock_llm_server_url: Mock LLM server URL.
     """
     # Use a UUID suffix so parallel test runs don't collide.
@@ -643,7 +643,7 @@ def test_filesystem_changes_appear_after_agent_write(
     session_id = _create_bound_session(
         fs_ws_client,
         live_runner_id=fs_ws_runner_id,
-        databricks_workspace_host=databricks_workspace_host,
+        gateway_base_url=gateway_base_url,
         initial_text=(
             f"Write a file named '{filename}' containing exactly: "
             f"'{file_content}'. Use sys_os_write."
@@ -721,7 +721,7 @@ def test_diff_endpoint_shows_git_diff_for_modified_file(
     fs_ws_client: httpx.Client,
     fs_ws_runner_id: str,
     fs_workspace: Path,
-    databricks_workspace_host: str | None,
+    gateway_base_url: str | None,
     mock_llm_server_url: str,
 ) -> None:
     """The diff endpoint returns the git HEAD content as ``before`` and the modified
@@ -751,8 +751,8 @@ def test_diff_endpoint_shows_git_diff_for_modified_file(
     :param fs_ws_client: HTTP client pointed at the workspace-rooted server.
     :param fs_ws_runner_id: Runner id for the workspace-rooted runner.
     :param fs_workspace: The isolated git workspace the runner is rooted at.
-    :param databricks_workspace_host: Workspace host URL when the
-        test suite routes LLM calls through Databricks model serving.
+    :param gateway_base_url: Workspace host URL when the
+        test suite routes LLM calls through model serving.
     :param mock_llm_server_url: Mock LLM server URL.
     """
     # The seed file tracked in the workspace's initial commit (see the
@@ -790,7 +790,7 @@ def test_diff_endpoint_shows_git_diff_for_modified_file(
     session_id = _create_bound_session(
         fs_ws_client,
         live_runner_id=fs_ws_runner_id,
-        databricks_workspace_host=databricks_workspace_host,
+        gateway_base_url=gateway_base_url,
         initial_text=(
             f"Overwrite the file '{target_rel}' with exactly this content "
             f"(no trailing newline): '{modified_content}'. Use sys_os_write."

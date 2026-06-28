@@ -1949,15 +1949,15 @@ def test_clone_os_env_spec_preserves_all_sandbox_fields() -> None:
 
     sandbox = OSEnvSandboxSpec(
         type="darwin_seatbelt",
-        read_paths=["~/.databrickscfg"],
+        read_paths=["~/.config/provider"],
         write_paths=["."],
         write_files=["~/.ssh/known_hosts"],
         allow_network=True,
         cwd_allow_hidden=[".git", ".venv"],
         cwd_hidden_scan_max_entries=12345,
         cwd_hidden_scan_overflow="warn",
-        env_passthrough=["DATABRICKS_HOST", "DATABRICKS_TOKEN"],
-        egress_rules=["GET api.github.com/repos/databricks/*/**"],
+        env_passthrough=["CUSTOM_PROVIDER_HOST", "CUSTOM_PROVIDER_TOKEN"],
+        egress_rules=["GET api.github.com/repos/example/*/**"],
         egress_allow_private_destinations=True,
     )
     spec = OSEnvSpec(
@@ -2739,9 +2739,9 @@ def _spec_with_subagent_harness(harness: str) -> SimpleNamespace:
 @pytest.mark.parametrize(
     ("harness", "model"),
     [
-        pytest.param("claude-native", "databricks-claude-sonnet-4-6", id="claude-native"),
-        pytest.param("codex-native", "databricks-gpt-5-4", id="codex-native"),
-        pytest.param("claude-sdk", "databricks-claude-sonnet-4-6", id="claude-sdk"),
+        pytest.param("claude-native", "anthropic/claude-sonnet-4-6", id="claude-native"),
+        pytest.param("codex-native", "openai/gpt-5-4", id="codex-native"),
+        pytest.param("claude-sdk", "anthropic/claude-sonnet-4-6", id="claude-sdk"),
     ],
 )
 async def test_sys_session_send_model_lands_in_child_create_body(
@@ -3096,17 +3096,17 @@ async def test_sys_session_send_model_rejected_for_unplumbed_harness(
     ("harness", "model", "expected_rule"),
     [
         pytest.param(
-            "claude-native", "databricks-gpt-5-4", "only runs Claude models", id="gpt-on-claude"
+            "claude-native", "openai/gpt-5-4", "only runs Claude models", id="gpt-on-claude"
         ),
         pytest.param(
             "codex-native",
-            "databricks-claude-sonnet-4-6",
+            "anthropic/claude-sonnet-4-6",
             "only runs GPT models",
             id="claude-on-codex",
         ),
         pytest.param(
             "claude-native",
-            "databricks-meta-llama-3.3-70b-instruct",
+            "meta-llama-3.3-70b-instruct",
             "only runs Claude models",
             id="unknown-family-on-claude",
         ),
@@ -3282,7 +3282,6 @@ def _isolate_model_providers(
     """
     monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(tmp_path))
     monkeypatch.setenv("GOALRAIL_DISABLE_KEYRING", "1")
-    monkeypatch.delenv("DATABRICKS_CONFIG_PROFILE", raising=False)
     monkeypatch.setattr("goalrail.onboarding.detected.detect_providers", list)
     (tmp_path / "config.yaml").write_text(yaml_text)
 
@@ -3371,16 +3370,14 @@ async def _dispatch_model_send(
         pytest.param(
             "claude-native",
             "claude-sonnet-4-6",
-            "databricks-claude-sonnet-4-6",
-            id="canonical-claude-localized",
+            "claude-sonnet-4-6",
+            id="canonical-claude-preserved",
         ),
-        pytest.param(
-            "codex-native", "gpt-5-4", "databricks-gpt-5-4", id="canonical-gpt-localized"
-        ),
+        pytest.param("codex-native", "gpt-5-4", "gpt-5-4", id="canonical-gpt-preserved"),
         pytest.param(
             "claude-native",
-            "databricks-claude-sonnet-4-6",
-            "databricks-claude-sonnet-4-6",
+            "anthropic/claude-sonnet-4-6",
+            "anthropic/claude-sonnet-4-6",
             id="already-local-unchanged",
         ),
         pytest.param(
@@ -3391,7 +3388,7 @@ async def _dispatch_model_send(
         ),
     ],
 )
-async def test_sys_session_send_localizes_canonical_model_for_gateway_child(
+async def test_sys_session_send_preserves_model_for_gateway_child(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     harness: str,
@@ -3399,13 +3396,7 @@ async def test_sys_session_send_localizes_canonical_model_for_gateway_child(
     expected: str,
 ) -> None:
     """
-    A gateway-routed child persists the gateway-local spelling.
-
-    With a Databricks default provider, a bare canonical vendor id
-    (``claude-sonnet-4-6``) would die at the gateway ("model not
-    found"); the gate must persist the ``databricks-``-prefixed
-    spelling as ``model_override`` — and ONLY for mechanical ids:
-    already-local and vendor-prefixed shapes pass through verbatim.
+    A gateway-routed child preserves the requested spelling.
 
     :param monkeypatch: Pytest monkeypatch fixture.
     :param tmp_path: Per-test temp dir for the isolated provider config.
@@ -3416,7 +3407,16 @@ async def test_sys_session_send_localizes_canonical_model_for_gateway_child(
     _isolate_model_providers(
         monkeypatch,
         tmp_path,
-        "providers:\n  workspace:\n    kind: databricks\n    profile: prof-a\n    default: true\n",
+        "providers:\n"
+        "  workspace:\n"
+        "    kind: gateway\n"
+        "    default: true\n"
+        "    anthropic:\n"
+        "      base_url: https://gateway.example.com/anthropic\n"
+        "      api_key: sk-gateway\n"
+        "    openai:\n"
+        "      base_url: https://gateway.example.com/openai\n"
+        "      api_key: sk-gateway\n",
     )
     result = await _dispatch_model_send(
         monkeypatch,
@@ -3426,23 +3426,18 @@ async def test_sys_session_send_localizes_canonical_model_for_gateway_child(
     )
     payload = json.loads(result.output)
     assert payload["status"] == "launching"
-    # The persisted override is the localized id — this is the value the
-    # server stores and the harness launch consumes.
+    # The persisted override is the exact id the caller requested.
     assert len(result.create_bodies) == 1
     assert result.create_bodies[0]["model_override"] == expected
 
 
 @pytest.mark.asyncio
-async def test_sys_session_send_strips_gateway_prefix_for_vendor_direct_child(
+async def test_sys_session_send_preserves_model_for_vendor_direct_child(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     """
-    A vendor-direct child persists the bare canonical spelling.
-
-    With an Anthropic API-key default provider, a ``databricks-``
-    prefixed id would be rejected by the vendor API; the gate must
-    strip the prefix before persisting.
+    A vendor-direct child preserves the requested spelling.
 
     :param monkeypatch: Pytest monkeypatch fixture.
     :param tmp_path: Per-test temp dir for the isolated provider config.
@@ -3462,14 +3457,13 @@ async def test_sys_session_send_strips_gateway_prefix_for_vendor_direct_child(
     result = await _dispatch_model_send(
         monkeypatch,
         agent_spec=_spec_with_real_subagent("claude-native"),
-        model="databricks-claude-opus-4-8",
+        model="anthropic/claude-opus-4-8",
         conv_id="conv_parent_norm_direct",
     )
     payload = json.loads(result.output)
     assert payload["status"] == "launching"
     assert len(result.create_bodies) == 1
-    # Stripped: the vendor API only routes the bare canonical id.
-    assert result.create_bodies[0]["model_override"] == "claude-opus-4-8"
+    assert result.create_bodies[0]["model_override"] == "anthropic/claude-opus-4-8"
 
 
 @pytest.mark.asyncio
@@ -3508,12 +3502,11 @@ async def test_sys_session_send_family_guard_runs_before_normalization(
     tmp_path: Path,
 ) -> None:
     """
-    The family guard fires on the RAW requested id, before any localize.
+    The family guard fires on the RAW requested id before create.
 
     A GPT id on a claude worker must be rejected quoting exactly what
-    the caller sent (``gpt-5-4``, not ``databricks-gpt-5-4``) and no
-    child may be created — even though the gateway provider would have
-    localized the id had the guard passed.
+    the caller sent (``gpt-5-4``, not ``openai/gpt-5-4``) and no
+    child may be created.
 
     :param monkeypatch: Pytest monkeypatch fixture.
     :param tmp_path: Per-test temp dir for the isolated provider config.
@@ -3521,7 +3514,16 @@ async def test_sys_session_send_family_guard_runs_before_normalization(
     _isolate_model_providers(
         monkeypatch,
         tmp_path,
-        "providers:\n  workspace:\n    kind: databricks\n    profile: prof-a\n    default: true\n",
+        "providers:\n"
+        "  workspace:\n"
+        "    kind: gateway\n"
+        "    default: true\n"
+        "    anthropic:\n"
+        "      base_url: https://gateway.example.com/anthropic\n"
+        "      api_key: sk-gateway\n"
+        "    openai:\n"
+        "      base_url: https://gateway.example.com/openai\n"
+        "      api_key: sk-gateway\n",
     )
     result = await _dispatch_model_send(
         monkeypatch,

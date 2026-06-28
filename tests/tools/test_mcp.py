@@ -187,7 +187,7 @@ def test_cache_key_stdio_args_changes_key() -> None:
     """
     Different args on the same stdio command produce different
     cache keys — covers the realistic "same binary, different
-    CLI flags" case (e.g. databricks MCPs differentiated by
+    CLI flags" case (e.g. vendor MCPs differentiated by
     ``--profile``).
 
     What breaks if this fails: the cache treats
@@ -1404,8 +1404,7 @@ async def test_http_falls_back_to_sse_when_streamable_fails() -> None:
 
     If the fallback were removed, any legacy SSE-only MCP server
     would fail to connect. If ``streamablehttp_client`` is not
-    tried first, Streamable HTTP servers (e.g. Databricks MCP
-    gateways) would get the wrong transport.
+    tried first, Streamable HTTP servers would get the wrong transport.
     """
     config = MCPServerConfig(
         name="test-sse-fallback",

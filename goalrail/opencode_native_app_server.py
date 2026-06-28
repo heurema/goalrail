@@ -63,7 +63,6 @@ _ENV_PASSTHROUGH_PREFIXES = (
     "OPENAI_",
     "ANTHROPIC_",
     "OPENCODE_",
-    "DATABRICKS_",
     "GEMINI_",
     "GOOGLE_",
     "HTTP_",

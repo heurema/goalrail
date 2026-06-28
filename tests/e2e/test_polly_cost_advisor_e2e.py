@@ -1,7 +1,7 @@
 """Mock-LLM e2e for the v3 cost advisor (per-turn brain-model selection) on polly.
 
 Boots a throwaway LOCAL server from this working tree and drives the polly
-orchestrator headless using a mock LLM — no real Claude/Databricks credentials
+orchestrator headless using a mock LLM — no real Claude/provider credentials
 required. Proves the advisor's end-to-end contract against the mock substrate:
 
 (a) ADVISE (shadow): a trivial prompt and a hard implementation prompt each

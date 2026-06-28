@@ -46,8 +46,8 @@ RELEASING.md,141,root-config-docs,> (`/tmp/goalrail-rc/bin/pip install --index-u
 ap-web/electron/src/url.js,127,desktop-electron,   * Mirrors the goalrail CLI's behavioral detection
 ap-web/src/shell/NewChatDialog.tsx,222,web-app-src,  // only the plain `goalrail host` command. Driven by /v1/info.
 ap-web/src/shell/NewChatDialog.tsx,242,web-app-src,              command={`goalrail host --server ${serverUrl}`}
-ap-web/src/shell/NewChatDialog.tsx,248,web-app-src,"              command=""goalrail sandbox create --provider lakebox"""
-ap-web/src/shell/NewChatDialog.tsx,252,web-app-src,              command={`goalrail sandbox connect --provider lakebox --sandbox-id <id> --server ${serverUrl}`}
+ap-web/src/shell/NewChatDialog.tsx,248,web-app-src,"              command=""goalrail sandbox create --provider remote-sandbox"""
+ap-web/src/shell/NewChatDialog.tsx,252,web-app-src,              command={`goalrail sandbox connect --provider remote-sandbox --sandbox-id <id> --server ${serverUrl}`}
 ap-web/src/shell/NewChatDialog.tsx,258,web-app-src,"        <CliCommandBlock command={`goalrail host --server ${serverUrl}`} testIdPrefix=""connect-host"" />"
 ap-web/src/shell/SubagentsPanel.tsx,469,web-app-src," * ``goalrail --harness kimi``, whose ``harness: ""kimi""`` would otherwise fall"
 designs/CLI_CONTRACT.md,42,designs,"| `goalrail.accent`  | `#F43BA6` magenta  | Brand — wordmark, headers, `==>`, spinner |"
@@ -57,10 +57,10 @@ designs/CLI_CONTRACT.md,45,designs,| `goalrail.error`   | red                | E
 designs/CLI_CONTRACT.md,46,designs,| `goalrail.info`    | cyan               | Informational                        |
 designs/CLI_CONTRACT.md,47,designs,"| `goalrail.muted`   | dim                | Metadata, secondary text             |"
 docs/QWEN_FOLLOWUPS.md,157,docs,- [x] **Restore qwen's TUI history on resume.** `goalrail qwen --resume <conv_id>`
-docs/QWEN_FOLLOWUPS.md,239,docs,"    `databricks-*` model), then `goalrail run`; confirm the runner log's"
+docs/QWEN_FOLLOWUPS.md,239,docs,"    `*` model), then `goalrail run`; confirm the runner log's"
 docs/QWEN_FOLLOWUPS.md,275,docs,(e.g. printing `Command: rm …` as text). The goalrail run is deterministic about
 docs/QWEN_NATIVE_DESIGN.md,385,docs,"On `goalrail qwen --resume <conv_id>` (or a runner restart), `_auto_create_qwen_terminal`"
-docs/databricks.md,141,docs,goalrail server
+docs/removed-provider.md,141,docs,goalrail server
 docs/goalrail-upgrade-design.md,1,docs,# Upgrade experience: `goalrail upgrade` + release-available notices
 docs/goalrail-upgrade-design.md,8,docs,2. An **`goalrail upgrade`** command that upgrades the CLI and gracefully cycles
 docs/goalrail-upgrade-design.md,11,docs,"   actually on PyPI, and points at `goalrail upgrade`."
@@ -155,14 +155,14 @@ scripts/install_oss.sh,499,scripts,"  # ""Installed N executables"" summary (the
 scripts/install_oss.sh,628,scripts,  # `goalrail` is a shorthand alias installed alongside `goalrail`; check it so a
 scripts/install_oss.sh,630,scripts,  for alias_cmd in goalrail; do
 tests/cli/test_cli.py,718,python-tests,"    Pins the ""same thing as bare ``goalrail``"" contract: the first-run plan's"
-tests/cli/test_login_databricks.py,422,python-tests,"    result = CliRunner().invoke(cli_group, [""login"", ""http://goalrail.internal:6767""])"
-tests/cli/test_login_databricks.py,425,python-tests,"    assert cli_mod._load_global_config().get(""server"") == ""http://goalrail.internal:6767"""
-tests/cli/test_login_databricks.py,441,python-tests,"    server = ""http://goalrail-oidc.internal:6767"""
-tests/cli/test_login_databricks.py,553,python-tests,"            ""https://goalrail.example.com/v1/me"": _response(401, body={""login_url"": ""/login""}),"
-tests/cli/test_login_databricks.py,558,python-tests,"        cli_mod._workspace_api_server_url(""https://goalrail.example.com"") == ""https://goalrail.example.com"""
-tests/cli/test_login_databricks.py,870,python-tests,"            ""https://goalrail.example.com/v1/me"": _response(401, body={""login_url"": ""/login""}),"
-tests/cli/test_login_databricks.py,875,python-tests,"        cli_mod._workspace_api_server_url(""https://goalrail.example.com/goalrail"")"
-tests/cli/test_login_databricks.py,876,python-tests,"        == ""https://goalrail.example.com/goalrail"""
+tests/cli/test_login_auth.py,422,python-tests,"    result = CliRunner().invoke(cli_group, [""login"", ""http://goalrail.internal:6767""])"
+tests/cli/test_login_auth.py,425,python-tests,"    assert cli_mod._load_global_config().get(""server"") == ""http://goalrail.internal:6767"""
+tests/cli/test_login_auth.py,441,python-tests,"    server = ""http://goalrail-oidc.internal:6767"""
+tests/cli/test_login_auth.py,553,python-tests,"            ""https://goalrail.example.com/v1/me"": _response(401, body={""login_url"": ""/login""}),"
+tests/cli/test_login_auth.py,558,python-tests,"        cli_mod._workspace_api_server_url(""https://goalrail.example.com"") == ""https://goalrail.example.com"""
+tests/cli/test_login_auth.py,870,python-tests,"            ""https://goalrail.example.com/v1/me"": _response(401, body={""login_url"": ""/login""}),"
+tests/cli/test_login_auth.py,875,python-tests,"        cli_mod._workspace_api_server_url(""https://goalrail.example.com/goalrail"")"
+tests/cli/test_login_auth.py,876,python-tests,"        == ""https://goalrail.example.com/goalrail"""
 tests/cli/test_opencode_setup.py,1,python-tests,"""""""Tests for the OpenCode ``goalrail setup`` default-model picker helpers."""""""
 tests/cli/test_update_check.py,894,python-tests,    The ``runnable`` half of the assertion guards ``goalrail upgrade``: if a
 tests/cli/test_update_check.py,921,python-tests,    upgrade a *different* environment than the one running ``goalrail``. Pinning
@@ -207,7 +207,7 @@ tests/e2e/test_goose_native_cli_e2e.py,100,python-tests,"        [goalrail, ""go
 tests/e2e/test_goose_native_cli_e2e.py,159,python-tests,    goalrail = str(goalrail_console_script())
 tests/e2e/test_goose_native_cli_e2e.py,161,python-tests,"        [goalrail, ""goose"", ""--server"", resume_test_server],"
 tests/e2e/test_harness_wrap_e2e.py,92,python-tests,"    parent = Path(""/tmp"") / f""goalrail-cs-{uuid.uuid4().hex[:8]}"""
-tests/e2e/test_host_opencode_native_e2e.py,13,python-tests,    HOME=/tmp/goalrail-isolated DATABRICKS_CONFIG_FILE=$REAL_HOME/.databrickscfg \
+tests/e2e/test_host_opencode_native_e2e.py,13,python-tests,    HOME=/tmp/goalrail-isolated GOALRAIL_CONFIG_FILE=$REAL_HOME/.providercfg \
 tests/e2e/test_kiro_native_cli_e2e.py,63,python-tests,    goalrail = str(goalrail_console_script())
 tests/e2e/test_kiro_native_cli_e2e.py,65,python-tests,"        [goalrail, ""kiro"", ""--server"", resume_test_server],"
 tests/host/test_connect.py,234,python-tests,    harness and never installs the ``cursor-agent`` CLI ``goalrail cursor`` boots.

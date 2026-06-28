@@ -8,7 +8,7 @@ describe("RoutingDecisionChip — intelligent model router", () => {
   it("applied verdict: names the active model with its tier, plus the rationale line", () => {
     render(
       <RoutingDecisionChip
-        model="databricks-claude-opus-4-8"
+        model="anthropic/claude-opus-4-8"
         tier="expensive"
         applied
         rationale="multi-file refactor needs deep reasoning"
@@ -31,7 +31,7 @@ describe("RoutingDecisionChip — intelligent model router", () => {
   it("shadow verdict: reads 'would have picked' instead of naming the active model", () => {
     render(
       <RoutingDecisionChip
-        model="databricks-claude-haiku-4-5"
+        model="anthropic/claude-haiku-4-5"
         tier="cheap"
         applied={false}
         rationale="trivial question"
@@ -48,7 +48,7 @@ describe("RoutingDecisionChip — intelligent model router", () => {
   it("renders nothing for the rationale line when rationale is empty", () => {
     render(
       <RoutingDecisionChip
-        model="databricks-claude-sonnet-4-6"
+        model="anthropic/claude-sonnet-4-6"
         tier="medium"
         applied
         rationale=""
@@ -64,7 +64,7 @@ describe("RoutingDecisionChip — intelligent model router", () => {
   it("never uses the old 'model control' vocabulary (rename sweep)", () => {
     render(
       <RoutingDecisionChip
-        model="databricks-claude-opus-4-8"
+        model="anthropic/claude-opus-4-8"
         tier="expensive"
         applied
         rationale="x"

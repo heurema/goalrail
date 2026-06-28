@@ -43,8 +43,8 @@ _MOD = _load_module()
 
 
 def test_normalize_text_rewrites_proxy_registry() -> None:
-    """A Databricks-proxy registry URL is rewritten to public PyPI."""
-    text = 'source = { registry = "https://pypi-proxy.cloud.databricks.com/simple" }\n'
+    """A private proxy registry URL is rewritten to public PyPI."""
+    text = 'source = { registry = "https://pypi-proxy.internal.example.com/simple" }\n'
     assert _MOD.normalize_text(text) == f'source = {{ registry = "{_CANONICAL}" }}\n'
 
 
@@ -56,7 +56,7 @@ def test_normalize_text_rewrites_any_index() -> None:
 
 def test_normalize_text_rewrites_every_occurrence() -> None:
     """Multiple package entries are all normalized in one pass."""
-    proxy = "https://pypi-proxy.cloud.databricks.com/simple"
+    proxy = "https://pypi-proxy.internal.example.com/simple"
     text = (
         f'source = {{ registry = "{proxy}" }}\n'
         f'source = {{ registry = "{proxy}" }}\n'
@@ -88,7 +88,7 @@ def test_normalize_text_already_canonical_is_noop() -> None:
 def test_main_rewrites_file_and_returns_one_when_changed(tmp_path: Path) -> None:
     """``main`` rewrites a proxy lockfile in place and returns 1 (changed)."""
     lock = tmp_path / "uv.lock"
-    lock.write_text('source = { registry = "https://pypi-proxy.cloud.databricks.com/simple" }\n')
+    lock.write_text('source = { registry = "https://pypi-proxy.internal.example.com/simple" }\n')
     rc = _MOD.main([str(lock)])
     assert rc == 1
     assert lock.read_text() == f'source = {{ registry = "{_CANONICAL}" }}\n'
@@ -107,14 +107,14 @@ def test_main_returns_zero_when_already_canonical(tmp_path: Path) -> None:
 def test_main_is_idempotent(tmp_path: Path) -> None:
     """A second run after normalization is a no-op returning 0."""
     lock = tmp_path / "uv.lock"
-    lock.write_text('source = { registry = "https://pypi-proxy.cloud.databricks.com/simple" }\n')
+    lock.write_text('source = { registry = "https://pypi-proxy.internal.example.com/simple" }\n')
     assert _MOD.main([str(lock)]) == 1
     assert _MOD.main([str(lock)]) == 0
 
 
 def test_main_handles_multiple_files(tmp_path: Path) -> None:
     """Given several files, any change yields exit 1 and each is normalized."""
-    proxy = 'source = { registry = "https://pypi-proxy.cloud.databricks.com/simple" }\n'
+    proxy = 'source = { registry = "https://pypi-proxy.internal.example.com/simple" }\n'
     canonical = f'source = {{ registry = "{_CANONICAL}" }}\n'
     a = tmp_path / "a.lock"
     b = tmp_path / "b.lock"
@@ -128,7 +128,7 @@ def test_main_handles_multiple_files(tmp_path: Path) -> None:
 
 def test_non_canonical_registries_lists_offenders() -> None:
     """The check helper reports each non-canonical registry URL, in order."""
-    proxy = "https://pypi-proxy.cloud.databricks.com/simple"
+    proxy = "https://pypi-proxy.internal.example.com/simple"
     text = (
         f'source = {{ registry = "{proxy}" }}\n'
         f'source = {{ registry = "{_CANONICAL}" }}\n'
@@ -146,7 +146,7 @@ def test_non_canonical_registries_empty_when_canonical() -> None:
 def test_main_check_fails_without_writing(tmp_path: Path) -> None:
     """``--check`` returns 1 for a proxy lockfile and does NOT modify it."""
     lock = tmp_path / "uv.lock"
-    original = 'source = { registry = "https://pypi-proxy.cloud.databricks.com/simple" }\n'
+    original = 'source = { registry = "https://pypi-proxy.internal.example.com/simple" }\n'
     lock.write_text(original)
     rc = _MOD.main(["--check", str(lock)])
     assert rc == 1

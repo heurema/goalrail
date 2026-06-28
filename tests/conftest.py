@@ -276,23 +276,23 @@ def pytest_addoption(parser):
     parser.addoption(
         "--model",
         action="store",
-        default="databricks-claude-sonnet-4-6",
-        help="Model name for integration tests (default: databricks-claude-sonnet-4-6)",
+        default="anthropic/claude-sonnet-4-6",
+        help="Model name for integration tests (default: anthropic/claude-sonnet-4-6)",
     )
     parser.addoption(
         "--harness",
         action="store",
-        default="databricks",
+        default="claude-sdk",
         help=(
-            "Harness type: 'databricks', 'claude-sdk', 'open-responses', "
-            "'openai-agents', or 'codex' (default: databricks)"
+            "Harness type: 'claude-sdk', 'open-responses', "
+            "'openai-agents', or 'codex' (default: claude-sdk)"
         ),
     )
     parser.addoption(
         "--profile",
         action="store",
         default="",
-        help="Databricks config profile for integration tests",
+        help="Optional provider profile for integration tests",
     )
     parser.addoption(
         "--llm-api-key",

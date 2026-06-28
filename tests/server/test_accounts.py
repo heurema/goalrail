@@ -1720,7 +1720,7 @@ def test_cli_accounts_login_happy_path_stores_token(
             self._body = body
             self.is_success = 200 <= status_code < 300
             self.text = str(body)
-            # The login probe inspects response headers (Databricks-fronted
+            # The login probe inspects response headers (proxy-fronted
             # server detection); a plain accounts server sends none relevant.
             self.headers: dict[str, str] = {}
 
@@ -1786,7 +1786,7 @@ def test_cli_accounts_login_wrong_password_surfaces_clean_error(
             self._body = body
             self.is_success = 200 <= status_code < 300
             self.text = str(body)
-            # The login probe inspects response headers (Databricks-fronted
+            # The login probe inspects response headers (proxy-fronted
             # server detection); a plain accounts server sends none relevant.
             self.headers: dict[str, str] = {}
 
@@ -1836,7 +1836,7 @@ def test_cli_accounts_login_network_failure_surfaces_clean_error(
             self._body = body
             self.is_success = 200 <= status_code < 300
             self.text = str(body)
-            # The login probe inspects response headers (Databricks-fronted
+            # The login probe inspects response headers (proxy-fronted
             # server detection); a plain accounts server sends none relevant.
             self.headers: dict[str, str] = {}
 

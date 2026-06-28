@@ -12,7 +12,6 @@ Two use cases:
 
 from __future__ import annotations
 
-import configparser
 import os
 import re
 import shutil
@@ -393,7 +392,7 @@ _CLI_HARNESSES: dict[str, dict[str, str]] = {
 }
 
 # Pure-Python harnesses (no CLI binary needed, but require a Python package).
-# Need API credentials (env var or Databricks profile).
+# Need API credentials.
 _API_HARNESSES: dict[str, dict[str, str]] = {
     "openai-agents": {
         "display": "OpenAI Agents",
@@ -460,7 +459,6 @@ class _SupervisorConfig:
         harnesses that manage their own model selection.
     :param task: User-provided collaboration task description, or ``None``
         if the user skipped the prompt.
-    :param profile: Databricks CLI profile name, or ``None``.
     :param base_url: Custom OpenAI-compatible base URL, or ``None``.
     :param api_key: OpenAI API key provided by the user, or ``None``
         (env var already set).
@@ -469,7 +467,6 @@ class _SupervisorConfig:
     harness: str
     model: str | None = None
     task: str | None = None
-    profile: str | None = None
     base_url: str | None = None
     api_key: str | None = None
 
@@ -482,21 +479,6 @@ class _SupervisorConfig:
 def _detect_coding_agents() -> dict[str, str | None]:
     """Return {harness_name: path_or_None} for each CLI-based harness."""
     return {name: shutil.which(info["cli"]) for name, info in _CLI_HARNESSES.items()}
-
-
-def _list_databricks_profiles() -> list[str]:
-    """Parse ~/.databrickscfg and return section names."""
-    cfg_path = Path.home() / ".databrickscfg"
-    if not cfg_path.exists():
-        return []
-    parser = configparser.ConfigParser()
-    try:
-        parser.read(cfg_path)
-    except configparser.Error:
-        return []
-    return [s for s in parser.sections() if s != "DEFAULT"] or (
-        ["DEFAULT"] if parser.defaults() else []
-    )
 
 
 def _sanitize_agent_name(name: str) -> str:
@@ -521,18 +503,12 @@ def _prompt_global_auth() -> tuple[dict[str, str], None] | tuple[None, None]:
     """
     Interactive prompt for executor auth config.
 
-    Shows two auth types:
-
-    - ``api_key`` — direct OpenAI-compatible bearer token. Prompts for
-      the actual key value (not an env-var reference) and an optional
-      custom endpoint URL.
-    - ``databricks`` — Databricks profile from ``~/.databrickscfg``.
-      Detected profiles are shown as a hint; the user can type any name.
+    Prompts for a direct OpenAI-compatible bearer token and an optional custom
+    endpoint URL.
 
     Internal sub-steps with Esc-to-go-back:
 
-    0. Auth type picker.
-    1. Credentials for chosen type.
+    0. Credentials.
 
     :returns: ``(auth_dict, None)`` where *auth_dict* is the ``auth:``
         mapping to write to ``~/.goalrail/config.yaml``, e.g.
@@ -540,80 +516,36 @@ def _prompt_global_auth() -> tuple[dict[str, str], None] | tuple[None, None]:
         Returns ``(None, None)`` when the user presses Escape at the
         top level (caller may skip auth configuration).
     """
-    profiles = _list_databricks_profiles()
     sub = 0
-    choice = 0
     auth_dict: dict[str, str] | None = None
 
     while True:
         try:
             if sub == 0:
                 console.print()
-                console.print("  [bold]How will Goalrail authenticate with the LLM?[/bold]")
+                console.print("  [bold]Configure an OpenAI-compatible API key[/bold]")
                 console.print()
-
-                # Menu label only (display text, not a credential). Named to
-                # avoid an api_key/secret substring so CodeQL's clear-text
-                # logging heuristic doesn't flag the menu render as leaking a
-                # key (it's just the words "API key" on a button).
-                direct_auth_label = "API key"
-                if profiles:
-                    profiles_hint = ", ".join(profiles[:3])
-                    if len(profiles) > 3:
-                        profiles_hint += f", +{len(profiles) - 3} more"
-                    db_label = (
-                        f"Databricks\n        {_DIM}profiles detected: {profiles_hint}{_RESET}"
-                    )
-                else:
-                    db_label = (
-                        f"Databricks\n"
-                        f"        {_DIM}no profiles in ~/.databrickscfg — "
-                        f"you can still type a profile name{_RESET}"
-                    )
-                choice = _arrow_menu([direct_auth_label, db_label])
-                sub = 1
-
-            if sub == 1:
-                if choice == 0:
-                    # API key path
-                    console.print()
-                    console.print(
-                        "  [dim]Tip: the key is stored in ~/.goalrail/config.yaml,"
-                        " not in the agent YAML.[/dim]"
-                    )
-                    console.print()
-                    api_key_val = _text_prompt("API key", hide_input=True)
-                    if not api_key_val:
-                        sub = 0
-                        continue
-                    console.print()
-                    console.print(
-                        "  [dim]Leave blank to use the default OpenAI endpoint"
-                        " (https://api.openai.com/v1).[/dim]"
-                    )
-                    base_url_val = _text_prompt("Base URL (optional)", default="")
-                    auth_dict = {"type": "api_key", "api_key": api_key_val}
-                    if base_url_val:
-                        auth_dict["base_url"] = base_url_val
-                else:
-                    # Databricks path
-                    console.print()
-                    default_profile = profiles[0] if len(profiles) == 1 else None
-                    if profiles:
-                        hint = ", ".join(profiles)
-                        console.print(f"  [dim]Detected profiles: {hint}[/dim]")
-                        console.print()
-                    profile_val = _text_prompt("Databricks profile name", default=default_profile)
-                    if not profile_val:
-                        sub = 0
-                        continue
-                    auth_dict = {"type": "databricks", "profile": profile_val}
+                console.print(
+                    "  [dim]Tip: the key is stored in ~/.goalrail/config.yaml,"
+                    " not in the agent YAML.[/dim]"
+                )
+                console.print()
+                api_key_val = _text_prompt("API key", hide_input=True)
+                if not api_key_val:
+                    return None, None
+                console.print()
+                console.print(
+                    "  [dim]Leave blank to use the default OpenAI endpoint"
+                    " (https://api.openai.com/v1).[/dim]"
+                )
+                base_url_val = _text_prompt("Base URL (optional)", default="")
+                auth_dict = {"type": "api_key", "api_key": api_key_val}
+                if base_url_val:
+                    auth_dict["base_url"] = base_url_val
                 return auth_dict, None
 
         except _GoBack:
-            if sub <= 0:
-                return None, None
-            sub = 0
+            return None, None
 
 
 def _prompt_server_url(current: str | None) -> str | None:
@@ -1091,14 +1023,14 @@ def _prompt_cli_supervisor_config(harness_name: str) -> _SupervisorConfig:
 def _prompt_openai_agents_config() -> _SupervisorConfig:
     """Configure the openai-agents supervisor.
 
-    Shows three endpoint options (OpenAI API, custom endpoint,
-    Databricks profile) with credential detection status inline,
-    then drills into credential prompts for the chosen option.
+    Shows endpoint options (OpenAI API or custom endpoint) with credential
+    detection status inline, then drills into credential prompts for the chosen
+    option.
 
     Internal sub-steps with Esc-to-go-back:
 
-    0. Endpoint type picker (OpenAI / custom / Databricks).
-    1. Credentials for chosen endpoint (API key, base URL, profile).
+    0. Endpoint type picker (OpenAI / custom).
+    1. Credentials for chosen endpoint (API key, base URL).
     2. Model picker.
 
     :returns: Fully populated :class:`_SupervisorConfig` with
@@ -1107,13 +1039,11 @@ def _prompt_openai_agents_config() -> _SupervisorConfig:
     """
     has_key = bool(os.environ.get("OPENAI_API_KEY"))
     has_base = bool(os.environ.get("OPENAI_BASE_URL"))
-    profiles = _list_databricks_profiles()
 
     sub = 0
     choice = 0
     base_url: str | None = None
     api_key: str | None = None
-    profile: str | None = None
 
     while True:
         try:
@@ -1121,7 +1051,6 @@ def _prompt_openai_agents_config() -> _SupervisorConfig:
                 # --- Pick endpoint type ---
                 base_url = None
                 api_key = None
-                profile = None
 
                 console.print()
                 console.print("  [bold]How should the supervisor access an LLM?[/bold]")
@@ -1151,25 +1080,8 @@ def _prompt_openai_agents_config() -> _SupervisorConfig:
                     f" -- {', '.join(custom_parts)}{_RESET}"
                 )
 
-                # Databricks profile option.
-                if profiles:
-                    profiles_hint = ", ".join(profiles)
-                    db_label = (
-                        f"Databricks\n"
-                        f"        {_DIM}{len(profiles)}"
-                        f" profile{'s' if len(profiles) != 1 else ''}"
-                        f" detected: {profiles_hint}{_RESET}"
-                    )
-                else:
-                    db_label = (
-                        f"Databricks\n        {_DIM}no profiles found in ~/.databrickscfg{_RESET}"
-                    )
-
-                labels = [openai_label, custom_label, db_label]
-                disabled: set[int] = set()
-                if not profiles:
-                    disabled.add(2)
-                choice = _arrow_menu(labels, disabled=disabled)
+                labels = [openai_label, custom_label]
+                choice = _arrow_menu(labels)
                 sub = 1
 
             if sub == 1:
@@ -1188,21 +1100,11 @@ def _prompt_openai_agents_config() -> _SupervisorConfig:
                     if not has_key:
                         console.print()
                         api_key = _text_prompt("OPENAI_API_KEY", hide_input=True)
-                else:
-                    console.print()
-                    if len(profiles) == 1:
-                        profile = profiles[0]
-                        console.print(f"  Using profile: [bold]{profile}[/bold]")
-                    else:
-                        console.print("  [bold]Pick a Databricks profile:[/bold]")
-                        console.print()
-                        pidx = _arrow_menu(list(profiles))
-                        profile = profiles[pidx]
                 sub = 2
 
             if sub == 2:
                 # --- Pick model ---
-                default_model = "databricks-gpt-5-4" if profile else "gpt-4o"
+                default_model = "gpt-4o"
                 console.print()
                 console.print("  [bold]Which model should the supervisor use?[/bold]")
                 model = _text_prompt("Supervisor model", default=default_model)
@@ -1212,7 +1114,6 @@ def _prompt_openai_agents_config() -> _SupervisorConfig:
                     model=model,
                     base_url=base_url,
                     api_key=api_key,
-                    profile=profile,
                 )
 
         except _GoBack:
@@ -1271,14 +1172,7 @@ def _generate_multi_agent_yaml(
     ]
     if supervisor.model:
         lines.append(f"  model: {supervisor.model}")
-    if supervisor.profile:
-        # Emit the typed auth block (deprecated bare `profile:` key replaced).
-        lines += [
-            "  auth:",
-            "    type: databricks",
-            f"    profile: {supervisor.profile}",
-        ]
-    elif supervisor.api_key:
+    if supervisor.api_key:
         # api_key: use an env-var reference so the secret stays out of the file.
         lines += [
             "  auth:",
@@ -1339,22 +1233,20 @@ def _store_default_config(yaml_path: Path, supervisor: _SupervisorConfig | None 
     """
     Store the generated agent as the global default and persist auth.
 
-    Writes ``default_agent`` and, when *supervisor* carries auth info,
+    Writes ``default_agent`` and, when *supervisor* carries API key auth info,
     the ``auth:`` block so agents that omit ``executor.auth`` inherit
     credentials from ``~/.goalrail/config.yaml``.
 
     :param yaml_path: Absolute path to the generated agent YAML.
     :param supervisor: Optional supervisor config from the wizard.
-        When provided and it carries ``profile`` or ``api_key``,
-        the matching ``auth:`` block is written to the global config.
+        When provided and it carries ``api_key``, the matching ``auth:`` block
+        is written to the global config.
     """
     from goalrail.cli import _effective_global_config_path, _save_global_config
 
     settings: dict[str, str | dict[str, str]] = {"default_agent": str(yaml_path)}  # type: ignore[assignment]  # str | dict union: starts as dict[str, str], may later hold dict[str, str] values
     if supervisor is not None:
-        if supervisor.profile:
-            settings["auth"] = {"type": "databricks", "profile": supervisor.profile}
-        elif supervisor.api_key:
+        if supervisor.api_key:
             settings["auth"] = {"type": "api_key", "api_key": "$OPENAI_API_KEY"}
     _save_global_config(settings)
     console.print(f"  [green]✓ stored default_agent in {_effective_global_config_path()}[/green]")
@@ -1415,10 +1307,7 @@ def run_wizard_and_launch() -> None:
 
     1. **Server URL** — the Goalrail server to connect to (optional;
        blank means run locally).
-    2. **Auth** — ``api_key`` (bearer token + optional base URL) or
-       ``databricks`` (profile name). When ``type: databricks``, the
-       same profile is reused automatically for Goalrail server OAuth so no
-       separate ``profile:`` key is needed.
+    2. **Auth** — ``api_key`` (bearer token + optional base URL).
     3. **Agent YAML** — path to the agent spec file that becomes
        ``default_agent`` so ``goalrail run`` uses it without an
        argument.
@@ -1450,9 +1339,6 @@ def run_wizard_and_launch() -> None:
         save_settings["server"] = server_url
 
     # ── Step 2: LLM executor auth ─────────────────────────────────────
-    # When auth.type == "databricks", the same profile is also used to
-    # authenticate with the Goalrail server, so no separate ``profile:`` key
-    # is needed in the global config.
     _section()
     console.print("  [bold]Step 2 / 3 — LLM auth[/bold]")
     if existing_auth and isinstance(existing_auth, dict):

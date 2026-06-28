@@ -108,8 +108,8 @@ function renderButtonWithSession(
 
 const AGENT_WITH_BOTH: Agent = {
   id: "agent_1",
-  name: "databricks_coding_agent",
-  description: "Codes against Databricks.",
+  name: "coding_agent",
+  description: "Codes in the workspace.",
   mcp_servers_editable: true,
   mcp_servers: [
     { name: "slack", transport: "http", description: "Slack MCP", url: "https://example/slack" },
@@ -151,8 +151,8 @@ describe("AgentInfoButton", () => {
 
     // Name header plus every server and policy name proves the full
     // agent object flowed into the popover (not just structure).
-    expect(screen.getByText("Databricks_coding_agent")).toBeInTheDocument();
-    expect(screen.getByText("Codes against Databricks.")).toBeInTheDocument();
+    expect(screen.getByText("Coding_agent")).toBeInTheDocument();
+    expect(screen.getByText("Codes in the workspace.")).toBeInTheDocument();
     expect(screen.getByText("slack")).toBeInTheDocument();
     expect(screen.getByText("jira")).toBeInTheDocument();
     // Session policies render via SessionPoliciesSection when sessionId is passed.
@@ -203,7 +203,7 @@ describe("AgentInfoButton session cost row", () => {
     renderButtonWithSession(AGENT_WITH_BOTH, "conv_cost");
     fireEvent.click(screen.getByTestId("agent-info-trigger"));
     // The rest of the popover still renders (agent name proves it opened).
-    expect(screen.getByText("Databricks_coding_agent")).toBeInTheDocument();
+    expect(screen.getByText("Coding_agent")).toBeInTheDocument();
     expect(screen.queryByTestId("agent-info-session-cost")).toBeNull();
   });
 });
@@ -266,7 +266,7 @@ describe("AgentInfoButton session owner row", () => {
     // the popover still renders (agent name proves it opened).
     renderButtonWithSession(AGENT_WITH_BOTH, "conv_owner");
     fireEvent.click(screen.getByTestId("agent-info-trigger"));
-    expect(screen.getByText("Databricks_coding_agent")).toBeInTheDocument();
+    expect(screen.getByText("Coding_agent")).toBeInTheDocument();
     expect(screen.queryByTestId("agent-info-session-owner")).toBeNull();
   });
 });
@@ -289,7 +289,7 @@ describe("AgentInfoButton per-model usage breakdown", () => {
           cacheCreationInputTokens: null,
           totalCostUsd: 0.42,
         },
-        "databricks-gpt-5-5": {
+        "openai/gpt-5-5": {
           inputTokens: 800,
           outputTokens: 200,
           totalTokens: 1000,
@@ -309,8 +309,8 @@ describe("AgentInfoButton per-model usage breakdown", () => {
     );
     // The dominant model (most total tokens) leads, and its compact values
     // and cost render; the unpriced model shows tokens but no Cost row.
-    const gpt = screen.getByTestId("agent-info-model-databricks-gpt-5-5");
-    expect(gpt).toHaveTextContent("databricks-gpt-5-5");
+    const gpt = screen.getByTestId("agent-info-model-openai/gpt-5-5");
+    expect(gpt).toHaveTextContent("openai/gpt-5-5");
     expect(gpt).toHaveTextContent("1K");
     expect(gpt).not.toHaveTextContent("Cost");
   });
@@ -341,7 +341,7 @@ describe("AgentInfoButton per-model usage breakdown", () => {
     renderButtonWithSession(AGENT_WITH_BOTH, "conv_models");
     fireEvent.click(screen.getByTestId("agent-info-trigger"));
     // The popover still opens (agent name proves it), but no breakdown.
-    expect(screen.getByText("Databricks_coding_agent")).toBeInTheDocument();
+    expect(screen.getByText("Coding_agent")).toBeInTheDocument();
     expect(screen.queryByTestId("agent-info-usage-by-model")).toBeNull();
   });
 
@@ -652,7 +652,7 @@ function planLabels(payload: Record<string, unknown>): Record<string, string> {
 const APPLIED_PLAN = {
   version: 3,
   tier: "cheap",
-  model: "databricks-claude-haiku-4-5",
+  model: "anthropic/claude-haiku-4-5",
   applied: true,
   rationale: "Routine lookup; a small model suffices.",
   turn_anchor: "2026-06-10T12:00:00+00:00",
@@ -668,7 +668,7 @@ describe("AgentInfoButton intelligent routing section", () => {
     };
     renderButtonWithSession(AGENT_WITH_BOTH, "conv_child", child, true);
     fireEvent.click(screen.getByTestId("agent-info-trigger"));
-    expect(screen.getByText("Databricks_coding_agent")).toBeInTheDocument();
+    expect(screen.getByText("Coding_agent")).toBeInTheDocument();
     expect(screen.queryByTestId("intelligent-routing-section")).toBeNull();
   });
 
@@ -688,11 +688,11 @@ describe("AgentInfoButton intelligent routing section", () => {
     renderButtonWithSession(
       AGENT_WITH_BOTH,
       "conv_r1",
-      sessionWithLabels("conv_r1", {}, "databricks_coding_agent"),
+      sessionWithLabels("conv_r1", {}, "coding_agent"),
       true,
     );
     openInfo();
-    expect(screen.getByText("Databricks_coding_agent")).toBeInTheDocument();
+    expect(screen.getByText("Coding_agent")).toBeInTheDocument();
     // Any top-level agent now shows the routing section (server-side routing).
     expect(screen.getByTestId("intelligent-routing-section")).toBeInTheDocument();
   });
@@ -730,7 +730,7 @@ describe("AgentInfoButton intelligent routing section", () => {
     const model = screen.getByTestId("intelligent-routing-model");
     // The full id (not the short pill hint) in mono — this is the
     // detail surface the hover tooltip no longer carries.
-    expect(model).toHaveTextContent("databricks-claude-haiku-4-5");
+    expect(model).toHaveTextContent("anthropic/claude-haiku-4-5");
     expect(model.getAttribute("class")).toContain("font-mono");
     const verdict = screen.getByTestId("intelligent-routing-verdict").textContent ?? "";
     expect(verdict).toContain("cheap");
@@ -775,7 +775,7 @@ describe("AgentInfoButton intelligent routing section", () => {
     );
     openInfo();
     const verdict = screen.getByTestId("intelligent-routing-verdict").textContent ?? "";
-    expect(verdict).toContain("databricks-claude-haiku-4-5");
+    expect(verdict).toContain("anthropic/claude-haiku-4-5");
     expect(verdict).not.toContain("NaN");
   });
 

@@ -113,8 +113,7 @@ def ensure_repl_test_theme_env(env: Mapping[str, str]) -> dict[str, str]:
     When the caller already supplies an isolated ``HOME`` (typical
     ``tmp_path`` fixtures), this helper writes the theme config there.
     When the caller inherits the developer's real ``HOME``, it creates
-    a temporary home instead and symlinks Databricks auth files back
-    to the real home so profile-based harnesses still authenticate.
+    a temporary home instead.
 
     :param env: Base subprocess environment, e.g. the
         ``goalrail_credentials_env`` fixture.
@@ -127,9 +126,6 @@ def ensure_repl_test_theme_env(env: Mapping[str, str]) -> dict[str, str]:
     if requested_home == real_home:
         home = Path(mkdtemp(prefix="goalrail-e2e-home-"))
         atexit.register(shutil.rmtree, home, ignore_errors=True)
-        _link_if_exists(real_home / ".databrickscfg", home / ".databrickscfg")
-        _link_if_exists(real_home / ".databricks", home / ".databricks")
-        _link_if_exists(real_home / ".config" / "databricks", home / ".config" / "databricks")
         prepared["HOME"] = str(home)
     else:
         home = requested_home
@@ -140,24 +136,6 @@ def ensure_repl_test_theme_env(env: Mapping[str, str]) -> dict[str, str]:
         config_path.parent.mkdir(parents=True, exist_ok=True)
         config_path.write_text(_TEST_THEME_CONFIG, encoding="utf-8")
     return prepared
-
-
-def _link_if_exists(source: Path, dest: Path) -> None:
-    """
-    Symlink an auth file or directory into an isolated test HOME.
-
-    :param source: Source path under the developer's real home,
-        e.g. ``Path.home() / ".databrickscfg"``.
-    :param dest: Destination path under the temporary test home.
-    :returns: None.
-    """
-    if not source.exists():
-        return
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        dest.symlink_to(source, target_is_directory=source.is_dir())
-    except FileExistsError:
-        return
 
 
 def spawn_goalrail_run(
@@ -185,7 +163,7 @@ def spawn_goalrail_run(
         ``goalrail run --harness ...`` without an explicit
         agent argument.
     :param model: Model override passed via ``--model``, e.g.
-        ``"databricks-gpt-5-mini"``.
+        ``"openai/gpt-5-mini"``.
     :param harness: Harness override passed via ``--harness``,
         e.g. ``"openai-agents"``.
     :param env: Environment dict for the subprocess — supplied
@@ -253,7 +231,7 @@ def spawn_goalrail_run(
         args.extend(["--system-prompt", system_prompt])
     if initial_prompt is not None:
         args.extend(["-p", initial_prompt])
-    # NOTE: the goalrail CLI no longer accepts ``--profile``; Databricks
+    # NOTE: the goalrail CLI no longer accepts ``--profile``; gateway
     # routing for spawned CLIs comes from the ``auth:`` block written into
     # the isolated ``GOALRAIL_CONFIG_HOME`` by ``goalrail_credentials_env``.
     spawn_env = ensure_repl_test_theme_env(env)

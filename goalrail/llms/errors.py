@@ -14,7 +14,7 @@ from goalrail.errors import GoalrailError
 # separately via regex).
 CONTEXT_EXCEEDED_CODES: frozenset[str] = frozenset(
     {
-        # OpenAI / Databricks gateway
+        # OpenAI and OpenAI-compatible gateways.
         "context_length_exceeded",
         "max_tokens_exceeded",
         "string_above_max_length",

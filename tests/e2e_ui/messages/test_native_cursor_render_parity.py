@@ -26,9 +26,9 @@ three properties the codex/claude native forwarders are pinned against
 
 How this differs from the claude/codex render-parity suites
 -----------------------------------------------------------
-Claude Code and Codex derive their model auth from the runner's own Databricks
-gateway credentials (CI exchanges Databricks OAuth before pytest), so those
-suites run unconditionally in CI. ``cursor-agent`` has **no Databricks-gateway
+Claude Code and Codex derive their model auth from the runner's own gateway
+gateway credentials (CI exchanges provider OAuth before pytest), so those
+suites run unconditionally in CI. ``cursor-agent`` has **no gateway
 path** — it talks only to Cursor's backend and authenticates from the ambient
 ``cursor-agent login`` (``$HOME/.cursor``) or an ambient ``CURSOR_API_KEY``.
 Because CI does not provision a Cursor account by default, this suite is **gated

@@ -20,8 +20,8 @@ one identical version**.
   — use the **OSS GitHub account** (the personal account with push/release rights
   on the public repo).
 - **Publishing to PyPI**: the central **secure-release repo**
-  **`databricks/secure-public-registry-releases-eng`**, `goalrail` workflow —
-  use the **Databricks EMU account**. Publishing runs on hardened runner
+  **`heurema/goalrail-release`**, `goalrail` workflow —
+  use the **publishing account**. Publishing runs on hardened runner
   groups with **OIDC Trusted Publishing (no stored secrets)** and a **mandatory
   dependency scan**. This is why we don't publish from `heurema/goalrail`.
 
@@ -106,7 +106,7 @@ git push
 
 ```bash
 gh auth switch --user <emu-account>
-gh workflow run goalrail.yml --repo databricks/secure-public-registry-releases-eng \
+gh workflow run goalrail.yml --repo heurema/goalrail-release \
   -f ref=v0.2.0 -f destination=test-pypi -f dry-run=true
 ```
 
@@ -116,7 +116,7 @@ Runs build + dependency scan + the gates (lockstep version/pins, web-UI-in-wheel
 ### 3. Publish to TestPyPI + validate
 
 ```bash
-gh workflow run goalrail.yml --repo databricks/secure-public-registry-releases-eng \
+gh workflow run goalrail.yml --repo heurema/goalrail-release \
   -f ref=v0.2.0 -f destination=test-pypi -f dry-run=false
 ```
 
@@ -152,7 +152,7 @@ approval). The prod path also re-verifies that
 `ref` is exactly the `vX.Y.Z` tag and that the tag points at the built commit.
 
 ```bash
-gh workflow run goalrail.yml --repo databricks/secure-public-registry-releases-eng \
+gh workflow run goalrail.yml --repo heurema/goalrail-release \
   -f ref=v0.2.0 -f destination=pypi -f dry-run=false
 
 uv tool install goalrail==0.2.0        # final sanity from real PyPI

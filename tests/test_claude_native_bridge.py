@@ -4111,10 +4111,10 @@ def test_prepare_bridge_dir_stores_launch_model(
     bridge_dir = prepare_bridge_dir(
         "conv_abc",
         workspace=tmp_path,
-        launch_model="databricks-claude-opus-4-7",
+        launch_model="anthropic/claude-opus-4-7",
     )
     config = json.loads((bridge_dir / "bridge.json").read_text(encoding="utf-8"))
-    assert config["launch_model"] == "databricks-claude-opus-4-7"
+    assert config["launch_model"] == "anthropic/claude-opus-4-7"
 
 
 def test_prepare_bridge_dir_omits_launch_model_when_none(
@@ -4144,9 +4144,9 @@ def test_read_launch_model_returns_stored_value(
     bridge_dir = prepare_bridge_dir(
         "conv_abc",
         workspace=tmp_path,
-        launch_model="databricks-claude-sonnet-4-6",
+        launch_model="anthropic/claude-sonnet-4-6",
     )
-    assert read_launch_model(bridge_dir) == "databricks-claude-sonnet-4-6"
+    assert read_launch_model(bridge_dir) == "anthropic/claude-sonnet-4-6"
 
 
 def test_read_launch_model_returns_none_when_absent(

@@ -9,7 +9,7 @@ import yaml
 
 from goalrail.errors import GoalrailError
 from goalrail.spec.parser import discover_host_skills, parse
-from goalrail.spec.types import ApiKeyAuth, DatabricksAuth, ProviderAuth, SharePolicy
+from goalrail.spec.types import ApiKeyAuth, ProviderAuth, SharePolicy
 
 
 @pytest.fixture()
@@ -142,22 +142,22 @@ def test_parse_llm_connection_block(tmp_path: Path) -> None:
     config = {
         "spec_version": 1,
         "llm": {
-            "model": "databricks/databricks-gpt-5-4",
+            "model": "openai/gpt-5-4",
             "temperature": 0.5,
             "connection": {
-                "api_key": "dapi_test_key",
-                "base_url": "https://my-workspace.databricks.com/serving-endpoints",
+                "api_key": "sk_test_key",
+                "base_url": "https://gateway.example.com/v1",
             },
         },
     }
     (tmp_path / "config.yaml").write_text(yaml.dump(config))
     spec = parse(tmp_path)
     assert spec.llm is not None
-    assert spec.llm.model == "databricks/databricks-gpt-5-4"
+    assert spec.llm.model == "openai/gpt-5-4"
     assert spec.llm.extra == {"temperature": 0.5}
     assert spec.llm.connection == {
-        "api_key": "dapi_test_key",
-        "base_url": "https://my-workspace.databricks.com/serving-endpoints",
+        "api_key": "sk_test_key",
+        "base_url": "https://gateway.example.com/v1",
     }
 
 
@@ -433,12 +433,10 @@ def test_parse_skill_missing_description(agent_dir: Path) -> None:
         parse(agent_dir)
 
 
-# Reproduces the exact ``argument-hint:`` line from the upstream
-# Claude Code skill at
-# https://github.com/databricks-field-eng/vibe/blob/main/plugins/fe-databricks-tools/skills/databricks-data-generation/SKILL.md
-# which broke ``goalrail --harness codex`` REPL launch before the
-# host-skill scanner was made tolerant. YAML reads ``[industry]``
-# as a flow sequence and then chokes on the trailing ``[--rows N]``.
+# Reproduces a third-party Claude Code skill ``argument-hint:`` line that
+# broke ``goalrail --harness codex`` REPL launch before the host-skill scanner
+# was made tolerant. YAML reads ``[industry]`` as a flow sequence and then
+# chokes on the trailing ``[--rows N]``.
 _UPSTREAM_BAD_ARGUMENT_HINT = (
     "argument-hint: [industry] [--rows N] [--catalog NAME] [--schema NAME]"
 )
@@ -472,10 +470,8 @@ def test_discover_host_skills_skips_invalid_yaml_frontmatter(
     Host skill directories are user-managed (``~/.claude/skills/``,
     ``.claude/skills/``) and may contain third-party skills whose
     frontmatter doesn't strictly parse as YAML. This test uses the
-    literal upstream ``argument-hint:`` line from the
-    ``databricks-data-generation`` Claude Code skill — the exact
-    string that aborted ``goalrail --harness codex`` REPL launch
-    in production.
+    literal upstream-style ``argument-hint:`` line — the exact shape that
+    aborted ``goalrail --harness codex`` REPL launch in production.
 
     One bad skill must not break REPL launch: it must be logged
     (with the file path so the user knows what to fix and the YAML
@@ -1134,10 +1130,10 @@ def test_parse_inline_mcp_skips_non_mcp_type_entries(tmp_path: Path) -> None:
     assert spec.mcp_servers[0].name == "mcp_tool"
 
 
-def test_parse_inline_mcp_databricks_only_skipped(tmp_path: Path) -> None:
+def test_parse_inline_mcp_named_server_only_skipped(tmp_path: Path) -> None:
     """
     An inline ``type: mcp`` entry with no ``command`` or ``url``
-    (only ``databricks_server``) is silently skipped because no
+    (only a provider-specific named-server key) is silently skipped because no
     transport can be inferred.
 
     If the skip were missing, parse() would raise or produce a
@@ -1145,11 +1141,11 @@ def test_parse_inline_mcp_databricks_only_skipped(tmp_path: Path) -> None:
     """
     config = {
         "spec_version": 1,
-        "name": "db-only",
+        "name": "named-server-only",
         "tools": {
-            "db_mcp": {
+            "provider_mcp": {
                 "type": "mcp",
-                "databricks_server": {"name": "some_server"},
+                "provider_server": {"name": "some_server"},
             }
         },
     }
@@ -2084,8 +2080,8 @@ def test_parse_mcp_stdio_minimal(agent_dir: Path) -> None:
     Parse a stdio MCP server with only the required ``command``.
 
     What breaks if this fails: authors declaring a subprocess MCP
-    (the common glean / github / databricks shape) would see the
-    parser reject the whole spec at load time.
+    (the common local/github shape) would see the parser reject the whole spec
+    at load time.
 
     :param agent_dir: Temporary agent directory fixture.
     """
@@ -2120,8 +2116,8 @@ def test_parse_mcp_stdio_with_args_and_env(
     Parse a stdio MCP with every field populated, including
     ``${VAR}`` expansion in ``env``.
 
-    What breaks if this fails: a YAML like the databricks /
-    github MCPs (``env: {GITHUB_TOKEN: ${GITHUB_TOKEN}}``) would
+    What breaks if this fails: a YAML like a GitHub MCP
+    (``env: {GITHUB_TOKEN: ${GITHUB_TOKEN}}``) would
     either pass the literal ``${GITHUB_TOKEN}`` to the subprocess
     (breaking auth) or fail at parse time.
 
@@ -2459,7 +2455,7 @@ def test_parse_os_env_sandbox_env_passthrough_explicit_list(tmp_path: Path) -> N
             "type": "caller_process",
             "sandbox": {
                 "type": "linux_bwrap",
-                "env_passthrough": ["AWS_PROFILE", "GITHUB_TOKEN", "DATABRICKS_HOST"],
+                "env_passthrough": ["AWS_PROFILE", "GITHUB_TOKEN", "CUSTOM_API_TOKEN"],
             },
         },
     }
@@ -2469,7 +2465,7 @@ def test_parse_os_env_sandbox_env_passthrough_explicit_list(tmp_path: Path) -> N
     assert spec.os_env.sandbox.env_passthrough == [
         "AWS_PROFILE",
         "GITHUB_TOKEN",
-        "DATABRICKS_HOST",
+        "CUSTOM_API_TOKEN",
     ]
 
 
@@ -2664,7 +2660,7 @@ def test_executor_profile_field_lifted_from_yaml(tmp_path: Path) -> None:
             "profile": "dev",
             "config": {"harness": "claude-sdk"},
         },
-        "llm": {"model": "databricks-claude-sonnet-4-6"},
+        "llm": {"model": "anthropic/claude-sonnet-4-6"},
     }
     (tmp_path / "config.yaml").write_text(yaml.dump(config))
     spec = parse(tmp_path)
@@ -2683,7 +2679,7 @@ def test_executor_profile_field_lifted_for_non_goalrail(tmp_path: Path) -> None:
         "spec_version": 1,
         "name": "agent",
         "executor": {"type": "claude_sdk", "profile": "prod"},
-        "llm": {"model": "databricks-claude-sonnet-4-6"},
+        "llm": {"model": "anthropic/claude-sonnet-4-6"},
     }
     (tmp_path / "config.yaml").write_text(yaml.dump(config))
     spec = parse(tmp_path)
@@ -2700,7 +2696,7 @@ def test_goalrail_and_default_executor_minimal_configs_still_parse(tmp_path: Pat
             "type": "goalrail",
             "config": {"harness": "claude-sdk"},
         },
-        "llm": {"model": "databricks-claude-sonnet-4-6"},
+        "llm": {"model": "anthropic/claude-sonnet-4-6"},
     }
     omni_dir = tmp_path / "goalrail"
     omni_dir.mkdir()
@@ -2728,31 +2724,6 @@ def test_goalrail_and_default_executor_minimal_configs_still_parse(tmp_path: Pat
 # ---------------------------------------------------------------------------
 # executor.auth parsing
 # ---------------------------------------------------------------------------
-
-
-def test_parse_executor_auth_databricks(tmp_path: Path) -> None:
-    """
-    ``executor.auth: {type: databricks, profile: oss}`` parses into
-    :class:`DatabricksAuth`.
-
-    Failure means Databricks profile auth from the spec is silently
-    dropped and the harness falls back to env-var auth, which makes
-    the spec non-self-contained.
-    """
-    config = {
-        "spec_version": 1,
-        "executor": {
-            "harness": "openai-agents",
-            "model": "databricks-gpt-5-4-mini",
-            "auth": {"type": "databricks", "profile": "oss"},
-        },
-    }
-    (tmp_path / "config.yaml").write_text(yaml.dump(config))
-    spec = parse(tmp_path)
-
-    # auth field must be populated with a DatabricksAuth instance.
-    assert isinstance(spec.executor.auth, DatabricksAuth)
-    assert spec.executor.auth.profile == "oss"
 
 
 def test_parse_executor_auth_api_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -2838,7 +2809,7 @@ def test_parse_executor_auth_unknown_type_raises(tmp_path: Path) -> None:
         "executor": {"auth": {"type": "magic_token", "token": "abc"}},
     }
     (tmp_path / "config.yaml").write_text(yaml.dump(config))
-    with pytest.raises(GoalrailError, match=r"must be 'api_key', 'databricks', or 'provider'"):
+    with pytest.raises(GoalrailError, match=r"must be 'api_key' or 'provider'"):
         parse(tmp_path)
 
 
@@ -2853,20 +2824,6 @@ def test_parse_executor_auth_api_key_missing_key_raises(tmp_path: Path) -> None:
     }
     (tmp_path / "config.yaml").write_text(yaml.dump(config))
     with pytest.raises(GoalrailError, match=r"api_key is required"):
-        parse(tmp_path)
-
-
-def test_parse_executor_auth_databricks_missing_profile_raises(tmp_path: Path) -> None:
-    """
-    ``type: databricks`` without a ``profile`` field raises
-    :class:`GoalrailError` rather than silently using an empty profile.
-    """
-    config = {
-        "spec_version": 1,
-        "executor": {"auth": {"type": "databricks"}},
-    }
-    (tmp_path / "config.yaml").write_text(yaml.dump(config))
-    with pytest.raises(GoalrailError, match=r"profile is required"):
         parse(tmp_path)
 
 

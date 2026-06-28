@@ -203,12 +203,12 @@ pytest tests/codex_parity \
 
 You can also set `CODEX_TEST_BINS` to an `os.pathsep`-separated list.
 
-At Databricks, use the internal PyPI proxy when syncing the Python test
+At gateway, use the internal PyPI proxy when syncing the Python test
 environment:
 
 ```bash
 uv --no-config run --frozen \
-  --default-index https://pypi-proxy.cloud.databricks.com/simple/ \
+  --default-index https://pypi-proxy.cloud.gateway.com/simple/ \
   --extra dev \
   pytest tests/codex_parity --codex-parity --codex-bin "$(which codex)" -q
 ```

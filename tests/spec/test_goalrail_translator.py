@@ -80,10 +80,10 @@ def basic_spec() -> AgentSpec:
         spec_version=1,
         name="hello-agent",
         instructions="You are a helpful assistant.",
-        llm=LLMConfig(model="databricks-claude-sonnet-4-6"),
+        llm=LLMConfig(model="anthropic/claude-sonnet-4-6"),
         executor=ExecutorSpec(
             type="goalrail",
-            model="databricks-claude-sonnet-4-6",
+            model="anthropic/claude-sonnet-4-6",
             config={
                 "harness": "claude-sdk",
                 "profile": "test-profile",
@@ -129,7 +129,7 @@ def test_basic_spec_maps_llm_and_executor_config(
     """
     agent_def = agent_spec_to_agent_def(basic_spec)
     assert agent_def.executor is not None
-    assert agent_def.executor.model == "databricks-claude-sonnet-4-6"
+    assert agent_def.executor.model == "anthropic/claude-sonnet-4-6"
     assert agent_def.executor.harness == "claude-sdk"
     assert agent_def.executor.profile == "test-profile"
 
@@ -361,11 +361,11 @@ def test_missing_llm_rejected(basic_spec: AgentSpec) -> None:
     ("model", "expected_harness"),
     [
         # Claude models must get claude-sdk; before the fix they fell
-        # back to DatabricksExecutor and the agent hung.
-        ("databricks-claude-sonnet-4", "claude-sdk"),
-        ("databricks-claude-sonnet-4-6", "claude-sdk"),
+        # back to the wrong executor and the agent hung.
+        ("anthropic/claude-sonnet-4", "claude-sdk"),
+        ("anthropic/claude-sonnet-4-6", "claude-sdk"),
         # GPT models should get openai-agents.
-        ("databricks-gpt-5-4", "openai-agents"),
+        ("openai/gpt-5-4", "openai-agents"),
     ],
 )
 def test_native_goalrail_spec_infers_harness_from_model(
@@ -376,7 +376,7 @@ def test_native_goalrail_spec_infers_harness_from_model(
     Native Goalrail v1 specs use ``executor.type="goalrail"`` with no harness in
     ``executor.config``.  :func:`agent_spec_to_agent_def` must infer
     the harness from the model prefix so Claude models don't fall back
-    to ``DatabricksExecutor``.
+    to the wrong executor.
 
     A failure means the harness inference call was removed or the model
     prefix table was updated without propagating to the translator.
@@ -390,8 +390,7 @@ def test_native_goalrail_spec_infers_harness_from_model(
     )
     agent_def = agent_spec_to_agent_def(spec)
     assert agent_def.executor is not None
-    # Wrong harness → wrong executor class at runtime; Claude with
-    # DatabricksExecutor sends to Responses API which rejects it.
+    # Wrong harness → wrong executor class at runtime.
     assert agent_def.executor.harness == expected_harness, (
         f"Model {model!r}: expected harness {expected_harness!r}, "
         f"got {agent_def.executor.harness!r}."
@@ -416,16 +415,16 @@ def test_sub_agent_infers_harness_and_forwards_os_env() -> None:
         spec_version=1,
         name="backend_engineer",
         instructions="You write code.",
-        llm=LLMConfig(model="databricks-claude-sonnet-4"),
-        executor=ExecutorSpec(type="goalrail", model="databricks-claude-sonnet-4", config={}),
+        llm=LLMConfig(model="anthropic/claude-sonnet-4"),
+        executor=ExecutorSpec(type="goalrail", model="anthropic/claude-sonnet-4", config={}),
         os_env=sub_os_env,
     )
     parent_spec = AgentSpec(
         spec_version=1,
         name="root",
         instructions="You delegate.",
-        llm=LLMConfig(model="databricks-gpt-5-4"),
-        executor=ExecutorSpec(type="goalrail", model="databricks-gpt-5-4", config={}),
+        llm=LLMConfig(model="openai/gpt-5-4"),
+        executor=ExecutorSpec(type="goalrail", model="openai/gpt-5-4", config={}),
         tools=ToolsConfig(agents=["backend_engineer"]),
         sub_agents=[sub_spec],
     )
@@ -436,8 +435,7 @@ def test_sub_agent_infers_harness_and_forwards_os_env() -> None:
     assert isinstance(sub_tool, AgentTool), (
         "backend_engineer should be an AgentTool in the parent's tool registry."
     )
-    # Wrong harness → sub-agent hits Responses API passthrough which
-    # rejects databricks-claude-* with HTTP 400.
+    # Wrong harness → sub-agent hits the wrong runtime path.
     assert sub_tool.executor is not None
     assert sub_tool.executor.harness == "claude-sdk", (
         f"Expected harness 'claude-sdk', got {sub_tool.executor.harness!r}. "

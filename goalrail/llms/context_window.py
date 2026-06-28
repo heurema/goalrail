@@ -25,7 +25,7 @@ _MLFLOW_CATALOG_URL = (
 # but the response builder for ``GET /v1/sessions/{id}`` calls
 # ``get_model_context_window`` on every snapshot — without this cache,
 # every conversation load for a provider-prefixed model (claude-*, gpt-*,
-# databricks-*, …) paid a ~490ms uncached ``urlopen`` to GitHub. A 1-hour
+# …) paid a ~490ms uncached ``urlopen`` to GitHub. A 1-hour
 # TTL keeps it fresh enough while collapsing that to one fetch per
 # provider per hour. ``maxsize`` comfortably exceeds the provider count.
 # Guarded by a lock because the fetch runs under ``asyncio.to_thread``,
@@ -41,7 +41,6 @@ _catalog_cache_lock = threading.Lock()
 _CATALOG_MISS = object()
 
 _MODEL_PREFIX_TO_PROVIDER: dict[str, str] = {
-    "databricks-": "databricks",
     "gpt-": "openai",
     "o1-": "openai",
     "o3-": "openai",
@@ -91,8 +90,8 @@ def _qwen_context_window(model: str) -> int | None:
 
 
 # Fallback cache pricing as a multiple of the plain input rate, used when the
-# catalog publishes no explicit cache rate for a model (e.g. ``databricks-*``
-# entries today omit them). Both providers we serve publish the same ratios:
+# catalog publishes no explicit cache rate for a model. Both providers we serve
+# publish the same ratios:
 # a cache *read* (cache hit) bills at ~10% of input — OpenAI gpt-5 0.125/1.25,
 # gpt-5-mini 0.075/0.75, Anthropic sonnet 0.30/3.00 are all exactly 0.10 — and
 # an Anthropic cache *write* (5-minute cache creation) bills at 1.25× input
@@ -111,10 +110,8 @@ def _infer_provider(bare: str) -> str | None:
     Checks ``_MODEL_PREFIX_TO_PROVIDER`` with longest-prefix-first
     matching.
 
-    :param bare: Model name without provider prefix, e.g.
-        ``"databricks-gpt-5-5"`` or ``"gpt-4o"``.
-    :returns: Provider name (e.g. ``"databricks"``), or ``None``
-        when the prefix is not recognised.
+    :param bare: Model name without provider prefix, e.g. ``"gpt-4o"``.
+    :returns: Provider name, or ``None`` when the prefix is not recognised.
     """
     for prefix, provider in sorted(
         _MODEL_PREFIX_TO_PROVIDER.items(), key=lambda kv: len(kv[0]), reverse=True
@@ -135,8 +132,7 @@ def _download_mlflow_provider_catalog(provider: str) -> dict[str, object] | None
     network call; callers should go through
     :func:`_fetch_mlflow_provider_catalog` for the cached path.
 
-    :param provider: Provider name, e.g. ``"databricks"`` or
-        ``"openai"``.
+    :param provider: Provider name, e.g. ``"openai"``.
     :returns: Dict of model-name to catalog entry, or ``None`` on
         failure.
     """
@@ -165,8 +161,7 @@ def _fetch_mlflow_provider_catalog(provider: str) -> dict[str, object] | None:
     re-pay the timeout for an hour — acceptable since the caller falls
     back to the 128K default and the window is refreshed on TTL expiry.
 
-    :param provider: Provider name, e.g. ``"databricks"`` or
-        ``"openai"``.
+    :param provider: Provider name, e.g. ``"openai"``.
     :returns: Dict of model-name to catalog entry, or ``None`` on
         failure.
     """
@@ -201,8 +196,7 @@ def _fetch_context_window_from_mlflow(model: str) -> int | None:
     Times out after 5 seconds; any network or parse error returns
     ``None``.
 
-    :param model: Model identifier, e.g. ``"databricks-gpt-5-5"``
-        or ``"openai/gpt-4o"``.
+    :param model: Model identifier, e.g. ``"openai/gpt-4o"``.
     :returns: ``max_input + max_output`` from the catalog entry
         in tokens, or ``None`` when the model cannot be resolved.
     """
@@ -265,16 +259,14 @@ def get_model_context_window(model: str) -> int:
 
     1. ``AP_CONTEXT_WINDOW_OVERRIDE`` env var — overrides everything.
        Supports custom/self-hosted models and e2e compaction tests.
-    2. ``litellm.get_model_info()`` — fast, local, no network. Also
-       tried with the ``databricks/`` prefix for Databricks models.
+    2. ``litellm.get_model_info()`` — fast, local, no network.
     3. MLflow GitHub Release catalog — per-provider JSON fetched from
        ``github.com/mlflow/mlflow/releases``. Covers models not yet
        in litellm's bundled registry, with a family-prefix fallback
        for newly released variants.
     4. ``_DEFAULT_CONTEXT_WINDOW`` (128 K) — conservative fallback.
 
-    :param model: The model identifier, e.g. ``"openai/gpt-4o"`` or
-        ``"databricks-gpt-5-5"``.
+    :param model: The model identifier, e.g. ``"openai/gpt-4o"``.
     :returns: Context window size in tokens.
     """
     override = os.environ.get("AP_CONTEXT_WINDOW_OVERRIDE")
@@ -296,15 +288,6 @@ def get_model_context_window(model: str) -> int:
                 return int(limit)
     except Exception:
         pass
-    if model.startswith("databricks-"):
-        try:
-            info = litellm.get_model_info(f"databricks/{model}")
-            if info:
-                limit = info.get("max_input_tokens")
-                if limit:
-                    return int(limit)
-        except Exception:
-            pass
     return (
         _fetch_context_window_from_mlflow(model)
         or _qwen_context_window(model)
@@ -362,8 +345,7 @@ class ModelPricing:
     Anthropic-style providers report ``input_tokens`` as the *non-cached*
     portion of the prompt and bill cache reads / cache writes at separate
     rates, so cost is the sum of the four priced parts. When the catalog
-    publishes no cache rates (e.g. OpenAI and ``databricks-*`` entries in
-    the MLflow catalog), ``cache_read_per_token`` / ``cache_write_per_token``
+    publishes no cache rates, ``cache_read_per_token`` / ``cache_write_per_token``
     are ``None`` and :func:`compute_llm_cost` derives them from
     ``input_per_token`` via the standard ratios (see
     ``_FALLBACK_CACHE_READ_INPUT_RATIO`` / ``_FALLBACK_CACHE_WRITE_INPUT_RATIO``).
@@ -394,8 +376,7 @@ def fetch_model_pricing(model: str) -> ModelPricing | None:
     :func:`_fetch_context_window_from_mlflow`, with the same
     family-prefix fallback for newly released model variants.
 
-    :param model: Model identifier, e.g. ``"anthropic/claude-sonnet-4-6"``
-        or ``"databricks-gpt-5-5"``.
+    :param model: Model identifier, e.g. ``"anthropic/claude-sonnet-4-6"``.
     :returns: A :class:`ModelPricing`, or ``None`` when pricing is
         unavailable (network error, model not in catalog, or catalog
         entry lacks input/output pricing data).
@@ -456,20 +437,6 @@ def fetch_model_pricing(model: str) -> ModelPricing | None:
         if len(prices) == 1:
             return next(iter(prices))
 
-    # Databricks-gateway alias fallback. A model served through the
-    # Databricks gateway is reported as ``databricks-<base>`` (e.g.
-    # ``databricks-claude-opus-4-8``), but the Databricks provider catalog
-    # may not list every such alias even when the *underlying* provider
-    # catalog prices the base model (anthropic's ``claude-opus-4-8`` is
-    # priced; the databricks alias is not). Retry once with the de-prefixed
-    # base so the underlying provider's pricing applies. Only the known
-    # ``databricks-`` prefix is stripped, and the base never re-infers
-    # ``databricks`` (it has no such prefix), so this can't recurse.
-    if provider == "databricks" and bare.startswith("databricks-"):
-        base = bare[len("databricks-") :]
-        if base and base != bare:
-            return fetch_model_pricing(base)
-
     return None
 
 
@@ -489,9 +456,9 @@ def compute_llm_cost(usage: dict[str, Any], pricing: ModelPricing) -> float:
     input rate.
 
     Prices cache-read and cache-write (cache-creation) input tokens at
-    their own rates when the catalog publishes them; when it doesn't (e.g.
-    ``databricks-*`` entries), it derives them from the input rate via the
-    standard ratios — cache read ≈ 0.10× input, cache write ≈ 1.25× input
+    their own rates when the catalog publishes them; when it doesn't, it
+    derives them from the input rate via the standard ratios — cache read
+    ≈ 0.10× input, cache write ≈ 1.25× input
     (see ``_FALLBACK_CACHE_READ_INPUT_RATIO`` /
     ``_FALLBACK_CACHE_WRITE_INPUT_RATIO``). Providers that don't break out
     cache tokens omit those keys (counted as ``0``), so the result reduces
@@ -513,9 +480,9 @@ def compute_llm_cost(usage: dict[str, Any], pricing: ModelPricing) -> float:
     # No published cache rate → derive one from the input rate using the
     # industry-standard ratios (see _FALLBACK_CACHE_*_INPUT_RATIO). This keeps
     # cache reads at ~10% of input on models whose catalog entry omits cache
-    # pricing (``databricks-*`` today) instead of billing them at full input
-    # rate, which over-charged cache-heavy sessions ~10×. Never drop the
-    # tokens — cache reads/writes still cost something.
+    # pricing instead of billing them at full input rate, which over-charged
+    # cache-heavy sessions ~10×. Never drop the tokens — cache reads/writes
+    # still cost something.
     cache_read_rate = (
         pricing.cache_read_per_token
         if pricing.cache_read_per_token is not None

@@ -34,13 +34,13 @@ Three properties are covered, all against STABLE-on-main behavior:
   out, so the subprocess interpreter is what matters, not the test's own).
 - A Gemini API key resolvable — either a configured ``antigravity:`` block
   (``goalrail setup``) or an ambient ``GEMINI_API_KEY`` / ``ANTIGRAVITY_API_KEY``.
-  Antigravity is Gemini-native (no Databricks gateway / ``base_url`` path), so
-  unlike the gateway harnesses this test does NOT use ``patched_databrickscfg``
+  Antigravity is Gemini-native (no gateway / ``base_url`` path), so
+  unlike the gateway harnesses this test does NOT use ``patched_provider_config``
   / ``goalrail_credentials_env`` — a missing key is a clean SKIP so the e2e
   shards stay green, and it runs for real wherever a key is present.
 
 **Why this test cannot use the mock LLM server:** The ``google-antigravity``
-SDK has no OpenAI-compatible ``base_url`` and no Databricks-gateway path.
+SDK has no OpenAI-compatible ``base_url`` and no gateway path.
 Setting ``OPENAI_BASE_URL`` to the mock server has no effect on this harness —
 the SDK always connects directly to Google's Gemini backend. Furthermore,
 assertions 2 and 3 verify the lifecycle of a real native ``localharness``
@@ -183,7 +183,7 @@ def _antigravity_prereqs_missing(goalrail_python: Path) -> str | None:
     if not key_ok:
         return (
             "antigravity prerequisite missing: no Gemini API key resolvable. The "
-            "Antigravity SDK is Gemini-native (no Databricks-gateway path), so "
+            "Antigravity SDK is Gemini-native (no gateway path), so "
             "configure an 'antigravity:' key via 'goalrail setup' or export "
             "GEMINI_API_KEY / ANTIGRAVITY_API_KEY. Skipped (not failed) when absent."
         )
@@ -227,7 +227,7 @@ def _antigravity_env() -> dict[str, str]:
     Starts from ``os.environ`` (so HOME / PATH / the ambient Gemini key and any
     dev-only ``ANTIGRAVITY_HARNESS_PATH`` shim propagate) and suppresses the
     onboarding prompt + update-check banner so the subprocess never blocks on
-    stdin or dirties stderr. Deliberately does NOT inject a Databricks PAT /
+    stdin or dirties stderr. Deliberately does NOT inject a provider token /
     OPENAI_BASE_URL: antigravity is Gemini-native and ignores them.
 
     :returns: An env dict for ``subprocess.run(env=...)``.

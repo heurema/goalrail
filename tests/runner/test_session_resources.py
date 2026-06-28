@@ -1039,7 +1039,7 @@ async def test_create_terminal_threads_agent_parent_os_env_through(
             sandbox=OSEnvSandboxSpec(
                 type="darwin_seatbelt",
                 egress_rules=["* api.github.com/**"],
-                env_passthrough=["DATABRICKS_TOKEN"],
+                env_passthrough=["CUSTOM_PROVIDER_TOKEN"],
             ),
         ),
     )
@@ -1309,12 +1309,12 @@ def test_environment_safety_metadata_reflects_sandbox(
 
 def test_environment_safety_metadata_preserves_non_caller_process_type() -> None:
     spec = OSEnvSpec(
-        type="lakebox",
+        type="remote_sandbox",
         cwd="/workspace",
         sandbox=OSEnvSandboxSpec(type="none"),
     )
     meta = environment_safety_metadata(spec)
-    assert meta["environment_type"] == "lakebox"
+    assert meta["environment_type"] == "remote_sandbox"
     assert meta["sandbox_type"] == "none"
     assert meta["sandbox_active"] is False
 

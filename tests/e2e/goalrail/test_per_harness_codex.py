@@ -83,7 +83,7 @@ def test_per_harness_codex_one_shot(
 
     Uses the mock LLM server (via ``OPENAI_BASE_URL`` in
     ``mock_credentials_env``) so the test runs without real API
-    credentials or a Databricks workspace. The codex executor
+    credentials or a provider workspace. The codex executor
     honors ``OPENAI_BASE_URL`` for its app-server model routing.
 
     :param goalrail_python: Interpreter with goalrail

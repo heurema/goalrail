@@ -21,4 +21,4 @@ executor:
   # harness subprocess (it patches ``ClaudeSDKExecutor.__init__``
   # to capture the constructor kwargs).
   harness: claude-sdk
-  model: databricks-claude-sonnet-4-6
+  model: anthropic/claude-sonnet-4-6

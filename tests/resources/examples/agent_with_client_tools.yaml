@@ -17,7 +17,7 @@ prompt: |
   editor when explaining code. Use ``search_web`` for fact lookups.
 
 executor:
-  model: databricks-claude-sonnet-4
+  model: anthropic/claude-sonnet-4-6
 
 tools:
   search_web:

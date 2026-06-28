@@ -369,7 +369,7 @@ class QwenExecutor(Executor):
         empty dict when no gateway is configured (the CLI's ambient auth path).
 
         The token is captured at process start; qwen has no token-refresh hook,
-        so a short-lived rotating token (e.g. the Databricks gateway) can expire
+        so a short-lived rotating gateway token can expire
         over a long session — restart the subprocess to refresh. See
         docs/QWEN_FOLLOWUPS.md.
 

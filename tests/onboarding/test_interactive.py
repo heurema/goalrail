@@ -268,14 +268,14 @@ def test_prompt_text_fallback_uses_default_on_empty(
 ) -> None:
     """``prompt_text`` non-TTY returns the default when the user enters nothing.
 
-    Feeds an empty line with ``default="databricks"``; the function must
+    Feeds an empty line with ``default="gateway"``; the function must
     return the default. A failure means the default wiring is broken and
     an empty enter would yield ``""`` (an invalid provider name).
     """
     _feed(monkeypatch, [""])
-    result = interactive.prompt_text("Name for this provider", default="databricks")
+    result = interactive.prompt_text("Name for this provider", default="gateway")
     # Empty enter falls back to the supplied default.
-    assert result == "databricks"
+    assert result == "gateway"
 
 
 def test_prompt_text_fallback_hidden_value_confirms_without_echoing_secret(
@@ -334,9 +334,9 @@ def test_prompt_text_fallback_visible_value_has_no_hidden_feedback(
 def test_clear_screen_emits_clear_sequence_only_on_a_tty(monkeypatch: pytest.MonkeyPatch) -> None:
     """``clear_screen`` wipes the terminal on a TTY and is a no-op otherwise.
 
-    The TTY branch must emit the full clear (screen + scrollback + home) so the
-    Databricks ``+ Add`` takeover's leftover subprocess output is wiped before
-    the menu redraws. The non-TTY branch must emit NOTHING — otherwise escape
+    The TTY branch must emit the full clear (screen + scrollback + home) so
+    leftover subprocess output is wiped before the menu redraws. The non-TTY
+    branch must emit NOTHING — otherwise escape
     sequences would leak into piped/CI output and the numbered-fallback tests.
     """
 

@@ -12,49 +12,14 @@ Not a conftest because these are called explicitly by test functions
 
 from __future__ import annotations
 
-import os
 import shutil
 import subprocess
-from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
-import yaml
 
 from tests._model_pools import resolve_model
 from tests.e2e._run_with_group_timeout import run_with_group_timeout
-
-# --------------------------------------------------------------------
-# Env vars for unblocking MCP-gated example tests in real-run mode.
-#
-# Several examples (databricks_mcps_agent,
-# databricks_mcps_agent_with_google_policy, glean_mcp_agent,
-# databricks_coding_agent) hardcode
-#   args: [-m, goalrail.inner.databricks_mcps.<X>, --profile,
-#          <profile-name>]
-# in their YAMLs. The Databricks MCP subprocess has three auth
-# modes (see goalrail/inner/databricks_mcps/common/workspace.py):
-#   1. ``--host <url> --token <PAT>``  (explicit PAT)
-#   2. ``--profile <name>``            (look up host+token in .databrickscfg)
-#   3. no args                         (fall through to env vars)
-# The default YAML args target mode 2, which requires the host to
-# already have that profile's section in its ``~/.databrickscfg``.
-# These env vars let a test host override to mode 1 or 2 without
-# editing the YAML in-tree.
-#
-# Usage — mode 2 (profile-based):
-#   GOALRAIL_E2E_MCP_PROFILE=<your-profile> pytest ...
-#
-# Usage — mode 1 (direct PAT, no profile needed):
-#   GOALRAIL_E2E_MCP_HOST=https://... \
-#   GOALRAIL_E2E_MCP_TOKEN=dapi... \
-#   pytest ...
-#
-# When none of the three vars are set, tests fall back to
-# structural validation (spec + AgentDef translation).
-ENV_MCP_PROFILE = "GOALRAIL_E2E_MCP_PROFILE"
-ENV_MCP_HOST = "GOALRAIL_E2E_MCP_HOST"
-ENV_MCP_TOKEN = "GOALRAIL_E2E_MCP_TOKEN"
 
 # Default low-effort prompt used by examples whose purpose is to
 # demonstrate a feature but not run heavy tool logic on every call.
@@ -65,10 +30,10 @@ DEFAULT_PROMPT = "Reply with just the word 'OK'."
 # Default harness + model when a YAML doesn't pin one. We prefer
 # the openai-agents harness against dogfood GPT-5-mini because it
 # honors OPENAI_BASE_URL / OPENAI_API_KEY env vars directly (no
-# ~/.databrickscfg patching), which matches how the rest of the e2e
+# ~/provider config patching), which matches how the rest of the e2e
 # suite authenticates.
 DEFAULT_HARNESS = "openai-agents"
-DEFAULT_MODEL = resolve_model("databricks-gpt-5-mini", key=__name__)
+DEFAULT_MODEL = resolve_model("openai/gpt-5-mini", key=__name__)
 
 # Subprocess wall-clock budget. The openai-agents harness against
 # dogfood typically finishes a one-turn reply in 5-15s; 180s covers
@@ -262,7 +227,7 @@ def validate_agent_def_structure(
         matches the CLI.
     :param example_name: Example directory under ``examples/``.
     :param expected_name: ``AgentDef.name`` must equal this
-        exactly, e.g. ``"databricks_mcps_agent"``.
+        exactly, e.g. ``"gateway_mcps_agent"``.
     :param expected_tools: Tool names that must be present on
         ``AgentDef.tools`` (subset-match; extras don't fail).
         ``None`` means skip the tool check.
@@ -414,170 +379,6 @@ def assert_completed_one_shot(
     assert result.stdout.strip(), (
         f"{example_name!r}: run exited 0 but produced no stdout. stderr:\n{result.stderr}"
     )
-
-
-@dataclass(frozen=True)
-class McpAuthOverride:
-    """
-    MCP subprocess authentication override read from env vars.
-
-    The Databricks MCP CLI entry points accept three mutually
-    exclusive auth shapes: ``--profile <name>`` (looks up host +
-    token in ~/.databrickscfg), ``--host <url> --token <PAT>``
-    (explicit PAT), or nothing (env var fallback). This object
-    captures which shape the test is requesting.
-
-    :param profile: Profile name for ``--profile`` mode, or None.
-    :param host: Workspace URL for ``--host/--token`` mode, or None.
-    :param token: PAT for ``--host/--token`` mode, or None.
-    """
-
-    profile: str | None
-    host: str | None
-    token: str | None
-
-    @property
-    def has_any_override(self) -> bool:
-        """True when the env vars requested either auth mode."""
-        if self.profile is not None:
-            return True
-        return self.host is not None and self.token is not None
-
-
-def mcp_auth_override() -> McpAuthOverride:
-    """
-    Read MCP subprocess auth override from env vars.
-
-    If ``GOALRAIL_E2E_MCP_PROFILE`` is set, returns a
-    profile-based override. Else if BOTH ``GOALRAIL_E2E_MCP_HOST``
-    and ``GOALRAIL_E2E_MCP_TOKEN`` are set, returns a PAT-based
-    override. Otherwise returns an empty override (caller falls
-    back to structural validation).
-
-    :returns: :class:`McpAuthOverride`. Check
-        ``.has_any_override`` to branch.
-    """
-    profile = os.environ.get(ENV_MCP_PROFILE) or None
-    host = os.environ.get(ENV_MCP_HOST) or None
-    token = os.environ.get(ENV_MCP_TOKEN) or None
-    # Profile takes priority. PAT requires both host + token.
-    if profile:
-        return McpAuthOverride(profile=profile, host=None, token=None)
-    if host and token:
-        return McpAuthOverride(profile=None, host=host, token=token)
-    return McpAuthOverride(profile=None, host=None, token=None)
-
-
-def _rewrite_mcp_auth_in_place(yaml_obj: object, override: McpAuthOverride) -> int:
-    """
-    Walk a parsed YAML structure and rewrite the auth args for
-    every ``-m goalrail.inner.databricks_mcps.*`` subprocess.
-
-    Strips any existing ``--profile / --host / --token`` arg
-    pairs from the MCP's ``args:`` list and appends the ones
-    requested by *override*.
-
-    :param yaml_obj: Parsed YAML (nested dict/list/scalar).
-    :param override: The auth mode to inject.
-    :returns: Number of MCP entries rewritten.
-    """
-    count = 0
-    if isinstance(yaml_obj, dict):
-        for key, value in yaml_obj.items():
-            if key == "args" and isinstance(value, list):
-                count += _rewrite_args_list(value, override)
-            else:
-                count += _rewrite_mcp_auth_in_place(value, override)
-    elif isinstance(yaml_obj, list):
-        for item in yaml_obj:
-            count += _rewrite_mcp_auth_in_place(item, override)
-    return count
-
-
-def _rewrite_args_list(args: list[object], override: McpAuthOverride) -> int:
-    """
-    Rewrite a single MCP ``args:`` list: strip any existing
-    ``--profile / --host / --token`` pairs and append the
-    override's auth flags.
-
-    :param args: The ``args`` list to mutate in place.
-    :param override: The auth shape to inject.
-    :returns: 1 if this list was an MCP-subprocess args list, else 0.
-    """
-    if not any(
-        isinstance(x, str) and x.startswith("goalrail.inner.databricks_mcps.") for x in args
-    ):
-        return 0
-
-    # Strip (flag, value) pairs for any of the three auth flags.
-    strip_flags = {"--profile", "--host", "--token"}
-    cleaned: list[object] = []
-    i = 0
-    while i < len(args):
-        if args[i] in strip_flags and i + 1 < len(args):
-            i += 2  # skip both the flag and its value
-            continue
-        cleaned.append(args[i])
-        i += 1
-
-    # Append the override's auth args.
-    if override.profile is not None:
-        cleaned.extend(["--profile", override.profile])
-    elif override.host is not None and override.token is not None:
-        cleaned.extend(["--host", override.host, "--token", override.token])
-    # (If override has neither, leave args bare — MCP subprocess
-    # will fall through to DATABRICKS_* env vars.)
-
-    args.clear()
-    args.extend(cleaned)
-    return 1
-
-
-def materialize_yaml_with_mcp_auth(
-    source: Path, dest_dir: Path, override: McpAuthOverride
-) -> Path:
-    """
-    Copy *source* into *dest_dir* and rewrite every MCP
-    subprocess's auth args to match *override*.
-
-    Returns the path to pass to ``goalrail run``:
-    - For a single-file YAML source, the rewritten single-file
-      YAML at ``<dest_dir>/<name>``.
-    - For a directory source (AGENTSPEC), a new AGENTSPEC
-      directory at ``<dest_dir>/<name>/`` with the rewritten
-      ``config.yaml`` inside.
-
-    :param source: YAML file or AGENTSPEC directory.
-    :param dest_dir: Parent directory to write the rewrite into.
-    :param override: The auth shape to inject into every MCP's
-        args list.
-    :returns: Path to pass to the CLI.
-    :raises AssertionError: When no MCP subprocess was found in
-        the YAML — the test expected at least one, so zero
-        rewrites means the YAML shape drifted.
-    """
-    if source.is_file():
-        raw = yaml.safe_load(source.read_text())
-        count = _rewrite_mcp_auth_in_place(raw, override)
-        assert count > 0, (
-            f"materialize_yaml_with_mcp_auth found no MCP subprocess to rewrite in {source}."
-        )
-        out = dest_dir / source.name
-        out.write_text(yaml.safe_dump(raw, default_flow_style=False))
-        return out
-
-    import shutil as _shutil
-
-    target_dir = dest_dir / source.name
-    _shutil.copytree(source, target_dir)
-    cfg_path = target_dir / "config.yaml"
-    raw = yaml.safe_load(cfg_path.read_text())
-    count = _rewrite_mcp_auth_in_place(raw, override)
-    assert count > 0, (
-        f"materialize_yaml_with_mcp_auth found no MCP subprocess to rewrite in {cfg_path}."
-    )
-    cfg_path.write_text(yaml.safe_dump(raw, default_flow_style=False))
-    return target_dir
 
 
 def require_claude_sdk() -> None:

@@ -10,7 +10,7 @@ import json
 import logging
 import os
 import shlex
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -33,10 +33,6 @@ from goalrail.entities import (
 )
 from goalrail.errors import ErrorCode, GoalrailError
 from goalrail.llms import Client as LLMClient
-from goalrail.onboarding.databricks_config import (
-    DATABRICKS_CLAUDE_DEFAULT_MODEL,
-    get_workspace_url_for_profile,
-)
 from goalrail.onboarding.detected import (
     codex_config_provider_dismissed,
     effective_config_with_detected,
@@ -45,7 +41,6 @@ from goalrail.onboarding.provider_config import (
     ANTHROPIC_FAMILY,
     BEDROCK_KIND,
     CLI_CONFIG_KIND,
-    DATABRICKS_KIND,
     OPENAI_FAMILY,
     RESPONSES_WIRE_API,
     SUBSCRIPTION_KIND,
@@ -55,7 +50,6 @@ from goalrail.onboarding.provider_config import (
     load_config,
     load_providers,
 )
-from goalrail.onboarding.ucode_state import UcodeAgentState, read_ucode_state
 from goalrail.runtime import (
     get_artifact_store,
     get_conversation_store,
@@ -75,7 +69,6 @@ from goalrail.spec import AgentSpec
 from goalrail.spec.parser import check_unresolved_env_vars
 from goalrail.spec.types import (
     ApiKeyAuth,
-    DatabricksAuth,
     LLMConfig,
     ProviderAuth,
     RetryPolicy,
@@ -146,26 +139,19 @@ AgentHarnessType = Literal[
 
 
 @dataclass(frozen=True)
-class UcodeHarnessConfig:
-    """Env-var mapping for one harness's ucode agent state.
+class GatewayHarnessConfig:
+    """Env-var mapping for one harness's provider gateway state.
 
-    :param agent_name: ucode agent key, e.g. ``"claude"`` or ``"codex"``.
+    :param agent_name: Agent key, e.g. ``"claude"`` or ``"codex"``.
     :param model_key: Harness model env var.
     :param base_url_key: Harness gateway base URL env var.
-    :param base_url_family: Optional provider key to use when the ucode agent
+    :param base_url_family: Optional provider key to use when the agent
         entry only has provider-specific base URLs, e.g. ``"claude"``.
     :param base_urls_key: Optional harness gateway base URLs env var for
         agents with multiple provider URLs.
     :param host_key: Harness gateway workspace host env var.
     :param auth_key: Optional harness gateway auth command env var.
     :param refresh_key: Optional harness gateway auth refresh interval env var.
-    :param databricks_default_model: Fallback model id to use on the
-        Databricks gateway path when neither the spec nor the ucode
-        state names a model, e.g. ``"databricks-claude-opus-4-8"``.
-        ``None`` for harnesses with no confirmed Databricks default.
-        Required because the Databricks AI gateway only routes
-        ``databricks-*`` endpoint names, so the CLI's own host-config
-        default (an Anthropic-direct id) is not a usable fallback there.
     """
 
     agent_name: str
@@ -176,11 +162,10 @@ class UcodeHarnessConfig:
     host_key: str
     auth_key: str | None
     refresh_key: str | None
-    databricks_default_model: str | None = None
 
 
-_UCODE_HARNESS_CONFIGS: dict[AgentHarnessType, UcodeHarnessConfig] = {
-    "claude-sdk": UcodeHarnessConfig(
+_GATEWAY_HARNESS_CONFIGS: dict[AgentHarnessType, GatewayHarnessConfig] = {
+    "claude-sdk": GatewayHarnessConfig(
         agent_name="claude",
         model_key="HARNESS_CLAUDE_SDK_MODEL",
         base_url_key="HARNESS_CLAUDE_SDK_GATEWAY_BASE_URL",
@@ -189,11 +174,8 @@ _UCODE_HARNESS_CONFIGS: dict[AgentHarnessType, UcodeHarnessConfig] = {
         host_key="HARNESS_CLAUDE_SDK_GATEWAY_HOST",
         auth_key="HARNESS_CLAUDE_SDK_GATEWAY_AUTH_COMMAND",
         refresh_key="HARNESS_CLAUDE_SDK_GATEWAY_AUTH_REFRESH_INTERVAL_MS",
-        # The executor only applies this on the profile-derived gateway path,
-        # so the producer must supply it on the ucode-cached path.
-        databricks_default_model=DATABRICKS_CLAUDE_DEFAULT_MODEL,
     ),
-    "codex": UcodeHarnessConfig(
+    "codex": GatewayHarnessConfig(
         agent_name="codex",
         model_key="HARNESS_CODEX_MODEL",
         base_url_key="HARNESS_CODEX_GATEWAY_BASE_URL",
@@ -203,7 +185,7 @@ _UCODE_HARNESS_CONFIGS: dict[AgentHarnessType, UcodeHarnessConfig] = {
         auth_key="HARNESS_CODEX_GATEWAY_AUTH_COMMAND",
         refresh_key="HARNESS_CODEX_GATEWAY_AUTH_REFRESH_INTERVAL_MS",
     ),
-    "pi": UcodeHarnessConfig(
+    "pi": GatewayHarnessConfig(
         agent_name="pi",
         model_key="HARNESS_PI_MODEL",
         base_url_key="HARNESS_PI_GATEWAY_BASE_URL",
@@ -212,11 +194,8 @@ _UCODE_HARNESS_CONFIGS: dict[AgentHarnessType, UcodeHarnessConfig] = {
         host_key="HARNESS_PI_GATEWAY_HOST",
         auth_key="HARNESS_PI_GATEWAY_AUTH_COMMAND",
         refresh_key="HARNESS_PI_GATEWAY_AUTH_REFRESH_INTERVAL_MS",
-        # Same parity as claude-sdk: the executor only defaults on the
-        # profile-derived gateway path, so the producer must supply it here.
-        databricks_default_model=DATABRICKS_CLAUDE_DEFAULT_MODEL,
     ),
-    "openai-agents-sdk": UcodeHarnessConfig(
+    "openai-agents-sdk": GatewayHarnessConfig(
         agent_name="codex",
         model_key="HARNESS_OPENAI_AGENTS_MODEL",
         base_url_key="HARNESS_OPENAI_AGENTS_GATEWAY_BASE_URL",
@@ -226,7 +205,7 @@ _UCODE_HARNESS_CONFIGS: dict[AgentHarnessType, UcodeHarnessConfig] = {
         auth_key="HARNESS_OPENAI_AGENTS_GATEWAY_AUTH_COMMAND",
         refresh_key=None,
     ),
-    "qwen": UcodeHarnessConfig(
+    "qwen": GatewayHarnessConfig(
         agent_name="qwen",
         model_key="HARNESS_QWEN_MODEL",
         base_url_key="HARNESS_QWEN_GATEWAY_BASE_URL",
@@ -239,7 +218,7 @@ _UCODE_HARNESS_CONFIGS: dict[AgentHarnessType, UcodeHarnessConfig] = {
     # NB: ``antigravity`` is intentionally absent. Unlike the gateway
     # harnesses above, the Antigravity SDK authenticates Gemini-natively
     # (API key or Vertex AI) and has no OpenAI-compatible ``base_url``, so it
-    # has no ucode gateway entry — ``_build_antigravity_spawn_env`` threads
+    # has no provider gateway entry — ``_build_antigravity_spawn_env`` threads
     # ``HARNESS_ANTIGRAVITY_API_KEY`` / ``_VERTEX`` directly.
 }
 
@@ -264,8 +243,7 @@ def _get_runner_client_for_compaction(
     Return the httpx client for the runner handling *conversation_id*.
 
     Used by compaction call sites so Layer 2 summarization is routed
-    through the runner's own credentials (e.g. the user's Databricks
-    profile) instead of the Goalrail server's.
+    through the runner's own credentials instead of the Goalrail server's.
 
     Returns ``None`` when:
     - ``conversation_id`` is ``None`` (in-process / no-server mode).
@@ -291,97 +269,6 @@ def _get_runner_client_for_compaction(
     return routed.client if routed else None
 
 
-def configure_agent_harness_with_ucode(
-    env: dict[str, str],
-    profile: str | None,
-    *,
-    harness_type: AgentHarnessType,
-) -> None:
-    """Inject per-harness model, URL, and auth values from ucode state.
-
-    The harness-specific constants live here so callers only declare which
-    agent harness they are configuring. ucode's per-agent ``agents`` entries
-    are the source of truth for gateway URLs and auth commands.
-
-    :param env: Mutable spawn-env dict, modified in place.
-    :param profile: The ``executor.profile`` / provider-config value,
-        e.g. ``"oss"``.  ``None`` short-circuits the entire lookup.
-    :param harness_type: Canonical harness type, e.g. ``"claude-sdk"``.
-    """
-    if not profile:
-        return
-    workspace_url = get_workspace_url_for_profile(profile)
-    if workspace_url is None:
-        return
-    state = read_ucode_state(workspace_url)
-    if state is None:
-        return
-    config = _UCODE_HARNESS_CONFIGS[harness_type]
-    agent_state = state.agent(config.agent_name)
-    if agent_state is None:
-        return
-    _inject_ucode_agent_state(
-        env,
-        agent_state,
-        model_key=config.model_key,
-        base_url_key=config.base_url_key,
-        base_url_family=config.base_url_family,
-        base_urls_key=config.base_urls_key,
-        host_key=config.host_key,
-        auth_key=config.auth_key,
-        refresh_key=config.refresh_key,
-        workspace_url=state.workspace_host,
-    )
-    # When ucode caches no model, default it so the CLI doesn't fall back to
-    # its host-config model (an Anthropic-direct id the gateway rejects).
-    if config.model_key not in env and config.databricks_default_model:
-        env[config.model_key] = config.databricks_default_model
-
-
-def _inject_ucode_agent_state(
-    env: dict[str, str],
-    state: UcodeAgentState,
-    *,
-    model_key: str,
-    base_url_key: str,
-    base_url_family: str | None,
-    base_urls_key: str | None,
-    host_key: str,
-    auth_key: str | None,
-    refresh_key: str | None,
-    workspace_url: str,
-) -> None:
-    """Copy one ucode agent entry into harness env vars.
-
-    :param env: Mutable spawn-env dict, modified in place.
-    :param state: Parsed ucode per-agent state.
-    :param model_key: Harness model env var, e.g. ``"HARNESS_CODEX_MODEL"``.
-    :param base_url_key: Harness gateway base URL env var.
-    :param base_url_family: Optional provider key to use when ``state`` has
-        provider-specific base URLs instead of a single base URL.
-    :param base_urls_key: Optional harness gateway base URLs env var for
-        agents with multiple provider URLs.
-    :param host_key: Harness gateway workspace host env var.
-    :param auth_key: Optional harness gateway auth command env var.
-    :param refresh_key: Optional harness gateway auth refresh interval env var.
-    :param workspace_url: Workspace URL for token refresh commands.
-    """
-    if model_key not in env and state.model:
-        env[model_key] = state.model
-    base_url = state.base_url
-    if base_url is None and base_url_family is not None:
-        base_url = state.base_urls.get(base_url_family)
-    if base_url:
-        env[base_url_key] = base_url
-    if base_urls_key and state.base_urls:
-        env[base_urls_key] = json.dumps(state.base_urls, sort_keys=True)
-    env[host_key] = workspace_url
-    if auth_key and state.auth_command:
-        env[auth_key] = state.auth_command
-    if refresh_key and state.auth_refresh_interval_ms is not None:
-        env[refresh_key] = str(state.auth_refresh_interval_ms)
-
-
 # Maps single-family harnesses to the generic-provider family they consume.
 # (``pi`` is handled separately — it consumes both families.) The keys are
 # the canonical harness names used by the Chunk-1a provider-config layer
@@ -393,7 +280,7 @@ _PROVIDER_HARNESS_FAMILY: dict[AgentHarnessType, str] = {
     "codex": OPENAI_FAMILY,
     "openai-agents-sdk": OPENAI_FAMILY,
     # Antigravity is Gemini-native but routes generic-provider traffic over
-    # the OpenAI-compatible wire (OpenRouter / LiteLLM / Databricks gateway),
+    # the OpenAI-compatible wire (OpenRouter / LiteLLM),
     # so it consumes the ``openai`` family like openai-agents-sdk.
     "antigravity": OPENAI_FAMILY,
     # Qwen Code routes through OpenAI-compatible providers (like Kimi v1).
@@ -403,7 +290,7 @@ _PROVIDER_HARNESS_FAMILY: dict[AgentHarnessType, str] = {
 # Maps harnesses that gate the vendor-neutral gateway transport on a
 # ``HARNESS_*_GATEWAY`` truthy flag to that env var name. The flag enables
 # the executor's gateway path (base URL + token command + model) regardless
-# of which producer fed it — generic providers or the Databricks AI gateway.
+# of which provider fed it.
 # ``openai-agents-sdk`` is absent: its executor takes the API key / base URL
 # directly with no such gate (see :func:`_apply_provider_to_openai_agents`).
 _HARNESS_GATEWAY_FLAG: dict[AgentHarnessType, str] = {
@@ -418,25 +305,6 @@ _HARNESS_GATEWAY_FLAG: dict[AgentHarnessType, str] = {
 _PI_FAMILY_KEY: dict[str, str] = {
     ANTHROPIC_FAMILY: "claude",
     OPENAI_FAMILY: "openai",
-}
-
-# Per-harness ``HARNESS_*_DATABRICKS_PROFILE`` env var name, used by the
-# databricks-kind provider branch (which delegates to the existing ucode
-# path). This stays Databricks-named: it is a ``~/.databrickscfg`` profile
-# the executor uses for Databricks-specific credential resolution / token
-# refresh, not part of the vendor-neutral gateway transport.
-# ``openai-agents-sdk`` uses the same var name but has no enable flag.
-_HARNESS_DATABRICKS_PROFILE: dict[AgentHarnessType, str] = {
-    "claude-sdk": "HARNESS_CLAUDE_SDK_DATABRICKS_PROFILE",
-    "codex": "HARNESS_CODEX_DATABRICKS_PROFILE",
-    "pi": "HARNESS_PI_DATABRICKS_PROFILE",
-    "openai-agents-sdk": "HARNESS_OPENAI_AGENTS_DATABRICKS_PROFILE",
-    "qwen": "HARNESS_QWEN_DATABRICKS_PROFILE",
-    # NB: no ``antigravity`` — it has no Databricks/gateway path (Gemini-native).
-    # NB: no ``kimi`` — upstream kimi has no per-spawn provider override flag,
-    # so Goalrail cannot thread a Databricks gateway through. Users configure
-    # providers via ``kimi provider add`` in ``~/.kimi/config.toml``
-    # (Goalrail-side provider injection is a deferred follow-up).
 }
 
 
@@ -510,14 +378,12 @@ def configure_agent_harness_with_provider(
 ) -> None:
     """Inject per-harness model, URL, and auth from a generic provider.
 
-    The open-source counterpart to :func:`configure_agent_harness_with_ucode`:
-    it takes a resolved :class:`ProviderEntry` (from the ``providers:`` block
-    of ``~/.goalrail/config.yaml``) and emits the **same** vendor-neutral
-    ``HARNESS_*_GATEWAY_*`` env vars the Databricks producer emits (base URL,
-    host, a bearer-token command, model default), so the executors' existing
-    gateway path handles a
-    LiteLLM / OpenRouter / local endpoint with no executor changes. Dispatch
-    is on :attr:`ProviderEntry.kind`:
+    Takes a resolved :class:`ProviderEntry` (from the ``providers:`` block
+    of ``~/.goalrail/config.yaml``) and emits the vendor-neutral
+    ``HARNESS_*_GATEWAY_*`` env vars (base URL, host, a bearer-token command,
+    model default), so the executors' existing gateway path handles a LiteLLM /
+    OpenRouter / local endpoint with no executor changes. Dispatch is on
+    :attr:`ProviderEntry.kind`:
 
     - ``key`` / ``gateway`` / ``local`` — resolve the harness's family and
       emit the ``HARNESS_*_GATEWAY_*`` env vars (see
@@ -530,9 +396,6 @@ def configure_agent_harness_with_provider(
       (``HARNESS_CODEX_MODEL_PROVIDER``); the provider table + credential
       come from the user's ``~/.codex/config.toml``, which the executor
       bridges into the per-session ``CODEX_HOME``. Codex harness only.
-    - ``databricks`` — delegate to the existing ucode path keyed on the
-      provider's profile, reusing :func:`configure_agent_harness_with_ucode`
-      so the ``polly`` / Databricks coding-agent flow is unchanged.
     - ``bedrock`` — rejected (raises): AWS Bedrock mode is wired only into
       the native ``goalrail claude`` launch, not the in-process / gateway
       harnesses.
@@ -570,22 +433,19 @@ def configure_agent_harness_with_provider(
             f"provider {entry.name!r} (kind 'bedrock') is only supported by the "
             f"native 'goalrail claude' terminal, not the {harness_type!r} harness. "
             "For agents / 'goalrail run', use a 'gateway' provider "
-            "(OpenAI/Anthropic-compatible endpoint), or a 'databricks' / 'key' "
-            "provider.",
+            "(OpenAI/Anthropic-compatible endpoint) or a 'key' provider.",
             code=ErrorCode.INVALID_INPUT,
         )
     if entry.kind == SUBSCRIPTION_KIND:
         # A logged-in CLI (claude / codex) carries its own auth; the
         # native/CLI harness reads its own login. Emitting inline-family
         # gateway vars here would point the harness at a non-existent
-        # endpoint. (Chunk 1b routes only the inline-family + databricks
-        # kinds; subscription routing — toggling the CLI's logged-in model
-        # — is a later chunk.)
+        # endpoint.
         if harness_type == "codex":
             # The codex executor symlinks the user's ~/.codex/config.toml
             # into the per-session CODEX_HOME, so a custom default
-            # ``model_provider`` there (e.g. isaac's Databricks AI Gateway)
-            # would silently hijack a Subscription selection. Pin codex's
+            # ``model_provider`` there would silently hijack a Subscription
+            # selection. Pin codex's
             # built-in ``openai`` provider so "Subscription" always means
             # the ChatGPT login — a no-op when the user's config sets no
             # custom default.
@@ -609,24 +469,6 @@ def configure_agent_harness_with_provider(
             )
         # entry.model_provider is required by the cli-config parse branch.
         env["HARNESS_CODEX_MODEL_PROVIDER"] = str(entry.model_provider)
-        return
-
-    if entry.kind == DATABRICKS_KIND:
-        # A Databricks profile: reuse the existing ucode path so the
-        # Databricks coding agent / polly keep working unchanged. The
-        # profile name drives model + base URL + auth-command lookup from
-        # ~/.databrickscfg + ucode state. This mirrors the legacy
-        # DatabricksAuth branch: enable the neutral gateway transport (the
-        # Databricks AI gateway is one producer of that transport), record
-        # the Databricks profile (Databricks-specific, used by the executor
-        # for token refresh), then delegate gateway enrichment to ucode.
-        profile = entry.profile
-        flag = _HARNESS_GATEWAY_FLAG.get(harness_type)
-        if flag is not None:
-            env[flag] = "true"
-        if profile:
-            env[_HARNESS_DATABRICKS_PROFILE[harness_type]] = profile
-        configure_agent_harness_with_ucode(env, profile, harness_type=harness_type)
         return
 
     # Inline-family kinds: key / gateway / local.
@@ -666,9 +508,8 @@ def _catalog_default_model(family_name: str) -> str | None:
     Used as the model-resolution fallback for a ``key`` / ``gateway`` /
     ``local`` provider on a KNOWN family (anthropic / openai) when neither
     the spec nor the provider's ``models.default`` names a model: rather than
-    fail loud, resolve a sensible vendor model from the catalog. The neutral
-    gateway path never falls back to a ``databricks-*`` model. This is a real,
-    designed default — see
+    fail loud, resolve a sensible vendor model from the catalog. This is a
+    real, designed default — see
     :func:`goalrail.onboarding.providers.default_chat_model` for the rule
     (newest general-purpose chat model for that vendor) — not an invented
     one masking missing data: it only applies on a family the catalog knows.
@@ -695,10 +536,9 @@ def _apply_provider_family(
 ) -> None:
     """Apply a provider family to a gateway-style harness (claude-sdk / codex).
 
-    Emits the same vendor-neutral ``HARNESS_*_GATEWAY_*`` env vars the
-    Databricks producer emits so the executor's existing gateway path is
-    reused unchanged. The model default is only applied when the spec did
-    not already set the model env var.
+    Emits the vendor-neutral ``HARNESS_*_GATEWAY_*`` env vars so the
+    executor's existing gateway path is reused unchanged. The model default
+    is only applied when the spec did not already set the model env var.
 
     :param env: Mutable spawn-env dict, modified in place.
     :param harness_type: ``"claude-sdk"`` or ``"codex"``.
@@ -706,7 +546,7 @@ def _apply_provider_family(
     :raises GoalrailError: If no model is resolvable (neither the spec nor
         the family declares one).
     """
-    cfg = _UCODE_HARNESS_CONFIGS[harness_type]
+    cfg = _GATEWAY_HARNESS_CONFIGS[harness_type]
     env[_HARNESS_GATEWAY_FLAG[harness_type]] = "true"
     env[cfg.base_url_key] = family.base_url
     env[cfg.host_key] = _origin_of(family.base_url)
@@ -720,8 +560,6 @@ def _apply_provider_family(
         # Neither the spec nor the provider names a model. On a KNOWN family
         # (anthropic / openai) fall back to the bundled catalog's default for
         # that vendor — a real designed default — rather than failing loud.
-        # The neutral gateway path never selects a ``databricks-*`` model;
-        # the executor's old flag-triggered ``databricks-*`` fallback is gone.
         catalog_default = _catalog_default_model(_PROVIDER_HARNESS_FAMILY[harness_type])
         if catalog_default is not None:
             env[cfg.model_key] = catalog_default
@@ -890,20 +728,17 @@ def _resolve_provider_for_build(
 ) -> ProviderEntry | None:
     """Resolve the generic provider that should route *harness_type*, if any.
 
-    Implements the new provider branch of the auth precedence (slotted ahead
-    of the legacy-profile / global-``auth:`` / auto-databricks fallbacks):
+    Implements the provider branch of auth precedence:
 
     1. ``spec.executor.auth`` is a :class:`ProviderAuth` → resolve that named
        provider via the ``providers:`` config block, **failing loud** when no
        such provider is declared.
-    2. The spec declares **no** auth at all (neither ``executor.auth`` nor a
-       legacy ``profile``) → use the per-family global default returned by
-       :func:`default_provider_for_harness` for this harness, if one is
-       configured (``default: true``).
+    2. The spec declares **no** auth at all → use the per-family global
+       default returned by :func:`default_provider_for_harness` for this
+       harness, if one is configured (``default: true``).
 
-    Returns ``None`` in every other case (legacy profile present, a
-    non-provider explicit auth, or no provider configured), leaving the
-    caller's existing branches untouched.
+    Returns ``None`` in every other case (a non-provider explicit auth, or no
+    provider configured), leaving the caller's existing branches untouched.
 
     :param spec: The agent spec.
     :param harness_type: Canonical workflow harness type, e.g. ``"codex"``.
@@ -928,31 +763,21 @@ def _resolve_provider_for_build(
                 code=ErrorCode.INVALID_INPUT,
             )
         return entry
-    # An explicit non-provider auth (api_key / databricks) takes its own
-    # existing branch; only the no-auth case consults a default.
+    # An explicit non-provider auth (api_key) takes its own branch; only the
+    # no-auth case consults a default.
     if auth is not None:
-        return None
-    _spec_has_legacy_profile = bool(spec.executor.profile or spec.executor.config.get("profile"))
-    if _spec_has_legacy_profile:
         return None
 
     # No spec auth. Precedence — most explicit wins, ambient last:
     #   1. an EXPLICIT provider default (providers: ... default: true);
-    #   2. else an EXPLICIT global ``auth:`` block (e.g. the databricks auth
-    #      `goalrail setup` writes) — return None so the caller's existing
-    #      global-auth / ucode path runs, NOT shadowed by an ambient key;
-    #   3. else a ``databricks-*`` model name — return None so the caller's
-    #      auto-databricks model-prefix heuristic runs (the model itself
-    #      signals Databricks intent), NOT shadowed by an ambient key;
-    #   4. else an AMBIENT-detected provider, so a fresh machine with only an
+    #   2. else an EXPLICIT global ``auth:`` block — return None so the
+    #      caller's global-auth path runs, NOT shadowed by an ambient key;
+    #   3. else an AMBIENT-detected provider, so a fresh machine with only an
     #      env key / CLI login still routes (first run without configure).
     explicit_default = default_provider_for_harness(explicit_config, harness)
     if explicit_default is not None:
         return explicit_default
     if _load_global_auth() is not None:
-        return None
-    model = _resolve_spec_model(spec)
-    if model is not None and model.startswith(("databricks-", "databricks/")):
         return None
     return default_provider_for_harness(effective_config_with_detected(explicit_config), harness)
 
@@ -1034,27 +859,20 @@ def _build_claude_sdk_spawn_env(
     # 0. Generic provider — spec.executor.auth: {type: provider, name: X},
     #    OR (no spec auth) the per-family global default from the
     #    ``providers:`` config block (:func:`_resolve_provider_for_build`).
-    #    Routes a LiteLLM / OpenRouter / local / Databricks-profile provider.
+    #    Routes a LiteLLM / OpenRouter / local provider.
     # 1. spec.executor.auth — explicit typed auth in the agent YAML.
-    # 2. Legacy spec.executor.profile / executor.config["profile"] (deprecated).
-    # 3. Global config ~/.goalrail/config.yaml auth: — only when spec has
+    # 2. Global config ~/.goalrail/config.yaml auth: — only when spec has
     #    no auth at all (same guard as openai-agents to prevent global defaults
-    #    from silently overriding YAML-declared legacy profiles).
-    # 4. Auto-Databricks: databricks-* model prefix triggers Databricks routing.
+    #    from silently overriding YAML-declared auth).
     provider = _resolve_provider_for_build(spec, harness_type="claude-sdk")
     if provider is not None:
         configure_agent_harness_with_provider(env, provider, harness_type="claude-sdk")
     else:
         auth_from_spec = spec.executor.auth
-        _spec_has_legacy_profile = bool(
-            spec.executor.profile or spec.executor.config.get("profile")
-        )
-        if auth_from_spec is None and not _spec_has_legacy_profile:
+        if auth_from_spec is None:
             auth_from_spec = _load_global_auth()
 
-        if isinstance(auth_from_spec, DatabricksAuth):
-            profile: str | None = auth_from_spec.profile or None
-        elif isinstance(auth_from_spec, ApiKeyAuth) and auth_from_spec.api_key:
+        if isinstance(auth_from_spec, ApiKeyAuth) and auth_from_spec.api_key:
             # Explicit api_key auth for claude-sdk.  The executor always strips
             # ANTHROPIC_API_KEY before connecting the claude CLI (to force
             # subscription auth inside Claude Code), so we cannot pass the key
@@ -1069,38 +887,18 @@ def _build_claude_sdk_spawn_env(
             if auth_from_spec.base_url:
                 env["HARNESS_CLAUDE_SDK_GATEWAY_BASE_URL"] = auth_from_spec.base_url
                 # The gateway auth command is required by
-                # _resolve_gateway_env when no Databricks profile is
-                # present.  Reuse the same printf command so the
-                # executor resolves ANTHROPIC_BASE_URL correctly.
+                # _resolve_gateway_env. Reuse the same printf command so
+                # the executor resolves ANTHROPIC_BASE_URL correctly.
                 env["HARNESS_CLAUDE_SDK_GATEWAY_AUTH_COMMAND"] = _key_cmd
-            profile = None
-        else:
-            # Legacy path: executor.config["profile"] or executor.profile.
-            # DEPRECATED: use executor.auth: {type: databricks, profile: …} instead.
-            profile = spec.executor.config.get("profile") or spec.executor.profile or None
 
-        # Enable gateway routing when:
-        # 1. An explicit Databricks profile is set, OR
-        # 2. The model starts with ``databricks-``, OR
-        # 3. An ApiKeyAuth with a custom ``base_url`` is declared (e.g.
-        #    pointing at a mock LLM server).
+        # Enable gateway routing when an ApiKeyAuth with a custom ``base_url``
+        # is declared (e.g. pointing at a mock LLM server).
         # Without the gateway flag the executor ignores
         # ``HARNESS_CLAUDE_SDK_GATEWAY_BASE_URL`` and falls through to
         # ``api.anthropic.com``.
-        use_gateway = (
-            bool(profile)
-            or (model is not None and model.startswith(("databricks-", "databricks/")))
-            or (isinstance(auth_from_spec, ApiKeyAuth) and bool(auth_from_spec.base_url))
-        )
+        use_gateway = isinstance(auth_from_spec, ApiKeyAuth) and bool(auth_from_spec.base_url)
         if use_gateway:
             env["HARNESS_CLAUDE_SDK_GATEWAY"] = "true"
-            if profile:
-                env["HARNESS_CLAUDE_SDK_DATABRICKS_PROFILE"] = str(profile)
-        configure_agent_harness_with_ucode(
-            env,
-            str(profile) if profile else None,
-            harness_type="claude-sdk",
-        )
     _add_claude_sdk_skills_env(env, spec, workdir)
     # OS env: enabling this in the inner ClaudeSDKExecutor is
     # what gates the SDK-native ``Bash/Read/Edit/Write/Glob/Grep``
@@ -1175,30 +973,13 @@ def _build_codex_spawn_env(
     if model is not None:
         env["HARNESS_CODEX_MODEL"] = model
 
-    # Generic-provider branch (slotted ahead of the legacy-profile /
-    # databricks-prefix path): a ProviderAuth on the spec, or — when the spec
+    # Generic-provider branch: a ProviderAuth on the spec, or — when the spec
     # declares no auth — the per-family global default. See
-    # :func:`_resolve_provider_for_build`. Otherwise the existing path is
-    # unchanged.
+    # :func:`_resolve_provider_for_build`.
     provider = _resolve_provider_for_build(spec, harness_type="codex")
     if provider is not None:
         configure_agent_harness_with_provider(env, provider, harness_type="codex")
     else:
-        # Same routing heuristic as the claude-sdk variant: profile set OR
-        # model starts with ``databricks-`` / ``databricks/``.
-        profile = spec.executor.config.get("profile")
-        use_databricks = bool(profile) or (
-            model is not None and model.startswith(("databricks-", "databricks/"))
-        )
-        if use_databricks:
-            env["HARNESS_CODEX_GATEWAY"] = "true"
-            if profile:
-                env["HARNESS_CODEX_DATABRICKS_PROFILE"] = str(profile)
-        configure_agent_harness_with_ucode(
-            env,
-            str(profile) if profile else None,
-            harness_type="codex",
-        )
         if "HARNESS_CODEX_GATEWAY" not in env and codex_config_provider_dismissed(load_config()):
             # No provider resolved and no gateway transport configured — the
             # executor's bridged ~/.codex/config.toml would still route this
@@ -1258,30 +1039,12 @@ def _build_pi_spawn_env(
     if model is not None:
         env["HARNESS_PI_MODEL"] = model
 
-    # Generic-provider branch (slotted ahead of the legacy-profile /
-    # databricks-prefix path): a ProviderAuth on the spec, or — when the spec
+    # Generic-provider branch: a ProviderAuth on the spec, or — when the spec
     # declares no auth — the per-family global default. pi consumes both
-    # families (see :func:`_apply_provider_to_pi`). Otherwise the existing
-    # path is unchanged.
+    # families (see :func:`_apply_provider_to_pi`).
     provider = _resolve_provider_for_build(spec, harness_type="pi")
     if provider is not None:
         configure_agent_harness_with_provider(env, provider, harness_type="pi")
-    else:
-        # Same routing heuristic as the claude-sdk variant: profile set OR
-        # model starts with ``databricks-`` / ``databricks/``.
-        profile = spec.executor.config.get("profile")
-        use_databricks = bool(profile) or (
-            model is not None and model.startswith(("databricks-", "databricks/"))
-        )
-        if use_databricks:
-            env["HARNESS_PI_GATEWAY"] = "true"
-            if profile:
-                env["HARNESS_PI_DATABRICKS_PROFILE"] = str(profile)
-        configure_agent_harness_with_ucode(
-            env,
-            str(profile) if profile else None,
-            harness_type="pi",
-        )
     # Skills bridge — same shape as the claude-sdk + codex variants.
     # Always set so the harness wrap doesn't fall back to ``"all"``
     # and override an explicit ``skills: none`` from the spec.
@@ -1324,29 +1087,12 @@ def _build_qwen_spawn_env(
     if model is not None:
         env["HARNESS_QWEN_MODEL"] = model
 
-    # Generic-provider branch (slotted ahead of the legacy-profile /
-    # databricks-prefix path): a ProviderAuth on the spec, or — when the spec
+    # Generic-provider branch: a ProviderAuth on the spec, or — when the spec
     # declares no auth — the per-family global default. qwen routes through
     # OpenAI-compatible providers.
     provider = _resolve_provider_for_build(spec, harness_type="qwen")
     if provider is not None:
         configure_agent_harness_with_provider(env, provider, harness_type="qwen")
-    else:
-        # Same routing heuristic as the claude-sdk variant: profile set OR
-        # model starts with ``databricks-`` / ``databricks/``.
-        profile = spec.executor.config.get("profile")
-        use_databricks = bool(profile) or (
-            model is not None and model.startswith(("databricks-", "databricks/"))
-        )
-        if use_databricks:
-            env["HARNESS_QWEN_GATEWAY"] = "true"
-            if profile:
-                env["HARNESS_QWEN_DATABRICKS_PROFILE"] = str(profile)
-        configure_agent_harness_with_ucode(
-            env,
-            str(profile) if profile else None,
-            harness_type="qwen",
-        )
     # NB: no skills bridge for qwen yet. Unlike the claude-sdk / codex
     # variants, the qwen wrap (goalrail/inner/qwen_harness.py) and
     # QwenExecutor have no skills concept, so emitting
@@ -1370,10 +1116,8 @@ def _build_goose_spawn_env(
     Maps spec.executor fields → the ``HARNESS_GOOSE_*`` env vars defined in
     ``goalrail/inner/goose_harness.py``. Unlike the SDK harnesses, Goose owns its
     own auth via ``goose configure`` (keyring / ``~/.config/goose/config.yaml``),
-    so this builder wires **no** provider/gateway credential — it forwards only an
-    optional model override and the os_env/sandbox spec. A ``databricks-*`` model
-    is dropped (not a valid Goose model id; the provider/model then come from the
-    user's Goose config), mirroring how the native CLIs handle gateway ids.
+    so this builder wires **no** provider/gateway credential — it forwards only
+    an optional model override and the os_env/sandbox spec.
 
     :param spec: The agent spec.
     :param workdir: The bundle's on-disk path. Accepted for signature parity with
@@ -1383,7 +1127,7 @@ def _build_goose_spawn_env(
     """
     env: dict[str, str] = {}
     model = _resolve_spec_model(spec)
-    if model is not None and not model.startswith(("databricks-", "databricks/")):
+    if model is not None:
         env["HARNESS_GOOSE_MODEL"] = model
     os_env_payload = _serialize_os_env(spec.os_env)
     if os_env_payload is not None:
@@ -1391,7 +1135,7 @@ def _build_goose_spawn_env(
     return env
 
 
-def _load_global_auth() -> ApiKeyAuth | DatabricksAuth | None:
+def _load_global_auth() -> ApiKeyAuth | None:
     """
     Load the ``auth:`` block from ``~/.goalrail/config.yaml``.
 
@@ -1406,9 +1150,8 @@ def _load_global_auth() -> ApiKeyAuth | DatabricksAuth | None:
     so the user only configures auth once during ``goalrail setup``
     rather than in every agent YAML.
 
-    :returns: A :class:`ApiKeyAuth` or :class:`DatabricksAuth`, or
-        ``None`` when the global config has no ``auth:`` block or the
-        file is missing.
+    :returns: A :class:`ApiKeyAuth`, or ``None`` when the global config has
+        no ``auth:`` block or the file is missing.
     """
     config_home = os.environ.get("GOALRAIL_CONFIG_HOME")
     path = (
@@ -1442,9 +1185,6 @@ def _load_global_auth() -> ApiKeyAuth | DatabricksAuth | None:
             base_url = os.path.expandvars(str(raw_base_url))
             check_unresolved_env_vars("auth.base_url", base_url)
         return ApiKeyAuth(api_key=api_key, base_url=base_url)
-    if auth_type == "databricks":
-        profile_val = str(raw_auth.get("profile") or "")
-        return DatabricksAuth(profile=profile_val) if profile_val else None
     return None
 
 
@@ -1460,22 +1200,13 @@ def _build_openai_agents_sdk_spawn_env(spec: AgentSpec) -> dict[str, str]:
     Auth resolution order (highest priority first):
 
     1. ``spec.executor.auth`` — explicit typed auth in the agent YAML.
-    2. Legacy ``spec.executor.profile`` / ``spec.executor.config["profile"]``
-       (**deprecated** — use ``executor.auth: {type: databricks, …}``).
-       Both 1 and 2 are spec-level declarations; the spec always wins.
-    3. Global config ``~/.goalrail/config.yaml`` ``auth:`` block —
-       **only consulted when the spec declares no auth at all** (neither
-       new nor legacy style). This prevents the user's global default
-       from silently overriding a YAML that uses the old profile field.
-    4. Auto-Databricks: ``databricks-`` / ``databricks/`` model prefix
-       with no auth → fall back to the SDK ``"DEFAULT"`` profile so
-       ambient OPENAI_API_KEY doesn't short-circuit Databricks routing.
+    2. Global config ``~/.goalrail/config.yaml`` ``auth:`` block —
+       **only consulted when the spec declares no auth at all**.
 
     :param spec: The agent spec.
     :returns: A dict of env-var overrides for
         :meth:`HarnessProcessManager.get_client(env=...)`. May
-        be empty when no auth is configured and the model name does not
-        start with ``databricks-``; in that case the wrap falls back to
+        be empty when no auth is configured; in that case the wrap falls back to
         ``OPENAI_BASE_URL`` / ``OPENAI_API_KEY`` env vars and the
         ``use_responses=True`` default.
     """
@@ -1486,13 +1217,12 @@ def _build_openai_agents_sdk_spawn_env(spec: AgentSpec) -> dict[str, str]:
 
     # ── Auth resolution ────────────────────────────────────────────────
     # Priority: generic provider → spec.executor.auth → global config auth →
-    # legacy profile in config dict → auto-Databricks for databricks-* models.
+    # Priority: generic provider → spec.executor.auth → global config auth.
     #
     # 0. Generic provider — spec.executor.auth: {type: provider, name: X},
     #    OR (no spec auth) the per-family global default. Sets API key /
     #    base URL / model and maps the openai family's wire_api to
-    #    USE_RESPONSES. No ucode enrichment (no Databricks profile to look
-    #    up), so it returns early. A spec's explicit ``use_responses`` still
+    #    USE_RESPONSES. A spec's explicit ``use_responses`` still
     #    wins over the provider's wire_api.
     provider = _resolve_provider_for_build(spec, harness_type="openai-agents-sdk")
     if provider is not None:
@@ -1502,65 +1232,22 @@ def _build_openai_agents_sdk_spawn_env(spec: AgentSpec) -> dict[str, str]:
             env["HARNESS_OPENAI_AGENTS_USE_RESPONSES"] = "true" if use_responses else "false"
         return env
 
-    # Global config auth is only consulted when the spec declares NO
-    # auth at all — neither the new executor.auth block nor the legacy
-    # executor.profile / executor.config["profile"].  A spec that uses
-    # the old profile style is still an explicit spec-level auth
-    # declaration and must not be silently overridden by the user's
-    # global default (which may be a different auth type entirely).
-    #
     # ProviderAuth is fully handled by the early-return block above (it
     # resolves a provider or fails loud), so spec.executor.auth is narrowed
-    # to ApiKeyAuth / DatabricksAuth / None here.
+    # to ApiKeyAuth / None here.
     spec_auth = spec.executor.auth
-    auth: ApiKeyAuth | DatabricksAuth | None = (
-        spec_auth if isinstance(spec_auth, (ApiKeyAuth, DatabricksAuth)) else None
-    )
-    _spec_has_legacy_profile = bool(spec.executor.profile or spec.executor.config.get("profile"))
-    if auth is None and not _spec_has_legacy_profile:
+    auth: ApiKeyAuth | None = spec_auth if isinstance(spec_auth, ApiKeyAuth) else None
+    if auth is None:
         auth = _load_global_auth()
 
     if isinstance(auth, ApiKeyAuth):
         env["HARNESS_OPENAI_AGENTS_API_KEY"] = auth.api_key
         if auth.base_url:
             env["HARNESS_OPENAI_AGENTS_GATEWAY_BASE_URL"] = auth.base_url
-    elif isinstance(auth, DatabricksAuth):
-        env["HARNESS_OPENAI_AGENTS_DATABRICKS_PROFILE"] = auth.profile
-    else:
-        # Legacy path: executor.config["profile"] (deprecated — use executor.auth instead).
-        # DEPRECATED: config["profile"] will be removed once all specs migrate to auth:.
-        profile = spec.executor.config.get("profile")
-        if not profile and model and model.startswith(("databricks-", "databricks/")):
-            # databricks- / databricks/ prefix: route to Databricks (avoiding the
-            # OPENAI_API_KEY short-circuit) via the SDK's DEFAULT profile. The
-            # ambient DATABRICKS_CONFIG_PROFILE env var is deliberately NOT
-            # consulted — credentials are controlled by the spec or by
-            # `goalrail setup` provider config, never by shell environment.
-            profile = "DEFAULT"
-        if profile:
-            # Single canonical env var: ``DATABRICKS_PROFILE``. No
-            # ``GATEWAY=true`` gate (unlike claude-sdk / codex /
-            # pi) because :class:`OpenAIAgentsSDKExecutor` takes the
-            # profile name directly and resolves credentials itself —
-            # a separate truthy gate would be dead surface.
-            env["HARNESS_OPENAI_AGENTS_DATABRICKS_PROFILE"] = str(profile)
-
-    # Resolve the effective profile for ucode state lookup (model/base-URL enrichment).
-    # For api_key auth there is no profile to look up, so ucode enrichment is skipped.
-    ucode_profile: str | None = None
-    if isinstance(auth, DatabricksAuth):
-        ucode_profile = auth.profile
-    elif "HARNESS_OPENAI_AGENTS_DATABRICKS_PROFILE" in env:
-        ucode_profile = env["HARNESS_OPENAI_AGENTS_DATABRICKS_PROFILE"]
 
     use_responses = spec.executor.config.get("use_responses")
     if use_responses is not None:
         env["HARNESS_OPENAI_AGENTS_USE_RESPONSES"] = "true" if use_responses else "false"
-    configure_agent_harness_with_ucode(
-        env,
-        ucode_profile,
-        harness_type="openai-agents-sdk",
-    )
     return env
 
 
@@ -1574,12 +1261,11 @@ def _build_cursor_spawn_env(
 
     Maps spec.executor fields → the ``HARNESS_CURSOR_*`` env vars defined
     in ``goalrail/inner/cursor_harness.py``. Unlike the gateway-backed
-    builders (claude-sdk / codex / pi / openai-agents), there is NO gateway or
-    Databricks-profile resolution: the Cursor SDK talks only to Cursor's own
-    backend (``CURSOR_API_KEY``) and has no custom API base-URL override, so it
-    never routes through the Databricks AI gateway. That is also why cursor is
-    intentionally absent from :data:`AgentHarnessType` and the gateway/ucode
-    dicts above.
+    builders (claude-sdk / codex / pi / openai-agents), there is NO gateway
+    resolution: the Cursor SDK talks only to Cursor's own backend
+    (``CURSOR_API_KEY``) and has no custom API base-URL override. That is also
+    why cursor is intentionally absent from :data:`AgentHarnessType` and the
+    gateway dicts above.
 
     Auth: an explicit ``executor.auth: {type: api_key, api_key: ...}`` is
     forwarded as ``HARNESS_CURSOR_API_KEY`` (the cursor harness passes it to the
@@ -1587,8 +1273,7 @@ def _build_cursor_spawn_env(
     ``CURSOR_API_KEY`` registered once via ``goalrail setup`` (the dedicated
     ``cursor:`` config block — see :mod:`goalrail.onboarding.cursor_auth`) is
     used instead, so a user need not export it in every shell. With neither, the
-    harness falls back to an inherited ``CURSOR_API_KEY`` — a ``DatabricksAuth``
-    profile does not apply to cursor and is ignored.
+    harness falls back to an inherited ``CURSOR_API_KEY``.
 
     :param spec: The agent spec.
     :param workdir: The bundle's on-disk path, threaded as
@@ -1604,7 +1289,7 @@ def _build_cursor_spawn_env(
     # auth at all, fall back to a CURSOR_API_KEY registered once via
     # ``goalrail setup`` (the dedicated ``cursor:`` config block), else an
     # ambient CURSOR_API_KEY (an exported key / a host launched with one). A
-    # Databricks / provider auth has no cursor equivalent and never silently
+    # provider auth has no cursor equivalent and never silently
     # adopts a stored or ambient cursor key.
     if isinstance(spec.executor.auth, ApiKeyAuth):
         env["HARNESS_CURSOR_API_KEY"] = spec.executor.auth.api_key
@@ -1652,7 +1337,7 @@ def _build_kimi_spawn_env(
     :func:`configure_agent_harness_with_provider` (there is no env-var
     surface to translate a provider into), so the rejection of declared
     auth has to live here: a spec that declares an explicit
-    provider / Databricks / api_key auth raises directly so the user
+    provider / api_key auth raises directly so the user
     understands why their auth didn't take effect rather than silently
     routing through whatever default kimi already had.
 
@@ -1699,7 +1384,7 @@ def _build_antigravity_spawn_env(spec: AgentSpec) -> dict[str, str]:
     antigravity harness wrap reads.
 
     Antigravity is Gemini-native with no OpenAI-compatible ``base_url``, so there
-    is no gateway / ucode / Databricks path — only a direct API key or Vertex AI.
+    is no gateway path — only a direct API key or Vertex AI.
     API-key resolution (first wins): (1) spec ``executor.auth`` api_key; (2) the
     dedicated ``antigravity:`` config block from ``goalrail setup``; (3) an
     ambient ``GEMINI_API_KEY`` / ``ANTIGRAVITY_API_KEY``. The legacy global
@@ -1708,8 +1393,7 @@ def _build_antigravity_spawn_env(spec: AgentSpec) -> dict[str, str]:
     SDK can't use — adopting it would guarantee an auth failure / mis-billing and
     shadow the user's ambient ``GEMINI_API_KEY``. Any ``base_url`` is dropped (the
     SDK has no such field). Vertex AI is opt-in via ``executor.config``
-    vertex/project/location, independent of the key path. A ``DatabricksAuth`` is
-    unsupported — warned and ignored.
+    vertex/project/location, independent of the key path.
 
     :param spec: The agent spec.
     :returns: Env-var overrides; may be empty (the wrap then uses the SDK's
@@ -1779,11 +1463,10 @@ def _build_copilot_spawn_env(
 
     Maps spec.executor fields → the ``HARNESS_COPILOT_*`` env vars defined in
     ``goalrail/inner/copilot_harness.py``. Like the cursor / antigravity
-    builders there is NO gateway or Databricks-profile resolution: the GitHub
-    Copilot SDK talks only to GitHub's Copilot backend (a GitHub token) and has
-    no custom API base-URL override, so it never routes through the Databricks
-    AI gateway. That is also why copilot is intentionally absent from
-    :data:`AgentHarnessType` and the gateway/ucode dicts above.
+    builders there is NO gateway resolution: the GitHub Copilot SDK talks only
+    to GitHub's Copilot backend (a GitHub token) and has no custom API base-URL
+    override. That is also why copilot is intentionally absent from
+    :data:`AgentHarnessType` and the gateway dicts above.
 
     Auth: an explicit ``executor.auth: {type: api_key, api_key: ...}`` carries
     the GitHub token, forwarded as ``HARNESS_COPILOT_GITHUB_TOKEN`` (the copilot
@@ -1792,8 +1475,7 @@ def _build_copilot_spawn_env(
     dedicated ``copilot:`` config block — see
     :mod:`goalrail.onboarding.copilot_auth`) is used instead, so a user need not
     export it in every shell. With neither, the harness falls back to an
-    inherited ``COPILOT_GITHUB_TOKEN`` / ``GH_TOKEN`` / ``GITHUB_TOKEN`` — a
-    ``DatabricksAuth`` profile does not apply to copilot and is ignored.
+    inherited ``COPILOT_GITHUB_TOKEN`` / ``GH_TOKEN`` / ``GITHUB_TOKEN``.
 
     :param spec: The agent spec.
     :param workdir: The bundle's on-disk path, threaded as
@@ -1809,7 +1491,7 @@ def _build_copilot_spawn_env(
     # is the GitHub token); with NO spec auth at all, fall back to a token
     # registered once via ``goalrail setup`` (the dedicated ``copilot:`` config
     # block), else an ambient ``COPILOT_GITHUB_TOKEN`` / ``GH_TOKEN`` /
-    # ``GITHUB_TOKEN``. A Databricks / provider auth has no copilot equivalent
+    # ``GITHUB_TOKEN``. A provider auth has no copilot equivalent
     # and never silently adopts a stored or ambient copilot token.
     if isinstance(spec.executor.auth, ApiKeyAuth):
         env["HARNESS_COPILOT_GITHUB_TOKEN"] = spec.executor.auth.api_key
@@ -1946,7 +1628,7 @@ def _apply_request_model_override(
     :param llm_config: The agent spec's LLM config (already merged
         with any per-request reasoning override).
     :param model_override: Per-request LLM model identifier, e.g.
-        ``"databricks-claude-sonnet-4-6"``, or ``None`` to pass
+        ``"claude-sonnet-4-6"``, or ``None`` to pass
         ``llm_config`` through unchanged.
     :returns: A (possibly new) :class:`LLMConfig`.
     """
@@ -2322,7 +2004,6 @@ async def compact_conversation_now(
         return CompactionResult(messages=[], summary_metadata=None)
 
     effective_llm_config = _apply_request_model_override(llm_config, model_override)
-    effective_llm_config = _route_databricks_model_for_compaction(effective_llm_config)
     compaction_config = spec.compaction
     if preserve_recent_window is not None:
         # The compaction helper's boundary is inclusive: recent_window=1
@@ -2386,23 +2067,6 @@ async def compact_conversation_now(
         conv_store,
     )
     return result
-
-
-def _route_databricks_model_for_compaction(llm_config: LLMConfig) -> LLMConfig:
-    """
-    Route bare Databricks model ids through the Databricks LLM adapter.
-
-    Normal openai-agents execution handles ``databricks-gpt-*`` via its
-    harness-specific Databricks client. Explicit ``/compact`` uses the
-    generic runtime LLM client; without a provider prefix that client
-    defaults to OpenAI and incorrectly calls api.openai.com.
-
-    :param llm_config: Effective LLM config for the session.
-    :returns: ``llm_config`` or a copy with ``model='databricks/<id>'``.
-    """
-    if llm_config.model.startswith("databricks-"):
-        return replace(llm_config, model=f"databricks/{llm_config.model}")
-    return llm_config
 
 
 def _maybe_persist_compaction_item(

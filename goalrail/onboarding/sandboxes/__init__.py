@@ -4,8 +4,7 @@ Sandbox launchers: run Goalrail hosts in remote sandboxes.
 Public API for the ``goalrail sandbox`` CLI and anything else that
 bootstraps a sandbox-backed host. Providers are registered by name in
 :data:`_LAUNCHERS`; launcher modules may be absent from a given
-distribution (e.g. the Databricks Lakebox launcher), in which case the
-provider simply isn't offered.
+distribution, in which case the provider simply isn't offered.
 """
 
 from __future__ import annotations
@@ -23,19 +22,15 @@ from goalrail.onboarding.sandboxes.base import (
 )
 from goalrail.onboarding.sandboxes.bootstrap import (
     DEFAULT_SANDBOX_NAME,
-    DerivedWorkspace,
     bootstrap_sandbox_host,
     build_wheels,
     connect_sandbox_host,
-    derive_workspace,
-    login_app_oauth_in_sandbox,
     set_sandbox_host_name,
     ship_wheels,
 )
 
 __all__ = [
     "DEFAULT_SANDBOX_NAME",
-    "DerivedWorkspace",
     "RemoteCommandResult",
     "RemoteProcess",
     "SandboxCapabilityError",
@@ -44,18 +39,15 @@ __all__ = [
     "bootstrap_sandbox_host",
     "build_wheels",
     "connect_sandbox_host",
-    "derive_workspace",
     "get_launcher",
-    "login_app_oauth_in_sandbox",
     "set_sandbox_host_name",
     "ship_wheels",
 ]
 
 # Provider name → "module:ClassName" of its SandboxLauncher. Modules are
 # imported lazily (some pull in optional SDKs) and may be absent from a
-# distribution entirely (e.g. lakebox).
+# distribution entirely.
 _LAUNCHERS: dict[str, str] = {
-    "lakebox": "goalrail.onboarding.sandboxes.lakebox:LakeboxLauncher",
     "modal": "goalrail.onboarding.sandboxes.modal:ModalSandboxLauncher",
     "daytona": "goalrail.onboarding.sandboxes.daytona:DaytonaSandboxLauncher",
     "boxlite": "goalrail.onboarding.sandboxes.boxlite:BoxliteSandboxLauncher",
@@ -82,9 +74,7 @@ def available_providers() -> tuple[str, ...]:
     to call at CLI startup to decide whether to register the
     ``goalrail sandbox`` command group.
 
-    :returns: Provider names in registration order, e.g.
-        ``("lakebox", "modal")`` internally or ``("modal",)`` in the
-        OSS build (where the lakebox module is excluded).
+    :returns: Provider names in registration order.
     """
     available: list[str] = []
     for name, target in _LAUNCHERS.items():
@@ -94,21 +84,11 @@ def available_providers() -> tuple[str, ...]:
     return tuple(available)
 
 
-def get_launcher(provider: str, *, workspace_host: str | None = None) -> SandboxLauncher:
+def get_launcher(provider: str) -> SandboxLauncher:
     """
     Resolve a provider name to a launcher instance.
 
-    :param provider: Provider name, e.g. ``"lakebox"``.
-    :param workspace_host: Databricks workspace fronting the target
-        server (derived from ``--server`` via
-        :func:`~goalrail.onboarding.sandboxes.bootstrap.derive_workspace`),
-        e.g. ``"https://example.databricks.com"``. Consumed only by
-        the lakebox launcher, which pins its local ``databricks
-        lakebox`` calls to it so sandboxes are created in the server's
-        workspace. Other providers' sandboxes don't live in a
-        Databricks workspace, so the value is meaningless for them and
-        deliberately not forwarded — the CLI derives it from --server
-        for every provider, so rejecting it here would break them.
+    :param provider: Provider name, e.g. ``"modal"``.
     :returns: A fresh launcher for the provider.
     :raises click.ClickException: If the provider is unknown or its
         launcher module is not present in this build.
@@ -119,13 +99,6 @@ def get_launcher(provider: str, *, workspace_host: str | None = None) -> Sandbox
         raise click.ClickException(
             f"Unknown or unavailable sandbox provider '{provider}'. Available: {offered}."
         )
-    if provider == "lakebox" and workspace_host is not None:
-        # Imported here (not at module top) because the lakebox module
-        # may be absent from a distribution; the availability check above
-        # guarantees it exists in this one.
-        from goalrail.onboarding.sandboxes.lakebox import LakeboxLauncher
-
-        return LakeboxLauncher(workspace_host=workspace_host)
     module_name, _, class_name = target.partition(":")
     module = importlib.import_module(module_name)
     launcher_cls: type[SandboxLauncher] = getattr(module, class_name)

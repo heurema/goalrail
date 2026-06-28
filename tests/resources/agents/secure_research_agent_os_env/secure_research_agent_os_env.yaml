@@ -51,7 +51,7 @@ os_env:
     # write_paths: ["/tmp"]
 
 executor:
-  model: databricks-claude-sonnet-4-6
+  model: anthropic/claude-sonnet-4-6
 
 tools:
   # NB: the tool is named ``search_web`` (not ``web_search``) because

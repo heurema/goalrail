@@ -6,8 +6,7 @@ A coding harness is "ready" along two independent axes:
   :func:`goalrail.onboarding.provider_config.default_provider_for_harness`
   over the ambient-merged config). That lives in the provider layer.
 - **installed** — the harness's CLI binary is on ``PATH``. This module owns
-  that axis, mirroring how ``ucode`` checks (``shutil.which(binary)``) and the
-  npm packages it installs.
+  that axis via ``shutil.which(binary)`` and the npm packages it installs.
 
 ``goalrail setup --no-internal-beta`` uses this to mark an uninstalled harness and
 offer to ``npm install`` it; the first-run ``goalrail run`` flow uses the
@@ -137,8 +136,7 @@ class HarnessInstallSpec:
 
 
 # Keyed by harness family (Claude=anthropic, Codex=openai) plus the pi
-# fallback. Binaries/packages mirror ucode's ``TOOL_SPECS`` so the two tools
-# install the same thing. Login/logout argv use each CLI's first-class auth
+# fallback. Login/logout argv use each CLI's first-class auth
 # subcommands (``claude auth login --claudeai`` / ``codex login``), so the user
 # can sign in to a subscription from ``configure harnesses`` directly.
 _HARNESS_INSTALL: dict[str, HarnessInstallSpec] = {
@@ -393,7 +391,7 @@ def harness_cli_installed(key: str) -> bool:
     """Return whether the harness's CLI binary is on ``PATH``.
 
     "Installed" is deliberately the CLI binary (``shutil.which``), matching
-    ucode and the npm install-prompt UX — even though the SDK-based
+    the npm install-prompt UX — even though the SDK-based
     ``claude-sdk`` harness can run without the ``claude`` CLI.
 
     :param key: A harness family (``"anthropic"`` / ``"openai"``) or

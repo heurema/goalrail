@@ -4,9 +4,8 @@
 #
 # The agent writes a single file via sys_os_write so the
 # ConversationWorkspaceRegistry can attribute the write to the
-# conversation.  No harness-specific auth is required — the
-# executor.model is rewritten to a Databricks equivalent when
-# --profile is passed to pytest.
+# conversation. No harness-specific auth is required; e2e tests may
+# rewrite executor.model when GOALRAIL_E2E_OPENAI_BASE_URL is set.
 
 name: workspace-file-writer
 prompt: |

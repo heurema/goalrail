@@ -12,7 +12,7 @@
 #   --repo URL    install from a git checkout instead (builds from source;
 #                 requires Node 22+/npm) — for development
 #   --extra NAME  install an optional-dependency extra (repeatable, or
-#                 comma-separated), e.g. --extra databricks
+#                 comma-separated), e.g. --extra cursor
 #   --non-interactive, --verbose
 #
 # uv and git (only with --repo) are required; the installer offers to install
@@ -27,7 +27,7 @@ set -eu
 PACKAGE_NAME="goalrail"
 VERSION=
 # Comma-separated optional-dependency extras to install with the package
-# (e.g. "databricks"), accumulated from one or more --extra flags. Empty =>
+# (e.g. "cursor"), accumulated from one or more --extra flags. Empty =>
 # the base install with no extras.
 EXTRAS=
 # Set by --repo to install from a git checkout instead (development; builds
@@ -471,7 +471,7 @@ install_goalrail() {
   # The wheel ships the prebuilt web UI, so there is no npm/Node step and no
   # source build — the fast, reliable path. `--repo` switches INSTALL_URL to a
   # git ref, which builds from source (and needs npm, checked above).
-  # Extras suffix like "[databricks]" appended to the package name so the
+  # Extras suffix like "[cursor]" appended to the package name so the
   # optional-dependency group(s) install alongside the base package. Applies to
   # every mode below; empty when no --extra was given.
   extras_suffix=
@@ -480,7 +480,7 @@ install_goalrail() {
   fi
   if building_from_source; then
     # A PEP 508 direct reference attaches extras to a git source install:
-    # "goalrail[databricks] @ git+https://...". Without extras, keep the bare
+    # "goalrail[cursor] @ git+https://...". Without extras, keep the bare
     # URL (the long-standing form uv accepts directly).
     if [ -n "$extras_suffix" ]; then
       target="${PACKAGE_NAME}${extras_suffix} @ ${INSTALL_URL}"
@@ -646,9 +646,6 @@ print_next_steps() {
   printf '  %sgoalrail codex           # Codex\n\n' "$command_prefix"
   printf 'Manage model credentials any time:\n'
   printf '  %sgoalrail setup\n\n' "$command_prefix"
-  printf '%sUsing a Databricks workspace as your model provider? Install the\n' "$DIM"
-  printf 'Databricks CLI (https://docs.databricks.com/aws/en/dev-tools/cli/install)\n'
-  printf 'and add it via: goalrail setup -> Databricks.%s\n' "$RESET"
 }
 
 main() {

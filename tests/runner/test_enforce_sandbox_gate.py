@@ -145,7 +145,7 @@ def _spec_with_enforce_sandbox(
         name="sandbox-test-agent",
         executor=ExecutorSpec(
             config={"harness": "claude-sdk"},
-            model="databricks-claude-sonnet-4-6",
+            model="anthropic/claude-sonnet-4-6",
         ),
         os_env=OSEnvSpec(
             type="caller_process",
@@ -259,7 +259,7 @@ async def test_enforce_sandbox_no_policy_leaves_spec_unchanged() -> None:
         name="no-policy-agent",
         executor=ExecutorSpec(
             config={"harness": "claude-sdk"},
-            model="databricks-claude-sonnet-4-6",
+            model="anthropic/claude-sonnet-4-6",
         ),
         os_env=OSEnvSpec(
             type="caller_process",

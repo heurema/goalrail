@@ -101,7 +101,7 @@ prompt: |
   exist, that is the sandbox masking it, not a real absence.
 
 executor:
-  model: databricks-gpt-5-4-mini
+  model: openai/gpt-5-4-mini
   profile: test-profile
 
 os_env:

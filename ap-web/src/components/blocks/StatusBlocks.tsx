@@ -127,7 +127,7 @@ interface RoutingDecisionChipProps {
  * won), the line reads "would have picked" instead of naming the active
  * model — visible without hovering anything, surviving reload.
  *
- * @param model Model id the router chose, e.g. `databricks-claude-opus-4-8`.
+ * @param model Model id the router chose, e.g. `anthropic/claude-opus-4-8`.
  * @param tier Difficulty tier the router assigned.
  * @param applied `true` when the brain ran on `model` this turn.
  * @param rationale One-line router explanation; hidden when empty.

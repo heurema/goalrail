@@ -115,12 +115,16 @@ def test_default_provider_for_pi_skips_subscription_defaults() -> None:
     config = {
         "providers": {
             "claude": {"kind": "subscription", "default": True, "cli": "claude"},
-            "databricks": {"kind": "databricks", "default": "openai", "profile": "p1"},
+            "openai-gateway": {
+                "kind": "gateway",
+                "default": "openai",
+                "openai": {"base_url": "https://gateway.example.com/v1", "api_key_ref": "env:K"},
+            },
         }
     }
     # pi skips the anthropic-family subscription and lands on the openai-
-    # family databricks default, which it CAN consume (ucode/gateway path).
-    assert default_provider_for_harness(config, "pi").name == "databricks"
+    # family gateway default, which it CAN consume.
+    assert default_provider_for_harness(config, "pi").name == "openai-gateway"
     # The mapped claude-sdk harness still takes the subscription — it wraps
     # the claude CLI, so the CLI login is exactly its credential.
     assert default_provider_for_harness(config, "claude-sdk").name == "claude"
@@ -148,20 +152,20 @@ def test_default_provider_for_pi_skips_cli_config_defaults() -> None:
     """For the unmapped ``pi`` harness, a cli-config default is skipped.
 
     A cli-config entry pins a provider table in ~/.codex/config.toml (e.g.
-    isaac's Databricks AI Gateway); only the codex harness bridges that file,
+    an enterprise gateway); only the codex harness bridges that file,
     and ``configure_agent_harness_with_provider`` raises for any other
     harness. A regression here makes the resolver hand pi the codex-only
-    gateway: the REPL startup header then shows "Pi → ⚙️ Databricks AI
-    Gateway" while ``setup`` (which filters via ``provider_families``)
+    gateway: the REPL startup header then shows a Codex-only gateway while
+    ``setup`` (which filters via ``provider_families``)
     correctly shows pi as credential-less, and an actual pi spawn fails.
     """
     config = {
         "providers": {
-            "codex-databricks": {
+            "codex-enterprisegateway": {
                 "kind": "cli-config",
                 "default": True,
                 "cli": "codex",
-                "model_provider": "databricks",
+                "model_provider": "EnterpriseGateway",
             },
         }
     }
@@ -172,7 +176,7 @@ def test_default_provider_for_pi_skips_cli_config_defaults() -> None:
     assert default_provider_for_harness(config, "pi") is None
     # The codex harness itself still takes the cli-config default — it is
     # exactly the CLI whose config.toml carries the provider table.
-    assert default_provider_for_harness(config, "codex").name == "codex-databricks"
+    assert default_provider_for_harness(config, "codex").name == "codex-enterprisegateway"
 
 
 # ── the pi default scope ──────────────────────────────────────────────
@@ -303,27 +307,6 @@ def test_gemini_key_cannot_claim_pi_scope_at_parse() -> None:
         }
         with pytest.raises(GoalrailError):
             load_providers({"providers": {"gemini": raw}})
-
-
-def test_databricks_does_not_serve_gemini_surface() -> None:
-    """Databricks routes anthropic/openai + pi, NOT the Gemini surface.
-
-    The antigravity-native harness drives Gemini via the Google SDK + a
-    GEMINI_API_KEY / OAuth, not an OpenAI-compatible gateway, so a databricks
-    profile cannot supply the Gemini surface. Were it gemini-capable, a
-    ``default: true`` databricks profile would auto-become the gemini-surface
-    default and wedge its launch on a credential it cannot use.
-    """
-    config = {"providers": {"dbx": {"kind": "databricks", "profile": "ws", "default": True}}}
-    entry = load_providers(config)["dbx"]
-    assert provider_families(entry) == frozenset({ANTHROPIC_FAMILY, OPENAI_FAMILY, PI_SURFACE})
-    assert GEMINI_FAMILY not in provider_families(entry)
-    # A default databricks profile does NOT become the gemini-surface default.
-    assert default_provider_for_harness(config, "antigravity-native") is None
-    # And a databricks profile cannot name the gemini scope at parse.
-    bad = {"providers": {"dbx": {"kind": "databricks", "profile": "ws", "default": ["gemini"]}}}
-    with pytest.raises(GoalrailError):
-        load_providers(bad)
 
 
 @pytest.mark.parametrize("kind", ["gateway", "local"])
@@ -472,13 +455,12 @@ def test_set_default_provider_pi_scope_round_trips_and_moves() -> None:
     "raw,expect_pi",
     [
         # An inline key/gateway/local serves pi when it declares a pi-capable
-        # family (anthropic / openai); databricks routes pi too.
+        # family (anthropic / openai).
         ({"kind": "key", "openai": {"base_url": "https://x/v1", "api_key_ref": "env:K"}}, True),
         (
             {"kind": "gateway", "anthropic": {"base_url": "https://x", "api_key_ref": "env:K"}},
             True,
         ),
-        ({"kind": "databricks", "profile": "my-ws"}, True),
         # Bedrock mode is native-`goalrail claude` only — pi cannot use it.
         (
             {"kind": "bedrock", "anthropic": {"base_url": "https://x", "api_key_ref": "env:K"}},
@@ -511,8 +493,8 @@ def test_provider_families_pi_capability(raw: dict[str, object], expect_pi: bool
     """``provider_families`` reports the pi scope only for pi-capable providers.
 
     pi-capable = an inline key/gateway/local declaring an anthropic or openai
-    family, or a databricks profile. A gemini-only key (Gemini surface only)
-    and a subscription (CLI-bound) are NOT pi-capable. This drives both the Pi
+    family. A gemini-only key (Gemini surface only) and a subscription
+    (CLI-bound) are NOT pi-capable. This drives both the Pi
     page's credential list (which rows appear) and set-default validation — a
     regression in either direction lets the menu offer a credential pi can't
     use, or hides one it can.
@@ -571,20 +553,20 @@ def test_parse_cli_config_entry() -> None:
     entry = load_providers(
         {
             "providers": {
-                "codex-databricks": {
+                "codex-enterprisegateway": {
                     "kind": "cli-config",
                     "cli": "codex",
-                    "model_provider": "Databricks",
-                    "display_name": "Databricks AI Gateway",
+                    "model_provider": "EnterpriseGateway",
+                    "display_name": "Enterprise AI Gateway",
                     "default": True,
                 }
             }
         }
-    )["codex-databricks"]
+    )["codex-enterprisegateway"]
     assert entry.kind == "cli-config"
     assert entry.cli == "codex"
-    assert entry.model_provider == "Databricks"
-    assert entry.display_name == "Databricks AI Gateway"
+    assert entry.model_provider == "EnterpriseGateway"
+    assert entry.display_name == "Enterprise AI Gateway"
     # Serves (and can default) exactly the codex/openai surface.
     assert provider_families(entry) == frozenset({OPENAI_FAMILY})
     assert entry.default_families == frozenset({OPENAI_FAMILY})
@@ -632,10 +614,10 @@ def test_describe_active_credential_cli_config() -> None:
 
     config = {
         "providers": {
-            "codex-databricks": {
+            "codex-enterprisegateway": {
                 "kind": "cli-config",
                 "cli": "codex",
-                "model_provider": "Databricks",
+                "model_provider": "EnterpriseGateway",
                 "default": True,
             }
         }
@@ -643,10 +625,10 @@ def test_describe_active_credential_cli_config() -> None:
     cred = describe_active_credential(config, "codex")
     assert cred is not None
     assert cred.kind == "cli-config"
-    assert cred.provider_name == "codex-databricks"
+    assert cred.provider_name == "codex-enterprisegateway"
     # The source names the file and the pinned provider — the two facts a
     # user needs to find/edit the underlying credential.
-    assert cred.source == "~/.codex/config.toml provider: Databricks"
+    assert cred.source == "~/.codex/config.toml provider: EnterpriseGateway"
     # No inline endpoint/model: both live in the CLI's own config.
     assert cred.base_url is None
     assert cred.model is None

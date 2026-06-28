@@ -477,8 +477,8 @@ async def test_session_labels_for_runner_spawn_empty_200_body_recovers(
     """
     A 200 response with an empty (non-JSON) body returns the fallback.
 
-    The Databricks Apps proxy can return HTTP 200 with an empty body
-    when the server event loop is starved. Parsing that with
+    A deployed app proxy can return HTTP 200 with an empty body when
+    the server event loop is starved. Parsing that with
     ``resp.json()`` raises ``JSONDecodeError``; left unguarded it
     propagated out of ``_ensure_comment_relay_started`` and aborted
     every message turn before any LLM call (observed in production:
@@ -1121,7 +1121,7 @@ async def test_create_session_threads_resolved_bundle_dir_to_codex_spawn_env(
         skills_filter=["codex_e2e_xyz_greet_a3f9c2"],
         executor=ExecutorSpec(
             config={"harness": "codex", "profile": "test-profile"},
-            model="databricks-gpt-5-4-mini",
+            model="openai/gpt-5-4-mini",
         ),
     )
     harness_client = _ScriptedHarnessClient([])
@@ -1442,7 +1442,6 @@ async def test_auto_create_codex_terminal_uses_persisted_resume_launch_config(
     monkeypatch.setattr(codex_native_bridge, "_BRIDGE_ROOT", tmp_path / "codex-bridge")
     monkeypatch.setenv("GOALRAIL_RUNNER_WORKSPACE", str(tmp_path / "workspace"))
     monkeypatch.setenv("RUNNER_SERVER_URL", "http://ap.example")
-    monkeypatch.delenv("DATABRICKS_CONFIG_PROFILE", raising=False)
     monkeypatch.setattr("goalrail.runner._entry._make_auth_token_factory", lambda: None)
     bridge_dir = codex_native_bridge.bridge_dir_for_bridge_id(session_id)
     codex_native_bridge.write_bridge_state(
@@ -1738,7 +1737,6 @@ async def test_auto_create_codex_terminal_fork_clones_rollout_and_resumes(
     monkeypatch.setattr(codex_native_bridge, "_BRIDGE_ROOT", tmp_path / "codex-bridge")
     monkeypatch.setenv("GOALRAIL_RUNNER_WORKSPACE", str(workspace))
     monkeypatch.setenv("RUNNER_SERVER_URL", "http://ap.example")
-    monkeypatch.delenv("DATABRICKS_CONFIG_PROFILE", raising=False)
     monkeypatch.setattr("goalrail.runner._entry._make_auth_token_factory", lambda: None)
     bridge_dir = bridge_dir_for_bridge_id(session_id)
     codex_native_bridge.write_bridge_state(
@@ -2005,7 +2003,6 @@ async def test_auto_create_codex_terminal_fork_builds_rollout_from_items_and_res
     monkeypatch.setattr(codex_native_bridge, "_BRIDGE_ROOT", tmp_path / "codex-bridge")
     monkeypatch.setenv("GOALRAIL_RUNNER_WORKSPACE", str(workspace))
     monkeypatch.setenv("RUNNER_SERVER_URL", "http://ap.example")
-    monkeypatch.delenv("DATABRICKS_CONFIG_PROFILE", raising=False)
     monkeypatch.setattr("goalrail.runner._entry._make_auth_token_factory", lambda: None)
 
     patched_external_ids: list[str] = []
@@ -2262,7 +2259,6 @@ async def test_auto_create_codex_terminal_uses_worktree_workspace_not_bundle_dir
     monkeypatch.setattr(codex_native_bridge, "_BRIDGE_ROOT", tmp_path / "codex-bridge")
     monkeypatch.setenv("GOALRAIL_RUNNER_WORKSPACE", str(runner_env))
     monkeypatch.setenv("RUNNER_SERVER_URL", "http://ap.example")
-    monkeypatch.delenv("DATABRICKS_CONFIG_PROFILE", raising=False)
     monkeypatch.setattr("goalrail.runner._entry._make_auth_token_factory", lambda: None)
     bridge_dir = codex_native_bridge.bridge_dir_for_bridge_id(session_id)
     codex_native_bridge.write_bridge_state(
@@ -2501,7 +2497,6 @@ async def test_auto_create_codex_terminal_starts_relay_at_session_creation(
     monkeypatch.setattr(codex_native_bridge, "_BRIDGE_ROOT", tmp_path / "codex-bridge")
     monkeypatch.setenv("GOALRAIL_RUNNER_WORKSPACE", str(tmp_path / "workspace"))
     monkeypatch.setenv("RUNNER_SERVER_URL", "http://ap.example")
-    monkeypatch.delenv("DATABRICKS_CONFIG_PROFILE", raising=False)
     monkeypatch.setattr("goalrail.runner._entry._make_auth_token_factory", lambda: None)
 
     class _SnapshotClient:
@@ -2823,7 +2818,6 @@ async def _run_antigravity_auto_create(
     monkeypatch.setenv("RUNNER_SERVER_URL", "http://ap.example")
     monkeypatch.setenv("GOALRAIL_RUNNER_WORKSPACE", str(tmp_path / "workspace"))
     (tmp_path / "workspace").mkdir(parents=True, exist_ok=True)
-    monkeypatch.delenv("DATABRICKS_CONFIG_PROFILE", raising=False)
     monkeypatch.setattr("goalrail.runner._entry._make_auth_token_factory", lambda: None)
 
     # No-op the launch builder + onboarding seed so nothing tries to find agy.
@@ -3262,7 +3256,6 @@ async def test_auto_create_antigravity_wires_reader_task_and_interaction_bridge(
     monkeypatch.setenv("RUNNER_SERVER_URL", "http://ap.example")
     monkeypatch.setenv("GOALRAIL_RUNNER_WORKSPACE", str(tmp_path / "workspace"))
     (tmp_path / "workspace").mkdir(parents=True, exist_ok=True)
-    monkeypatch.delenv("DATABRICKS_CONFIG_PROFILE", raising=False)
     monkeypatch.setattr("goalrail.runner._entry._make_auth_token_factory", lambda: None)
     monkeypatch.setattr(
         launch_mod, "build_agy_launch", lambda **_kwargs: (("agy",), {"AGY_ENV": "1"})
@@ -3442,7 +3435,6 @@ async def test_auto_create_antigravity_wires_goalrail_mcp_relay(
     monkeypatch.setenv("RUNNER_SERVER_URL", "http://ap.example")
     monkeypatch.setenv("GOALRAIL_RUNNER_WORKSPACE", str(tmp_path / "workspace"))
     (tmp_path / "workspace").mkdir(parents=True, exist_ok=True)
-    monkeypatch.delenv("DATABRICKS_CONFIG_PROFILE", raising=False)
     monkeypatch.setattr("goalrail.runner._entry._make_auth_token_factory", lambda: None)
     monkeypatch.setattr(bridge_mod, "ensure_agy_onboarding_complete", lambda: None)
     monkeypatch.setattr(runner_app_mod, "_terminal_tmux_pane", lambda *_a, **_k: (None, None))
@@ -8768,7 +8760,7 @@ async def test_codex_native_model_options_query_model_list(
                 "data": [
                     {
                         "id": "gpt-5.5",
-                        "model": "databricks-gpt-5-5",
+                        "model": "openai/gpt-5-5",
                         "displayName": "GPT-5.5",
                         "defaultReasoningEffort": "high",
                         "supportedReasoningEfforts": [
@@ -8786,7 +8778,7 @@ async def test_codex_native_model_options_query_model_list(
                 "data": [
                     {
                         "id": "gpt-5.4-mini",
-                        "model": "databricks-gpt-5-4-mini",
+                        "model": "openai/gpt-5-4-mini",
                         "displayName": "GPT-5.4 mini",
                         "defaultReasoningEffort": "medium",
                         "supportedReasoningEfforts": [
@@ -8855,7 +8847,7 @@ async def test_codex_native_model_options_query_model_list(
         "models": [
             {
                 "id": "gpt-5.5",
-                "model": "databricks-gpt-5-5",
+                "model": "openai/gpt-5-5",
                 "displayName": "GPT-5.5",
                 "defaultReasoningEffort": "high",
                 "supportedReasoningEfforts": [
@@ -8866,7 +8858,7 @@ async def test_codex_native_model_options_query_model_list(
             },
             {
                 "id": "gpt-5.4-mini",
-                "model": "databricks-gpt-5-4-mini",
+                "model": "openai/gpt-5-4-mini",
                 "displayName": "GPT-5.4 mini",
                 "defaultReasoningEffort": "medium",
                 "supportedReasoningEfforts": [
@@ -12114,13 +12106,13 @@ async def test_auto_create_claude_terminal_registers_permission_hook(
 
     # The forwarder must get a refresh-capable httpx.Auth (not just a
     # one-shot Authorization header) so a long-running host-spawned
-    # session keeps forwarding after the ~1h OAuth token expires.
+    # session keeps forwarding after remote bearer tokens expire.
     # ``_auto_create_claude_terminal`` schedules the forwarder as a task;
     # yield once so the stub records its kwargs before asserting.
-    from goalrail.runner._entry import _RunnerDatabricksAuth
+    from goalrail.runner._entry import _RunnerBearerAuth
 
     await asyncio.sleep(0)
-    assert isinstance(forwarder_kwargs.get("auth"), _RunnerDatabricksAuth)
+    assert isinstance(forwarder_kwargs.get("auth"), _RunnerBearerAuth)
 
 
 @pytest.mark.asyncio
@@ -12659,41 +12651,28 @@ async def test_auto_create_claude_terminal_inherits_agent_sandbox(
 
 
 @pytest.mark.asyncio
-async def test_auto_create_claude_terminal_injects_ucode_gateway_config(
+async def test_auto_create_claude_terminal_injects_provider_gateway_config(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
-    Host-spawned launch injects the ucode Databricks gateway config.
+    Host-spawned launch injects the configured provider gateway config.
 
     On the daemon / web-UI path the runner — not the CLI — launches
     Claude, so it must reproduce the gateway auth the CLI normally
     injects: the ``ANTHROPIC_BASE_URL`` env, the ``apiKeyHelper`` token
     command, and the gateway default model. The runner derives this from
-    the user's provider config (here the legacy global ``auth:`` block —
-    the ambient ``DATABRICKS_CONFIG_PROFILE`` env var deliberately no
-    longer steers credentials). Without it, Claude would launch with
-    empty env and no token and could not reach the Databricks model —
-    the exact regression that blocked daemon-routing.
+    the user's provider config. Without it, Claude would launch with
+    empty env and no token and could not reach the configured gateway model.
 
     :param tmp_path: Pytest-provided temporary directory.
     :param monkeypatch: Pytest monkeypatch fixture.
     """
-    from goalrail.claude_native import ClaudeNativeUcodeConfig
+    from goalrail.claude_native import ClaudeNativeProviderConfig
 
     monkeypatch.setattr(claude_native_bridge, "_TRUSTED_PARENT", tmp_path)
     monkeypatch.setattr(claude_native_bridge, "_BRIDGE_ROOT", tmp_path / "root")
     monkeypatch.setenv("RUNNER_SERVER_URL", "http://127.0.0.1:8000")
-    # The supported credential source for a host-spawned runner: the
-    # global config's ``auth:`` block (written by ``goalrail setup``),
-    # isolated to a temp config home so the developer's real config
-    # can't leak in.
-    config_home = tmp_path / "config-home"
-    config_home.mkdir()
-    (config_home / "config.yaml").write_text(
-        "auth:\n  type: databricks\n  profile: test-profile\n"
-    )
-    monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(config_home))
 
     async def _no_op_forwarder(**kwargs: Any) -> None:
         del kwargs
@@ -12704,16 +12683,14 @@ async def test_auto_create_claude_terminal_injects_ucode_gateway_config(
     )
 
     gateway_env = {"ANTHROPIC_BASE_URL": "https://gw.example/anthropic"}
-    ucode = ClaudeNativeUcodeConfig(
+    provider_config = ClaudeNativeProviderConfig(
         env=dict(gateway_env),
-        api_key_helper="databricks auth token --fake-helper",
-        model="databricks-claude-opus-4-7",
+        api_key_helper="printf gateway-token",
+        model="anthropic/claude-opus-4-7",
     )
-    # The runner imports ``_ucode_config_for_profile`` from
-    # ``goalrail.claude_native`` per call, so patch it at the source.
     monkeypatch.setattr(
-        "goalrail.claude_native._ucode_config_for_profile",
-        lambda profile: ucode,
+        "goalrail.claude_native.resolve_native_claude_config",
+        lambda spec=None: provider_config,
     )
 
     captured: dict[str, Any] = {}
@@ -12752,14 +12729,14 @@ async def test_auto_create_claude_terminal_injects_ucode_gateway_config(
     )
 
     await _auto_create_claude_terminal(
-        "conv_ucode",
+        "conv_provider_gateway",
         _FakeResourceRegistry(),
         lambda _sid, _evt: None,
         server_client=fake_client,
     )
 
     spec = captured["spec"]
-    # The gateway env points ``claude`` at the Databricks gateway, and
+    # The gateway env points ``claude`` at the configured gateway, and
     # ENABLE_TOOL_SEARCH forces Claude Code to defer MCP tool schemas
     # instead of loading all 200+ bridge tools into startup context.
     assert spec.env == {
@@ -12770,10 +12747,10 @@ async def test_auto_create_claude_terminal_injects_ucode_gateway_config(
     assert spec.command == "claude"
     # The gateway default model is applied (no per-session override here).
     assert "--model" in spec.args
-    assert spec.args[spec.args.index("--model") + 1] == "databricks-claude-opus-4-7"
+    assert spec.args[spec.args.index("--model") + 1] == "anthropic/claude-opus-4-7"
     # The apiKeyHelper threaded into the Claude settings augment so the
     # gateway token command is registered.
-    assert "databricks auth token --fake-helper" in " ".join(spec.args)
+    assert "printf gateway-token" in " ".join(spec.args)
 
     await fake_client.aclose()
 
@@ -12789,7 +12766,7 @@ async def _run_auto_create_cursor_terminal(
 
     Stubs the cursor-agent binary lookup, the transcript forwarder, and the
     runner auth factory so the model-injection branch runs without a real
-    ``cursor-agent`` install or Databricks credentials. The session snapshot
+    ``cursor-agent`` install or remote credentials. The session snapshot
     (workspace + ``terminal_launch_args``) is served from an in-memory
     ``httpx.MockTransport``, and a fake registry records the ``spec`` passed to
     ``launch_required_terminal`` so the test can assert on ``spec.args``.
@@ -12809,8 +12786,7 @@ async def _run_auto_create_cursor_terminal(
         "goalrail.cursor_native_forwarder.supervise_cursor_forwarder",
         _no_op_forwarder,
     )
-    # The forwarder is stubbed, so the auth it would carry is never used — keep
-    # the factory from reaching for ambient Databricks credentials in tests.
+    # The forwarder is stubbed, so the auth it would carry is never used.
     monkeypatch.setattr(_runner_entry, "_make_auth_token_factory", lambda *a, **k: None)
 
     captured: dict[str, Any] = {}
@@ -12918,8 +12894,8 @@ async def test_auto_create_cursor_terminal_user_model_wins(
 
 @pytest.mark.parametrize(
     "spec_model",
-    [None, "", "databricks-claude-opus", "databricks/claude-opus"],
-    ids=["none", "empty", "databricks-dash", "databricks-slash"],
+    [None, ""],
+    ids=["none", "empty"],
 )
 @pytest.mark.asyncio
 async def test_auto_create_cursor_terminal_omits_model_when_unusable(
@@ -12927,11 +12903,7 @@ async def test_auto_create_cursor_terminal_omits_model_when_unusable(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """No usable cursor model id → no ``--model`` (cursor-agent keeps its default).
-
-    Gateway-routed ``databricks-*`` ids are not cursor-agent model ids, so they
-    are dropped rather than passed through (which would error on launch).
-    """
+    """No usable cursor model id -> no ``--model`` (cursor-agent keeps its default)."""
     spec = await _run_auto_create_cursor_terminal(
         tmp_path=tmp_path,
         monkeypatch=monkeypatch,
@@ -12985,9 +12957,7 @@ async def test_auto_create_claude_terminal_forwarder_skips_replayed_transcript_o
     monkeypatch.setattr(claude_native_bridge, "_BRIDGE_ROOT", tmp_path / "root")
     monkeypatch.setenv("RUNNER_SERVER_URL", "http://127.0.0.1:8000")
     monkeypatch.setenv("GOALRAIL_RUNNER_WORKSPACE", str(tmp_path / "workspace"))
-    # Pin the launch config to Claude's native auth so the test does not
-    # depend on the runner process's ambient Databricks profile.
-    monkeypatch.delenv("DATABRICKS_CONFIG_PROFILE", raising=False)
+    # Pin the launch config to Claude's native auth so the test is hermetic.
 
     forwarder_kwargs: dict[str, Any] = {}
 
@@ -15910,7 +15880,6 @@ async def test_auto_create_codex_terminal_recreate_cancels_prior_forwarder(
     monkeypatch.setattr(codex_native_bridge, "_BRIDGE_ROOT", tmp_path / "codex-bridge")
     monkeypatch.setenv("GOALRAIL_RUNNER_WORKSPACE", str(tmp_path / "workspace"))
     monkeypatch.setenv("RUNNER_SERVER_URL", "http://ap.example")
-    monkeypatch.delenv("DATABRICKS_CONFIG_PROFILE", raising=False)
     monkeypatch.setattr("goalrail.runner._entry._make_auth_token_factory", lambda: None)
 
     class _SnapshotServerClient:

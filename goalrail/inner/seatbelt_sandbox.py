@@ -194,7 +194,6 @@ _SENSITIVE_HIDDEN_NAMES: frozenset[str] = frozenset(
         ".azure",
         ".gcloud",
         ".config",
-        ".databrickscfg",
     }
 )
 

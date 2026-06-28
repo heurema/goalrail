@@ -85,8 +85,8 @@ def test_global_config_write_then_list_roundtrips(
             "set",
             "--global",
             "default_agent=tests/resources/examples/hello_world.yaml",
-            "model=databricks-claude-sonnet-4-6",
-            "server=https://example.databricks.com",
+            "model=anthropic/claude-sonnet-4-6",
+            "server=https://goalrail.example",
         ],
     )
     assert write.returncode == 0, (
@@ -105,10 +105,10 @@ def test_global_config_write_then_list_roundtrips(
     assert listed.returncode == 0, (
         f"config list failed: stdout={listed.stdout!r} stderr={listed.stderr!r}"
     )
-    assert "model=databricks-claude-sonnet-4-6" in listed.stdout, (
+    assert "model=anthropic/claude-sonnet-4-6" in listed.stdout, (
         f"model not in --list output; got {listed.stdout!r}"
     )
-    assert "server=https://example.databricks.com" in listed.stdout, (
+    assert "server=https://goalrail.example" in listed.stdout, (
         f"server not in --list output; got {listed.stdout!r}"
     )
     assert "default_agent=" in listed.stdout, (
@@ -138,7 +138,7 @@ def test_global_config_write_then_list_roundtrips(
     assert "server=" not in listed_after.stdout, (
         f"server key should be gone after unset; got {listed_after.stdout!r}"
     )
-    assert "model=databricks-claude-sonnet-4-6" in listed_after.stdout
+    assert "model=anthropic/claude-sonnet-4-6" in listed_after.stdout
     assert "default_agent=" in listed_after.stdout
 
 

@@ -60,26 +60,26 @@ _POLLY = _REPO / "examples" / "polly"
 _RUN_TIMEOUT_SEC = 300
 
 # Models dispatched to each worker in the multi-dispatch test.
-# Under mock (no Databricks creds), the dispatch gate localizes models for
+# Under mock (no creds), the dispatch gate localizes models for
 # non-gateway children:
-# - ``pi`` (multi-provider, gateway-capable): databricks-gpt-5-4 passes through.
-# - ``codex`` (codex-native, subscription): databricks-gpt-5-4-mini is stripped
+# - ``pi`` (multi-provider, gateway-capable): openai/gpt-5-4 passes through.
+# - ``codex`` (codex-native, subscription): openai/gpt-5-4-mini is stripped
 #   to gpt-5-4-mini by normalize_model_for_provider("subscription").
 # - ``claude_code`` (claude-native, subscription): claude-sonnet-4-6 (no prefix).
 # These are the DISPATCHED model ids sent in sys_session_send.
 _DISPATCHED_MODELS = {
     "claude_code": "claude-sonnet-4-6",
-    "codex": "databricks-gpt-5-4-mini",
-    "pi": "databricks-gpt-5-4",
+    "codex": "openai/gpt-5-4-mini",
+    "pi": "openai/gpt-5-4",
 }
 # These are the PERSISTED model_override values after localization. In mock
 # mode, rewrite_sub_agent_harnesses=True rewrites codex → openai-agents
 # (SDK-based, no native binary). openai-agents routes through the gateway,
-# so databricks- prefix is preserved (no subscription-provider stripping).
+# so gateway- prefix is preserved (no subscription-provider stripping).
 _EXPECTED_MODELS = {
     "claude_code": "claude-sonnet-4-6",
-    "codex": "databricks-gpt-5-4-mini",  # openai-agents harness; prefix preserved
-    "pi": "databricks-gpt-5-4",  # pi is gateway-capable; prefix preserved
+    "codex": "openai/gpt-5-4-mini",  # openai-agents harness; prefix preserved
+    "pi": "openai/gpt-5-4",  # pi is gateway-capable; prefix preserved
 }
 
 
@@ -364,7 +364,7 @@ def test_polly_rejects_cross_family_model_dispatch(
                                 "title": "explore-violation",
                                 "args": {
                                     "purpose": "explore",
-                                    "model": "databricks-gpt-5-4-mini",
+                                    "model": "openai/gpt-5-4-mini",
                                     "input": "Report the first line of README.md.",
                                 },
                             }
@@ -442,7 +442,7 @@ def test_polly_lists_models_then_dispatches_pi_from_list(
     tag = uuid.uuid4().hex[:8]
     # Pick a concrete Claude model for pi — one that the family guard will accept
     # (it only needs to be a Claude-family id, not one from any real catalog).
-    pi_dispatch_model = "databricks-claude-sonnet-4-6"
+    pi_dispatch_model = "anthropic/claude-sonnet-4-6"
 
     configure_mock_llm(
         mock_llm_server_url,
@@ -554,9 +554,9 @@ def test_polly_canonical_id_localized_for_gateway_child(
     - Exactly one pi child is created with a non-null ``model_override``
       (proving the dispatch was accepted and localization did not drop it).
 
-    The exact localized value (e.g. ``databricks-claude-opus-4-8``) depends on
+    The exact localized value (e.g. ``anthropic/claude-opus-4-8``) depends on
     provider resolution at runtime; the test checks presence rather than an
-    exact Databricks prefix because the mock environment has no gateway creds.
+    exact prefix because the mock environment has no gateway creds.
 
     :param local_polly_server: Base URL of the in-tree local server fixture.
     :param mock_llm_server_url: Mock LLM server base URL.
@@ -576,7 +576,7 @@ def test_polly_canonical_id_localized_for_gateway_child(
     configure_mock_llm(
         mock_llm_server_url,
         [
-            # Dispatch pi with the canonical vendor id (no databricks- prefix).
+            # Dispatch pi with the canonical vendor id (no gateway- prefix).
             {
                 "tool_calls": [
                     {
@@ -635,7 +635,7 @@ def test_polly_canonical_id_localized_for_gateway_child(
     child_id = kids[0].get("session_id") or kids[0].get("id")
     override = _api(local_polly_server, f"/v1/sessions/{child_id}").get("model_override")
     # The dispatch gate accepted the canonical id; model_override must be non-null.
-    # In a real deployment the localized value would be "databricks-claude-opus-4-8";
+    # In a real deployment the localized value would be "anthropic/claude-opus-4-8";
     # under mock we only require the gate did not drop it.
     assert override is not None, (
         "pi child has no model_override; canonical-id dispatch may have been dropped. "

@@ -30,8 +30,7 @@ would wipe another test's queue if two tests ran simultaneously.
 
 **Mock routing note (pi):** The pi executor is expected to route
 model calls via ``OPENAI_BASE_URL`` (set by ``mock_credentials_env``).
-If a particular pi build reads ``~/.databrickscfg`` instead and
-ignores ``OPENAI_BASE_URL``, the test would connect to a real
+If a particular pi build ignores ``OPENAI_BASE_URL``, the test would connect to a real
 endpoint rather than the mock server and fail or behave
 non-deterministically. The module-level ``pytestmark`` skips the
 test when ``pi`` is absent; on CI the binary should either be
@@ -87,7 +86,7 @@ def test_per_harness_pi_one_shot(
     exits 0 and emits a non-trivial assistant reply.
 
     Uses the mock LLM server so the test runs without real API
-    credentials or a Databricks workspace. The pi executor routes
+    credentials or a provider workspace. The pi executor routes
     model calls through ``OPENAI_BASE_URL`` (provided by
     ``mock_credentials_env``).
 

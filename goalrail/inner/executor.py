@@ -72,7 +72,7 @@ class ExecutorConfig:
     """Per-turn configuration handed to an :class:`Executor`.
 
     :param model: The backend-specific model identifier (e.g.
-        ``"databricks-claude-sonnet-4"`` or ``"gpt-5.3-codex"``), or
+        ``"anthropic/claude-sonnet-4"`` or ``"gpt-5.3-codex"``), or
         ``None`` when no model has been pinned by the agent spec — each
         executor picks its own default in that case.
     :param temperature: Sampling temperature forwarded to the LLM.

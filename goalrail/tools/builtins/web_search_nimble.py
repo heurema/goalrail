@@ -2,8 +2,8 @@
 
 Uses Nimble's AI web search endpoint (``POST /v1/search``) to return a
 list of grounded results (title, URL, snippet). Good for non-OpenAI
-models (Anthropic, Llama, Databricks-hosted, etc.) that cannot use
-OpenAI's native ``web_search_preview``.
+models (Anthropic, Llama, etc.) that cannot use OpenAI's native
+``web_search_preview``.
 
 Configured in the agent spec::
 

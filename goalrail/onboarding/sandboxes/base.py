@@ -1,15 +1,14 @@
 """
 Provider-agnostic interface for running Goalrail hosts in remote sandboxes.
 
-A *sandbox launcher* wraps one sandbox provider (Databricks Lakebox, Modal,
-Daytona, …) behind the small set of transport / lifecycle primitives that the
-generic bootstrap flow in :mod:`goalrail.onboarding.sandboxes.bootstrap`
-composes: provision a sandbox, run commands in it, ship files into it, stream
-a PTY-backed process out of it, forward a local port into it, and hold a
-foreground process open. Everything provider-specific (CLI bootstrap, SSH
-quirks, image contents, pip flags) lives behind a :class:`SandboxLauncher`
-implementation; everything provider-agnostic (wheel builds, the in-sandbox
-App OAuth dance, host registration) lives in ``bootstrap``.
+A *sandbox launcher* wraps one sandbox provider behind the small set of
+transport / lifecycle primitives that the generic bootstrap flow in
+:mod:`goalrail.onboarding.sandboxes.bootstrap` composes: provision a sandbox,
+run commands in it, ship files into it, stream a PTY-backed process out of it,
+forward a local port into it, and hold a foreground process open. Everything
+provider-specific (CLI bootstrap, SSH quirks, image contents, pip flags) lives
+behind a :class:`SandboxLauncher` implementation; everything provider-agnostic
+(wheel builds, the in-sandbox login, host registration) lives in ``bootstrap``.
 """
 
 from __future__ import annotations
@@ -153,21 +152,19 @@ class SandboxLauncher(ABC):
     """
     Transport + lifecycle primitives for one sandbox provider.
 
-    Implementations exist per provider (``LakeboxLauncher``, …) and are
-    resolved by name through
+    Implementations exist per provider and are resolved by name through
     :func:`goalrail.onboarding.sandboxes.get_launcher`. All methods
     raise ``click.ClickException`` (with a remediation hint) on failure
     so CLI callers surface clean errors without extra wrapping.
     """
 
     # Short provider name used in CLI ``--provider`` choices and error
-    # messages, e.g. ``"lakebox"``.
+    # messages.
     provider: ClassVar[str]
 
     # Package index URL exported as ``UV_INDEX_URL`` for the local wheel
     # build, or ``None`` to use ambient uv configuration. Providers tied
-    # to networks where public PyPI is unreachable (Lakebox on the
-    # Databricks corp network) override this.
+    # to networks where public PyPI is unreachable override this.
     wheel_build_index_url: ClassVar[str | None] = None
 
     # Whether this provider can bridge a local port into the sandbox
@@ -427,7 +424,7 @@ class SandboxLauncher(ABC):
 
         :param sandbox_id: Target sandbox.
         :param command: Shell command to execute remotely, e.g.
-            ``"databricks auth login --host https://… --profile oss"``.
+            ``"goalrail login https://app.example.com"``.
         :param pty: When ``True``, allocate a remote PTY. Required for
             CLIs that suppress output when not attached to a terminal.
         :returns: A handle streaming the process's combined output.
@@ -451,8 +448,8 @@ class SandboxLauncher(ABC):
         """
         return SandboxCapabilityError(
             f"The '{self.provider}' provider cannot forward a local port into the "
-            "sandbox, which the in-sandbox Databricks App auth flow requires — "
-            "use this provider with servers that don't need App auth."
+            "sandbox, which the in-sandbox browser login requires — "
+            "use this provider with servers that don't need interactive auth."
         )
 
     def forward_local_port(self, sandbox_id: str, port: int) -> AbstractContextManager[None]:
@@ -463,7 +460,7 @@ class SandboxLauncher(ABC):
 
         Optional capability: the default implementation raises
         :class:`SandboxCapabilityError`. Providers with an inbound
-        forwarding path (Lakebox over SSH) override it AND set
+        forwarding path override it AND set
         :attr:`supports_local_port_forward` to ``True``.
 
         :param sandbox_id: Target sandbox.
@@ -542,8 +539,7 @@ class SandboxLauncher(ABC):
         tarball and pip-installs the wheels.
 
         Provider-specific because the right pip flags depend on the
-        sandbox image (e.g. the Lakebox image bakes goalrail and its
-        deps, requiring ``--force-reinstall --no-deps``).
+        sandbox image.
         CLI-bootstrap capability — managed-only launchers run from
         pre-baked images and need not override the raising default.
 

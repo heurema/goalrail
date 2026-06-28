@@ -23,15 +23,8 @@ The server inherits credentials by harness:
 
 - ``--harness=open-responses`` / ``--harness=openai-agents`` →
   ``OPENAI_API_KEY=<--llm-api-key>``.
-- ``--harness=claude-sdk`` → ``ANTHROPIC_API_KEY=<--llm-api-key>``,
-  OR Databricks-routed via ``HARNESS_CLAUDE_SDK_GATEWAY=true`` +
-  ``HARNESS_CLAUDE_SDK_DATABRICKS_PROFILE=<--profile>`` when
-  ``--profile`` is set.
-- ``--harness=codex`` → ``CODEX_API_KEY=<--llm-api-key>`` (or its
-  Databricks variant when ``--profile`` is set).
-- ``--harness=databricks`` → server reads from the Databricks CLI
-  profile; no extra env var needed beyond the user's
-  ``DATABRICKS_CONFIG_PROFILE`` / standard CLI auth.
+- ``--harness=claude-sdk`` → ``ANTHROPIC_API_KEY=<--llm-api-key>``.
+- ``--harness=codex`` → ``CODEX_API_KEY=<--llm-api-key>``.
 
 Adding a new harness is one entry in :func:`_compute_harness_env`.
 """
@@ -74,14 +67,12 @@ class HarnessCredentials:
     """
     Per-harness credentials and config the live server needs.
 
-    :param harness: Harness identifier, e.g. ``"databricks"``,
-        ``"claude-sdk"``, ``"open-responses"``, ``"openai-agents"``,
-        ``"codex"``.
-    :param profile: Databricks CLI profile name, e.g. ``"test-profile"``.
-        ``None`` when not using a Databricks-backed harness.
+    :param harness: Harness identifier, e.g. ``"claude-sdk"``,
+        ``"open-responses"``, ``"openai-agents"``, ``"codex"``.
+    :param profile: Optional provider profile name for harnesses that
+        support profile-based auth. ``None`` for direct API-key harnesses.
     :param llm_api_key: Direct API key for the harness's provider,
-        e.g. an OpenAI or Anthropic key. ``None`` when the harness
-        is Databricks-backed and credentials come from the profile.
+        e.g. an OpenAI or Anthropic key.
     """
 
     harness: str
@@ -97,9 +88,7 @@ def _compute_harness_env(creds: HarnessCredentials) -> dict[str, str]:
     :param creds: Harness identity + auth source.
     :returns: A dict of env vars to merge into the subprocess's
         environment, e.g. ``{"OPENAI_API_KEY": "sk-..."}``. Empty
-        dict when the harness reads credentials elsewhere
-        (e.g. ``--harness=databricks`` reads the CLI profile from
-        ``~/.databrickscfg`` directly).
+        dict when the harness reads credentials elsewhere.
     """
     env: dict[str, str] = {}
     h = creds.harness
@@ -107,25 +96,11 @@ def _compute_harness_env(creds: HarnessCredentials) -> dict[str, str]:
         if creds.llm_api_key is not None:
             env["OPENAI_API_KEY"] = creds.llm_api_key
     elif h == "claude-sdk":
-        if creds.profile:
-            # Claude SDK harness wrap reads these to route through
-            # the Databricks gateway instead of Anthropic direct.
-            env["HARNESS_CLAUDE_SDK_GATEWAY"] = "true"
-            env["HARNESS_CLAUDE_SDK_DATABRICKS_PROFILE"] = creds.profile
-        elif creds.llm_api_key is not None:
+        if creds.llm_api_key is not None:
             env["ANTHROPIC_API_KEY"] = creds.llm_api_key
     elif h == "codex":
-        if creds.profile:
-            env["HARNESS_CODEX_GATEWAY"] = "true"
-            env["HARNESS_CODEX_DATABRICKS_PROFILE"] = creds.profile
-        elif creds.llm_api_key is not None:
+        if creds.llm_api_key is not None:
             env["CODEX_API_KEY"] = creds.llm_api_key
-    elif h == "databricks":
-        # Databricks executor reads the CLI profile from
-        # ``~/.databrickscfg`` directly — no extra env var.
-        # The profile is selected via the agent YAML's
-        # ``executor.config.profile`` (see translator).
-        pass
     # else: unknown harness — let the server fail loud rather
     # than silently injecting nothing.
     return env

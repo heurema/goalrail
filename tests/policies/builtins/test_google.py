@@ -112,7 +112,7 @@ def test_drive_restricted_read_allowlisted_prefix_agnostic(prefix: str) -> None:
     """Restricted read of an allowlisted ID abstains, for either server prefix.
 
     Proves canonical matching is MCP-agnostic — the same allowlist works against
-    the standard ``mcp__google__*`` and the Databricks ``google__*``.
+    the standard ``mcp__google__*`` and legacy bare ``google__*`` names.
     """
     policy = gdrive_policy(read_all=False, read_files=[_DOC_ID])
     assert policy(tc(f"{prefix}docs_document_get", {"document_id": _DOC_ID})) is None

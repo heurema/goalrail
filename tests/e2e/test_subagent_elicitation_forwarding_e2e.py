@@ -16,16 +16,14 @@ delegated shell command makes the worker raise a real approval that
 must be forwarded and answered from the parent.
 
 OPT-IN. Like ``test_polly_e2e.py`` this needs the dev-box toolset CI
-runners lack (a logged-in ``oss`` Databricks OAuth profile + the
-``claude``/``codex`` binaries), so it is gated behind
+runners lack (native ``claude``/``codex`` binaries and a real provider key),
+so it is gated behind
 ``GOALRAIL_E2E_SUBAGENT_ELICIT=1`` and is not collected by default::
 
     GOALRAIL_E2E_SUBAGENT_ELICIT=1 \\
     .venv/bin/python -m pytest \\
         tests/e2e/test_subagent_elicitation_forwarding_e2e.py \\
-        --profile oss \\
-        --llm-api-key "$(databricks auth token -p oss \\
-            | python -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')" \\
+        --llm-api-key "$OPENAI_API_KEY" \\
         -v
 """
 
@@ -38,7 +36,6 @@ import signal
 import socket
 import subprocess
 import sys
-import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -48,8 +45,6 @@ from pathlib import Path
 import pytest
 
 _REPO = Path(__file__).resolve().parents[2]
-_PROFILE = "oss"
-
 # ── Fixture agent bundle (materialized into a tmp dir by ``agent_dir``) ──
 # A polly-style supervisor whose claude_code and codex sub-agents run in
 # PROMPTING (ask) permission mode — NOT bypass/yolo — so a worker raises a
@@ -66,13 +61,14 @@ description: >-
   surfaces on the parent session and is answerable by resolving against
   the child session id (PR 2272 — sub-agent elicitation routing).
 
-# Orchestrator brain: claude-sdk (in-process), like polly. It only
+# Orchestrator brain: openai-agents (in-process). It only
 # delegates; the substantive command-running work is done by the native
 # sub-agents, which run in their own terminal and prompt for approval.
 executor:
   type: goalrail
   config:
-    harness: claude-sdk
+    harness: openai-agents
+    model: openai/gpt-5-4-mini
 
 prompt: |
   You are a coding orchestrator. You do not do substantive work
@@ -163,10 +159,7 @@ os_env:
   sandbox:
     type: none
 """
-# Brain model for the claude-sdk orchestrator. The agent pins no model;
-# on a workspace whose default is a non-Claude model the claude-sdk brain
-# 400s, so name a Claude model here (mirrors test_polly_e2e / the driver).
-_BRAIN_MODEL = "databricks-claude-opus-4-8"
+_BRAIN_MODEL = "openai/gpt-5-4-mini"
 _SERVER_BOOT_TIMEOUT_SEC = 90
 _POLL_INTERVAL_SEC = 4.0
 # Bounded, fail-fast phases so a flaky/stalled real-LLM brain surfaces the run
@@ -178,34 +171,29 @@ _ELICIT_TIMEOUT_SEC = 180
 pytestmark = pytest.mark.skipif(
     os.environ.get("GOALRAIL_E2E_SUBAGENT_ELICIT") != "1",
     reason=(
-        "sub-agent elicitation e2e needs the dev-box toolset (oss OAuth + "
+        "sub-agent elicitation e2e needs the dev-box toolset (real provider key + "
         "claude/codex CLIs) absent on CI — set "
         "GOALRAIL_E2E_SUBAGENT_ELICIT=1 to opt in."
     ),
 )
 
 
-def _clean_env(profile: str = _PROFILE) -> dict[str, str]:
+def _clean_env() -> dict[str, str]:
     """
     Build a child env with leaked agent credentials/PYTHONPATH stripped.
 
-    The native harnesses resolve the profile's OAuth via the global
-    config's ``auth:`` block, written into an isolated
-    ``GOALRAIL_CONFIG_HOME`` here (the supported replacement for the
-    removed ``--profile`` CLI flag); a stray ``DATABRICKS_TOKEN`` /
-    ``ANTHROPIC_API_KEY`` / ``CLAUDE_CODE`` from the outer coding-agent
-    process would shadow it.
+    A stray ``ANTHROPIC_API_KEY`` / ``CLAUDE_CODE`` from the outer
+    coding-agent process could shadow the test's explicit key or native
+    CLI state.
     ``PYTHONPATH`` is dropped so the child imports goalrail from
     ``--code-dir`` (this worktree), not a sibling editable install.
 
-    :param profile: Databricks profile for the auth block, e.g. ``"oss"``.
     :returns: A sanitized copy of ``os.environ``.
     """
     env = dict(os.environ)
     env["GOALRAIL_SKIP_ONBOARD"] = "1"
     env["GOALRAIL_NO_UPDATE_CHECK"] = "1"
     for stale in (
-        "DATABRICKS_TOKEN",
         "ANTHROPIC_API_KEY",
         "OPENAI_API_KEY",
         "CLAUDE_CODE",
@@ -214,13 +202,6 @@ def _clean_env(profile: str = _PROFILE) -> dict[str, str]:
         "PYTHONPATH",
     ):
         env.pop(stale, None)
-    config_home = Path(tempfile.mkdtemp(prefix="goalrail-elicit-config-"))
-    (config_home / "config.yaml").write_text(
-        f"auth:\n  type: databricks\n  profile: {profile}\n",
-        encoding="utf-8",
-    )
-    env["GOALRAIL_CONFIG_HOME"] = str(config_home)
-    env["DATABRICKS_CONFIG_PROFILE"] = profile
     return env
 
 
@@ -565,7 +546,7 @@ def _llm_token(request: pytest.FixtureRequest) -> str:
     """
     key = request.config.getoption("--llm-api-key")
     if not key:
-        raise pytest.UsageError("this e2e requires --llm-api-key (an `oss` Databricks PAT).")
+        raise pytest.UsageError("this e2e requires --llm-api-key.")
     return str(key)
 
 
@@ -612,7 +593,7 @@ def test_subagent_prompt_surfaces_on_parent_and_resolves_via_child(
     parked).
 
     :param local_server: Base URL of the booted local server.
-    :param request: Pytest request (for ``--llm-api-key`` / ``--profile``).
+    :param request: Pytest request for ``--llm-api-key``.
     :param sub_agent: Which native sub-agent to delegate to, e.g.
         ``"claude_code"``.
     :param scenario: Which elicitation the worker raises — ``"command"``
@@ -640,7 +621,7 @@ def test_subagent_prompt_surfaces_on_parent_and_resolves_via_child(
         )
 
     token = _llm_token(request)
-    env = _clean_env(request.config.getoption("--profile") or _PROFILE)
+    env = _clean_env()
     env["OPENAI_API_KEY"] = token
 
     # Paths to the developer's native-CLI config we may toggle to PROMPTING.

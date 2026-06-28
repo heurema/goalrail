@@ -23,8 +23,8 @@ _SUMMARIZATION_BASE_PROMPT = (
 )
 
 # Trailing user turn appended to the conversation so providers that
-# reject conversations ending in an assistant message (e.g. Databricks
-# Claude, other no-prefill models) accept the summarization request.
+# reject conversations ending in an assistant message accept the
+# summarization request.
 _SUMMARIZATION_TRIGGER_MESSAGE = (
     "Produce the summary now, following the instructions in the system message."
 )
@@ -81,8 +81,7 @@ def build_summarization_input(
 
     Appends a trailing user turn that triggers the summary so the
     resulting chat-completions message list ends with ``role: user``,
-    which providers like Databricks Claude require (they reject
-    assistant-message prefill). Skipped when *messages* already ends
+    which no-prefill providers require. Skipped when *messages* already ends
     with a user message, since some providers reject consecutive
     same-role turns and the existing user turn is already a valid
     final position.

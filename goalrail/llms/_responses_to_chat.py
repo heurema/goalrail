@@ -267,7 +267,7 @@ def _extract_delta_content(
     Extract text and reasoning from a Chat Completions delta content value.
 
     Handles both plain string content (most providers) and list-of-blocks
-    content (Kimi / some Databricks-served models that emit typed content
+    content (Kimi and other providers that emit typed content
     blocks in the streaming delta).
 
     :param content: The ``delta.content`` value from a streaming chunk.
@@ -350,8 +350,7 @@ async def chat_stream_to_response_events(
 
         delta = choices[0].get("delta", {})
 
-        # Content delta — may be a plain string or a list of typed blocks
-        # (Kimi and some Databricks models use typed blocks).
+        # Content delta — may be a plain string or a list of typed blocks.
         content = delta.get("content")
         if content is not None:
             text, reasoning = _extract_delta_content(content)

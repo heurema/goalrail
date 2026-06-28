@@ -16,8 +16,7 @@ per-module health waits share a single source of truth.
 
 from __future__ import annotations
 
-import configparser
-from pathlib import Path
+import os
 from typing import Any
 
 # Polling cadence for server-health and response-poll loops. 0.1s
@@ -33,23 +32,15 @@ POLL_INTERVAL_S: float = 0.1
 # modules can exceed the prior budget on contended runners.
 HEALTH_TIMEOUT_S: float = 60.0
 
-_DATABRICKSCFG_PATH = Path.home() / ".databrickscfg"
 
+def lookup_gateway_base_url() -> str | None:
+    """Return the optional OpenAI-compatible gateway base URL for e2e tests.
 
-def lookup_databricks_host(profile: str) -> str | None:
-    """Return the workspace ``host`` for *profile* from
-    ``~/.databrickscfg``.
-
-    :param profile: The Databricks profile name to look up.
-    :returns: The workspace host with any trailing ``/`` stripped,
-        or ``None`` when the profile is absent from
-        ``~/.databrickscfg`` or the section has no ``host`` key.
+    :returns: ``GOALRAIL_E2E_OPENAI_BASE_URL`` with any trailing ``/`` stripped,
+        or ``None`` when the e2e suite should use the provider default.
     """
-    cfg = configparser.ConfigParser()
-    if _DATABRICKSCFG_PATH.exists():
-        cfg.read(_DATABRICKSCFG_PATH)
-    host = cfg[profile].get("host") if profile in cfg else None
-    return host.rstrip("/") if host else None
+    raw = os.environ.get("GOALRAIL_E2E_OPENAI_BASE_URL")
+    return raw.rstrip("/") if raw else None
 
 
 def get_output_items(

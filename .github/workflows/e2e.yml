@@ -2,7 +2,7 @@ name: E2E Tests
 
 # Runs the `tests/e2e/` suite against the in-process mock LLM server.
 # All tests use mock LLM by default; real-credential tests skip cleanly
-# when no DATABRICKS_TOKEN is present.
+# when required provider credentials are absent.
 #
 # Triggers:
 #   schedule            09:00 UTC daily (alongside nightly.yml).

@@ -13,11 +13,9 @@
 #
 # Syntax is CODEOWNERS-like for familiarity: "<path-prefix>  @handle @handle".
 # Last matching line wins per file. Owners must be maintainers in
-# .github/MAINTAINER. Per-area owners are the top maintainers by COMBINED commit
-# count across both repos (databricks-eng/agent-framework full history +
-# heurema/goalrail), up to ~4 per area, excluding tree-wide mechanical
-# sweeps (>100 files) and non-maintainer contributors. Worth a periodic
-# sanity-check.
+# .github/MAINTAINER. Per-area owners are the top maintainers by repository
+# history, up to ~4 per area, excluding tree-wide mechanical sweeps (>100
+# files) and non-maintainer contributors. Worth a periodic sanity-check.
 
 # Repo automation / CI
 /.github/                    @PattaraS @serena-ruan @dhruv0811 @TomeHirata

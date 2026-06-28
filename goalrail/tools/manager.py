@@ -49,50 +49,6 @@ from goalrail.tools.local import load_local_python_tools
 _logger = logging.getLogger(__name__)
 
 
-class _UCFunctionSchemaTool(Tool):
-    """Schema-only tool entry for UC function tools.
-
-    UC function tools are dispatched by the runner via the SQL
-    Statement Execution API — the tool manager only exposes the
-    schema to the LLM. This avoids the ``ClientSideTool`` path
-    (which routes to ``action_required`` / client tunneling)
-    and the ``LocalCallableTool`` path (which requires a
-    server-side callable).
-
-    :param tool_name: Tool name shown to the LLM, e.g.
-        ``"classify_text"``.
-    :param schema: OpenAI-format tool schema dict.
-    """
-
-    def __init__(self, tool_name: str, schema: dict[str, object]) -> None:
-        self._name = tool_name
-        self._schema = schema
-
-    def name(self) -> str:  # type: ignore[override]
-        """Return the tool name.
-
-        :returns: The tool name, e.g. ``"classify_text"``.
-        """
-        return self._name
-
-    def description(self) -> str:  # type: ignore[override]
-        """Return the tool description from the schema.
-
-        :returns: The description string, or empty string if
-            none was provided in the schema.
-        """
-        func = self._schema.get("function", {})
-        return func.get("description", "") if isinstance(func, dict) else ""
-
-    def get_schema(self) -> dict[str, object]:
-        """Return the OpenAI-format tool schema.
-
-        :returns: A dict with ``"type": "function"`` and the
-            ``"function"`` sub-dict.
-        """
-        return self._schema
-
-
 class ToolManager:
     """Registry-based tool manager for a single workflow execution.
 
@@ -339,9 +295,7 @@ class ToolManager:
         """
         Build a :class:`WebSearchTool` for the parent's LLM.
 
-        Uses ``parse_model_string`` to infer the provider, except for
-        ``databricks-*`` models which don't support the native
-        ``web_search_preview`` schema and fall back to function-tool mode.
+        Uses ``parse_model_string`` to infer the provider.
 
         :param config: Spec-level tool config dict, e.g.
             ``{"api_key": "...", "engine_id": "..."}``.
@@ -352,12 +306,9 @@ class ToolManager:
         llm_provider = None
         if self._spec.executor.model:
             model = self._spec.executor.model
-            # Databricks doesn't support web_search_preview; skip
-            # OpenAI provider inference for all databricks-* models.
-            if not model.startswith("databricks-"):
-                from goalrail.llms.routing import parse_model_string
+            from goalrail.llms.routing import parse_model_string
 
-                llm_provider = parse_model_string(model).provider
+            llm_provider = parse_model_string(model).provider
         return WebSearchTool(config=config, llm_provider=llm_provider)
 
     def _create_web_fetch(self) -> Tool:
@@ -623,15 +574,8 @@ class ToolManager:
         # ``parameters`` block from the spec — schema visible to the
         # LLM, dispatch short-circuited to ``action_required`` via
         # :meth:`is_client_side_tool`.
-        server_local_tools = [
-            t
-            for t in self._spec.local_tools
-            if t.runtime not in (ToolRuntime.CLIENT, ToolRuntime.UC_FUNCTION)
-        ]
+        server_local_tools = [t for t in self._spec.local_tools if t.runtime != ToolRuntime.CLIENT]
         client_local_tools = [t for t in self._spec.local_tools if t.runtime == ToolRuntime.CLIENT]
-        uc_function_tools = [
-            t for t in self._spec.local_tools if t.runtime == ToolRuntime.UC_FUNCTION
-        ]
         for client_info in client_local_tools:
             if not is_valid_tool_name(client_info.name):
                 _logger.warning(
@@ -669,38 +613,6 @@ class ToolManager:
             }
             self._tools[client_info.name] = ClientSideTool(
                 ClientSideToolSpec(name=client_info.name, schema=schema),
-            )
-        # UC function tools — dispatched by the runner via the SQL
-        # Statement Execution API. The tool manager only needs to
-        # expose the schema to the LLM; actual execution goes
-        # through ``_execute_uc_function_tool`` in tool_dispatch.
-        for uc_info in uc_function_tools:
-            if not is_valid_tool_name(uc_info.name):
-                _logger.warning(
-                    "UC function tool %r has invalid name — skipping",
-                    uc_info.name,
-                )
-                continue
-            if uc_info.name in self._tools:
-                raise ValueError(
-                    f"UC function tool {uc_info.name!r} collides with an already-registered tool"
-                )
-            uc_schema: dict[str, Any] = {
-                "type": "function",
-                "function": {
-                    "name": uc_info.name,
-                    "parameters": uc_info.parameters
-                    or {
-                        "type": "object",
-                        "properties": {},
-                    },
-                },
-            }
-            if uc_info.description:
-                uc_schema["function"]["description"] = uc_info.description
-            self._tools[uc_info.name] = _UCFunctionSchemaTool(
-                tool_name=uc_info.name,
-                schema=uc_schema,
             )
         # Native Goalrail local tools (``language == "python"``) need a
         # workdir on disk so the subprocess loader can locate the

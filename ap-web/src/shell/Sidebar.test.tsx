@@ -50,10 +50,10 @@ function conv(id: string, agentName: string, partial: Partial<Conversation> = {}
 }
 
 // Three distinct agent types, mirroring the user's report
-// (databricks_coding_agent / Claude Code / Codex).
+// (coding_agent / Claude Code / Codex).
 const THREE_TYPE_CONVERSATIONS = [
-  conv("conv_a", "databricks_coding_agent"),
-  conv("conv_b", "databricks_coding_agent"),
+  conv("conv_a", "coding_agent"),
+  conv("conv_b", "coding_agent"),
   conv("conv_c", "Claude Code"),
   conv("conv_d", "Codex"),
 ];

@@ -95,11 +95,12 @@ _ASK_APPROVED_KEY = SESSION_COST_ASK_APPROVED_STATE_KEY
 # ``max_cost_usd``. Matched as substrings of the active model id so a single
 # token hits every deployment spelling AND the tier aliases the native
 # ``/model`` command stores: ``"opus"`` matches ``claude-opus-4-8``,
-# ``databricks-claude-opus-4-7``, and the bare alias ``"opus"``; ``"gpt-5"``
-# matches the whole GPT-5 family (``gpt-5``, ``gpt-5.5``, the dash spelling
-# ``databricks-gpt-5-5``, …) EXCEPT the cheap variants carved out by
-# ``_DEFAULT_EXPENSIVE_EXCLUDES`` below. Fable (``claude-fable-5``, the tier
-# above Opus at 2x its price), Opus, and GPT-5 are the costly tiers today.
+# ``anthropic/claude-opus-4-8``, and the bare alias ``"opus"``;
+# ``"gpt-5"`` matches the whole GPT-5 family (``gpt-5``, ``gpt-5.5``,
+# ``openai/gpt-5-5``, …) EXCEPT the cheap variants carved out by
+# ``_DEFAULT_EXPENSIVE_EXCLUDES`` below. Fable (``claude-fable-5``,
+# the tier above Opus at 2x its price), Opus, and GPT-5 are the
+# costly tiers today.
 _DEFAULT_EXPENSIVE_MODELS = ("fable", "opus", "gpt-5")
 
 # Default substring tokens (case-insensitive) that OVERRIDE a match in
@@ -135,7 +136,7 @@ def _current_model(event: PolicyEvent) -> str | None:
 
     :param event: Policy event dict.
     :returns: ``event["context"]["model"]`` as a string, e.g.
-        ``"databricks-claude-opus-4-8"`` or the tier alias ``"opus"``;
+        ``"anthropic/claude-opus-4-8"`` or the tier alias ``"opus"``;
         ``None`` when the engine could not determine a model (no
         ``model_override`` and no spec ``llm``).
     """
@@ -375,7 +376,7 @@ def cost_budget(
         identifying the model tiers blocked once over *max_cost_usd*,
         e.g. ``["opus", "gpt-5"]``. A token matches when it is a
         substring of the active model id (so ``"opus"`` matches both
-        ``"databricks-claude-opus-4-8"`` and the alias ``"opus"``).
+        ``"anthropic/claude-opus-4-8"`` and the alias ``"opus"``).
         ``None`` uses the built-in default (Fable + Opus + GPT-5,
         excluding the cheap ``-mini`` / ``-nano`` variants). An explicit
         list is matched literally with no exclusions. ``[]`` disables the

@@ -100,7 +100,7 @@ def claude_native_ui_agent(
         return upload_agent(
             http_client,
             Path(tmpdir),
-            rewrite_model_for_databricks=False,
+            rewrite_models_for_gateway=False,
         )
 
 
@@ -121,7 +121,7 @@ def _claude_code_session(
 
     :param session_id: Goalrail session id, e.g. ``"conv_abc123"``.
     :param model: Claude model id to pin, e.g.
-        ``"databricks-claude-sonnet-4-6"``. ``None`` lets the CLI choose.
+        ``"anthropic/claude-sonnet-4-6"``. ``None`` lets the CLI choose.
     :param launch_env: Extra environment for the launched ``claude``
         process — mock LLM base URL and API key.
     :yields: The bridge directory path.

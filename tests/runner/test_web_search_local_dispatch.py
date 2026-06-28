@@ -65,9 +65,9 @@ def test_dispatch_preserves_openai_passthrough_fence() -> None:
     assert mock_post.call_count == 0, "OpenAI passthrough must never hit a search backend."
 
 
-def test_dispatch_databricks_model_uses_function_mode() -> None:
-    """A ``databricks-*`` model skips passthrough and runs the configured backend."""
-    spec = _spec_with_model("databricks-claude-sonnet-4-6")
+def test_dispatch_non_openai_model_uses_function_mode() -> None:
+    """A non-OpenAI model skips passthrough and runs the configured backend."""
+    spec = _spec_with_model("anthropic/claude-sonnet-4-6")
     fake_response = MagicMock()
     fake_response.json.return_value = {"choices": [{"message": {"content": "answer"}}]}
     with patch("goalrail.tools.builtins.web_search_perplexity.httpx.post") as mock_post:
@@ -75,5 +75,5 @@ def test_dispatch_databricks_model_uses_function_mode() -> None:
         result = asyncio.run(
             _execute_web_search_tool({"query": "x"}, agent_spec=spec, conversation_id="c")
         )
-    assert mock_post.call_count == 1, "databricks-* must run the backend (function mode)."
+    assert mock_post.call_count == 1, "non-OpenAI models must run the backend."
     assert "answer" in result

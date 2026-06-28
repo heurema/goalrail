@@ -1,7 +1,7 @@
 """End-to-end: ``goalrail run`` renders through sessions (mock LLM).
 
 Migrated to mock LLM: uses the mock server for the LLM response
-so the test is deterministic and needs no Databricks credentials.
+so the test is deterministic and needs no provider credentials.
 
 Driven under a pseudo-terminal via :mod:`pexpect` because the
 REPL's TUI requires a TTY to render.

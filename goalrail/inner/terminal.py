@@ -730,7 +730,7 @@ class TerminalInstance:
     :param env: Extra environment variables for the terminal process.
     :param env_unset: Environment variables to strip from the
         terminal's environment before launching, e.g.
-        ``["DATABRICKS_CONFIG_PROFILE"]``. Applied AFTER ``env``
+        ``["AWS_PROFILE"]``. Applied AFTER ``env``
         is merged, so a listed key is removed unconditionally —
         if the same key also appears in ``env``, the strip wins.
         Intentional: ``env_unset`` is a leak-prevention boundary,
@@ -909,11 +909,7 @@ class TerminalInstance:
         env.pop("GOALRAIL_TMUX_SOCK", None)
         # Apply per-terminal env overrides (takes precedence over inherited env).
         env.update(self.env)
-        # Strip vars the caller asked us not to leak into the terminal —
-        # ambient values like ``DATABRICKS_CONFIG_PROFILE`` would otherwise
-        # propagate to the terminal's children (including MCP servers),
-        # whose own auth resolution then picks up the parent's profile
-        # instead of the credentials they were explicitly configured with.
+        # Strip vars the caller asked us not to leak into the terminal.
         # Applied AFTER ``env.update`` so the strip wins even if the
         # same key was set in ``self.env`` — ``env_unset`` is a
         # leak-prevention boundary, not a soft default.

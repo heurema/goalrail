@@ -14,8 +14,8 @@ threading ``HARNESS_ANTIGRAVITY_*`` -> the ``antigravity`` harness wrap ->
 
 Unlike the other per-harness e2e tests (claude-sdk / codex / openai-agents / pi),
 the antigravity harness is **Gemini-native**: the SDK has no OpenAI-compatible
-``base_url`` and there is deliberately no Databricks-gateway path, so this test
-does NOT use ``patched_databrickscfg`` / ``goalrail_credentials_env``'s gateway
+``base_url`` and there is deliberately no gateway path, so this test
+does NOT use ``patched_provider_config`` / ``goalrail_credentials_env``'s gateway
 URL — it authenticates purely from the configured / ambient Gemini key. This
 mirrors :mod:`tests.e2e.goalrail.test_per_harness_cursor` (the other
 backend-native SDK harness): because a Gemini key is not provisioned on CI, the
@@ -23,7 +23,7 @@ test **skips** (rather than fails) when no key is present, so the e2e shards sta
 green; it runs for real wherever a key is configured.
 
 **Why this test cannot use the mock LLM server:** The ``google-antigravity``
-SDK has no OpenAI-compatible ``base_url`` and no Databricks-gateway path.
+SDK has no OpenAI-compatible ``base_url`` and no gateway path.
 Setting ``OPENAI_BASE_URL`` to the mock server has no effect on this harness —
 the SDK always connects directly to Google's Gemini backend using the Gemini
 API key. There is no intercept point equivalent to ``OPENAI_BASE_URL`` in the
@@ -133,7 +133,7 @@ def _antigravity_skip_reason(goalrail_python: Path) -> str | None:
     """Return a skip reason when the antigravity prerequisites are absent.
 
     Mirrors the cursor harness gate: the antigravity harness talks only to
-    Google's Gemini backend (no Databricks-gateway path), and CI does not
+    Google's Gemini backend (no gateway path), and CI does not
     provision a Gemini key, so an absent prerequisite is a clean **skip** rather
     than a failure — keeping the e2e shards green while the test runs for real
     wherever a key is configured.
@@ -186,7 +186,7 @@ def _antigravity_skip_reason(goalrail_python: Path) -> str | None:
             "'antigravity:' block via 'goalrail setup' or export GEMINI_API_KEY / "
             "ANTIGRAVITY_API_KEY. Skipped (not failed) because CI does not "
             "provision a Gemini key — this Gemini-native harness has no "
-            "Databricks-gateway fallback."
+            "gateway fallback."
         )
     return None
 
@@ -372,7 +372,7 @@ def test_per_harness_antigravity_smoke(
     :param goalrail_repo_root: Cwd for the subprocess.
     : param mock_credentials_env: Base env (PATH / onboarding-suppression /
         worktree PYTHONPATH); the Gemini key resolves independently of the
-        Databricks gateway keys it also carries.
+        gateway keys it also carries.
     :param antigravity_spec: Materialized antigravity agent YAML.
     :param tmp_path: Per-test temp dir (also the fake ``$HOME``).
     """

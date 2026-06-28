@@ -223,21 +223,12 @@ comments; this is the *what*, not the *how*.)
     gateway is silently ignored. qwen exposes no config-dir flag, so making the
     gateway authoritative needs HOME / config-dir isolation for the subprocess.
   - **No token refresh.** The bearer token is snapshotted once at session start;
-    qwen has no refresh hook, so a short-lived rotating token (Databricks
-    gateway) can expire over a long session. Static keys / stable gateways are
-    unaffected.
-- [ ] **Databricks path.** Verify the `databricks-*` profile route end-to-end
-  (the env plumbing exists; only the OpenAI-compatible gateway has been tested).
-  The profile route derives the base URL + auth from **ucode state**, so it
-  depends on ucode provisioning a `qwen` agent for the workspace. To test:
-  - *Quick (no ucode):* point a gateway straight at Databricks' OpenAI-compatible
-    serving endpoint — `gateway_base_url = https://<host>/serving-endpoints`,
-    `gateway_auth_command = databricks auth token --profile <p> --output json |
-    jq -r .access_token`, `model = <served-endpoint-name>` — run a turn from a
-    **clean `HOME`** (so `~/.qwen/settings.json` can't take precedence).
-  - *Full route:* spec with `executor.profile: <db-profile>` (or a
-    `databricks-*` model), then `goalrail run`; confirm the runner log's
-    `qwen gateway routing:` line shows the Databricks base URL + profile.
+    qwen has no refresh hook, so a short-lived rotating gateway token can expire
+    over a long session. Static keys / stable gateways are unaffected.
+- [ ] **Gateway path.** Verify the OpenAI-compatible gateway route end-to-end
+  with `gateway_base_url`, `gateway_auth_command`, and a model served by that
+  gateway. Run from a **clean `HOME`** so `~/.qwen/settings.json` cannot take
+  precedence over the injected gateway env.
 - [ ] **Goalrail tools.** Qwen can only call its own built-in tools; tools
   defined by Goalrail aren't exposed to it (so they can't be invoked or
   recorded). Permission gating on qwen's *own* tool calls already works.
@@ -328,5 +319,5 @@ Spec model → provider default → catalog default; `/model` overrides via
 ### Env vars consumed by the harness wrap
 
 `HARNESS_QWEN_MODEL`, `HARNESS_QWEN_CWD`, `HARNESS_QWEN_PATH`,
-`HARNESS_QWEN_OS_ENV`. (Gateway/Databricks vars are computed but not yet
+`HARNESS_QWEN_OS_ENV`. (Gateway/vars are computed but not yet
 consumed — see Pending work. No skills-bridge vars are emitted.)

@@ -80,7 +80,7 @@ that works, the full stack is good: key, egress, bridge, harness.
 
 - **Shell / file tools:** add `--tools coding`.
 - **Specific model:** add `--model gpt-5` (or `composer-1`, `auto`,
-  `databricks-claude-opus-4-8`, …).
+  `claude-opus-4-8`, …).
 
 ## Targeted scenarios
 
@@ -95,7 +95,7 @@ that works, the full stack is good: key, egress, bridge, harness.
 ## Gotchas (these cost real time)
 
 1. **`config.yaml`'s `server:` defaults to a *remote* server** (e.g. a
-   Databricks Apps URL). Omitting `--server` sends your turn to that remote
+   hosted app URL). Omitting `--server` sends your turn to that remote
    deploy — which may be **stale** and reject the cursor harness with
    `executor.config.harness: must be one of […], got 'cursor'`. **Always pass
    `--server http://127.0.0.1:<port>`** for local testing. (That allowlist is
@@ -106,8 +106,8 @@ that works, the full stack is good: key, egress, bridge, harness.
 3. **Cursor needs a `crsr_` API key** (no CLI login). Resolution precedence:
    spec `executor.auth` (api_key) > stored `cursor:` config block (`goalrail
    setup`) > ambient `CURSOR_API_KEY`.
-4. **No Databricks gateway.** Cursor talks only to Cursor's backend, so a
-   `databricks-*` model is silently resolved to cursor `auto` — it will *not*
+4. **No OpenAI-compatible gateway.** Cursor talks only to Cursor's backend, so a
+   `*` model is silently resolved to cursor `auto` — it will *not*
    route through the AI Gateway like claude-sdk/codex/pi.
 5. **Use a model id from the account's catalog.** Bare `gpt-5` is **not** valid;
    the SDK rejects unknown ids. Valid examples seen live: `default`,

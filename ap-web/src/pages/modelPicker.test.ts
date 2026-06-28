@@ -12,7 +12,7 @@ import { isModelImplicitlySelected } from "./ChatPage";
 const CODEX_MODEL_OPTIONS: CodexModelOption[] = [
   {
     id: "gpt-5.5",
-    model: "databricks-gpt-5-5",
+    model: "openai/gpt-5-5",
     displayName: "GPT-5.5",
     defaultReasoningEffort: "high",
     supportedReasoningEfforts: [
@@ -25,7 +25,7 @@ const CODEX_MODEL_OPTIONS: CodexModelOption[] = [
   },
   {
     id: "gpt-5.4-mini",
-    model: "databricks-gpt-5-4-mini",
+    model: "openai/gpt-5-4-mini",
     displayName: "GPT-5.4 mini",
     defaultReasoningEffort: "medium",
     supportedReasoningEfforts: [
@@ -60,9 +60,9 @@ describe("CLAUDE_NATIVE_MODELS", () => {
 describe("Codex model-list helpers", () => {
   it("matches only raw Codex picker ids from the Codex catalog", () => {
     expect(findCodexModelOption(CODEX_MODEL_OPTIONS, "gpt-5.5")?.id).toBe("gpt-5.5");
-    expect(findCodexModelOption(CODEX_MODEL_OPTIONS, "databricks-gpt-5-5")).toBeNull();
+    expect(findCodexModelOption(CODEX_MODEL_OPTIONS, "openai/gpt-5-5")).toBeNull();
     expect(isCodexNativeModel(CODEX_MODEL_OPTIONS, "gpt-5.4-mini")).toBe(true);
-    expect(isCodexNativeModel(CODEX_MODEL_OPTIONS, "databricks-gpt-5-4-mini")).toBe(false);
+    expect(isCodexNativeModel(CODEX_MODEL_OPTIONS, "openai/gpt-5-4-mini")).toBe(false);
     expect(isCodexNativeModel(CODEX_MODEL_OPTIONS, "opus")).toBe(false);
   });
 
@@ -91,9 +91,9 @@ describe("isModelImplicitlySelected", () => {
     expect(isModelImplicitlySelected("sonnet", "anthropic/claude-sonnet-4-6")).toBe(true);
     // Fable's concrete id (claude-fable-5) must light up the "fable" row.
     expect(isModelImplicitlySelected("fable", "anthropic/claude-fable-5")).toBe(true);
-    // ucode gateway IDs carry the tier token too, so the same row lights up.
-    expect(isModelImplicitlySelected("haiku", "databricks-claude-haiku-4-5")).toBe(true);
-    expect(isModelImplicitlySelected("fable", "databricks-claude-fable-5")).toBe(true);
+    // Provider-qualified IDs carry the tier token too, so the same row lights up.
+    expect(isModelImplicitlySelected("haiku", "anthropic/claude-haiku-4-5")).toBe(true);
+    expect(isModelImplicitlySelected("fable", "anthropic/claude-fable-5")).toBe(true);
   });
 
   it("matches when llmModel is already the bare alias", () => {

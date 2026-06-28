@@ -235,18 +235,16 @@ running `create`:
 
 ```bash
 modal secret create goalrail-server-auth \
-  DATABRICKS_HOST=https://example.databricks.com \
-  DATABRICKS_TOKEN=<your-pat>
+  GOALRAIL_SERVER_URL=https://goalrail.example.com \
+  GOALRAIL_AUTH_TOKEN=<your-pat>
 export GOALRAIL_MODAL_SANDBOX_SECRETS=goalrail-server-auth
 goalrail sandbox create --provider modal
 ```
 
-The in-sandbox host mints a fresh bearer token from those credentials
-on every connect and reconnect. For a server fronted by Databricks
-authentication, inject `DATABRICKS_HOST` plus either
-`DATABRICKS_TOKEN` (a PAT) or `DATABRICKS_CLIENT_ID` /
-`DATABRICKS_CLIENT_SECRET` (an OAuth service principal — re-minting
-keeps a long-lived sandbox connected past any single token's expiry).
+The in-sandbox host uses those credentials on every connect and reconnect. For
+a server fronted by an external identity provider, inject `GOALRAIL_SERVER_URL`
+plus either `GOALRAIL_AUTH_TOKEN` or `GOALRAIL_CLIENT_ID` /
+`GOALRAIL_CLIENT_SECRET`.
 
 A server with no authentication on the host tunnel needs none of this,
 and neither do [server-managed sandboxes](#server-managed-sandboxes) —

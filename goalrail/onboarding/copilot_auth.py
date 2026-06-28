@@ -3,10 +3,10 @@
 Copilot is deliberately outside the anthropic/openai provider-family + gateway
 machinery (see :func:`goalrail.runtime.workflow._build_copilot_spawn_env`): the
 GitHub Copilot SDK (``github-copilot-sdk``) talks only to GitHub's Copilot
-backend, authenticated by a **GitHub token** — never the Databricks AI gateway.
-It therefore has no ``providers:`` family entry, but a user should still be able
-to register a Copilot token once through ``goalrail setup`` rather than
-exporting it in every shell.
+backend, authenticated by a **GitHub token**. It therefore has no
+``providers:`` family entry, but a user should still be able to register a
+Copilot token once through ``goalrail setup`` rather than exporting it in every
+shell.
 
 This module is that home. The token is stored exactly like the api-key
 providers' secrets — in the goalrail secret store (OS keychain, else a ``0600``

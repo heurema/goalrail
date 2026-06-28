@@ -102,12 +102,12 @@ _BUILD_OUTPUT = _REPO_ROOT / "goalrail" / "server" / "static" / "web-ui"
 # YAML must carry an explicit ``executor`` block — otherwise the
 # server rejects with ``executor.config.harness: required when
 # executor.type is 'goalrail'``. The model name (gpt-4o-mini) is a plain
-# (non-``databricks-``) name on purpose: the openai-agents harness then
+# (non-``gateway-``) name on purpose: the openai-agents harness then
 # resolves no provider auth and falls back to ``OPENAI_BASE_URL`` (the
-# in-process mock) rather than routing to the Databricks gateway, which
-# would need real credentials CI does not have. A ``databricks-``-prefixed
-# model forces Databricks DEFAULT-profile auth (see
-# goalrail/runtime/workflow.py) and fails with DatabricksAuthError in CI.
+# in-process mock) rather than routing to the gateway, which
+# would need real credentials CI does not have. A ``gateway-``-prefixed
+# model forces DEFAULT-profile auth (see
+# goalrail/runtime/workflow.py) and fails with auth error in CI.
 _TEST_AGENT_YAML = """\
 name: hello_world
 prompt: You are a friendly assistant. Say hello and answer questions.
@@ -1779,7 +1779,7 @@ def server_pid(live_server: str) -> int:
 # runner auto-launches Claude Code in the session terminal on bind, including
 # the gateway auth it derives from the runner's own credentials and the
 # first-run trust/onboarding pre-accept, so no CLI client is needed. In CI the
-# workflow exchanges Databricks OAuth before pytest runs (the same gateway the
+# workflow exchanges provider OAuth before pytest runs (the same gateway the
 # ``hello_world`` / ``echo_probe`` agents authenticate against), so Claude Code
 # boots non-interactively. The native render-parity suite drives this fixture.
 #
@@ -2523,7 +2523,7 @@ def mocked_native_codex_goal_session(
 # Two things differ from claude/codex, both stemming from cursor-agent owning
 # its own auth/approval:
 #
-# * **Auth has NO Databricks-gateway path.** cursor-agent talks only to
+# * **Auth has NO gateway path.** cursor-agent talks only to
 #   Cursor's backend, so it does not derive auth from the runner's gateway
 #   credentials the way Claude Code / Codex do. It authenticates from the
 #   ambient ``cursor-agent login`` (``$HOME/.cursor``, inherited by the runner)

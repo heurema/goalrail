@@ -405,37 +405,37 @@ def test_detection_priority_order(clean_env, monkeypatch: pytest.MonkeyPatch) ->
 
 # ── Codex config.toml custom provider (cli-config) detection ───────────────
 
-# The exact shape `isaac configure codex` writes (AI Gateway mode): a custom
-# [model_providers.Databricks] table authenticated by a token-printing
-# command, selected via a top-level model_provider — and NO auth.json.
+# A custom [model_providers.EnterpriseGateway] table authenticated by a
+# token-printing command, selected via a top-level model_provider — and NO
+# auth.json.
 _ISAAC_STYLE_CODEX_CONFIG = """
-model_provider = "Databricks"
+model_provider = "EnterpriseGateway"
 
-[model_providers.Databricks]
-name = "Databricks AI Gateway"
-base_url = "https://example.ai-gateway.cloud.databricks.com/codex/v1"
+[model_providers.EnterpriseGateway]
+name = "Enterprise AI Gateway"
+base_url = "https://gateway.example.com/codex/v1"
 wire_api = "responses"
 
-[model_providers.Databricks.auth]
+[model_providers.EnterpriseGateway.auth]
 command = "jq"
-args = ["-r", ".access_token", "/home/user/.databricks/model-serving-token.json"]
+args = ["-r", ".access_token", "/home/user/.goalrail/gateway-token.json"]
 timeout_ms = 5000
 refresh_interval_ms = 1500000
 
 [profiles.default]
-model_provider = "Databricks"
+model_provider = "EnterpriseGateway"
 """
 
 # The DetectedProvider the isaac-style config must produce, asserted by
 # full equality so any drifted field (name slug, kind, family, source
 # wording, provider id, display name) turns the test red.
 _ISAAC_STYLE_DETECTION = DetectedProvider(
-    name="codex-databricks",
+    name="codex-enterprisegateway",
     kind="cli-config",
     family="openai",
-    source="~/.codex/config.toml provider 'Databricks'",
-    model_provider="Databricks",
-    display_name="Databricks AI Gateway",
+    source="~/.codex/config.toml provider 'EnterpriseGateway'",
+    model_provider="EnterpriseGateway",
+    display_name="Enterprise AI Gateway",
 )
 
 
@@ -479,7 +479,7 @@ def test_codex_config_detected_before_codex_login(clean_env) -> None:
     detected = detect_providers()
     # Exactly the two codex signals, config provider first (priority order).
     assert [(d.name, d.kind) for d in detected] == [
-        ("codex-databricks", "cli-config"),
+        ("codex-enterprisegateway", "cli-config"),
         ("codex", "subscription"),
     ]
 

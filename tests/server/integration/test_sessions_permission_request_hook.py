@@ -3127,7 +3127,7 @@ async def test_gated_tool_output_resolves_pending_elicitation(
     ``PermissionRequest`` hook parks a ``Bash`` approval; the user
     answers in Claude's TUI, NOT the web UI, so the parked hook never
     gets a web verdict and ``request.is_disconnected()`` does not fire
-    behind the Databricks Apps proxy. Claude runs the tool and the
+    behind the proxy. Claude runs the tool and the
     forwarder mirrors its ``function_call`` then ``function_call_output``.
     The output carries the SAME tool name + input as the parked prompt,
     so it must resolve the prompt now instead of leaving the badge up

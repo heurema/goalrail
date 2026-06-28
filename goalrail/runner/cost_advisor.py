@@ -103,11 +103,11 @@ def parse_advisor_config(executor_config: Mapping[str, Any] | None) -> AdvisorCo
           config:
             cost_optimize:
               mode: advise
-              advisor_model: databricks-claude-haiku-4-5
+              advisor_model: anthropic/claude-haiku-4-5
               tiers:
-                cheap: [databricks-claude-haiku-4-5]
-                medium: [databricks-claude-sonnet-4-6]
-                expensive: [databricks-claude-opus-4-8]
+                cheap: [anthropic/claude-haiku-4-5]
+                medium: [anthropic/claude-sonnet-4-6]
+                expensive: [anthropic/claude-opus-4-8]
 
     :param executor_config: The spec's ``executor.config`` dict, or
         ``None`` when the spec has no executor config.
@@ -162,57 +162,6 @@ def parse_advisor_config(executor_config: Mapping[str, Any] | None) -> AdvisorCo
             )
         tiers[name] = tuple(models)
     return AdvisorConfig(tiers=tiers, mode=mode)
-
-
-def _databricks_profile_for_spec(spec: Any) -> str | None:  # type: ignore[explicit-any]  # structural spec stubs in tests
-    """
-    Resolve the Databricks profile the brain's gateway routing would use.
-
-    Mirrors the claude-sdk spawn-env auth precedence
-    (:func:`goalrail.runtime.workflow._build_claude_sdk_spawn_env`):
-    provider-config default > spec auth > legacy spec profile > global
-    ``auth:`` block — so the judge call rides the same Databricks gateway
-    as the brain. claude-sdk is the resolution family because the advisor
-    only ever applies to a claude-sdk brain (and the tier catalog is
-    Claude-shaped by construction).
-
-    :param spec: The resolved agent spec for the session.
-    :returns: The profile name, e.g. ``"my-workspace"``, or ``None``
-        (no Databricks routing configured, or resolution failed — the
-        judge then relies on ambient credential resolution, fail-open).
-    """
-    try:
-        from goalrail.runtime.workflow import (
-            _load_global_auth,
-            _resolve_provider_for_build,
-        )
-        from goalrail.spec.types import DatabricksAuth
-
-        provider = _resolve_provider_for_build(spec, harness_type="claude-sdk")
-        if provider is not None:
-            # A non-databricks provider routes the brain elsewhere; the
-            # judge then has no profile to ride (ambient resolution).
-            return provider.profile if provider.kind == "databricks" else None
-        executor = spec.executor
-        legacy = (getattr(executor, "config", None) or {}).get("profile") or getattr(
-            executor, "profile", None
-        )
-        auth = getattr(executor, "auth", None)
-        if auth is None and not legacy:
-            auth = _load_global_auth()
-        if isinstance(auth, DatabricksAuth):
-            return auth.profile or None
-        if auth is not None:
-            # Explicit non-Databricks auth (e.g. api_key) — no profile.
-            return None
-        return str(legacy) if legacy else None
-    except Exception:  # noqa: BLE001 — advisor must never block the turn
-        _logger.warning(
-            "cost_advisor: Databricks profile resolution failed; "
-            "judge will use ambient credentials",
-            exc_info=True,
-        )
-        return None
 
 
 class Judge(Protocol):
@@ -412,10 +361,6 @@ async def maybe_run_advisor(
             tiers=config.tiers,
             executor_config=getattr(spec.executor, "config", None),
             connection=getattr(spec.executor, "connection", None),
-            # Ride the same Databricks gateway as the brain — a bare
-            # databricks-* judge model would otherwise route to the
-            # default openai adapter and fail open every turn.
-            databricks_profile=_databricks_profile_for_spec(spec),
         )
     verdict = await effective_judge.judge(
         query=_extract_query_text(turn_content),

@@ -53,8 +53,7 @@ def clear_screen() -> None:
 
     The :func:`select` picker only erases the lines *it* rendered
     (``\\033[<n>A\\033[J``); it cannot erase output printed above its frame.
-    A flow that shells out to a noisy subprocess (e.g. the Databricks
-    ``+ Add`` path running ``databricks auth login`` + ``ucode configure``)
+    A flow that shells out to a noisy subprocess
     therefore leaves that output on screen, and the next in-place menu
     redraw collides with it. Callers bracket such a takeover with this full
     clear so the picker re-renders on a clean buffer.

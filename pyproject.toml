@@ -9,9 +9,9 @@ description = "Goalrail: contract-first agent runtime and CLI"
 readme = "README.md"
 requires-python = ">=3.12"
 authors = [
-    { name = "Databricks, Inc." },
+    { name = "Heurema" },
 ]
-keywords = ["agents", "llm", "ai", "databricks", "cli"]
+keywords = ["agents", "llm", "ai", "cli", "goalrail"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -51,9 +51,8 @@ dependencies = [
     # selection). Used by goalrail/onboarding/secrets.py; falls back to
     # a 0600 file when no keyring backend is available (e.g. headless).
     "keyring>=24,<26",
-    # Round-trip (comment/format-preserving) TOML editing of the user's
-    # ~/.codex/config.toml when removing a Databricks provider
-    # (goalrail/onboarding/ucode_cleanup.py). stdlib tomllib is read-only.
+    # Round-trip (comment/format-preserving) TOML editing of user config files.
+    # stdlib tomllib is read-only.
     "tomlkit>=0.12,<1",
     # goalrail deps (runtime, spec, server, persistent terminal, etc.).
     "alembic>=1.0,<2",
@@ -97,11 +96,7 @@ dependencies = [
 # working; the underlying packages are now default deps above.
 claude-sdk = []
 openai-agents = []
-# `all` additionally carries databricks-sdk: the SDK moved out of the
-# default install (it now lives in the `databricks` extra), but internal
-# CI / dev installs use `--extra all` and the test suite, deploy tooling,
-# and databricks_mcps servers import it.
-all = ["databricks-sdk>=0.56.0,<1"]
+all = []
 # Legacy provider extras.
 bedrock = ["boto3>=1.30,<2", "botocore>=1.30,<2"]
 # S3-compatible artifact store (AWS S3, Cloudflare R2, MinIO, …). Selected
@@ -139,12 +134,11 @@ openshell = ["openshell>=0.0.7,<1"]
 # package and imports the official client lazily, so only users of the
 # provider need this extra.
 kubernetes = ["kubernetes>=36,<37"]
-# MLflow tracing is opt-in: tracing is disabled by default and the
-# server degrades gracefully when mlflow is absent, so the (heavy) mlflow
-# dependency only installs for users who want it (`goalrail[tracing]`).
-# Full `mlflow` (not the skinny `mlflow-tracing`) is required because the
-# default export path resolves a tracking store.
-tracing = ["mlflow>=3,<4"]
+# Retained as a no-op alias for existing install commands. Goalrail no longer
+# declares MLflow as a managed dependency because current MLflow wheels pull
+# provider SDKs transitively; operators who need MLflow tracing can install
+# MLflow explicitly in their environment and Goalrail will lazy-import it.
+tracing = []
 agents-sdk = [
     "openai-agents>=0.1,<1",
     "opentelemetry-instrumentation-openai-agents-v2>=0.1",
@@ -163,25 +157,8 @@ copilot = ["github-copilot-sdk>=1,<2"]
 # cursor` users need this extra (`goalrail[cursor]`). Was a baseline dependency;
 # now opt-in to keep the default install lean.
 cursor = ["cursor-sdk>=0.1.7"]
-databricks = [
-    # Floor matches what core code was tested against when the SDK was a
-    # default dependency (it moved here from `dependencies` above).
-    "databricks-sdk>=0.56.0,<1",
-    "opentelemetry-distro>=0,<1",
-    "psycopg[binary]>=3.1,<4",
-    # Databricks-specific MCP servers. Not imported by core Goalrail
-    # code, so it is opt-in here rather than a default dependency — this
-    # also keeps its heavy transitive `mlflow` out of bare OSS installs.
-    "databricks-mcp>=0.1.0",
-    # Managed Databricks deployments export traces, so they keep mlflow
-    # (bare OSS installs get it via the `tracing` extra instead).
-    "mlflow>=3,<4",
-]
 dev = [
     "pytest>=7.0",
-    # mlflow is now opt-in (the `tracing` / `databricks` extras), but the
-    # telemetry + tracing test suites need it, so keep it in the dev set.
-    "mlflow>=3,<4",
     "pytest-asyncio>=0.21",
     "pytest-xdist>=3.6",
     # Line coverage during the unit-test matrix. Each CI shard writes its
@@ -273,10 +250,9 @@ include = ["goalrail*"]
 # both work under auto.
 asyncio_mode = "auto"
 testpaths = ["tests"]
-# tests/e2e, tests/e2e_ui, and tests/e2e_live all require real LLM
-# credentials and/or extra setup (Databricks profile; npm build +
-# Playwright browsers for the UI suite; a deployed Databricks App URL
-# for the live suite). Opt-in via explicit pytest invocation.
+# tests/e2e, tests/e2e_ui, and tests/e2e_live all require real LLM credentials
+# and/or extra setup (npm build + Playwright browsers for the UI suite; a live
+# deployed server URL for the live suite). Opt-in via explicit pytest invocation.
 addopts = "--ignore=tests/e2e --ignore=tests/e2e_ui --ignore=tests/e2e_live --ignore=tests/integration"
 # Default per-test wallclock cap. Catches infinite hangs in any
 # suite (unit, inner, integration, e2e) without bothering tests
@@ -301,8 +277,7 @@ timeout_method = "thread"
 pythonpath = [".", "sdks/python-client", "sdks/ui"]
 markers = [
     "live: end-to-end tests requiring real LLM API key (run with --llm-api-key)",
-    "live_app: end-to-end tests requiring a deployed Databricks App server",
-    "databricks: requires the `databricks` extra (psycopg / databricks-sdk / mlflow). Deselected on the standard lanes via -m 'not databricks'; runs only in the Pytest (databricks) lane, which installs the extra. Use for tests that build a postgresql+psycopg engine or call the Databricks SDK.",
+    "live_app: end-to-end tests requiring a deployed app server",
     "model(name, ...): one arg pins this test to that model overriding the suite-wide --model CLI default; multiple args fan the test out across all listed models via indirect parametrize.",
     "model_pinned: opt out of tests/_model_pools.py spreading and retry rotation; literal model strings are used as written.",
     "flaky(reruns=2, reruns_delay=0): rerun a nondeterministic test on failure (pytest-rerunfailures). Use for tests flaky due to timing/scheduling races (e.g. PTY drain timing), NOT real-LLM nondeterminism — those use llm_flaky, which rotates models per attempt.",
@@ -351,11 +326,9 @@ line-length = 99
 # migration that belongs in its own cleanup PR.
 target-version = "py310"
 # Vendored upstream code — not ours to restyle.
-#  - ``goalrail/inner/databricks_mcps/google``: Google MCP server source.
 #  - ``assistant-ui/``: assistant-ui.com React/Python suite imported as a
 #    vendored snapshot; tracked upstream, no in-tree edits.
 extend-exclude = [
-    "goalrail/inner/databricks_mcps/google",
     "assistant-ui",
 ]
 
@@ -473,7 +446,7 @@ disallow_any_explicit = true
 # setup.py — build-time scaffolding that imports the (untyped) setuptools
 # build_py and subclasses it; not application code, so excluded from mypy
 # rather than pulling in types-setuptools just for one shim file.
-exclude = ["^goalrail/inner/databricks_mcps/google/", "^setup\\.py$"]
+exclude = ["^setup\\.py$"]
 # Incremental rollout: load imported modules for type info but don't
 # report their errors. Remove once every goalrail/ module is clean.
 follow_imports = "silent"
@@ -486,20 +459,9 @@ ignore_missing_imports = true
 module = "mcp.*"
 ignore_missing_imports = true
 
-[[tool.mypy.overrides]]
-module = "databricks.*"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "databricks_mcp.*"
-ignore_missing_imports = true
-
-# psycopg is an optional dep (only declared in the ``databricks``
-# extra, used by ``deploy/databricks/grant_sp_perms.py``). Previously installed
-# transitively via ``dbos``; after the DBOS removal, ``uv sync
-# --extra dev`` no longer pulls it, so the lint workflow can't
-# import it. Treat the missing module as silent — runtime use still
-# requires installing the ``databricks`` extra.
+# psycopg is an optional Postgres driver. Treat the missing module as silent
+# for static checks; runtime use requires installing a compatible driver in the
+# target environment.
 [[tool.mypy.overrides]]
 module = "psycopg.*"
 ignore_missing_imports = true

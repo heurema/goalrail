@@ -34,11 +34,6 @@ def test_ensure_repl_test_theme_env_does_not_write_real_home(
     """
     real_home = tmp_path / "real-home"
     real_home.mkdir()
-    databrickscfg = real_home / ".databrickscfg"
-    databrickscfg.write_text(
-        "[profile]\nhost = https://example.databricks.com\n",
-        encoding="utf-8",
-    )
     monkeypatch.setattr(Path, "home", lambda: real_home)
 
     env = ensure_repl_test_theme_env({"HOME": str(real_home)})
@@ -46,7 +41,7 @@ def test_ensure_repl_test_theme_env_does_not_write_real_home(
 
     assert prepared_home != real_home
     assert not (real_home / ".goalrail" / "config.yaml").exists()
-    assert (prepared_home / ".databrickscfg").samefile(databrickscfg)
+    assert not (prepared_home / ".provider-profile").exists()
     assert "theme: light" in (prepared_home / ".goalrail" / "config.yaml").read_text(
         encoding="utf-8"
     )

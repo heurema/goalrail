@@ -190,9 +190,9 @@ user credentials instead of a launch token. Managed launches never
 need this: the server injects a per-launch host token automatically.
 But a [CLI-launched](#cli-launched-sandboxes) host does when the
 server requires authentication — inject the keys for the relevant
-server, e.g. `DATABRICKS_HOST` + `DATABRICKS_TOKEN` (or
-`DATABRICKS_CLIENT_ID` / `DATABRICKS_CLIENT_SECRET`) for a
-Databricks-fronted server, by naming them in
+server, e.g. `GOALRAIL_SERVER_URL` + `GOALRAIL_AUTH_TOKEN` (or
+`GOALRAIL_CLIENT_ID` / `GOALRAIL_CLIENT_SECRET`) for a
+externally authenticated server, by naming them in
 `GOALRAIL_DAYTONA_SANDBOX_ENV` before `create` — and the in-sandbox
 host mints fresh bearer tokens from them on every reconnect. See
 [Connecting to an authenticated

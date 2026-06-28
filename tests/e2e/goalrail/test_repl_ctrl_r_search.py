@@ -1,7 +1,7 @@
 """Phase 0 characterization test — Ctrl+R reverse-incremental search.
 
 Migrated to mock LLM: uses canned responses for the LLM turns so the
-test is deterministic and requires no real Databricks credentials.
+test is deterministic and requires no real provider credentials.
 
 Submits a prompt carrying a unique substring, presses ``Ctrl+R``,
 types the substring, and asserts (a) the reverse-search prompt

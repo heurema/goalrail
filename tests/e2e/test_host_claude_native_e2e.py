@@ -51,14 +51,11 @@ Environment requirements (why this is opt-in, not pure-CI):
   identity registers there with no collision.
 
 claude-native authenticates through the Claude CLI's own session, so
-``--llm-api-key`` only satisfies the server fixture. Derive it from the
-oss profile::
+``--llm-api-key`` only satisfies the server fixture::
 
     GOALRAIL_E2E_CLAUDE_NATIVE=1 \
     .venv/bin/python -m pytest tests/e2e/test_host_claude_native_e2e.py \
-        --profile oss \
-        --llm-api-key "$(databricks auth token -p oss \
-            | python -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')" \
+        --llm-api-key "$OPENAI_API_KEY" \
         -v
 """
 

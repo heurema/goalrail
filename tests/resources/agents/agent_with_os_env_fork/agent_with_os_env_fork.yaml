@@ -42,7 +42,7 @@ prompt: |
   `sys_os_shell` tools to inspect and modify files.
 
 executor:
-  model: databricks-gpt-5-4-mini
+  model: openai/gpt-5-4-mini
   profile: test-profile
 
 os_env:

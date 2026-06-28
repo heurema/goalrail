@@ -16,4 +16,4 @@ prompt: |
 skills: none
 executor:
   harness: pi
-  model: databricks-claude-sonnet-4-6
+  model: anthropic/claude-sonnet-4-6

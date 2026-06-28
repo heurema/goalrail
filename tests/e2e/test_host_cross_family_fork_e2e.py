@@ -350,11 +350,11 @@ def test_fork_openai_sdk_source_into_claude_native_rebuilds_history(
     )
 
     # Register the openai-coder (openai-agents, openai family) SOURCE agent.
-    # No Databricks rewrite needed — we use the mock model key directly.
+    # No rewrite needed — we use the mock model key directly.
     sdk_agent_name = upload_agent(
         http_client,
         _OPENAI_CODER_DIR,
-        rewrite_model_for_databricks=False,
+        rewrite_models_for_gateway=False,
     )
 
     # Only the claude-native CLONE shows Claude's folder-trust dialog.

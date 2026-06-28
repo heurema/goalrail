@@ -164,7 +164,7 @@ async def test_create_rejects_harness_override_for_non_goalrail_agent(
         # executor.connection, so agents_sdk is the representative here);
         # the helper still injects config.harness, which this executor
         # type simply ignores.
-        executor={"type": "agents_sdk", "model": "databricks-gpt-5-4"},
+        executor={"type": "agents_sdk", "model": "openai/gpt-5-4"},
     )
     resp = await client.post(
         "/v1/sessions",

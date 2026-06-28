@@ -9,7 +9,7 @@ architecture without a vendor SDK.
 
 Why a test-only harness rather than reusing claude-sdk /
 openai-agents: keeps the test self-contained (no extra package
-deps, no Databricks profile, no model selection issue). The loop
+deps, no provider profile, no model selection issue). The loop
 body is intentionally minimal — call the LLM with streaming, forward
 each event as SSE, terminate on response.completed or response.failed.
 """

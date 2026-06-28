@@ -250,7 +250,7 @@ describe("formatModelEffortStatusLabel", () => {
       formatModelEffortStatusLabel("gpt-5.5", "xhigh", [
         {
           id: "gpt-5.5",
-          model: "databricks-gpt-5-5",
+          model: "openai/gpt-5-5",
           displayName: "codex says GPT-5.5",
           defaultReasoningEffort: "high",
           supportedReasoningEfforts: [
@@ -267,9 +267,7 @@ describe("formatModelEffortStatusLabel", () => {
 
   it("leaves unknown model ids raw", () => {
     expect(formatModelEffortStatusLabel("gpt-5.5", "xhigh")).toBe("gpt-5.5 xHigh");
-    expect(formatModelEffortStatusLabel("databricks-gpt-5-5", "xhigh")).toBe(
-      "databricks-gpt-5-5 xHigh",
-    );
+    expect(formatModelEffortStatusLabel("openai/gpt-5-5", "xhigh")).toBe("openai/gpt-5-5 xHigh");
   });
 
   it("omits missing pieces", () => {

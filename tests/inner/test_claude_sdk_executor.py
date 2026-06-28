@@ -264,105 +264,27 @@ class TestConstructor(unittest.TestCase):
 
         self.assertTrue(ClaudeSDKExecutor().supports_tool_calling())
 
-    def test_databricks_flag_with_profile(self):
-        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
-        from goalrail.inner.databricks_executor import DatabricksCredentials
-
-        with (
-            patch.dict("os.environ", {}, clear=True),
-            patch(
-                "goalrail.inner.databricks_executor._read_databrickscfg",
-                return_value=DatabricksCredentials(
-                    host="https://example.cloud.databricks.com",
-                    token="dapi_test_token",
-                ),
-            ),
-        ):
-            executor = ClaudeSDKExecutor(gateway=True)
-            self.assertTrue(executor._gateway)
-            self.assertEqual(
-                executor._extra_env["ANTHROPIC_BASE_URL"],
-                "https://example.cloud.databricks.com/ai-gateway/anthropic",
-            )
-            self.assertEqual(executor._extra_env["CLAUDE_CODE_API_KEY_HELPER_TTL_MS"], "900000")
-            self.assertIn(
-                'databricks auth token --host "https://example.cloud.databricks.com"',
-                executor._extra_env["GOALRAIL_CLAUDE_API_KEY_HELPER"],
-            )
-            self.assertNotIn("ANTHROPIC_AUTH_TOKEN", executor._extra_env)
-
-    def test_databricks_explicit_profile_selects_by_profile(self):
-        """An explicit ``databricks_profile`` makes the token helper select
-        the bearer by ``--profile`` (unambiguous), not ``--host``.
-
-        Two ``~/.databrickscfg`` profiles can share one host, which makes
-        ``databricks auth token --host`` fail ("Use --profile to specify
-        which profile") → empty token → a silent ``status=401``. Selecting
-        by ``--profile`` avoids that.
-        """
-        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
-        from goalrail.inner.databricks_executor import DatabricksCredentials
-
-        with (
-            patch.dict("os.environ", {}, clear=True),
-            patch(
-                "goalrail.inner.databricks_executor._read_databrickscfg",
-                return_value=DatabricksCredentials(
-                    host="https://example.cloud.databricks.com",
-                    token="dapi_test_token",
-                ),
-            ),
-        ):
-            executor = ClaudeSDKExecutor(gateway=True, databricks_profile="oss")
-        helper = executor._extra_env["GOALRAIL_CLAUDE_API_KEY_HELPER"]
-        # Proves the selector is --profile, not --host. A regression to --host
-        # makes a two-profiles-one-host workspace yield an empty token → 401.
-        self.assertIn('databricks auth token --profile "oss"', helper)
-        self.assertNotIn("--host", helper)
-        # `--force-refresh` only exists in Databricks CLI >= v0.296.0, so it
-        # must be applied via a `--help` capability probe ($force), never
-        # passed unconditionally — an older CLI rejects the unknown flag and
-        # yields an empty token → silent 401.
-        self.assertIn("databricks auth token --help", helper)
-        self.assertIn("force=--force-refresh", helper)
-        self.assertNotIn('oss" --force-refresh', helper)
-
-    def test_databricks_flag_no_creds_raises(self):
+    def test_gateway_flag_with_explicit_transport(self):
         from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
 
-        with (
-            patch.dict("os.environ", {}, clear=True),
-            patch("goalrail.inner.claude_sdk_executor._resolve_gateway_env", return_value={}),
-        ):
-            with self.assertRaises(EnvironmentError):
-                ClaudeSDKExecutor(gateway=True)
-
-    def test_databricks_flag_with_host_override(self):
-        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
-
-        with (
-            patch.dict("os.environ", {}, clear=True),
-            patch("goalrail.inner.databricks_executor._read_databrickscfg") as read_cfg,
-        ):
+        with patch.dict("os.environ", {}, clear=True):
             executor = ClaudeSDKExecutor(
                 gateway=True,
-                databricks_profile="missing-profile",
-                gateway_host="https://example.databricks.com/",
-                base_url_override="https://example.databricks.com/ai-gateway/anthropic",
+                gateway_host="https://gateway.example.com/",
+                base_url_override="https://gateway.example.com/anthropic",
                 gateway_auth_command="printf token",
             )
+            self.assertTrue(executor._gateway)
+            self.assertEqual(executor._gateway_host, "https://gateway.example.com")
+            self.assertEqual(
+                executor._extra_env["ANTHROPIC_BASE_URL"],
+                "https://gateway.example.com/anthropic",
+            )
+            self.assertEqual(executor._extra_env["CLAUDE_CODE_API_KEY_HELPER_TTL_MS"], "900000")
+            self.assertEqual(executor._extra_env["GOALRAIL_CLAUDE_API_KEY_HELPER"], "printf token")
+            self.assertNotIn("ANTHROPIC_AUTH_TOKEN", executor._extra_env)
 
-        read_cfg.assert_not_called()
-        self.assertEqual(
-            executor._extra_env["ANTHROPIC_BASE_URL"],
-            "https://example.databricks.com/ai-gateway/anthropic",
-        )
-        self.assertEqual(
-            executor._extra_env["GOALRAIL_CLAUDE_API_KEY_HELPER"],
-            "printf token",
-        )
-
-    def test_databricks_flag_with_host_override_requires_base_url(self):
+    def test_gateway_flag_requires_explicit_base_url(self):
         from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
 
         with (
@@ -371,11 +293,10 @@ class TestConstructor(unittest.TestCase):
         ):
             ClaudeSDKExecutor(
                 gateway=True,
-                gateway_host="https://example.databricks.com/",
                 gateway_auth_command="printf token",
             )
 
-    def test_databricks_flag_with_host_override_requires_auth_command(self):
+    def test_gateway_flag_requires_explicit_auth_command(self):
         from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
 
         with (
@@ -384,69 +305,24 @@ class TestConstructor(unittest.TestCase):
         ):
             ClaudeSDKExecutor(
                 gateway=True,
-                gateway_host="https://example.databricks.com/",
-                base_url_override="https://example.databricks.com/ai-gateway/anthropic",
+                base_url_override="https://gateway.example.com/anthropic",
             )
 
-    def test_databricks_false_no_extra_env(self):
+    def test_gateway_false_no_extra_env(self):
         from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
         from goalrail.spec.types import RetryPolicy
 
         executor = ClaudeSDKExecutor(gateway=False)
-        # gateway=False → no Databricks env, but RetryPolicy CLI env
+        # gateway=False -> no gateway env, but RetryPolicy CLI env
         # is always merged in. Verify the only entries are the retry env.
         self.assertEqual(executor._extra_env, RetryPolicy().claude_cli.env())
 
-    def test_databricks_profile_default_model_used_when_unset(self):
-        """gateway=True (profile-derived) + no model → Databricks default.
-
-        On the Databricks-profile gateway path (transport derived from
-        ~/.databrickscfg, no gateway base URL supplied directly), a missing
-        model falls back to the Databricks default. The neutral
-        generic-provider gateway path never does this (see
-        ``test_neutral_gateway_no_model_does_not_inject_databricks_default``).
-        """
-        from goalrail.inner.claude_sdk_executor import (
-            _DATABRICKS_CLAUDE_DEFAULT_MODEL,
-            ClaudeSDKExecutor,
-        )
-        from goalrail.inner.databricks_executor import DatabricksCredentials
-
-        async def _t():
-            with patch(
-                "goalrail.inner.databricks_executor._read_databrickscfg",
-                return_value=DatabricksCredentials(
-                    host="https://example.cloud.databricks.com",
-                    token="dapi_test_token",
-                ),
-            ):
-                executor = ClaudeSDKExecutor(gateway=True)
-
-            captured: dict[str, str | None] = {}
-
-            async def fake_get_or_create_client(sdk, *, session_key, options, model):
-                captured["model"] = model
-                raise RuntimeError("stop after model resolution")
-
-            with patch.object(
-                executor,
-                "_get_or_create_client",
-                side_effect=fake_get_or_create_client,
-            ):
-                with self.assertRaises(RuntimeError):
-                    async for _ in executor.run_turn([{"role": "user", "content": "hi"}], [], ""):
-                        pass
-
-            self.assertEqual(captured["model"], _DATABRICKS_CLAUDE_DEFAULT_MODEL)
-
-        _run(_t())
-
-    def test_neutral_gateway_no_model_does_not_inject_databricks_default(self):
+    def test_gateway_no_model_passes_none_to_sdk(self):
         """Neutral gateway (base URL supplied directly) + no model → ``None``.
 
-        The neutral generic-provider gateway transport never falls back to a
-        ``databricks-*`` model: the Goalrail producer resolves a concrete model
-        before spawning, so the executor passes ``None`` through to the SDK.
+        The generic-provider gateway transport does not choose a provider
+        default in the executor. The workflow producer must resolve a concrete
+        model before spawning when the gateway requires one.
         """
         from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
 
@@ -454,7 +330,7 @@ class TestConstructor(unittest.TestCase):
             executor = ClaudeSDKExecutor(
                 gateway=True,
                 gateway_host="https://gateway.example.com",
-                base_url_override="https://gateway.example.com/v1",
+                base_url_override="https://gateway.example.com/anthropic",
                 gateway_auth_command="printf token",
             )
 
@@ -480,17 +356,14 @@ class TestConstructor(unittest.TestCase):
     def test_gateway_model_passes_through(self):
         """Explicit model on the gateway path passes through unchanged."""
         from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
-        from goalrail.inner.databricks_executor import DatabricksCredentials
 
         async def _t():
-            with patch(
-                "goalrail.inner.databricks_executor._read_databrickscfg",
-                return_value=DatabricksCredentials(
-                    host="https://example.cloud.databricks.com",
-                    token="dapi_test_token",
-                ),
-            ):
-                executor = ClaudeSDKExecutor(gateway=True, model="databricks-claude-sonnet-4-6")
+            executor = ClaudeSDKExecutor(
+                gateway=True,
+                base_url_override="https://gateway.example.com/anthropic",
+                gateway_auth_command="printf token",
+                model="anthropic/claude-sonnet-4-6",
+            )
 
             captured: dict[str, str | None] = {}
 
@@ -507,11 +380,11 @@ class TestConstructor(unittest.TestCase):
                     async for _ in executor.run_turn([{"role": "user", "content": "hi"}], [], ""):
                         pass
 
-            self.assertEqual(captured["model"], "databricks-claude-sonnet-4-6")
+            self.assertEqual(captured["model"], "anthropic/claude-sonnet-4-6")
 
         _run(_t())
 
-    def test_no_databricks_default_when_databricks_off(self):
+    def test_gateway_off_no_default_model(self):
         """gateway=False keeps prior behavior: None falls through to the SDK."""
         from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
 
@@ -536,94 +409,17 @@ class TestConstructor(unittest.TestCase):
 
         _run(_t())
 
-    def test_databricks_opus_pins_thinking_to_adaptive(self):
-        """gateway=True + opus sets ``thinking={"type": "adaptive", "display": "summarized"}``."""
+    def test_gateway_opus_leaves_thinking_unset(self):
+        """gateway=True does not inject provider-specific thinking settings."""
         from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
-        from goalrail.inner.databricks_executor import DatabricksCredentials
 
         async def _t():
-            with patch(
-                "goalrail.inner.databricks_executor._read_databrickscfg",
-                return_value=DatabricksCredentials(
-                    host="https://example.cloud.databricks.com",
-                    token="dapi_test_token",
-                ),
-            ):
-                executor = ClaudeSDKExecutor(gateway=True, model="databricks-claude-opus-4-7")
-
-            captured: dict[str, object] = {}
-
-            async def fake_get_or_create_client(sdk, *, session_key, options, model):
-                captured["thinking"] = getattr(options, "thinking", None)
-                raise RuntimeError("stop after options built")
-
-            with patch.object(
-                executor,
-                "_get_or_create_client",
-                side_effect=fake_get_or_create_client,
-            ):
-                with self.assertRaises(RuntimeError):
-                    async for _ in executor.run_turn([{"role": "user", "content": "hi"}], [], ""):
-                        pass
-
-            self.assertEqual(captured["thinking"], {"type": "adaptive", "display": "summarized"})
-
-        _run(_t())
-
-    def test_databricks_fable_pins_thinking_to_adaptive(self):
-        """gateway=True + fable sets ``thinking={"type": "adaptive", "display": "summarized"}``.
-
-        Fable (claude-fable-5) shares Opus 4.7/4.8's adaptive-only thinking
-        surface, so the Databricks gateway rejects the CLI's default
-        thinking=enabled for it too. If this stays unset, a fable session
-        through the gateway 400s on the first request.
-        """
-        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
-        from goalrail.inner.databricks_executor import DatabricksCredentials
-
-        async def _t():
-            with patch(
-                "goalrail.inner.databricks_executor._read_databrickscfg",
-                return_value=DatabricksCredentials(
-                    host="https://example.databricks.com",
-                    token="dapi_test_token",
-                ),
-            ):
-                executor = ClaudeSDKExecutor(gateway=True, model="databricks-claude-fable-5")
-
-            captured: dict[str, object] = {}
-
-            async def fake_get_or_create_client(sdk, *, session_key, options, model):
-                captured["thinking"] = getattr(options, "thinking", None)
-                raise RuntimeError("stop after options built")
-
-            with patch.object(
-                executor,
-                "_get_or_create_client",
-                side_effect=fake_get_or_create_client,
-            ):
-                with self.assertRaises(RuntimeError):
-                    async for _ in executor.run_turn([{"role": "user", "content": "hi"}], [], ""):
-                        pass
-
-            self.assertEqual(captured["thinking"], {"type": "adaptive", "display": "summarized"})
-
-        _run(_t())
-
-    def test_databricks_sonnet_leaves_thinking_unset(self):
-        """gateway=True + non-adaptive-tier model preserves CLI default thinking."""
-        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
-        from goalrail.inner.databricks_executor import DatabricksCredentials
-
-        async def _t():
-            with patch(
-                "goalrail.inner.databricks_executor._read_databrickscfg",
-                return_value=DatabricksCredentials(
-                    host="https://example.cloud.databricks.com",
-                    token="dapi_test_token",
-                ),
-            ):
-                executor = ClaudeSDKExecutor(gateway=True, model="databricks-claude-sonnet-4-6")
+            executor = ClaudeSDKExecutor(
+                gateway=True,
+                base_url_override="https://gateway.example.com/anthropic",
+                gateway_auth_command="printf token",
+                model="anthropic/claude-opus-4-7",
+            )
 
             captured: dict[str, object] = {}
 
@@ -644,7 +440,69 @@ class TestConstructor(unittest.TestCase):
 
         _run(_t())
 
-    def test_no_databricks_leaves_thinking_unset(self):
+    def test_gateway_fable_leaves_thinking_unset(self):
+        """gateway=True + fable preserves the SDK's default thinking behavior."""
+        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
+
+        async def _t():
+            executor = ClaudeSDKExecutor(
+                gateway=True,
+                base_url_override="https://gateway.example.com/anthropic",
+                gateway_auth_command="printf token",
+                model="anthropic/claude-fable-5",
+            )
+
+            captured: dict[str, object] = {}
+
+            async def fake_get_or_create_client(sdk, *, session_key, options, model):
+                captured["thinking"] = getattr(options, "thinking", None)
+                raise RuntimeError("stop after options built")
+
+            with patch.object(
+                executor,
+                "_get_or_create_client",
+                side_effect=fake_get_or_create_client,
+            ):
+                with self.assertRaises(RuntimeError):
+                    async for _ in executor.run_turn([{"role": "user", "content": "hi"}], [], ""):
+                        pass
+
+            self.assertIsNone(captured["thinking"])
+
+        _run(_t())
+
+    def test_gateway_sonnet_leaves_thinking_unset(self):
+        """gateway=True + non-adaptive-tier model preserves CLI default thinking."""
+        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
+
+        async def _t():
+            executor = ClaudeSDKExecutor(
+                gateway=True,
+                base_url_override="https://gateway.example.com/anthropic",
+                gateway_auth_command="printf token",
+                model="anthropic/claude-sonnet-4-6",
+            )
+
+            captured: dict[str, object] = {}
+
+            async def fake_get_or_create_client(sdk, *, session_key, options, model):
+                captured["thinking"] = getattr(options, "thinking", None)
+                raise RuntimeError("stop after options built")
+
+            with patch.object(
+                executor,
+                "_get_or_create_client",
+                side_effect=fake_get_or_create_client,
+            ):
+                with self.assertRaises(RuntimeError):
+                    async for _ in executor.run_turn([{"role": "user", "content": "hi"}], [], ""):
+                        pass
+
+            self.assertIsNone(captured["thinking"])
+
+        _run(_t())
+
+    def test_no_gateway_leaves_thinking_unset(self):
         """gateway=False does not touch ``thinking``; preserves CLI default."""
         from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
 
@@ -878,97 +736,45 @@ class TestBuildMcpTools(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Tests: Databricks env resolution
+# Tests: gateway env resolution
 # ---------------------------------------------------------------------------
 
 
 class TestResolveGatewayEnv(unittest.TestCase):
-    def test_from_profile(self):
-        from goalrail.inner.claude_sdk_executor import _resolve_gateway_env
-        from goalrail.inner.databricks_executor import DatabricksCredentials
-
-        with (
-            patch.dict("os.environ", {}, clear=True),
-            patch(
-                "goalrail.inner.databricks_executor._read_databrickscfg",
-                return_value=DatabricksCredentials(
-                    host="https://example.databricks.com",
-                    token="dapi_abc123",
-                ),
-            ),
-        ):
-            env = _resolve_gateway_env()
-            self.assertEqual(
-                env["ANTHROPIC_BASE_URL"],
-                "https://example.databricks.com/ai-gateway/anthropic",
-            )
-            self.assertEqual(env["CLAUDE_CODE_API_KEY_HELPER_TTL_MS"], "900000")
-            self.assertIn(
-                'databricks auth token --host "https://example.databricks.com"',
-                env["GOALRAIL_CLAUDE_API_KEY_HELPER"],
-            )
-            self.assertNotIn("ANTHROPIC_AUTH_TOKEN", env)
-
-    def test_strips_trailing_slash(self):
-        from goalrail.inner.claude_sdk_executor import _resolve_gateway_env
-        from goalrail.inner.databricks_executor import DatabricksCredentials
-
-        with (
-            patch.dict("os.environ", {}, clear=True),
-            patch(
-                "goalrail.inner.databricks_executor._read_databrickscfg",
-                return_value=DatabricksCredentials(host="https://my-workspace.com/", token="tok"),
-            ),
-        ):
-            env = _resolve_gateway_env()
-            self.assertFalse(env["ANTHROPIC_BASE_URL"].endswith("//"))
-            self.assertTrue(env["ANTHROPIC_BASE_URL"].endswith("/ai-gateway/anthropic"))
-
-    def test_no_creds_returns_empty(self):
+    def test_from_explicit_transport(self):
         from goalrail.inner.claude_sdk_executor import _resolve_gateway_env
 
-        with (
-            patch.dict("os.environ", {}, clear=True),
-            patch("goalrail.inner.databricks_executor._read_databrickscfg", return_value=None),
-        ):
-            env = _resolve_gateway_env()
-            self.assertEqual(env, {})
-
-    def test_host_override_skips_profile_lookup(self):
-        from goalrail.inner.claude_sdk_executor import _resolve_gateway_env
-
-        with patch("goalrail.inner.databricks_executor._read_databrickscfg") as read_cfg:
-            env = _resolve_gateway_env(
-                profile="missing-profile",
-                host_override="https://example.databricks.com/",
-                base_url_override="https://example.databricks.com/ai-gateway/anthropic",
-                auth_command_override="printf token",
-            )
-
-        read_cfg.assert_not_called()
-        self.assertEqual(
-            env["ANTHROPIC_BASE_URL"],
-            "https://example.databricks.com/ai-gateway/anthropic",
+        env = _resolve_gateway_env(
+            base_url_override="https://gateway.example.com/anthropic",
+            auth_command_override="printf token",
         )
+        self.assertEqual(env["ANTHROPIC_BASE_URL"], "https://gateway.example.com/anthropic")
+        self.assertEqual(env["CLAUDE_CODE_API_KEY_HELPER_TTL_MS"], "900000")
         self.assertEqual(env["GOALRAIL_CLAUDE_API_KEY_HELPER"], "printf token")
+        self.assertEqual(env["CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS"], "1")
+        self.assertNotIn("ANTHROPIC_AUTH_TOKEN", env)
 
-    def test_host_override_requires_base_url(self):
+    def test_custom_refresh_interval(self):
+        from goalrail.inner.claude_sdk_executor import _resolve_gateway_env
+
+        env = _resolve_gateway_env(
+            base_url_override="https://gateway.example.com/anthropic",
+            auth_command_override="printf token",
+            auth_refresh_interval_ms=12345,
+        )
+        self.assertEqual(env["CLAUDE_CODE_API_KEY_HELPER_TTL_MS"], "12345")
+
+    def test_requires_base_url(self):
         from goalrail.inner.claude_sdk_executor import _resolve_gateway_env
 
         with self.assertRaisesRegex(OSError, "GATEWAY_BASE_URL"):
-            _resolve_gateway_env(
-                host_override="https://example.databricks.com/",
-                auth_command_override="printf token",
-            )
+            _resolve_gateway_env(auth_command_override="printf token")
 
-    def test_host_override_requires_auth_command(self):
+    def test_requires_auth_command(self):
         from goalrail.inner.claude_sdk_executor import _resolve_gateway_env
 
         with self.assertRaisesRegex(OSError, "GATEWAY_AUTH_COMMAND"):
-            _resolve_gateway_env(
-                host_override="https://example.databricks.com/",
-                base_url_override="https://example.databricks.com/ai-gateway/anthropic",
-            )
+            _resolve_gateway_env(base_url_override="https://gateway.example.com/anthropic")
 
 
 # ---------------------------------------------------------------------------
@@ -993,7 +799,7 @@ class TestEmptyPrompt(unittest.TestCase):
 
 
 class TestSystemMessages(unittest.TestCase):
-    def test_databricks_auth_uses_api_key_helper_settings(self):
+    def test_gateway_auth_uses_api_key_helper_settings(self):
         from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
 
         captured_options = []
@@ -1032,30 +838,26 @@ class TestSystemMessages(unittest.TestCase):
                     return None
 
         def _resolve_gateway_env(
-            profile=None,
             *,
-            host_override=None,
             base_url_override=None,
             auth_command_override=None,
             auth_refresh_interval_ms=None,
         ):
             return {
-                "ANTHROPIC_BASE_URL": base_url_override or "https://host/ai-gateway/anthropic",
-                "GOALRAIL_CLAUDE_API_KEY_HELPER": "databricks auth token --host https://host",
+                "ANTHROPIC_BASE_URL": base_url_override or "https://gateway.example.com/anthropic",
+                "GOALRAIL_CLAUDE_API_KEY_HELPER": auth_command_override or "printf token",
                 "CLAUDE_CODE_API_KEY_HELPER_TTL_MS": "900000",
                 "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": "1",
             }
 
-        shim_upstream: dict[str, str] = {}
-
         async def _t():
             executor = ClaudeSDKExecutor()
             executor._gateway = True
-            executor._databricks_profile = "oss"
-            executor._base_url_override = "https://host/ai-gateway/anthropic"
+            executor._base_url_override = "https://gateway.example.com/anthropic"
+            executor._gateway_auth_command = "printf token"
             executor._extra_env = _resolve_gateway_env(
-                profile="oss",
-                base_url_override="https://host/ai-gateway/anthropic",
+                base_url_override="https://gateway.example.com/anthropic",
+                auth_command_override="printf token",
             )
             with (
                 patch(
@@ -1073,13 +875,6 @@ class TestSystemMessages(unittest.TestCase):
                     )
                 ]
             self.assertEqual(len(events), 1)
-            # The gateway path routes the CLI through the local shim
-            # (which restores thinking.display); record its target and
-            # shut it down inside the loop that started it.
-            self.assertIsNotNone(executor._gateway_shim)
-            shim_upstream["base_url"] = executor._gateway_shim.base_url
-            shim_upstream["upstream"] = executor._gateway_shim._upstream_base_url
-            await executor._gateway_shim.aclose()
 
         _run(_t())
 
@@ -1087,17 +882,12 @@ class TestSystemMessages(unittest.TestCase):
         settings = json.loads(captured_options[0].settings)
         self.assertEqual(
             settings["apiKeyHelper"],
-            "databricks auth token --host https://host",
+            "printf token",
         )
-        # The CLI talks to the loopback shim; the shim forwards to the
-        # real gateway. A direct gateway URL here would mean the shim was
-        # bypassed and opus thinking.display stays stripped.
         self.assertEqual(
             captured_options[0].env["ANTHROPIC_BASE_URL"],
-            shim_upstream["base_url"],
+            "https://gateway.example.com/anthropic",
         )
-        self.assertTrue(shim_upstream["base_url"].startswith("http://127.0.0.1:"))
-        self.assertEqual(shim_upstream["upstream"], "https://host/ai-gateway/anthropic")
         self.assertEqual(captured_options[0].env["CLAUDE_CODE_API_KEY_HELPER_TTL_MS"], "900000")
         self.assertNotIn("GOALRAIL_CLAUDE_API_KEY_HELPER", captured_options[0].env)
         self.assertNotIn("ANTHROPIC_AUTH_TOKEN", captured_options[0].env)
@@ -2256,32 +2046,12 @@ def test_unset_env_var_restores_on_exception(monkeypatch):
     assert os.environ["CLAUDECODE"] == "original"
 
 
-def test_databricks_model_without_routing_raises() -> None:
-    """``databricks-*`` model with ``gateway=False`` raises ``ValueError``.
-
-    Without the guard the executor silently hits ``api.anthropic.com``
-    and surfaces a confusing "model not found" error.
-    """
-    import pytest
-
-    from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
-
-    with pytest.raises(ValueError, match="Databricks-hosted model"):
-        ClaudeSDKExecutor(
-            model="databricks-claude-sonnet-4-6",
-            gateway=False,
-        )
-
-
-def test_non_databricks_model_without_routing_does_not_raise() -> None:
-    """Non-``databricks-*`` model with ``gateway=False`` must not raise.
-
-    Ensures the guard only fires on the ``databricks-`` prefix.
-    """
+def test_provider_model_without_gateway_does_not_raise() -> None:
+    """Provider-qualified model with ``gateway=False`` must not raise."""
     from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
 
     executor = ClaudeSDKExecutor(
-        model="claude-3-5-sonnet-20241022",
+        model="anthropic/claude-sonnet-4-6",
         gateway=False,
     )
     assert not executor._gateway
@@ -2955,8 +2725,8 @@ async def test_assistant_message_model_flows_to_turn_usage() -> None:
 async def test_result_message_usage_none_yields_turn_complete_without_usage() -> None:
     """When ``ResultMessage.usage`` is ``None``, ``TurnComplete.usage`` is ``None``.
 
-    The executor must not synthesize fake usage when the SDK doesn't report it
-    (e.g. Databricks gateway not returning usage). ``None`` usage causes the
+    The executor must not synthesize fake usage when the SDK doesn't report it.
+    ``None`` usage causes the
     REPL to fall back to its local ``count_tokens()`` estimate, which is correct
     behaviour — no invented numbers should appear in the context ring.
 

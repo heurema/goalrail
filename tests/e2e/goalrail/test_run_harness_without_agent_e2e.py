@@ -7,7 +7,7 @@ launcher shape::
 
 under a real pseudo-TTY against the mock LLM server. It waits for the
 REPL banner, lets the ``-p`` startup hook submit a real user turn, and
-asserts the mock model returns the expected marker. No real Databricks
+asserts the mock model returns the expected marker. No real gateway
 credentials are required.
 """
 
@@ -148,7 +148,7 @@ def test_run_harness_live_matrix_covers_registered_coding_harnesses() -> None:
     separately as native-launcher PTY/REPL smoke tests).
 
     ``cursor`` is excluded because this matrix authenticates through
-    the Databricks gateway/profile, while cursor-agent talks only to
+    the shared gateway env, while cursor-agent talks only to
     Cursor's own backend and rejects gateway model ids.
 
     ``antigravity`` is excluded for the same reason as ``cursor``: it is
@@ -157,7 +157,7 @@ def test_run_harness_live_matrix_covers_registered_coding_harnesses() -> None:
 
     ``copilot`` is excluded for the same reason as ``cursor`` / ``antigravity``:
     the GitHub Copilot SDK authenticates with a GitHub token and talks only to
-    GitHub's Copilot backend (no Databricks gateway path), so ``_build_copilot_spawn_env``
+    GitHub's Copilot backend, so ``_build_copilot_spawn_env``
     emits none of the shared ``HARNESS_<H>_GATEWAY`` / profile probe vars this
     matrix drives. Its live round-trip is covered by the gated
     ``tests/e2e/test_polly_copilot_e2e.py`` and the ``copilot-sdk-e2e-dev`` skill.
@@ -165,8 +165,8 @@ def test_run_harness_live_matrix_covers_registered_coding_harnesses() -> None:
     ``cursor-native`` is excluded for the union of both reasons above.
 
     ``qwen`` is excluded because it does not follow the shared
-    ``HARNESS_<HARNESS>_GATEWAY``/``DATABRICKS_PROFILE`` probe wiring that
-    this matrix (and ``test_harness_wrap_e2e.py``) drive harnesses with: its
+    ``HARNESS_<HARNESS>_GATEWAY`` probe wiring that this matrix
+    (and ``test_harness_wrap_e2e.py``) drive harnesses with: its
     wrap routes through ``HARNESS_QWEN_GATEWAY_BASE_URL`` /
     ``HARNESS_QWEN_GATEWAY_AUTH_COMMAND`` instead. Its live round-trip is
     covered by the dedicated ``test_per_harness_qwen.py`` suite.
@@ -185,7 +185,7 @@ def test_run_harness_live_matrix_covers_registered_coding_harnesses() -> None:
     is a terminal-first TUI launched via ``goalrail antigravity`` (runner-owned
     agy tmux pane + bridge dir), not ``goalrail run --harness antigravity-native``,
     AND it is Gemini-native (agy authenticates via Google OAuth, not the shared
-    Databricks gateway/profile probe wiring this matrix drives).
+    shared gateway probe wiring this matrix drives).
 
     ``qwen-native`` is excluded for the same reason as ``goose-native`` /
     ``cursor-native``: it is a terminal-first TUI launched via ``goalrail qwen``
@@ -202,7 +202,7 @@ def test_run_harness_live_matrix_covers_registered_coding_harnesses() -> None:
     ``kimi`` is excluded for the same reason as ``hermes``: it requires the
     ``kimi`` CLI binary (installed via Moonshot's curl installer) and
     authenticates through ``kimi login`` (OAuth or a Moonshot API key), not the
-    shared Databricks gateway/profile probe wiring this matrix drives.
+    shared gateway probe wiring this matrix drives.
 
     ``kimi-native`` is excluded for the same reason as ``goose-native`` /
     ``qwen-native`` / ``kiro-native``: it is a terminal-first TUI launched via

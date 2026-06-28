@@ -382,7 +382,7 @@ def test_goalrail_executor_accepts_valid_harness() -> None:
     break of the phase 1 integration.
     """
     spec = _minimal_spec(
-        llm=LLMConfig(model="databricks-claude-sonnet-4-6"),
+        llm=LLMConfig(model="anthropic/claude-sonnet-4-6"),
         executor=ExecutorSpec(
             type="goalrail",
             config={"harness": "claude-sdk", "profile": "test-profile"},
@@ -402,7 +402,7 @@ def test_goalrail_executor_accepts_antigravity_native_harness() -> None:
     to be rejected at load time with an "unknown harness" validation error.
     """
     spec = _minimal_spec(
-        llm=LLMConfig(model="databricks-claude-sonnet-4-6"),
+        llm=LLMConfig(model="anthropic/claude-sonnet-4-6"),
         executor=ExecutorSpec(
             type="goalrail",
             config={"harness": "antigravity-native"},
@@ -421,7 +421,7 @@ def test_goalrail_executor_rejects_missing_harness() -> None:
     The validator fails loud instead.
     """
     spec = _minimal_spec(
-        llm=LLMConfig(model="databricks-claude-sonnet-4-6"),
+        llm=LLMConfig(model="anthropic/claude-sonnet-4-6"),
         executor=ExecutorSpec(type="goalrail", config={}),
     )
     result = validate(spec)
@@ -437,7 +437,7 @@ def test_goalrail_executor_rejects_unknown_harness() -> None:
     is rejected with a message naming the allowed harnesses.
     """
     spec = _minimal_spec(
-        llm=LLMConfig(model="databricks-claude-sonnet-4-6"),
+        llm=LLMConfig(model="anthropic/claude-sonnet-4-6"),
         executor=ExecutorSpec(
             type="goalrail",
             config={"harness": "totally-bogus"},
@@ -457,7 +457,7 @@ def test_goalrail_executor_rejects_compaction() -> None:
     directive from the spec would be silently ignored.
     """
     spec = _minimal_spec(
-        llm=LLMConfig(model="databricks-claude-sonnet-4-6"),
+        llm=LLMConfig(model="anthropic/claude-sonnet-4-6"),
         executor=ExecutorSpec(
             type="goalrail",
             config={"harness": "claude-sdk"},

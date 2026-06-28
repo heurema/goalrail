@@ -1,8 +1,8 @@
 // Embed entry point.
 //
 // Exposes `GoalrailApp` — a plain React component (app-specific providers +
-// routes, NO React root, NO router) — for a host (e.g. the Databricks monolith)
-// to render the full ap-web experience directly inside its own React tree and
+// routes, NO React root, NO router) — for a host application to render the
+// full ap-web experience directly inside its own React tree and
 // its own router. ap-web's `<Routes>` match the absolute host pathname (route
 // paths are prefixed with `basename`) and its routing hooks (useNavigate/Link)
 // rebase absolute targets under `basename`. This is the same-root path.
@@ -102,7 +102,6 @@ const SERVER_INFO_OFFLINE_FALLBACK: ServerInfo = {
   accounts_enabled: false,
   login_url: null,
   needs_setup: false,
-  databricks_features: false,
   managed_sandboxes_enabled: false,
   sandbox_provider: null,
   smart_routing_enabled: false,

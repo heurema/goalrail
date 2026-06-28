@@ -185,24 +185,17 @@ class Tool:
 
 @dataclass
 class FunctionTool(Tool):
-    """A tool backed by a Python callable, UC function, or client SDK impl.
+    """A tool backed by a Python callable or client SDK impl.
 
     :param callable: Resolved server-side callable. ``None`` for
-        ``runtime: client``, UC functions, or pre-resolve.
-    :param catalog_path: UC function reference. Mutually exclusive
-        with ``callable`` and ``runtime: client``.
+        ``runtime: client`` or pre-resolve.
     :param runtime: ``"server"`` (default) or ``"client"``. With
         ``"client"``, ``callable`` must be ``None``; the spec
         validator enforces this.
-    :param warehouse_id: Databricks SQL warehouse ID for UC
-        function execution, e.g. ``"abc123def456"``. Required
-        when ``catalog_path`` is set. ``None`` for non-UC tools.
     """
 
     callable: DynamicCallable | None = None
-    catalog_path: str | None = None
     runtime: Literal["server", "client"] = "server"
-    warehouse_id: str | None = None
 
 
 @dataclass
@@ -223,15 +216,13 @@ class CancellableFunctionTool(Tool):
 class MCPTool(Tool):
     """A tool (or set of tools) exposed by an MCP server.
 
-    Exactly one of ``url``, ``command``, or ``databricks_server``
-    selects how the server is reached.
+    Exactly one of ``url`` or ``command`` selects how the server is reached.
 
     :param url: HTTP(S) URL of an MCP server, e.g.
         ``"https://mcp.example.com/sse"``. ``None`` when connecting
-        via stdio (``command``) or a named Databricks server.
+        via stdio (``command``).
     :param command: Local stdio command to spawn an MCP server,
-        e.g. ``"npx"``. ``None`` when using ``url`` or
-        ``databricks_server``.
+        e.g. ``"npx"``. ``None`` when using ``url``.
     :param args: Arguments passed to ``command`` when spawning an
         stdio server.
     :param env: Environment variables injected into the stdio
@@ -243,12 +234,6 @@ class MCPTool(Tool):
         instance fans out multiple tools; the runtime replaces
         the fan-out placeholder with per-tool :class:`MCPTool`
         entries whose ``tool_name`` is populated.
-    :param profile: Databricks profile used to authenticate to
-        the MCP server, e.g. ``"<your-profile>"``. ``None`` when the
-        server doesn't require Databricks auth.
-    :param databricks_server: Named Databricks-managed MCP server
-        (e.g. ``"unity-catalog"``). ``None`` when ``url`` or
-        ``command`` is used.
     :param headers: Extra HTTP headers for the ``url`` transport.
     """
 
@@ -258,8 +243,6 @@ class MCPTool(Tool):
     env: dict[str, str] | None = None
     tools: list[str] | None = None  # specific tools to import
     tool_name: str | None = None
-    profile: str | None = None
-    databricks_server: str | None = None
     headers: dict[str, str] | None = None
 
 

@@ -100,7 +100,7 @@ def _pick_conversation_for_resume(
     "no resume requested" and exits cleanly.
 
     :param server: Remote Goalrail server URL, e.g.
-        ``"https://example.databricksapps.com"``.
+        ``"https://goalrail.example.com"``.
     :returns: Selected conversation id, or ``None`` on cancel.
     """
     from goalrail.chat import _remote_headers

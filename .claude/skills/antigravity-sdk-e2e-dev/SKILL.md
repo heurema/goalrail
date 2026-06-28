@@ -9,7 +9,7 @@ The `antigravity` harness drives Google's **Antigravity Python SDK**
 (`google-antigravity`, an in-process `Agent`/`Conversation`) and bridges
 Goalrail's `sys_*` tools into the SDK as `custom_tools`. It is **Gemini-native**:
 it authenticates with a Gemini / Antigravity API key (or Vertex AI) and has **no
-OpenAI-compatible gateway / Databricks path**. This skill is the proven recipe
+OpenAI-compatible gateway / gateway path**. This skill is the proven recipe
 for running it **for real** against a live local server — not just the unit
 tests.
 
@@ -122,10 +122,10 @@ streaming, harness.
    `executor.auth` (api_key) > stored `antigravity:` config block (`goalrail setup`)
    > ambient `GEMINI_API_KEY` / `ANTIGRAVITY_API_KEY`. Vertex AI is opt-in via
    `executor.config` `vertex`/`project`/`location`.
-4. **No OpenAI gateway / Databricks.** The SDK has no `base_url`; a `databricks`
-   or generic-`provider` auth is **warned and ignored**, and the run falls back
-   to ambient Gemini creds. Don't expect `databricks-*` models to route through
-   the AI Gateway like claude-sdk/codex/pi.
+4. **No OpenAI-compatible gateway.** The SDK has no `base_url`; generic
+   provider auth is **warned and ignored**, and the run falls back to ambient
+   Gemini creds. Don't expect gateway-routed model aliases to work like they do
+   for claude-sdk/codex/pi.
 5. **Model ids are Gemini ids.** Default `gemini-3.5-flash`. `gemini-3-pro`
    **404s on a plain AI-Studio key** — use `gemini-2.5-flash` / `gemini-3.5-flash`
    unless your key has Pro access.
@@ -157,7 +157,7 @@ uv run --frozen --extra dev python -m pytest \
 There is no gated per-harness antigravity e2e test yet (it is deliberately
 excluded from the live no-AGENT harness matrix in
 `tests/e2e/goalrail/test_run_harness_without_agent_e2e.py`, because that matrix
-authenticates through the Databricks gateway and antigravity is Gemini-native).
+authenticates through the OpenAI-compatible gateway and antigravity is Gemini-native).
 This skill IS the live coverage.
 
 ## Bug-bash (fan out)

@@ -1,7 +1,7 @@
 # Minimal demo for tool-call and output policies.
 #
 # Usage:
-#   export DATABRICKS_CONFIG_PROFILE=<your-profile>
+#   export OPENAI_API_KEY=<your-key>
 #
 #   # MCP tool — allowed
 #   python -m goalrail tests/resources/examples/agent_with_policies.yaml \
@@ -32,10 +32,10 @@ prompt: |
 
 executor:
   harness: openai-agents
-  model: databricks-gpt-5-4-mini
+  model: openai/gpt-5-4-mini
   auth:
-    type: databricks
-    profile: oss
+    type: api_key
+    api_key: $OPENAI_API_KEY
 
 tools:
   sleep-server:

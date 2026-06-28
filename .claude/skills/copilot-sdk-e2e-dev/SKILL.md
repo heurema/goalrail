@@ -97,7 +97,7 @@ the full stack is good: token, egress, bundled CLI, harness.
 |------|-----|
 | Native tools (shell/edit/read) | `--tools coding`, prompt to create→read→edit a file; confirm it actually touches disk |
 | Bridged `sys_*` / sub-agent dispatch | declare a sub-agent (harness `copilot` so auth is satisfied), prompt the parent to delegate — exercises the SDK `Tool` async-handler bridge into `_tool_executor` |
-| Model routing | run the same bundle with several `--model` values; an unknown id fails **loud**, a `databricks-*` id is dropped to auto with a warning |
+| Model routing | run the same bundle with several `--model` values; an unknown id fails **loud**, a `*` id is dropped to auto with a warning |
 | LLM-phase policy | add a guardrail that denies a keyword; confirm `PHASE_LLM_REQUEST`/`PHASE_LLM_RESPONSE` blocks it |
 | Concurrency / leaks | fire several `goalrail run … &` at once; then `pgrep -af "copilot/bin/copilot"` to check for orphaned bundled-CLI subprocesses |
 
@@ -123,7 +123,7 @@ local server, polls the AP API, auto-answers elicitations, and asserts the
 fan-out. Drive the brain on copilot with `--brain-harness copilot`, and **always
 pass a Copilot-catalog `--brain-model`** (`auto`, `claude-haiku-4.5`,
 `gpt-5-mini`): the driver's default `--brain-model` is a Claude id that Copilot
-(no Databricks gateway) can't route. From the agent-framework clone:
+(no OpenAI-compatible gateway) can't route. From the agent-framework clone:
 
 ```bash
 .venv/bin/python .claude/skills/polly-e2e-dev/polly_driver.py \
@@ -152,8 +152,8 @@ final answer lands server-side — read it over the AP API
    gh/Copilot-CLI OAuth token). Resolution precedence: spec `executor.auth`
    (api_key) > stored `copilot:` config block (`goalrail setup`) > ambient
    `COPILOT_GITHUB_TOKEN` / `GH_TOKEN` / `GITHUB_TOKEN`. Classic `ghp_` rejected.
-4. **No Databricks gateway.** Copilot talks only to GitHub's backend, so a
-   `databricks-*` model is silently resolved to Copilot's auto-select — it will
+4. **No OpenAI-compatible gateway.** Copilot talks only to GitHub's backend, so a
+   `*` model is silently resolved to Copilot's auto-select — it will
    *not* route through the AI Gateway like claude-sdk/codex/pi.
 5. **Use a model id from the account's catalog.** free_limited offers `auto`,
    `claude-haiku-4.5`, `gpt-5-mini`. Run `.venv/bin/python` + `client.list_models()`

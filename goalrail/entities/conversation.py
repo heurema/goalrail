@@ -497,7 +497,7 @@ class RoutingDecisionData(BaseModel):
     model's context.
 
     :param model: The concrete brain model the router chose, e.g.
-        ``"databricks-claude-opus-4-8"``.
+        ``"anthropic/claude-opus-4-8"``.
     :param tier: The difficulty tier the router assigned, one of
         ``"cheap"`` / ``"medium"`` / ``"expensive"``, e.g.
         ``"expensive"``.
@@ -522,7 +522,7 @@ class RoutingDecisionData(BaseModel):
         Validate that the router named a non-empty model.
 
         :param value: The chosen model id, e.g.
-            ``"databricks-claude-opus-4-8"``.
+            ``"anthropic/claude-opus-4-8"``.
         :returns: The stripped non-empty model id.
         :raises ValueError: If the model id is empty or whitespace-only —
             a routing decision with no model is meaningless to render.
@@ -739,7 +739,7 @@ class ConversationItem(BaseModel):
              "type": "message", "status": "completed",
              "role": "assistant",
              "content": [{"type": "output_text", "text": "hi"}],
-             "model": "databricks-gpt-5-4"}
+             "model": "openai/gpt-5-4"}
         """
         return {
             "id": self.id,

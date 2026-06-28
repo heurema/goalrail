@@ -96,24 +96,20 @@ _HOOK_APPROVAL_TIMEOUT_S = 86400
 
 
 def _resolve_model(model: str | None) -> str:
-    """Resolve the cursor model id, dropping ids cursor can't honor.
+    """Resolve the Cursor model id, dropping provider-qualified ids.
 
-    cursor-sdk accepts only Cursor model ids (``auto``, ``gpt-5``,
-    ``composer-2.5``, ...), so a gateway-routed model id (carried by a spec
-    authored for another harness) falls back to cursor's auto-select. ``None``
-    likewise resolves to ``auto`` (the SDK requires a model).
+    ``cursor-sdk`` accepts only Cursor model ids (``auto``, ``gpt-5``,
+    ``composer-2.5``, ...). ``None`` resolves to ``auto`` because the SDK
+    requires a model. Provider-qualified ids such as ``openai/gpt-5`` belong to
+    Goalrail routing, not the native Cursor catalog, so they are dropped.
     """
-    if not model or model.startswith(("databricks-", "databricks/")):
-        if model:
-            # Warn, not debug: the requested model is silently NOT honored, and
-            # a debug line is invisible in the harness subprocess — so a user who
-            # pinned a non-Cursor model would otherwise have no idea it was dropped.
-            logger.warning(
-                "CursorExecutor: requested model %r is not a Cursor model id; "
-                "falling back to %r auto-select.",
-                model,
-                _DEFAULT_CURSOR_MODEL,
-            )
+    if not model:
+        return _DEFAULT_CURSOR_MODEL
+    if "/" in model:
+        logger.warning(
+            "Ignoring provider-qualified model %r because it is not a Cursor model; using auto",
+            model,
+        )
         return _DEFAULT_CURSOR_MODEL
     return model
 

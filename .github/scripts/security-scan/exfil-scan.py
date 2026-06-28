@@ -43,12 +43,14 @@ _NETWORK = re.compile(
 # Secret-NAMED credential sources (deliberately narrow: generic os.environ /
 # LLM_API_KEY use is normal in tests, so it is INFO-only, not blocking).
 _SECRET = re.compile(
-    r"DATABRICKS_(CLIENT_ID|CLIENT_SECRET|TOKEN|BEARER)"
+    r"ANTHROPIC_API_KEY|OPENAI_API_KEY|GOOGLE_API_KEY|GEMINI_API_KEY"
+    r"|MOONSHOT_API_KEY|MISTRAL_API_KEY|OPENROUTER_API_KEY|GROQ_API_KEY"
+    r"|GATEWAY_(API_KEY|CLIENT_ID|CLIENT_SECRET|TOKEN|BEARER)"
     r"|FORK_E2E_APP_PRIVATE_KEY|PRIVATE_KEY|[A-Z0-9]+_SECRET\b"
     # No bare ACCESS_TOKEN: case-insensitively it matches common `access_token`
     # OAuth/JSON fields and would block legit PRs. The specific secret names
     # above stay; generic-token exfil is left to the reviewer + LLM advisory.
-    r"|GITHUB_TOKEN|\bGH_TOKEN\b|\.databrickscfg",
+    r"|GITHUB_TOKEN|\bGH_TOKEN\b",
     re.IGNORECASE,
 )
 

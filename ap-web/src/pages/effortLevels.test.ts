@@ -11,7 +11,7 @@ import {
 const CODEX_MODEL_OPTIONS: CodexModelOption[] = [
   {
     id: "gpt-5.5",
-    model: "databricks-gpt-5-5",
+    model: "openai/gpt-5-5",
     displayName: "GPT-5.5",
     defaultReasoningEffort: "high",
     supportedReasoningEfforts: [
@@ -24,7 +24,7 @@ const CODEX_MODEL_OPTIONS: CodexModelOption[] = [
   },
   {
     id: "gpt-5.4-mini",
-    model: "databricks-gpt-5-4-mini",
+    model: "openai/gpt-5-4-mini",
     displayName: "GPT-5.4 mini",
     defaultReasoningEffort: "medium",
     supportedReasoningEfforts: [

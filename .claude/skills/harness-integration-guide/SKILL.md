@@ -88,7 +88,7 @@ execution.
 
 | Pattern | Description |
 |---|---|
-| API key / Databricks gateway | Direct API key or routed through a Databricks gateway |
+| API key / OpenAI-compatible gateway | Direct API key or routed through a OpenAI-compatible gateway |
 | Vendor API key (direct) | Vendor-specific API key (e.g. Cursor, Gemini) |
 | Vendor CLI login / config file | Credentials stored in a vendor config file or managed via vendor CLI login |
 | OAuth / GitHub token | OAuth flow or platform token (e.g. GitHub PAT) |

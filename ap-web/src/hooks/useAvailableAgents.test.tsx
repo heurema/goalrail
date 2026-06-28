@@ -140,7 +140,7 @@ describe("useAvailableAgents", () => {
           },
           {
             id: "ag_yaml",
-            name: "databricks_coding_agent",
+            name: "coding_agent",
             description: "A coding agent",
             harness: "codex",
           },
@@ -222,8 +222,8 @@ describe("useAvailableAgents", () => {
       },
       {
         id: "ag_yaml",
-        name: "databricks_coding_agent",
-        display_name: "Databricks_coding_agent",
+        name: "coding_agent",
+        display_name: "Coding_agent",
         description: "A coding agent",
         harness: "codex",
         skills: [],

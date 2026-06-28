@@ -68,7 +68,7 @@ prompt: |
   - The user can watch workers directly via tmux.
 
 executor:
-  model: databricks-gpt-5-5
+  model: openai/gpt-5-5
   harness: open-responses
 
 async: true

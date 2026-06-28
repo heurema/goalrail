@@ -156,7 +156,7 @@ def model_name(request: pytest.FixtureRequest) -> str:
     spread when ``GOALRAIL_TEST_MODEL_SPREAD`` is on.
 
     :param request: Pytest fixture request for the consuming test.
-    :returns: The model name to use, e.g. ``"databricks-claude-sonnet-4-6"``.
+    :returns: The model name to use, e.g. ``"anthropic/claude-sonnet-4-6"``.
     """
     if hasattr(request, "param") and request.param is not None:
         return _model_pools.resolve_model(request.param, spread=False)

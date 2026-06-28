@@ -69,7 +69,7 @@ class BannerLine:
 
     :param text: The row's text. Width is measured with
         :func:`rich.cells.cell_len`, so emoji / wide glyphs (e.g. a
-        ``🧱 Databricks`` credential label) pad and align correctly.
+        credential labels pad and align correctly.
     :param dim: Render the row dim (``True``, for metadata rows like the
         model + credential, folder, or hint) or bold (``False``, used
         for the title row). Only the title row passes ``False``.

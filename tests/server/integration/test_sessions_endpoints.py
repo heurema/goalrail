@@ -1785,7 +1785,7 @@ async def test_claude_native_session_discoverable_with_terminal_metadata(
     session = await _create_session(
         client,
         agent["id"],
-        title="universe @ lakebox",
+        title="universe @ remote_sandbox",
         # Labels the route's _is_claude_native_terminal_session and the
         # UI's terminal-first layout key off of.
         labels={
@@ -1807,7 +1807,7 @@ async def test_claude_native_session_discoverable_with_terminal_metadata(
     assert list_resp.status_code == 200
     row = next((r for r in list_resp.json()["data"] if r["id"] == session_id), None)
     assert row is not None, f"session not in list: {list_resp.json()}"
-    assert row["title"] == "universe @ lakebox"
+    assert row["title"] == "universe @ remote_sandbox"
     assert row["agent_name"] == "claude-native-ui"
     assert row["labels"]["goalrail.wrapper"] == "claude-code-native-ui"
     assert row["labels"]["goalrail.ui"] == "terminal"
@@ -1816,7 +1816,7 @@ async def test_claude_native_session_discoverable_with_terminal_metadata(
 
     # Snapshot surface (opening the session) carries the same bundle.
     snap = (await client.get(f"/v1/sessions/{session_id}")).json()
-    assert snap["title"] == "universe @ lakebox"
+    assert snap["title"] == "universe @ remote_sandbox"
     assert snap["agent_name"] == "claude-native-ui"
     assert snap["labels"]["goalrail.wrapper"] == "claude-code-native-ui"
     assert snap["labels"]["goalrail.ui"] == "terminal"
@@ -3920,7 +3920,7 @@ async def test_external_session_usage_codex_tokens_priced(
                 "context_tokens": 1000,
                 "cumulative_input_tokens": 1000,
                 "cumulative_output_tokens": 500,
-                "model": "databricks-gpt-5-5",
+                "model": "openai/gpt-5-5",
             },
         },
     )
@@ -3996,12 +3996,12 @@ async def test_external_session_usage_codex_cached_tokens_no_catalog_cache_rate(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
-    With no published cache rate (today's ``databricks-*`` catalog entries),
+    With no published cache rate (some catalog entries),
     the cached portion is split out AND priced at the derived ratio default
     (0.10x input), so the dollar cost drops even though the catalog omits a
     cache rate.
 
-    This is the ``databricks-*`` path: the catalog has input/output rates but
+    This is the fallback path: the catalog has input/output rates but
     no ``cache_read_per_million_tokens``, so ``compute_llm_cost`` derives the
     cache-read rate from the input rate. Before the ratio fallback this billed
     cache reads at the full input rate (cost 0.002); now it bills 0.10x (cost
@@ -4024,7 +4024,7 @@ async def test_external_session_usage_codex_cached_tokens_no_catalog_cache_rate(
                 "cumulative_input_tokens": 1000,
                 "cumulative_cache_read_input_tokens": 800,
                 "cumulative_output_tokens": 500,
-                "model": "databricks-gpt-5-5",
+                "model": "openai/gpt-5-5",
             },
         },
     )
@@ -5137,14 +5137,14 @@ async def test_patch_model_override_records_system_note_for_inprocess_session(
 
     patch = await client.patch(
         f"/v1/sessions/{session['id']}",
-        json={"model_override": "databricks-gpt-5-4"},
+        json={"model_override": "openai/gpt-5-4"},
     )
     assert patch.status_code == 200, patch.text
 
     # Exactly one note, naming the new model. A missing note would mean the
     # gate dropped an in-process session; a wrong string means the text
     # template drifted from what SystemMessageView keys on.
-    assert _model_change_notes(published) == ["[System: model changed to databricks-gpt-5-4]"]
+    assert _model_change_notes(published) == ["[System: model changed to openai/gpt-5-4]"]
 
 
 async def test_patch_model_override_clear_records_reset_note(
@@ -5264,14 +5264,14 @@ async def test_patch_model_override_records_note_for_terminal_view_sdk_session(
 
     patch = await client.patch(
         f"/v1/sessions/{session['id']}",
-        json={"model_override": "databricks-claude-sonnet-4-6"},
+        json={"model_override": "anthropic/claude-sonnet-4-6"},
     )
     assert patch.status_code == 200, patch.text
     # Note IS recorded: ``goalrail.ui == "terminal"`` alone must not suppress
     # it. An empty list here means the gate regressed to keying on
     # ``goalrail.ui``, re-breaking the polly/debby web ``/model`` feedback.
     assert _model_change_notes(published) == [
-        "[System: model changed to databricks-claude-sonnet-4-6]"
+        "[System: model changed to anthropic/claude-sonnet-4-6]"
     ]
 
 
@@ -5293,7 +5293,7 @@ async def test_patch_model_override_silent_skips_note(
 
     patch = await client.patch(
         f"/v1/sessions/{session['id']}",
-        json={"model_override": "databricks-gpt-5-4", "silent": True},
+        json={"model_override": "openai/gpt-5-4", "silent": True},
     )
     assert patch.status_code == 200, patch.text
     assert _model_change_notes(published) == []

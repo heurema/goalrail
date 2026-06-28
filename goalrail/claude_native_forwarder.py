@@ -620,11 +620,10 @@ async def forward_claude_transcript_to_session(
         for reattach so old transcript lines are not duplicated.
     :param poll_interval_s: Seconds between transcript polls.
     :param auth: Optional httpx Auth that mints a fresh bearer token
-        per request, e.g. ``_server_auth(profile)`` for a Databricks
-        Apps deployment. ``None`` for local servers that don't need
-        auth. Required for long-lived remote sessions — Databricks
-        OAuth tokens expire after ~1 hour and a static header captured
-        at startup would stop authenticating mid-session.
+        per request for hosted deployments. ``None`` for local servers
+        that don't need auth. Required for long-lived remote sessions:
+        OAuth tokens may expire and a static header captured at startup
+        would stop authenticating mid-session.
     :returns: Never normally returns; cancel the task to stop it.
     """
     state = _read_forward_state(bridge_dir)
@@ -981,8 +980,7 @@ def _parse_json_response(resp: httpx.Response, *, context: str) -> Any:
     The forwarder calls ``resp.json()`` on Sessions API responses after
     ``resp.raise_for_status()``. That guards non-2xx statuses but not a
     2xx body that simply is not JSON: an auth or proxy layer in front of
-    the server — most commonly an expired Databricks Apps OAuth session —
-    can serve an HTML login or error page with a 200 status. A bare
+    the server can serve an HTML login or error page with a 200 status. A bare
     ``resp.json()`` then raises an opaque ``json.JSONDecodeError``
     ("Expecting value: line 1 column 1 (char 0)") with no hint that the
     body was HTML, and the forwarder supervisor turns that into a silent
@@ -3227,7 +3225,7 @@ def _model_alias_for(model: str | None) -> str | None:
     The web model picker speaks Claude Code's version-agnostic aliases
     (``"fable"`` / ``"opus"`` / ``"sonnet"`` / ``"haiku"``); the
     transcript records the resolved concrete id (e.g.
-    ``"claude-opus-4-8"`` or ``"databricks-claude-sonnet-4-6"``).
+    ``"anthropic/claude-opus-4-8"`` or ``"claude-sonnet-4-6"``).
     Mapping to the tier keeps the mirrored value in the picker's
     vocabulary and makes a web→TUI round-trip a no-op.
 

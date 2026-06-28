@@ -260,7 +260,7 @@ def test_azure_requires_api_base_and_version() -> None:
 
 def test_auth_fields_have_descriptions() -> None:
     """Every auth field must have a non-empty description."""
-    for provider_name in ["anthropic", "bedrock", "azure", "databricks"]:
+    for provider_name in ["anthropic", "bedrock", "azure"]:
         config = get_provider_config(provider_name)
         for mode in config.auth_modes:
             for field in mode.fields:

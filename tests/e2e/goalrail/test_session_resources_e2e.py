@@ -5,7 +5,7 @@ exercises every session-resource endpoint. No LLM calls are made --
 the test only needs the server to boot and register the agent.
 
 Migrated to mock LLM: uses ``mock_credentials_env`` so the server
-subprocess doesn't depend on real Databricks credentials in the
+subprocess doesn't depend on real provider credentials in the
 environment.
 
 Design reference: ``designs/SESSION_RESOURCES_API_DESIGN.md``
@@ -37,7 +37,7 @@ spec_version: 1
 name: e2e_resources_test
 prompt: Test agent for session resources e2e.
 executor:
-  model: databricks-gpt-5-4-mini
+  model: openai/gpt-5-4-mini
   config:
     harness: openai-agents
 os_env:
@@ -70,7 +70,6 @@ def _clean_env() -> dict[str, str]:
     env = dict(os.environ)
     for var in (
         "ANTHROPIC_API_KEY",
-        "DATABRICKS_TOKEN",
         "CLAUDE_CODE",
         "CLAUDECODE",
         "CLAUDE_CODE_ENTRYPOINT",

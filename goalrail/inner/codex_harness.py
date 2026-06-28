@@ -16,22 +16,13 @@ per-request).
 Env vars read at startup:
 
 - ``HARNESS_CODEX_MODEL``: model identifier, e.g.
-  ``"databricks-gpt-5-4-mini"``. ``None`` falls back to Codex's
-  own default.
+  ``"gpt-5.4-mini"``. ``None`` falls back to Codex's own default.
 - ``HARNESS_CODEX_GATEWAY``: ``"1"`` / ``"true"`` to route
   through a vendor-neutral gateway (base URL + bearer-token
-  command + model). The Databricks AI gateway (Codex Responses
-  API at ``/ai-gateway/codex/v1``) is one producer of this
-  transport; generic ``key`` / ``gateway`` providers are another.
-  Otherwise the executor uses Codex's built-in API path.
-- ``HARNESS_CODEX_DATABRICKS_PROFILE``: Databricks-specific
-  ``~/.databrickscfg`` profile name, used by the executor for
-  Databricks credential resolution / token refresh when the
-  gateway transport was fed from a Databricks profile, e.g.
-  ``"<your-profile>"``.
+  command + model). Otherwise the executor uses Codex's built-in API path.
 - ``HARNESS_CODEX_MODEL_PROVIDER``: a codex ``model_provider``
   id to pin via a ``-c`` override, e.g. ``"openai"`` (force the
-  built-in provider for a subscription) or ``"Databricks"`` (a
+  built-in provider for a subscription) or ``"corp-gateway"`` (a
   custom ``[model_providers.X]`` table in the user's
   ``~/.codex/config.toml``, bridged into the per-session
   ``CODEX_HOME``). Mutually exclusive with
@@ -105,7 +96,6 @@ _logger = logging.getLogger(__name__)
 # so misconfigurations surface as a single grep target.
 _ENV_MODEL = "HARNESS_CODEX_MODEL"
 _ENV_GATEWAY = "HARNESS_CODEX_GATEWAY"
-_ENV_DATABRICKS_PROFILE = "HARNESS_CODEX_DATABRICKS_PROFILE"
 _ENV_MODEL_PROVIDER = "HARNESS_CODEX_MODEL_PROVIDER"
 _ENV_GATEWAY_HOST = "HARNESS_CODEX_GATEWAY_HOST"
 _ENV_CWD = "HARNESS_CODEX_CWD"
@@ -265,10 +255,9 @@ def _build_codex_executor() -> Executor:
     Construct a :class:`CodexExecutor` from env-var config.
 
     Called lazily by the :class:`ExecutorAdapter` on the first
-    turn. Heavyweight init (CLI discovery, eager Databricks
-    credential resolution) happens at this point — operators
-    see the failure surface as a startup error on the first
-    request, not at FastAPI app boot.
+    turn. Heavyweight init (CLI discovery, gateway validation)
+    happens at this point — operators see the failure surface as
+    a startup error on the first request, not at FastAPI app boot.
 
     :returns: A configured :class:`CodexExecutor` instance.
     :raises ImportError: If the ``codex`` CLI isn't on PATH and
@@ -288,7 +277,6 @@ def _build_codex_executor() -> Executor:
         model=os.environ.get(_ENV_MODEL),
         codex_path=os.environ.get(_ENV_CODEX_PATH),
         gateway=_parse_truthy(_ENV_GATEWAY, default=False),
-        databricks_profile=os.environ.get(_ENV_DATABRICKS_PROFILE),
         model_provider_override=os.environ.get(_ENV_MODEL_PROVIDER) or None,
         gateway_host=os.environ.get(_ENV_GATEWAY_HOST) or None,
         # Default ``True`` mirrors the inner CodexExecutor's

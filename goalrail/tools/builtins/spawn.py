@@ -340,8 +340,8 @@ def _build_sys_session_send_schema(
                                         "description": (
                                             "Optional model the sub-agent "
                                             "harness should run, e.g. a "
-                                            "databricks-* endpoint name or "
-                                            "a harness-native model id. "
+                                            "provider/model id or a "
+                                            "harness-native model id. "
                                             "Applies only when this send "
                                             "CREATES the sub-agent session; "
                                             "omitted = the harness default."

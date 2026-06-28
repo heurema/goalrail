@@ -93,7 +93,7 @@ def test_empty_db_uri_skips_db_check(
     db_uri: str,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    with caplog.at_level(logging.DEBUG):
+    with caplog.at_level(logging.DEBUG, logger="goalrail.testing.guardrails"):
         assert check_test_environment(env=_TEST_ENV, db_uri=db_uri, warn_only=False) == []
     assert any("db_uri is blank; skipping DB check" in r.getMessage() for r in caplog.records)
 

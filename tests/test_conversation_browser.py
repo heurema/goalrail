@@ -172,51 +172,6 @@ def test_open_conversation_link_warns_when_opener_raises_oserror(
     ]
 
 
-def test_conversation_url_maps_workspace_hosted_server_to_ui_mount(tmp_path, monkeypatch) -> None:
-    """Workspace-hosted servers link to the SPA mount with the org selector.
-
-    The server base is the API proxy (``/api/2.0/goalrail``) — linking
-    there returns JSON, not the web UI. The browser URL must land on
-    ``/goalrail`` and carry ``?o=<org>`` recorded by ``goalrail
-    login`` so multi-org workspaces open in the right one.
-    """
-    from goalrail.cli_auth import store_databricks_auth
-    from goalrail.conversation_browser import conversation_url
-
-    monkeypatch.setattr(
-        "goalrail.cli_auth._token_file_path",
-        lambda: tmp_path / "auth_tokens.json",
-    )
-    server = "https://example.databricks.com/api/2.0/goalrail"
-    store_databricks_auth(
-        server,
-        "https://example.databricks.com",
-        org_id="2850744067564480",
-    )
-
-    url = conversation_url(server, "conv_abc123")
-
-    assert url == ("https://example.databricks.com/goalrail/c/conv_abc123?o=2850744067564480")
-
-
-def test_conversation_url_workspace_hosted_without_org_record(tmp_path, monkeypatch) -> None:
-    """No recorded org id → SPA mount link without the ?o selector.
-
-    Single-org workspaces resolve fine without it; inventing an org id
-    would be worse than omitting it.
-    """
-    from goalrail.conversation_browser import conversation_url
-
-    monkeypatch.setattr(
-        "goalrail.cli_auth._token_file_path",
-        lambda: tmp_path / "auth_tokens.json",
-    )
-
-    url = conversation_url("https://example.databricks.com/api/2.0/goalrail", "conv_abc123")
-
-    assert url == "https://example.databricks.com/goalrail/c/conv_abc123"
-
-
 def test_conversation_url_plain_server_unchanged(tmp_path, monkeypatch) -> None:
     """Non-workspace servers keep the plain /c/<id> link shape."""
     from goalrail.conversation_browser import conversation_url

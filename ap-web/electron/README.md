@@ -292,11 +292,11 @@ _invisible_ — the passkey sheet you see in Chrome/Safari is browser chrome,
 which Electron doesn't ship. Touching the key completes the ceremony with no
 UI.
 
-For a visual flow, the shell enables Electron's **Touch ID platform
-authenticator** (`app.configureWebAuthn`, Electron ≥ 42, macOS only):
-registering or signing in with a platform passkey then shows the native
-macOS Touch ID / keychain dialog, and a native chooser appears when several
-saved passkeys match. Three pieces must agree before this activates:
+The shell can enable Electron's **Touch ID platform authenticator**
+(`app.configureWebAuthn`, Electron ≥ 42, macOS only), but it is disabled in
+the OSS build until a Goalrail Apple Developer Team ID and matching
+provisioning profile are configured. Three pieces must agree before this
+activates:
 
 1. `WEBAUTHN_KEYCHAIN_ACCESS_GROUP` in `src/main.js` —
    `"<TEAM_ID>.dev.goalrail.desktop"`.
@@ -313,10 +313,8 @@ saved passkeys match. Three pieces must agree before this activates:
    Profiles → Distribution → Developer ID for that App ID. Verify with
    `security cms -D -i signing/goalrail.provisionprofile`.
 
-The signing identity's team must match the group prefix —
-`package.json` pins `"identity"` for this reason (with several certs in
-the keychain, electron-builder's auto-discovery can pick the wrong one).
-Helpers must NOT inherit the keychain entitlement
+The signing identity's team must match the group prefix. Helpers must NOT
+inherit the keychain entitlement
 (`entitlementsInherit` points at the minimal
 `signing/entitlements.mac.inherit.plist`; a restricted entitlement on a
 helper shows up as a "GPU process exited unexpectedly" crash loop).

@@ -20,7 +20,7 @@ prompt: |
   Use `sys_os_shell` for command execution.
 
 executor:
-  model: databricks-gpt-5-4-mini
+  model: openai/gpt-5-4-mini
   profile: test-profile
 
 os_env:

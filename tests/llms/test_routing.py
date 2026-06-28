@@ -53,10 +53,6 @@ from goalrail.llms.routing import RoutedModel, infer_harness_from_model, parse_m
             RoutedModel(provider="vertex", model="gemini-2.5-pro"),
         ),
         (
-            "databricks/my-endpoint",
-            RoutedModel(provider="databricks", model="my-endpoint"),
-        ),
-        (
             "moonshot/kimi-k2-instruct",
             RoutedModel(provider="moonshot", model="kimi-k2-instruct"),
         ),
@@ -79,21 +75,21 @@ def test_unknown_provider_raises() -> None:
         parse_model_string("foobar/some-model")
 
 
+def test_removed_legacy_gateway_model_prefix_raises() -> None:
+    legacy_model = "databricks-gpt-5-4"
+    with pytest.raises(GoalrailError, match="Legacy gateway-prefixed model ids"):
+        parse_model_string(legacy_model)
+
+
 # ── infer_harness_from_model ─────────────────────────────────────────────────
 
 
 @pytest.mark.parametrize(
     ("model", "expected_harness"),
     [
-        # Databricks-hosted Claude → claude-sdk harness; these are the
-        # models that triggered the original routing bug (Responses API
-        # passthrough 400s for Claude).
-        ("databricks-claude-sonnet-4", "claude-sdk"),
-        ("databricks-claude-sonnet-4-6", "claude-sdk"),
-        # Anthropic-prefixed models also need claude-sdk.
+        # Anthropic-prefixed models need claude-sdk.
         ("anthropic/claude-sonnet-4-20250514", "claude-sdk"),
-        # Databricks-hosted GPT and plain OpenAI models → openai-agents.
-        ("databricks-gpt-5-4", "openai-agents"),
+        # OpenAI-prefixed and plain GPT models use openai-agents.
         ("openai/gpt-5.4", "openai-agents"),
         ("gpt-5.4", "openai-agents"),
         # Unknown model — no prefix match — returns empty string so the

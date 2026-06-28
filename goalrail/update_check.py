@@ -69,7 +69,7 @@ _DIST_NAME = "goalrail"
 # "Is a newer release out?" is answered against the *configured* package
 # index via the Simple Repository API (PEP 503/691) — the universal
 # protocol every index speaks (pypi.org, a corporate mirror, devpi,
-# Artifactory, the Databricks proxy). We deliberately do NOT use PyPI's
+# Artifactory, private package proxies). We deliberately do NOT use PyPI's
 # JSON API (`/pypi/<name>/json`): that is Warehouse-specific and 404s on
 # mirrors, so it would silently never work on air-gapped / mirror-only
 # networks. Querying the same index the user installs from also keeps the

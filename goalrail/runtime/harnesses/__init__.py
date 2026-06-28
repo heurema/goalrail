@@ -128,7 +128,7 @@ _HARNESS_MODULES: dict[str, str] = {
     # In-process SDK harness (``github-copilot-sdk``), like cursor / antigravity:
     # the SDK bundles the Copilot CLI binary it drives as a backing server, so
     # Goalrail spawns no separately-installed CLI. Authenticates against GitHub's
-    # Copilot backend with a GitHub token (no Databricks gateway).
+    # Copilot backend with a GitHub token.
     "copilot": "goalrail.inner.copilot_harness",
     # Hermes Agent harness wrap. Runs the ``hermes`` CLI as a subprocess
     # for each turn, managing its own session state via Hermes' SQLite

@@ -1619,10 +1619,9 @@ def create_app(
         It exposes no sensitive state — only the active auth
         source, the login URL, whether first-run admin setup is
         still pending (``needs_setup``), coarse capability
-        booleans (``databricks_features``,
-        ``managed_sandboxes_enabled``), and the short sandbox
-        provider name (``sandbox_provider``) the web UI labels the
-        new-session sandbox option with.
+        booleans (``managed_sandboxes_enabled``) and the short
+        sandbox provider name (``sandbox_provider``) the web UI labels
+        the new-session sandbox option with.
         """
         from goalrail.server.auth import UnifiedAuthProvider
 
@@ -1639,16 +1638,6 @@ def create_app(
         needs_setup = False
         if accounts_enabled and account_store is not None:
             needs_setup = not any(u.has_password for u in account_store.list_users())
-        # databricks_features gates the Databricks-deployment-only UI hints
-        # (the "Databricks Lakebox" connect tab). True only when the internal
-        # lakebox launcher module is present — it is excluded from the OSS
-        # export, so an OSS build reports False and the SPA shows the clean,
-        # provider-agnostic hints. find_spec is side-effect-free (no import).
-        import importlib.util
-
-        databricks_features = (
-            importlib.util.find_spec("goalrail.onboarding.sandboxes.lakebox") is not None
-        )
         # managed_sandboxes_enabled gates the web UI's sandbox
         # option on the new-session screen: true only when a `sandbox:`
         # config is wired AND its provider can actually serve a managed
@@ -1681,7 +1670,6 @@ def create_app(
             "accounts_enabled": accounts_enabled,
             "login_url": login_url,
             "needs_setup": needs_setup,
-            "databricks_features": databricks_features,
             "managed_sandboxes_enabled": managed_sandboxes_enabled,
             "sandbox_provider": sandbox_provider,
             "smart_routing_enabled": smart_routing_enabled,
@@ -2123,7 +2111,6 @@ def create_app(
             """
             Return API server metadata when no web UI build is bundled.
 
-            Databricks Apps opens the app URL at ``/`` in a browser.
             API-only wheels intentionally omit the SPA assets, so serve
             a small JSON landing response instead of FastAPI's generic
             404. When a web UI build is present, the static mount above

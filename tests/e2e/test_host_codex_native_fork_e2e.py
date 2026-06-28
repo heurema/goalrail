@@ -27,9 +27,7 @@ needs ``codex`` on PATH and real model credentials. Set
 
     GOALRAIL_E2E_CODEX_NATIVE=1 \
     .venv/bin/python -m pytest tests/e2e/test_host_codex_native_fork_e2e.py \
-        --profile oss \
-        --llm-api-key "$(databricks auth token -p oss \
-            | python -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')" \
+        --llm-api-key "$OPENAI_API_KEY" \
         -v
 """
 

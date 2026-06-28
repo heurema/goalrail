@@ -21,7 +21,7 @@ def format_native_resume_command(
     :param session_id: Goalrail conversation id, e.g.
         ``"conv_abc123"``.
     :param server: Optional Goalrail server URL, e.g.
-        ``"https://example.databricks.com"``.
+        ``"https://goalrail.example.com"``.
     :returns: Shell-quoted command string, e.g.
         ``"goalrail claude --resume conv_abc123"``.
     """
@@ -46,7 +46,7 @@ def echo_native_resume_hint(
     :param session_id: Goalrail conversation id, e.g.
         ``"conv_abc123"``.
     :param server: Optional Goalrail server URL, e.g.
-        ``"https://example.databricks.com"``.
+        ``"https://goalrail.example.com"``.
     :returns: None.
     """
     command = format_native_resume_command(

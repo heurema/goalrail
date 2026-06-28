@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">Goalrail app icon</title>
+  <desc id="desc">A muted graphite rounded-square app icon with a rail-like route mark and terminal prompt.</desc>
+  <defs>
+    <linearGradient id="bg" x1="170" y1="120" x2="840" y2="900" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#555955" />
+      <stop offset="0.48" stop-color="#353735" />
+      <stop offset="1" stop-color="#17191c" />
+    </linearGradient>
+    <linearGradient id="rail" x1="270" y1="250" x2="740" y2="760" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#d7dddb" stop-opacity="0.94" />
+      <stop offset="0.5" stop-color="#aeb8b7" stop-opacity="0.84" />
+      <stop offset="1" stop-color="#7bede0" stop-opacity="0.9" />
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="46%" r="58%">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.1" />
+      <stop offset="0.62" stop-color="#5ed9ce" stop-opacity="0.09" />
+      <stop offset="1" stop-color="#000000" stop-opacity="0" />
+    </radialGradient>
+    <filter id="outerShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="28" stdDeviation="34" flood-color="#000000" flood-opacity="0.34" />
+      <feDropShadow dx="0" dy="-8" stdDeviation="12" flood-color="#ffffff" flood-opacity="0.08" />
+    </filter>
+    <filter id="lineGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="7" result="blur" />
+      <feColorMatrix in="blur" type="matrix" values="0 0 0 0 0.45 0 0 0 0 0.95 0 0 0 0 0.9 0 0 0 0.5 0" result="glow" />
+      <feMerge>
+        <feMergeNode in="glow" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+    <clipPath id="clip">
+      <rect x="104" y="104" width="816" height="816" rx="184" />
+    </clipPath>
+  </defs>
+  <rect width="1024" height="1024" fill="#151321" />
+  <g filter="url(#outerShadow)">
+    <rect x="104" y="104" width="816" height="816" rx="184" fill="url(#bg)" />
+    <rect x="123" y="123" width="778" height="778" rx="166" fill="none" stroke="#ffffff" stroke-opacity="0.13" stroke-width="10" />
+    <rect x="127" y="127" width="770" height="770" rx="162" fill="none" stroke="#000000" stroke-opacity="0.34" stroke-width="7" />
+  </g>
+  <g clip-path="url(#clip)">
+    <circle cx="468" cy="382" r="450" fill="url(#glow)" />
+    <path d="M188 782C328 696 452 718 552 786C644 850 770 835 872 746" fill="none" stroke="#7bede0" stroke-opacity="0.07" stroke-width="52" stroke-linecap="round" />
+  </g>
+  <g filter="url(#lineGlow)">
+    <path d="M324 618C278 596 250 552 250 500C250 427 308 369 381 369H398C423 314 478 279 540 279C619 279 684 337 695 413H706C766 413 815 462 815 522C815 582 766 631 706 631H645" fill="none" stroke="url(#rail)" stroke-width="38" stroke-linecap="round" stroke-linejoin="round" opacity="0.7" />
+    <path d="M356 432L420 512L356 592" fill="none" stroke="#d6dddc" stroke-width="48" stroke-linecap="round" stroke-linejoin="round" opacity="0.88" />
+    <path d="M500 592H630" fill="none" stroke="#d6dddc" stroke-width="46" stroke-linecap="round" opacity="0.72" />
+    <path d="M628 370C680 402 711 459 711 522" fill="none" stroke="#7bede0" stroke-width="24" stroke-linecap="round" opacity="0.42" />
+  </g>
+  <circle cx="706" cy="631" r="23" fill="#7bede0" opacity="0.9" />
+  <circle cx="706" cy="631" r="43" fill="none" stroke="#7bede0" stroke-width="6" opacity="0.22" />
+</svg>

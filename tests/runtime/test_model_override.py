@@ -23,12 +23,12 @@ def test_apply_request_model_override_none_returns_input_unchanged() -> None:
     would silently swap models on every request.
     """
     original = LLMConfig(
-        model="databricks-gpt-5-4",
+        model="openai/gpt-5-4",
         extra={"temperature": 0.5},
     )
     result = _apply_request_model_override(original, None)
     # The returned value is functionally identical to the input.
-    assert result.model == "databricks-gpt-5-4"
+    assert result.model == "openai/gpt-5-4"
     assert result.extra == {"temperature": 0.5}
     # ``extra["model_override"]`` is absent — downstream harness
     # propagation must distinguish "no override" from "override
@@ -44,7 +44,7 @@ def test_apply_request_model_override_substitutes_model_field() -> None:
     actually take effect on the wire.
     """
     original = LLMConfig(
-        model="databricks-gpt-5-4",
+        model="openai/gpt-5-4",
         extra={"temperature": 0.5},
     )
     result = _apply_request_model_override(original, "openai/gpt-5.4-mini")
@@ -60,7 +60,7 @@ def test_apply_request_model_override_stashes_override_in_extra() -> None:
     the unambiguous signal that ``the harness HTTP client`` reads to
     decide whether to emit ``body["model_override"]`` on the wire.
     """
-    original = LLMConfig(model="databricks-gpt-5-4", extra={})
+    original = LLMConfig(model="openai/gpt-5-4", extra={})
     result = _apply_request_model_override(original, "openai/gpt-5.4-mini")
     assert result.extra["model_override"] == "openai/gpt-5.4-mini"
 
@@ -75,7 +75,7 @@ def test_apply_request_model_override_preserves_other_extra_keys() -> None:
     silently fight when used together.
     """
     original = LLMConfig(
-        model="databricks-gpt-5-4",
+        model="openai/gpt-5-4",
         extra={"temperature": 0.5, "reasoning_effort": "high"},
     )
     result = _apply_request_model_override(original, "openai/gpt-5.4-mini")
@@ -96,10 +96,10 @@ def test_apply_request_model_override_does_not_mutate_input() -> None:
     exists to prevent.
     """
     original = LLMConfig(
-        model="databricks-gpt-5-4",
+        model="openai/gpt-5-4",
         extra={"temperature": 0.5},
     )
     _apply_request_model_override(original, "openai/gpt-5.4-mini")
     # Original is unchanged after the call.
-    assert original.model == "databricks-gpt-5-4"
+    assert original.model == "openai/gpt-5-4"
     assert original.extra == {"temperature": 0.5}

@@ -65,7 +65,7 @@ def executor_block_yaml(tmp_path: Path) -> Path:
         "name": "executor_example",
         "prompt": "Assistant with a fixed executor.",
         "executor": {
-            "model": "databricks-claude-sonnet-4",
+            "model": "anthropic/claude-sonnet-4",
             "harness": "claude-sdk",
             "profile": "test-profile",
         },
@@ -85,7 +85,7 @@ def function_tool_yaml(tmp_path: Path) -> Path:
     config = {
         "name": "tool_user",
         "prompt": "Use tools when helpful.",
-        "executor": {"model": "databricks-claude-sonnet-4"},
+        "executor": {"model": "anthropic/claude-sonnet-4"},
         "tools": {
             "get_current_time": {
                 "type": "function",
@@ -107,11 +107,11 @@ def _roundtrip(yaml_path: Path) -> None:
 
     **Lossy by design.** :class:`AgentSpec` does not model every
     goalrail :class:`FunctionTool` field — ``description``,
-    ``input_schema``, ``output_schema``, ``scopes``, and
-    ``catalog_path`` are dropped on the way to AgentSpec and not
-    recovered on the way back. We compare on the structural fields
-    we DO promise to round-trip: ``name``, ``prompt``, ``executor``,
-    and the per-tool ``(name, callable identity)`` pair.
+    ``input_schema``, ``output_schema``, and ``scopes`` are dropped
+    on the way to AgentSpec and not recovered on the way back. We
+    compare on the structural fields we DO promise to round-trip:
+    ``name``, ``prompt``, ``executor``, and the per-tool
+    ``(name, callable identity)`` pair.
 
     :param yaml_path: Path to an goalrail YAML fixture.
     """

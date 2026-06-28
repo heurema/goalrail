@@ -58,7 +58,7 @@ be one of: `claude-native` (Claude Code, full coding tools), `claude-sdk`,
 
 Model selection is optional — if omitted, the executor resolves the
 provider's default model from the configured credentials (e.g. an
-Anthropic key, a Claude subscription, or a Databricks profile). Pin one
+Anthropic key, an OpenAI key, or a Claude subscription). Pin one
 only when asked; see `goalrail-knowledge` for `executor.model` / `auth`.
 
 ## Step 3: Generate AGENTS.md
@@ -254,7 +254,6 @@ standard env var names:
 - `deepseek` → `DEEPSEEK_API_KEY`
 - `xai` → `XAI_API_KEY`
 - `mistral` → `MISTRAL_API_KEY`
-- `databricks` → `DATABRICKS_TOKEN` (or an `auth.profile`)
 
 ## Validation checklist
 

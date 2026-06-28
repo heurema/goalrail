@@ -57,8 +57,8 @@ import yaml
 # enough that a single shot produces the echo fingerprint.
 _OPENAI_MODEL = "gpt-4o-mini"
 
-# Harness that honors ``OPENAI_API_KEY`` directly (no Databricks
-# ``.databrickscfg`` patching needed).
+# Harness that honors ``OPENAI_API_KEY`` directly (no gateway
+# ``provider config`` patching needed).
 _HARNESS = "openai-agents"
 
 # Probe token the LLM must pass to the ``echo`` tool. Picked to
@@ -93,7 +93,7 @@ def _skip_without_openai_key() -> str:
     OpenAI key.
 
     Keeps the suite runnable on CI / in environments where the
-    contributor hasn't exported a key. A stale Databricks PAT
+    contributor hasn't exported a key. A stale provider token
     export (``dapi...``) is also skipped — the openai-agents
     harness would hit api.openai.com with it and 401.
 
@@ -113,7 +113,7 @@ def _skip_without_openai_key() -> str:
             f"OpenAI key (expected a string starting with 'sk-', "
             f"got {key[:6]!r}...). Refusing to run to avoid a "
             f"confusing 401 against api.openai.com — this test "
-            f"targets OpenAI directly, not a Databricks gateway.",
+            f"targets OpenAI directly, not a gateway.",
         )
     return key
 
@@ -208,16 +208,9 @@ def test_goalrail_stdio_mcp_tool_roundtrip(tmp_path: Path) -> None:
     env["OPENAI_API_KEY"] = openai_key
     # Belt-and-suspenders: clear any stale base-URL override
     # that could redirect the openai-agents harness's calls to
-    # a Databricks serving endpoint that doesn't know
-    # ``gpt-4o-mini``. Without this, a developer who exported
-    # ``OPENAI_BASE_URL`` earlier in their shell would see the
-    # test mysteriously route to a Databricks gateway.
+    # a gateway that doesn't know ``gpt-4o-mini``.
     env.pop("OPENAI_BASE_URL", None)
-    # Ditto for Databricks env vars the Goalrail mode shim might
-    # otherwise pick up and use to route credentials.
     for stale in (
-        "DATABRICKS_CONFIG_PROFILE",
-        "DATABRICKS_TOKEN",
         "ANTHROPIC_API_KEY",
         "CLAUDE_CODE",
         "CLAUDECODE",

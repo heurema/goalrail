@@ -522,7 +522,7 @@ async def test_build_policy_engine_llm_client_reaches_callable(
     assert captured._request_timeout == 60
 
 
-# ── Databricks profile support ──────────────────────────────────────────────
+# ── server LLM profile parsing ──────────────────────────────────────────────
 
 
 def test_parse_server_llm_with_profile() -> None:
@@ -530,17 +530,17 @@ def test_parse_server_llm_with_profile() -> None:
     ``parse_server_llm`` parses the ``profile:`` field into
     ``LLMConfig.profile``.
 
-    What breaks if this fails: the parser drops the profile
-    field, so Databricks profile auth is silently ignored.
+    What breaks if this fails: config round-tripping drops the
+    compatibility profile field.
     """
     raw = {
-        "model": "databricks-claude-sonnet-4-6",
+        "model": "anthropic/claude-sonnet-4-6",
         "profile": "my-workspace",
         "request_timeout": 30,
     }
     result = parse_server_llm(raw, expand_env=False)
     assert result is not None
-    assert result.model == "databricks-claude-sonnet-4-6"
+    assert result.model == "anthropic/claude-sonnet-4-6"
     assert result.profile == "my-workspace"
     assert result.connection is None
     # profile should NOT leak into extra
@@ -557,7 +557,7 @@ def test_parse_server_llm_profile_not_in_extra() -> None:
     parameter error.
     """
     raw = {
-        "model": "databricks-gpt-5-4-mini",
+        "model": "openai/gpt-5-4-mini",
         "profile": "dev",
         "temperature": 0.5,
     }
@@ -567,52 +567,16 @@ def test_parse_server_llm_profile_not_in_extra() -> None:
     assert result.extra == {"temperature": 0.5}
 
 
-def test_resolve_server_llm_connection_resolves_databricks_profile(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """
-    ``_resolve_server_llm_connection`` resolves a Databricks profile
-    to connection params when ``connection`` is absent.
-
-    What breaks if this fails: specifying ``profile:`` in the
-    server config has no effect — the classifier and PolicyLLMClient
-    get ``connection=None`` and fall back to env var / OpenAI
-    defaults instead of the gateway.
-    """
-    from goalrail.runtime.credentials.databricks import WorkspaceCreds
-
-    monkeypatch.setattr(
-        "goalrail.runtime.policies.builder.resolve_databricks_workspace",
-        lambda profile: WorkspaceCreds(
-            host="https://example.cloud.databricks.com",
-            token="dapi-test-token",
-        ),
-    )
-
-    llm_config = LLMConfig(
-        model="databricks-claude-sonnet-4-6",
-        profile="my-workspace",
-    )
-    connection = _resolve_server_llm_connection(llm_config)
-
-    # Profile resolved to serving-endpoints URL + bearer token.
-    assert connection == {
-        "base_url": "https://example.cloud.databricks.com/serving-endpoints",
-        "api_key": "dapi-test-token",
-    }
-
-
 def test_resolve_server_llm_connection_connection_wins_over_profile() -> None:
     """
     When both ``connection`` and ``profile`` are set, ``connection``
-    wins — the profile is not resolved.
+    wins.
 
     What breaks if this fails: explicit connection params are
-    overwritten by the profile, causing auth to go to the wrong
-    endpoint.
+    ignored, causing auth to go to the wrong endpoint.
     """
     llm_config = LLMConfig(
-        model="databricks-gpt-5-4-mini",
+        model="openai/gpt-5-4-mini",
         connection={"api_key": "explicit-key", "base_url": "https://explicit.com"},
         profile="should-be-ignored",
     )

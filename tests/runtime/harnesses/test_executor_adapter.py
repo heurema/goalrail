@@ -7,7 +7,7 @@ End-to-end through real subprocesses spawned via the same
 executor — no real LLM SDK required. The adapter's per-event
 translation contract is what's under test; per-harness
 configuration (Claude SDK CLI discovery, Codex subprocess setup,
-Databricks credential resolution) is the per-wrap concern tested
+provider credential resolution) is the per-wrap concern tested
 elsewhere.
 """
 

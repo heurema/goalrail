@@ -36,7 +36,7 @@ prompt: |
 
 executor:
   harness: openai-agents
-  model: databricks-gpt-5-5
+  model: openai/gpt-5-5
 
 async: true
 cancellable: true
@@ -64,7 +64,7 @@ tools:
     os_env: inherit
     executor:
       harness: claude-sdk
-      model: databricks-claude-opus-4-7
+      model: anthropic/claude-opus-4-7
 
   codex_worker:
     type: agent
@@ -77,4 +77,4 @@ tools:
     os_env: inherit
     executor:
       harness: codex
-      model: databricks-gpt-5-5
+      model: openai/gpt-5-5

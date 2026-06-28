@@ -86,7 +86,7 @@ class PolicyEngine:
     :param initial_model: The model the session is currently
         using — the conversation's ``model_override`` when set,
         else the agent spec's ``llm.model``, e.g.
-        ``"databricks-claude-opus-4-8"`` or the native tier alias
+        ``"anthropic/claude-opus-4-8"`` or the native tier alias
         ``"opus"``. Resolved at engine-build time and injected
         into every policy dispatch as ``event["context"]["model"]``
         so callables can gate on the active model. ``None`` when

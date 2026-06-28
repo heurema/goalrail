@@ -32,14 +32,6 @@ export interface ServerInfo {
    */
   needs_setup: boolean;
   /**
-   * True on Databricks/internal deployments (the server's internal lakebox
-   * CLI is present). Gates Databricks-only UI hints — the "Databricks Lakebox"
-   * connect tab in the CLI command snippets. False
-   * on the OSS build, where those modules are excluded from the export, so the
-   * SPA shows the clean, provider-agnostic hints.
-   */
-  databricks_features: boolean;
-  /**
    * True when the server can provision cloud-sandbox hosts for
    * ``host_type: "managed"`` session creates (a ``sandbox:`` config with a
    * launch-capable provider is wired). Gates the sandbox option in
@@ -47,9 +39,9 @@ export interface ServerInfo {
    */
   managed_sandboxes_enabled: boolean;
   /**
-   * Short name of the backing sandbox provider (e.g. ``"modal"``,
-   * ``"lakebox"``) used to label the new-session sandbox option per
-   * provider ("Modal Sandbox" / "Databricks Sandbox"). ``null`` when
+   * Short name of the backing sandbox provider (e.g. ``"modal"``)
+   * used to label the new-session sandbox option per provider
+   * ("Modal Sandbox"). ``null`` when
    * the server names no provider (e.g. an embedding deployment that
    * left it unset), in which case the UI shows the generic
    * "New Sandbox" label. Only meaningful when
@@ -68,7 +60,6 @@ const _OFF: ServerInfo = {
   accounts_enabled: false,
   login_url: null,
   needs_setup: false,
-  databricks_features: false,
   managed_sandboxes_enabled: false,
   sandbox_provider: null,
   smart_routing_enabled: false,
@@ -100,7 +91,6 @@ export async function resolveServerInfo(): Promise<ServerInfo> {
           accounts_enabled: data.accounts_enabled === true,
           login_url: typeof data.login_url === "string" ? data.login_url : null,
           needs_setup: data.needs_setup === true,
-          databricks_features: data.databricks_features === true,
           managed_sandboxes_enabled: data.managed_sandboxes_enabled === true,
           sandbox_provider:
             typeof data.sandbox_provider === "string" ? data.sandbox_provider : null,
@@ -137,7 +127,6 @@ export function getCachedServerInfo(): ServerInfo | null {
  */
 const _SANDBOX_PROVIDER_NAMES: Record<string, string> = {
   modal: "Modal",
-  lakebox: "Databricks",
   daytona: "Daytona",
   e2b: "E2B",
 };
@@ -145,8 +134,8 @@ const _SANDBOX_PROVIDER_NAMES: Record<string, string> = {
 /**
  * Label for the new-session sandbox option, named per provider.
  *
- * Returns e.g. "Modal Sandbox" or "Databricks Sandbox" when the
- * server reports a provider, and the generic "New Sandbox" when it
+ * Returns e.g. "Modal Sandbox" when the server reports a provider,
+ * and the generic "New Sandbox" when it
  * names none (``null``) — the same wording the UI used before
  * providers were surfaced.
  */

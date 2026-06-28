@@ -52,7 +52,6 @@ from goalrail.llms.routing import infer_harness_from_model as _infer_harness_fro
 from goalrail.spec.types import (
     AgentSpec,
     ApiKeyAuth,
-    DatabricksAuth,
     ExecutorSpec,
     GuardrailsSpec,
     LLMConfig,
@@ -119,8 +118,7 @@ _KNOWN_POLICY_TYPES: frozenset[str] = frozenset(
 
 # Harnesses that route through locally installed CLIs backed by the user's
 # subscription plan (Claude Code, Codex). These must NOT inherit a parent
-# agent's Databricks profile; doing so would trigger Databricks routing
-# and bypass subscription auth.
+# agent's legacy profile.
 _SUBSCRIPTION_AUTH_HARNESSES: frozenset[str] = frozenset({"claude-native", "claude-sdk", "codex"})
 
 # ── Forward direction: AgentSpec → AgentDef ────────────────────
@@ -160,7 +158,7 @@ def agent_spec_to_agent_def(spec: AgentSpec) -> AgentDef:
 
     # For native Goalrail v1 specs ``executor.config`` is empty; infer the
     # harness from the model prefix so Claude/GPT models get the right
-    # executor instead of falling back to DatabricksExecutor.
+    # executor instead of falling back to the legacy default.
     _raw_harness: str | None = spec.executor.config.get("harness")
     if not _raw_harness:
         _raw_harness = _infer_harness_from_model(spec.executor.model) or None
@@ -308,18 +306,6 @@ def _translate_tools_to_goalrail(spec: AgentSpec) -> dict[str, Tool]:
                 name=tool_info.name,
                 input_schema=tool_info.parameters,
                 runtime="client",
-            )
-            continue
-        # UC function tools have a catalog_path and no server-side
-        # callable. Round-trip them as a ``FunctionTool`` with the
-        # catalog_path preserved so the inner stack can delegate to
-        # the runner's UC executor at call time.
-        if tool_info.runtime == ToolRuntime.UC_FUNCTION:
-            tools[tool_info.name] = FunctionTool(
-                name=tool_info.name,
-                catalog_path=tool_info.catalog_path,
-                input_schema=tool_info.parameters,
-                warehouse_id=tool_info.warehouse_id,
             )
             continue
         # Step (c): every ``LocalToolInfo`` resolves to a plain
@@ -617,13 +603,9 @@ def _translate_guardrails_yaml(
         to ``guardrails.ask_timeout``. ``None`` means use the
         goalrail default (see
         :data:`goalrail.spec.types.DEFAULT_ASK_TIMEOUT`).
-    :param parent_profile: Databricks profile from the parent
-        agent's executor (``agent_def.executor.profile``). Used
-        to resolve ``type: prompt`` policy LLM credentials at
-        translation time — see
-        :func:`_translate_prompt_policy_yaml`. ``None`` skips
-        injection (policies must then carry their own
-        ``connection:`` or fail at classifier call time).
+    :param parent_profile: Legacy profile from the parent agent's executor
+        (``agent_def.executor.profile``). Kept for compatibility with older
+        goalrail YAMLs.
     :returns: A validated :class:`GuardrailsSpec`, or ``None``
         when no guardrails-related fields were declared in the
         source YAML.
@@ -717,11 +699,7 @@ def _translate_policies_yaml(
 
     :param raw_policies: Raw ``policies:`` map from the goalrail
         YAML, keyed by policy name.
-    :param parent_profile: Databricks profile from the parent
-        agent's executor — threaded down so ``type: prompt``
-        policies without their own ``connection:`` can resolve
-        credentials at translation time. See
-        :func:`_translate_prompt_policy_yaml`.
+    :param parent_profile: Legacy profile from the parent agent's executor.
     :returns: Agent-plane-shaped ``policies:`` map — same keys,
         transformed values. Empty dict when *raw_policies* is
         ``None`` or empty.
@@ -757,10 +735,7 @@ def _translate_policy_entry_yaml(
     :param policy_name: YAML key under ``policies:``, e.g.
         ``"block_long_sleep"`` — included in error messages.
     :param raw_entry: Raw YAML mapping for this policy.
-    :param parent_profile: Databricks profile from the parent
-        agent's executor. Only consumed by the ``type: prompt``
-        branch — function policies don't carry LLM configs so
-        the profile is irrelevant there.
+    :param parent_profile: Legacy profile from the parent agent's executor.
     :returns: Agent-plane-shaped dict.
     :raises GoalrailError: When the entry declares a policy
         ``type`` the translator doesn't recognize.
@@ -848,42 +823,6 @@ def _translate_function_policy_yaml(
     return out
 
 
-def _resolve_profile_to_connection(profile: str) -> dict[str, str] | None:
-    """
-    Resolve a Databricks profile name to a
-    ``{base_url, api_key}`` dict by reading ``~/.databrickscfg``.
-
-    Used at spec-translation time to make goalrail LLMConfig
-    self-contained — Goalrail' LLM adapters take credentials
-    via explicit ``connection:`` fields (per the "spec
-    self-containment" design principle) and do not read env vars.
-    Meanwhile goalrail declares Databricks creds via the
-    ``profile:`` convenience shortcut. The translator closes the
-    gap by resolving profile → connection once at load time.
-
-    :param profile: Profile name in ``~/.databrickscfg``, e.g.
-        ``"<your-profile>"``.
-    :returns: ``{"base_url": "<host>/serving-endpoints", "api_key":
-        "<token>"}`` when the profile is readable and has both
-        host + token; ``None`` when the profile is missing or
-        malformed (callers treat ``None`` as "skip injection" —
-        the policy then falls back to whatever connection the
-        YAML declared explicitly, or errors loud at call time).
-    """
-    # Import locally to avoid a top-level dependency on goalrail
-    # runtime details from the spec module — only this single
-    # translator path needs it.
-    from goalrail.inner.databricks_executor import _read_databrickscfg
-
-    creds = _read_databrickscfg(profile)
-    if creds is None:
-        return None
-    return {
-        "base_url": creds.host.rstrip("/") + "/serving-endpoints",
-        "api_key": creds.token,
-    }
-
-
 def _translate_prompt_policy_yaml(
     raw_entry: dict[str, Any],
     *,
@@ -898,30 +837,16 @@ def _translate_prompt_policy_yaml(
     - ``executor: {model: X}`` → ``llm: {model: X}``. The
       goalrail prompt policy uses ``executor`` to override
       the classifier LLM; goalrail uses ``llm``.
-    - When *parent_profile* is set AND the policy has no
-      explicit ``connection:``, resolve the profile to a
-      ``connection: {base_url, api_key}`` dict so the
-      goalrail classifier actually reaches the Databricks
-      gateway. Without this, a policy declaring
-      ``model: databricks-claude-sonnet-4`` parses as provider
-      ``"openai"`` and the request hits ``api.openai.com``.
     - Other fields (``on``, ``condition``, ``prompt``,
       ``action``, ``set_labels``, ``ask_timeout``) pass through
       unchanged.
 
     :param raw_entry: Raw YAML mapping for one ``type: prompt``
         policy, e.g. ``{"type": "prompt", "on": ["request"],
-        "executor": {"model": "databricks-claude-sonnet-4"},
+        "executor": {"model": "claude-sonnet-4-6"},
         "prompt": "Deny Canada-related requests."}``.
-    :param parent_profile: Databricks profile from the parent
-        agent's ``executor.profile`` — usually set by the
-        ``--profile`` CLI flag or the YAML's top-level
-        ``executor.profile:`` field. When present and the
-        policy has no explicit connection, the translator bakes
-        the resolved ``{base_url, api_key}`` into the
-        goalrail LLMConfig so the classifier call at runtime
-        routes correctly. ``None`` means no profile — policies
-        must carry their own credentials.
+    :param parent_profile: Legacy profile from the parent agent's
+        ``executor.profile``. Kept for signature compatibility.
     :returns: Agent-plane-shaped dict with ``executor:`` renamed
         to ``llm:``.
     """
@@ -1019,17 +944,10 @@ def agent_def_to_agent_spec(
         if executor_spec.connection is None:
             executor_spec.connection = llm_config.connection
 
-    # Parent's Databricks profile (from ``--profile`` CLI arg or
-    # YAML ``executor.profile``) propagates down to inline
-    # sub-agents that don't declare one of their own. Without
-    # this, a ``claude_worker`` inline AgentTool whose YAML
-    # omits ``profile:`` inherits empty string — the inner
-    # ClaudeSDKExecutor then resolves credentials with no
-    # profile and 403s against the Databricks workspace. Pure
-    # goalrail gets this "for free" via Session → factory; the
-    # goalrail spawn path runs each sub-agent as an
-    # independent task, so we have to bake the inheritance into
-    # the spec.
+    # Parent legacy profile propagates down to inline sub-agents that don't
+    # declare one of their own. Pure goalrail gets this "for free" via
+    # Session → factory; the goalrail spawn path runs each sub-agent as an
+    # independent task, so we bake the inheritance into the spec.
     parent_profile = agent_def.executor.profile if agent_def.executor is not None else None
     # Same deal for the harness. Inline AgentTools in YAMLs like
     # ``coding_supervisor_with_forks.yaml`` declare ``prompt:`` +
@@ -1041,11 +959,8 @@ def agent_def_to_agent_spec(
     #
     # We propagate the *effective* parent harness — i.e. the
     # harness after model-prefix auto-pick has run — not the raw
-    # YAML value. A parent YAML like ``agent_with_subagent_session.yaml``
-    # declares only ``executor.model: databricks-gpt-5-4-mini`` and
-    # relies on auto-pick to resolve it to ``openai-agents``; if we
-    # passed the raw ``""`` down, the child (which has no model of
-    # its own) would end up with an empty harness and fail
+    # YAML value. If we passed a raw empty harness down, the child (which has
+    # no model of its own) would end up with an empty harness and fail
     # validation.
     parent_harness: str | None = None
     if executor_spec.type == "goalrail":
@@ -1138,10 +1053,6 @@ def agent_def_to_agent_spec(
             raw_labels=raw_yaml.get("labels"),
             raw_label_schema=raw_yaml.get("label_schema"),
             raw_ask_timeout=raw_yaml.get("ask_timeout"),
-            # Baked-in at translation time so Goalrail'
-            # classifier LLM calls honor Databricks routing
-            # (goalrail adapters don't read env vars per the
-            # spec-self-containment design principle).
             parent_profile=parent_profile,
         )
 
@@ -1341,15 +1252,9 @@ def _agent_tool_to_sub_spec(
     :param tool_name: The YAML key under which this AgentTool is
         declared on the parent, e.g. ``"claude_worker"``.
     :param tool: The parsed goalrail :class:`AgentTool`.
-    :param parent_profile: Databricks profile carried on the
-        parent agent's executor. Used as the sub-spec's profile
-        when the inline AgentTool omits one — inline agents in
-        YAMLs like ``coding_supervisor.yaml`` typically declare
-        ``harness: claude-sdk`` + ``model: ...`` but leave
-        ``profile:`` out, relying on the CLI's ``--profile`` flag
-        to flow down. Agent-plane spawns each sub-agent as an
-        independent task, so we bake the inheritance into the
-        spec here. Empty string means "no parent profile known";
+    :param parent_profile: Legacy profile carried on the parent agent's
+        executor. Used as the sub-spec's profile when the inline AgentTool
+        omits one. Empty string means "no parent profile known";
         the sub-spec then falls through the same way its own
         empty field does.
     :param parent_harness: Goalrail harness carried on the
@@ -1526,6 +1431,7 @@ def _fail_on_unsupported_tool(
     :raises GoalrailError: On MCP tools or cancellable_function
         tools.
     """
+    _ = (agent_name, tool_name)
     # FunctionTool, CancellableFunctionTool, and AgentTool are all
     # supported — the caller dispatches them appropriately.
     # Agent-plane treats every tool as cancellable at the runtime
@@ -1534,23 +1440,6 @@ def _fail_on_unsupported_tool(
     if isinstance(tool, FunctionTool | CancellableFunctionTool | AgentTool):
         return
     if isinstance(tool, MCPTool):
-        # MCPTool is translated into ``AgentSpec.mcp_servers`` by
-        # :func:`_translate_mcp_tool_from_def` — except for the
-        # ``databricks_server=<name>`` shape, which references a
-        # Databricks-managed MCP endpoint that Goalrail'
-        # runtime has no resolver for yet. Reject that shape loud;
-        # HTTP + stdio MCPTools fall through and translate below.
-        if tool.databricks_server is not None:
-            raise GoalrailError(
-                f"goalrail agent {agent_name!r} declares tool "
-                f"{tool_name!r} of type `mcp` with "
-                f"``databricks_server={tool.databricks_server!r}`` — "
-                f"Goalrail' MCPServerConfig doesn't understand the "
-                f"named-Databricks-server shape. Translate to an "
-                f"explicit HTTP ``url`` or stdio ``command``+``args`` "
-                f"MCP first.",
-                code=ErrorCode.INVALID_INPUT,
-            )
         return
 
 
@@ -1609,7 +1498,7 @@ def _translate_llm_from_def(
     :param oa_executor: The goalrail
         :class:`~goalrail.datamodel.ExecutorSpec`, or ``None``
         when the YAML omitted the ``executor:`` block. Example:
-        ``GoalrailExecutorSpec(model="databricks-claude-sonnet-4")``.
+        ``GoalrailExecutorSpec(model="claude-sonnet-4-6")``.
     :param raw_executor: Optional raw goalrail YAML ``executor:``
         mapping. When present and it carries an ``extra:`` dict,
         those kwargs flow into :attr:`LLMConfig.extra` so harness-
@@ -1646,9 +1535,8 @@ def _translate_executor_from_def(
     Returns ``type="goalrail"`` when a harness can be resolved,
     routing the agent through ``GoalrailExecutor``. Raises
     :class:`GoalrailError` when a model is declared but no
-    harness can be inferred — the spec must explicitly declare a
-    harness or use a model whose prefix maps to a known harness
-    (e.g. ``databricks-claude-*`` maps to ``claude-sdk``).
+    harness can be inferred — the spec must explicitly declare a harness or
+    use a model whose prefix maps to a known harness.
 
     The ``harness`` and ``profile`` fields from goalrail land in
     ``executor.config`` so :meth:`GoalrailExecutor.from_spec` can
@@ -1664,9 +1552,8 @@ def _translate_executor_from_def(
        through by :func:`_agent_tool_to_sub_spec` for inline
        AgentTools that omit their own ``executor:`` block.
     3. :func:`_infer_harness_from_model` on the resolved model
-       string — mirrors pure goalrail' CLI auto-pick
-       (``databricks-claude-*`` → ``claude-sdk``, etc.) so YAMLs
-       that declare only a model continue to work under Goalrail mode.
+       string — mirrors pure goalrail' CLI auto-pick so YAMLs that declare
+       only a model continue to work under Goalrail mode.
     4. Error — when all of the above yield an empty string and a
        model is declared, the spec is invalid (no harness can be
        inferred for the model).
@@ -1682,8 +1569,8 @@ def _translate_executor_from_def(
         *oa_executor* has no profile of its own. Used by
         inline-AgentTool sub-specs so the parent's CLI
         ``--profile`` flows into the child task's executor —
-        otherwise Databricks-backed harnesses 403 on the empty
-        profile. Ignored when the inline spec already carries a
+        otherwise profile-backed harnesses run with an empty profile. Ignored
+        when the inline spec already carries a
         profile (explicit always wins).
     :param parent_harness: Harness to fall back to when
         *oa_executor* has no harness of its own. Matches the
@@ -1749,11 +1636,11 @@ def _translate_executor_from_def(
         # branch. ``and model`` matches the first branch's guard
         # so mypy narrows ``model`` to ``str`` for the call.
         harness = _infer_harness_from_model(model)
-    # Inherit the parent's Databricks profile when the child doesn't
+    # Inherit the parent's legacy profile when the child doesn't
     # specify its own, EXCEPT for subscription-auth harnesses
     # (claude-sdk, codex). Those route through the locally installed
-    # CLI's subscription auth; inheriting a parent profile would
-    # trigger Databricks routing and bypass subscription auth.
+    # CLI's subscription auth; inheriting a parent profile would bypass
+    # subscription auth.
     # This check runs AFTER harness resolution so that children that
     # omit ``executor.harness`` but resolve to codex/claude-sdk via
     # model inference or parent inheritance are still excluded.
@@ -1778,7 +1665,7 @@ def _translate_executor_from_def(
     # ``auth`` is now parsed by the loader into GoalrailExecutorSpec.auth;
     # fall back to raw_executor for the top-level agent path that still
     # goes through _translate_executor_from_def(raw_executor=...).
-    auth: ApiKeyAuth | DatabricksAuth | None = None
+    auth: ApiKeyAuth | None = None
     if oa_executor is not None and oa_executor.auth is not None:
         auth = oa_executor.auth  # type: ignore[assignment]
     elif raw_executor is not None:
@@ -1813,8 +1700,7 @@ def _translate_mcp_tool_from_def(
     Transport dispatch:
 
     - ``tool.url`` populated → ``transport="http"`` with optional
-      ``headers`` (used by Databricks-profile MCPs that hit an
-      SSE endpoint with a Bearer token).
+      ``headers``.
     - ``tool.command`` populated → ``transport="stdio"`` with
       ``args`` + ``env`` carried through verbatim. The
       subprocess spawns unsandboxed (matching legacy spec,
@@ -1829,7 +1715,7 @@ def _translate_mcp_tool_from_def(
     :returns: A fully populated :class:`MCPServerConfig`.
     :raises GoalrailError: If *tool* has neither ``url`` nor
         ``command`` (shouldn't happen for normal MCPTools, but the
-        ``databricks_server`` shape is caught upstream by
+        legacy named-server shape is caught upstream by
         :func:`_fail_on_unsupported_tool`).
     """
     if tool.url is not None:
@@ -1838,7 +1724,6 @@ def _translate_mcp_tool_from_def(
             transport="http",
             url=tool.url,
             headers=dict(tool.headers) if tool.headers else {},
-            databricks_profile=tool.profile,
         )
     if tool.command is not None:
         return MCPServerConfig(
@@ -1913,25 +1798,6 @@ def _translate_function_tool_from_def(
             language=GOALRAIL_TOOL_LANGUAGE,
             parameters=dict(tool.input_schema) if tool.input_schema else None,
             runtime=ToolRuntime.CLIENT,
-        )
-    # Unity Catalog tools declare ``catalog_path:`` instead of
-    # ``callable:``. They are executed at tool-call time via
-    # ``WorkspaceClient.statement_execution.execute_statement()``.
-    # No server-side callable to resolve or introspect — the
-    # parameter schema must come from the YAML ``parameters:``
-    # block or be fetched from UC metadata at registration time
-    # (future enhancement).
-    catalog_path = getattr(tool, "catalog_path", None)
-    if catalog_path:
-        return LocalToolInfo(
-            name=tool_name,
-            path=None,
-            language=GOALRAIL_TOOL_LANGUAGE,
-            parameters=dict(tool.input_schema) if tool.input_schema else None,
-            runtime=ToolRuntime.UC_FUNCTION,
-            catalog_path=catalog_path,
-            warehouse_id=getattr(tool, "warehouse_id", None),
-            description=tool.description,
         )
     callable_path = _recover_callable_path(tool_name, tool)
     # Mirror the legacy ``Tool.tool_schema()`` precedence: an

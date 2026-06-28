@@ -18,12 +18,10 @@ from goalrail.inner.codex_executor import (
     _build_initial_prompt,
     _codex_cli_version,
     _CodexAppServerSession,
-    _databricks_codex_config_overrides,
     _dynamic_tool_result_payload,
     _prompt_for_turn,
     _to_codex_input_items,
 )
-from goalrail.inner.databricks_executor import DatabricksCredentials
 from goalrail.inner.executor import (
     ExecutorError,
     ReasoningChunk,
@@ -133,67 +131,6 @@ class _FakeProcess:
 
 
 class TestCodexExecutor(unittest.TestCase):
-    def test_databricks_codex_config_overrides(self):
-        overrides = _databricks_codex_config_overrides(
-            model="databricks-gpt-5-4-mini",
-            base_url="https://example.cloud.databricks.com/ai-gateway/codex/v1",
-            auth_command=('databricks auth token --host "https://example.cloud.databricks.com"'),
-        )
-        self.assertIn('model="databricks-gpt-5-4-mini"', overrides)
-        self.assertIn('model_provider="goalrail_databricks"', overrides)
-        self.assertTrue(any("/ai-gateway/codex/v1" in item for item in overrides))
-        self.assertFalse(any("/serving-endpoints" in item for item in overrides))
-        self.assertTrue(any('auth={command="sh"' in item for item in overrides))
-        self.assertTrue(any("databricks auth token --host" in item for item in overrides))
-        self.assertTrue(any("refresh_interval_ms=900000" in item for item in overrides))
-        self.assertFalse(any('env_key="DATABRICKS_TOKEN"' in item for item in overrides))
-
-    def test_codex_config_overrides_neutralize_toml_breakout(self):
-        """A model id full of TOML metacharacters stays a literal string.
-
-        Defense-in-depth for the model_override RCE: the model value is
-        ``json.dumps``-escaped, so even a string crafted to close the
-        ``model="..."`` field and inject its own ``auth.command`` parses
-        back as one inert model name and never overwrites the real
-        token-minting auth command.
-        """
-        import tomllib
-
-        payload = 'x",auth={command="sh",args=["-c","touch /tmp/pwned"]},wire_api="responses"}'
-        real_auth = 'databricks auth token --host "https://example.cloud.databricks.com"'
-        overrides = _databricks_codex_config_overrides(
-            model=payload,
-            base_url="https://example.cloud.databricks.com/ai-gateway/codex/v1",
-            auth_command=real_auth,
-        )
-        parsed = tomllib.loads("\n".join(overrides))
-        # The whole payload round-trips as the literal model name.
-        self.assertEqual(parsed["model"], payload)
-        # The injected auth command did not survive — the legit one did.
-        provider = parsed["model_providers"]["goalrail_databricks"]
-        self.assertEqual(provider["auth"]["args"], ["-c", real_auth])
-
-    def test_constructor_databricks_flag_with_profile(self):
-        with (
-            patch("goalrail.inner.codex_executor._find_codex_cli", return_value="/usr/bin/codex"),
-            patch(
-                "goalrail.inner.codex_executor._read_databrickscfg",
-                return_value=DatabricksCredentials(
-                    host="https://example.cloud.databricks.com",
-                    token="dapi_test_token",
-                ),
-            ),
-        ):
-            executor = CodexExecutor(gateway=True)
-        self.assertTrue(executor._gateway)
-        self.assertEqual(
-            executor._env["DATABRICKS_HOST"],
-            "https://example.cloud.databricks.com",
-        )
-        self.assertNotIn("DATABRICKS_TOKEN", executor._env)
-        self.assertIn("model=", executor._codex_config_overrides[0])
-        self.assertIn('model_provider="goalrail_databricks"', executor._codex_config_overrides[1])
-
     def test_constructor_does_not_force_codex_debug_env_by_default(self):
         with (
             patch("goalrail.inner.codex_executor._find_codex_cli", return_value="/usr/bin/codex"),
@@ -203,116 +140,6 @@ class TestCodexExecutor(unittest.TestCase):
 
         self.assertNotIn("RUST_LOG", executor._env)
         self.assertNotIn("RUST_BACKTRACE", executor._env)
-
-    def test_constructor_databricks_flag_with_profile_uses_profile_credentials(self):
-        with (
-            patch("goalrail.inner.codex_executor._find_codex_cli", return_value="/usr/bin/codex"),
-            patch.dict("os.environ", {}, clear=True),
-            patch(
-                "goalrail.inner.codex_executor._read_databrickscfg",
-                return_value=DatabricksCredentials(
-                    host="https://example-profile-workspace.cloud.databricks.com",
-                    token="profile_token",
-                ),
-            ),
-        ):
-            executor = CodexExecutor(
-                gateway=True,
-                databricks_profile="test-profile",
-                model="databricks-gpt-5-4-mini",
-            )
-
-        self.assertEqual(
-            executor._env["DATABRICKS_HOST"],
-            "https://example-profile-workspace.cloud.databricks.com",
-        )
-        self.assertNotIn("DATABRICKS_TOKEN", executor._env)
-        # The fix: with an explicit profile, the bearer-token helper selects by
-        # --profile (unambiguous), never --host. A regression to --host makes a
-        # workspace with two profiles on one host return an empty token → 401.
-        self.assertTrue(
-            any(
-                "databricks auth token --profile" in override
-                for override in executor._codex_config_overrides
-            )
-        )
-        self.assertFalse(
-            any("--host" in override for override in executor._codex_config_overrides)
-        )
-        # `--force-refresh` only exists in Databricks CLI >= v0.296.0, so it
-        # must be applied via a `--help` capability probe ($force), never
-        # passed unconditionally — an older CLI rejects the unknown flag and
-        # yields an empty token → silent 401.
-        auth_override = next(
-            o for o in executor._codex_config_overrides if "databricks auth token" in o
-        )
-        self.assertIn("databricks auth token --help", auth_override)
-        self.assertIn("force=--force-refresh", auth_override)
-        self.assertNotIn('--profile "test-profile" --force-refresh', auth_override)
-
-    def test_constructor_databricks_flag_with_host_override_skips_profile_lookup(self):
-        with (
-            patch("goalrail.inner.codex_executor._find_codex_cli", return_value="/usr/bin/codex"),
-            patch.dict("os.environ", {}, clear=True),
-            patch("goalrail.inner.codex_executor._read_databrickscfg") as read_cfg,
-        ):
-            executor = CodexExecutor(
-                gateway=True,
-                databricks_profile="missing-profile",
-                gateway_host="https://example.databricks.com/",
-                base_url_override="https://example.databricks.com/ai-gateway/codex/v1",
-                gateway_auth_command="printf token",
-                model="databricks-gpt-5-4-mini",
-            )
-
-        read_cfg.assert_not_called()
-        self.assertEqual(
-            executor._env["DATABRICKS_HOST"],
-            "https://example.databricks.com",
-        )
-        self.assertNotIn("DATABRICKS_TOKEN", executor._env)
-        self.assertTrue(
-            any("printf token" in override for override in executor._codex_config_overrides)
-        )
-        self.assertFalse(
-            any(
-                "databricks auth token --host" in item for item in executor._codex_config_overrides
-            )
-        )
-
-    def test_constructor_databricks_flag_with_host_override_requires_base_url(self):
-        with (
-            patch("goalrail.inner.codex_executor._find_codex_cli", return_value="/usr/bin/codex"),
-            patch.dict("os.environ", {}, clear=True),
-            self.assertRaisesRegex(OSError, "GATEWAY_BASE_URL"),
-        ):
-            CodexExecutor(
-                gateway=True,
-                gateway_host="https://example.databricks.com/",
-                gateway_auth_command="printf token",
-            )
-
-    def test_constructor_databricks_flag_with_host_override_requires_auth_command(self):
-        with (
-            patch("goalrail.inner.codex_executor._find_codex_cli", return_value="/usr/bin/codex"),
-            patch.dict("os.environ", {}, clear=True),
-            self.assertRaisesRegex(OSError, "GATEWAY_AUTH_COMMAND"),
-        ):
-            CodexExecutor(
-                gateway=True,
-                gateway_host="https://example.databricks.com/",
-                base_url_override="https://example.databricks.com/ai-gateway/codex/v1",
-            )
-
-    def test_constructor_databricks_flag_no_creds_raises(self):
-        with (
-            patch("goalrail.inner.codex_executor._find_codex_cli", return_value="/usr/bin/codex"),
-            patch.dict("os.environ", {}, clear=True),
-            patch("goalrail.inner.codex_executor._read_databrickscfg", return_value=None),
-            patch("goalrail.inner.codex_executor._read_databrickscfg_host", return_value=None),
-        ):
-            with self.assertRaises(EnvironmentError):
-                CodexExecutor(gateway=True)
 
     def test_build_initial_prompt_serializes_history(self):
         prompt = _build_initial_prompt(
@@ -398,36 +225,6 @@ class TestCodexExecutor(unittest.TestCase):
             self.assertEqual(fake_session.calls[0]["system_prompt"], "Be helpful.")
             self.assertEqual(fake_session.calls[0]["model"], "gpt-5.4-mini")
             self.assertEqual(fake_session.calls[0]["tools"][0]["name"], "calculate")
-
-        _run(_t())
-
-    def test_run_turn_databricks_uses_databricks_default_model(self):
-        async def _t():
-            fake_session = _FakeAppSession([[TurnComplete(response="done")]])
-            with patch(
-                "goalrail.inner.codex_executor._read_databrickscfg",
-                return_value=DatabricksCredentials(
-                    host="https://example.cloud.databricks.com",
-                    token="dapi_test_token",
-                ),
-            ):
-                executor = CodexExecutor(
-                    codex_path="/bin/echo",
-                    gateway=True,
-                    app_session_factory=lambda **kwargs: fake_session,
-                )
-
-            events = [
-                e
-                async for e in executor.run_turn(
-                    [{"role": "user", "content": "hi", "session_id": "s1"}],
-                    [],
-                    "",
-                )
-            ]
-
-            self.assertEqual(events[-1].response, "done")
-            self.assertEqual(fake_session.calls[0]["model"], "databricks-gpt-5-5")
 
         _run(_t())
 
@@ -1756,11 +1553,9 @@ def test_format_codex_error_params_extracts_provider_error_from_nested_error() -
     line, not the raw nested structure.
 
     What breaks if this fails: users hit a config mismatch (Claude
-    model on a codex harness, bad profile, unsupported model on the
-    Databricks Responses passthrough) and see only the bare fallback
-    "Codex App Server error" — no clue why. The 2026-04-28 user
-    report was exactly this: codex+claude-opus-4-6 on Databricks
-    surfaced as "Codex App Server error" with zero diagnostic info.
+    model on a codex harness, bad profile, unsupported model on a provider
+    passthrough) and see only the bare fallback "Codex App Server error" —
+    no clue why.
     """
     from goalrail.inner.codex_executor import _format_codex_error_params
 
@@ -1769,7 +1564,7 @@ def test_format_codex_error_params_extracts_provider_error_from_nested_error() -
             "message": (
                 '{"error_code":"BAD_REQUEST","message":'
                 '"Responses API passthrough is not supported for '
-                'model databricks-claude-opus-4-6."}'
+                'model anthropic/claude-opus-4-6."}'
             ),
             "codexErrorInfo": "other",
             "additionalDetails": None,
@@ -2324,22 +2119,6 @@ def test_clean_codex_env_excludes_openai_api_key(monkeypatch) -> None:
     assert env.get("OPENAI_TIMEOUT") == "60"
 
 
-def test_clean_codex_env_includes_databricks_bearer(monkeypatch) -> None:
-    """``_clean_codex_env`` preserves CI's explicit Databricks bearer.
-
-    :param monkeypatch: Pytest monkeypatch fixture.
-    """
-    from goalrail.inner.codex_executor import _clean_codex_env
-
-    monkeypatch.setenv("DATABRICKS_BEARER", "ci-bearer")
-    monkeypatch.setenv("DATABRICKS_TOKEN", "stale-token")
-
-    env = _clean_codex_env()
-
-    assert env.get("DATABRICKS_BEARER") == "ci-bearer"
-    assert "DATABRICKS_TOKEN" not in env
-
-
 def test_clean_codex_env_includes_goalrail_session_marker(monkeypatch) -> None:
     """The ``GOALRAIL`` session marker survives the codex env scrub.
 
@@ -2599,8 +2378,8 @@ def test_model_provider_override_appends_pin() -> None:
     silently routes the session instead.
     """
     with patch("goalrail.inner.codex_executor._find_codex_cli", return_value="/usr/bin/codex"):
-        executor = CodexExecutor(model_provider_override="Databricks")
-    assert executor._codex_config_overrides == ['model_provider="Databricks"']
+        executor = CodexExecutor(model_provider_override="OpenRouter")
+    assert executor._codex_config_overrides == ['model_provider="OpenRouter"']
 
 
 def test_model_provider_override_with_gateway_raises() -> None:
@@ -2620,5 +2399,5 @@ def test_model_provider_override_with_gateway_raises() -> None:
             base_url_override="https://gw.example.com/codex/v1",
             gateway_auth_command="printf %s tok",
             model="some-model",
-            model_provider_override="Databricks",
+            model_provider_override="OpenRouter",
         )

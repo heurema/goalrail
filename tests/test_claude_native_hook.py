@@ -113,34 +113,17 @@ def test_session_start_hook_emits_conversation_url_system_message(
     assert read_transcript_path(bridge_dir) == transcript_path
 
 
-def test_session_start_hook_maps_workspace_hosted_server_to_ui_mount(
+def test_session_start_hook_uses_configured_server_url(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """
-    SessionStart links to the SPA mount for workspace-hosted servers.
-
-    ``ap_server_url`` is the API proxy base (``/api/2.0/goalrail``);
-    pointing the "Open this session" message there returns JSON, not
-    the web UI. The message must land on the ``/goalrail`` SPA mount
-    with the ``?o=<org>`` selector — matching the CLI's ``Web UI:``
-    line and the tmux status bar.
+    SessionStart links to the configured Goalrail server base URL.
     """
-    from goalrail.cli_auth import store_databricks_auth
-
     monkeypatch.setattr("goalrail.claude_native_bridge._TRUSTED_PARENT", tmp_path)
     monkeypatch.setattr("goalrail.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
-    monkeypatch.setattr(
-        "goalrail.cli_auth._token_file_path",
-        lambda: tmp_path / "auth_tokens.json",
-    )
-    server = "https://example.databricks.com/api/2.0/goalrail"
-    store_databricks_auth(
-        server,
-        "https://example.databricks.com",
-        org_id="2850744067564480",
-    )
+    server = "https://goalrail.example/api/2.0/goalrail"
     bridge_dir = prepare_bridge_dir(
         "conv_abc",
         bridge_id="bridge_shared",
@@ -159,8 +142,7 @@ def test_session_start_hook_maps_workspace_hosted_server_to_ui_mount(
     assert exit_code == 0
     assert json.loads(captured.out) == {
         "systemMessage": (
-            "Open this session in Goalrail: "
-            "https://example.databricks.com/goalrail/c/conv_abc?o=2850744067564480"
+            "Open this session in Goalrail: https://goalrail.example/api/2.0/goalrail/c/conv_abc"
         )
     }
 
@@ -1794,7 +1776,7 @@ def test_build_hook_settings_omits_apikeyhelper_when_none(
 ) -> None:
     """A ``None`` api_key_helper writes no ``apiKeyHelper`` (the Bedrock path).
 
-    ``ClaudeNativeUcodeConfig.api_key_helper`` is now Optional and the Bedrock
+    ``ClaudeNativeProviderConfig.api_key_helper`` is now Optional and the Bedrock
     config returns ``None`` (Bedrock authenticates from AWS_BEARER_TOKEN_BEDROCK,
     not an apiKeyHelper). The settings writer must omit the key for ``None`` and
     never write the string ``"None"`` — a regression to an unconditional

@@ -685,8 +685,8 @@ def _find_free_local_port() -> int:
 # Deliberately uncommon: 8000 is the default for FastAPI/uvicorn (and many
 # other dev servers), so it was frequently already taken and the local server
 # kept landing on a random fallback port — breaking bookmarked URLs.
-# Deployments (Databricks Apps, Docker) pin their own port (typically 8000,
-# the platform convention) and do NOT read this constant.
+# Packaged deployments pin their own port (typically 8000, the platform
+# convention) and do NOT read this constant.
 _DEFAULT_LOCAL_PORT = 6767
 
 

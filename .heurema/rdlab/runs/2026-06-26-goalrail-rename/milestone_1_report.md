@@ -34,7 +34,7 @@ Not changed in this milestone:
 - `docs/GOALRAIL_BOT_SETUP.md` was renamed to
   `docs/GOALRAIL_BOT_SETUP.md`, with an explicit transition note explaining
   the still-legacy bot identity values.
-- `docs/databricks.md` was updated in prose while preserving historical PR
+- `docs/removed-provider.md` was updated in prose while preserving historical PR
   links to `heurema/goalrail`.
 
 ## Checks

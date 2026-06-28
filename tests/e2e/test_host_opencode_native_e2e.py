@@ -10,11 +10,9 @@ send a user message -> poll session items until the assistant echoes a marker.
 Opt-in (needs a pinned ``opencode`` binary + LLM credentials)::
 
     GOALRAIL_E2E_OPENCODE_NATIVE=1 \
-    HOME=/tmp/goalrail-isolated DATABRICKS_CONFIG_FILE=$REAL_HOME/.databrickscfg \
+    HOME=/tmp/goalrail-isolated \
     .venv/bin/python -m pytest tests/e2e/test_host_opencode_native_e2e.py \
-        --profile ai-devtools-prod \
-        --llm-api-key "$(databricks auth token -p ai-devtools-prod \
-            | python -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')" \
+        --llm-api-key "$OPENAI_API_KEY" \
         -v
 
 Running under an isolated ``$HOME`` keeps the runner-owned ``opencode serve``
@@ -43,7 +41,7 @@ pytestmark = pytest.mark.skipif(
     os.environ.get("GOALRAIL_E2E_OPENCODE_NATIVE") != "1" or shutil.which("opencode") is None,
     reason=(
         "opencode-native host e2e needs a pinned `opencode` binary + LLM creds; "
-        "set GOALRAIL_E2E_OPENCODE_NATIVE=1 (and pass --profile/--llm-api-key) to run"
+        "set GOALRAIL_E2E_OPENCODE_NATIVE=1 (and pass --llm-api-key) to run"
     ),
 )
 
@@ -129,7 +127,7 @@ def test_opencode_native_multiturn_item_order(
                 "workspace": str(workspace),
                 # gateway-valid model via opencode's openai provider (the daemon
                 # has OPENAI_BASE_URL/OPENAI_API_KEY pointed at the gateway).
-                "model_override": "openai/databricks-claude-sonnet-4-6",
+                "model_override": "openai/anthropic/claude-sonnet-4-6",
             },
             timeout=60.0,
         )

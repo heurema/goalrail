@@ -11,53 +11,6 @@ import pytest
 from goalrail import pi_native_credentials as creds
 
 
-def _databricks_config() -> dict[str, object]:
-    """A config whose default provider is a Databricks profile (serves pi)."""
-    return {
-        "providers": {
-            "databricks": {"kind": "databricks", "default": True, "profile": "demo-staging"},
-        }
-    }
-
-
-def test_resolves_databricks_default_to_anthropic_gateway(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A Databricks default → Pi anthropic-messages gateway provider.
-
-    The Databricks profile is marked default for the anthropic/openai surfaces
-    (not ``pi`` directly), so the resolver must fall back to the Anthropic
-    surface — which Pi speaks natively — and build a gateway provider with a
-    bearer-token refresh command.
-    """
-    from goalrail.inner import databricks_executor
-
-    def _host(profile: str | None) -> str:
-        return "https://wkspc.example.com/"
-
-    monkeypatch.setattr(databricks_executor, "_read_databrickscfg_host", _host)
-
-    provider = creds.resolve_pi_native_provider(config_loader=_databricks_config)
-
-    assert provider is not None
-    assert provider.api == "anthropic-messages"
-    assert provider.base_url == "https://wkspc.example.com/ai-gateway/anthropic"
-    assert provider.model == "databricks-claude-sonnet-4-6"
-    assert provider.auth_header is True
-    # apiKey is a "!command" so Pi refreshes the gateway token per request.
-    assert provider.api_key.startswith("!")
-    assert "demo-staging" in provider.api_key
-
-
-def test_databricks_unresolvable_host_returns_none(monkeypatch: pytest.MonkeyPatch) -> None:
-    """No host for the profile → fall back to Pi's own login (None)."""
-    from goalrail.inner import databricks_executor
-
-    def _no_host(profile: str | None) -> None:
-        return None
-
-    monkeypatch.setattr(databricks_executor, "_read_databrickscfg_host", _no_host)
-    assert creds.resolve_pi_native_provider(config_loader=_databricks_config) is None
-
-
 def test_key_provider_resolves_to_inline_family() -> None:
     """A key-kind provider with an anthropic family → inline Pi provider."""
     config = {
@@ -134,7 +87,7 @@ def test_to_models_config_shape() -> None:
         provider_id="goalrail",
         base_url="https://x/ai-gateway/anthropic",
         api="anthropic-messages",
-        model="databricks-claude-sonnet-4-6",
+        model="claude-sonnet-4-6",
         api_key="!get-token",
         auth_header=True,
     )
@@ -144,7 +97,7 @@ def test_to_models_config_shape() -> None:
     assert entry["api"] == "anthropic-messages"
     assert entry["apiKey"] == "!get-token"
     assert entry["authHeader"] is True
-    assert entry["models"] == [{"id": "databricks-claude-sonnet-4-6"}]
+    assert entry["models"] == [{"id": "claude-sonnet-4-6"}]
 
 
 def test_write_models_config_is_owner_only(tmp_path: Path) -> None:

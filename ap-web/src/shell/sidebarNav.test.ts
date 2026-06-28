@@ -203,11 +203,11 @@ describe("getConversationAgentType", () => {
   it("returns agent_name for YAML-based sessions", () => {
     const conv: Conversation = {
       ...conversation("conv_yaml", "My session", new Date(2026, 4, 14, 9)),
-      agent_name: "databricks_coding_agent",
+      agent_name: "coding_agent",
     };
     // agent_name comes from the agent spec's `name:` field; it's the canonical
     // identity for YAML-based agents and is preferred over the id.
-    expect(getConversationAgentType(conv)).toBe("databricks_coding_agent");
+    expect(getConversationAgentType(conv)).toBe("coding_agent");
   });
 
   it("returns 'Other' when no wrapper label and no agent_name", () => {

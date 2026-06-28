@@ -169,7 +169,7 @@ Required tests:
 
 - Existing SDK imports and docs examples still run.
 - New SDK alias imports map to the same implementation.
-- Databricks wheel build and release-version pin checks still pass.
+- provider wheel build and release-version pin checks still pass.
 
 ### Deploy Images And Infrastructure
 
@@ -236,7 +236,7 @@ Rule:
 
 5. Decide SDK distribution names.
    - Files likely touched only after names are reserved: `sdks/**`,
-     `pyproject.toml`, release workflow, Databricks deploy scripts.
+     `pyproject.toml`, release workflow, provider deploy scripts.
    - Gate: old and new SDK imports both work.
 
 6. Publish/mirror deploy images.

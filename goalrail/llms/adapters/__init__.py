@@ -93,13 +93,8 @@ def _create_adapter(provider: str, **kwargs: Any) -> BaseAdapter:
 
         return VertexAdapter(**kwargs)
 
-    if provider == "databricks":
-        from goalrail.llms.adapters.databricks import DatabricksAdapter
-
-        return DatabricksAdapter(**kwargs)
-
     all_providers = sorted(
-        openai_compat_providers.keys() | {"anthropic", "gemini", "bedrock", "vertex", "databricks"}
+        openai_compat_providers.keys() | {"anthropic", "gemini", "bedrock", "vertex"}
     )
     raise GoalrailError(
         f"Unknown provider {provider!r}. Supported: {all_providers}",

@@ -29,14 +29,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from goalrail.onboarding.ambient import DetectedProvider
-from goalrail.onboarding.databricks_config import databricks_sdk_installed
 from goalrail.onboarding.interactive import ACCENT, console
 from goalrail.onboarding.provider_config import (
     ANTHROPIC_FAMILY,
     BEDROCK_KIND,
     CHAT_WIRE_API,
     CLI_CONFIG_KIND,
-    DATABRICKS_KIND,
     GATEWAY_KIND,
     GEMINI_FAMILY,
     KEY_KIND,
@@ -62,7 +60,6 @@ _KIND_GLYPH: dict[str, str] = {
     SUBSCRIPTION_KIND: "\N{ADMISSION TICKETS}\N{VARIATION SELECTOR-16}",
     GATEWAY_KIND: "\N{GLOBE WITH MERIDIANS}",
     LOCAL_KIND: "\N{DESKTOP COMPUTER}\N{VARIATION SELECTOR-16}",
-    DATABRICKS_KIND: "\N{BRICK}",
     # GEAR carries a VS16 for the same 2-cell-emoji rendering reason as the
     # ADMISSION TICKETS glyph above.
     CLI_CONFIG_KIND: "\N{GEAR}\N{VARIATION SELECTOR-16}",
@@ -79,7 +76,6 @@ _KIND_STYLE: dict[str, str] = {
     SUBSCRIPTION_KIND: "magenta",
     GATEWAY_KIND: "cyan",
     LOCAL_KIND: "green",
-    DATABRICKS_KIND: "red",
     CLI_CONFIG_KIND: "blue",
 }
 
@@ -252,7 +248,6 @@ _PROVIDER_DISPLAY_NAME: dict[str, str] = {
     "fireworks_ai": "Fireworks AI",
     "gemini": "Google Gemini",
     "google": "Google Gemini",
-    "databricks": "Databricks",
     "ollama": "Ollama",
 }
 
@@ -291,7 +286,7 @@ def kind_glyph(kind: str) -> str:
     separates it from the following label.
 
     :param kind: A provider kind, e.g. ``"key"``, ``"subscription"``,
-        ``"gateway"``, ``"local"``, or ``"databricks"``.
+        ``"gateway"``, ``"local"``, or ``"cli-config"``.
     :returns: The kind's glyph (e.g. ``"🔑"`` for ``"key"``), or an
         empty string for an unknown kind.
     """
@@ -310,35 +305,30 @@ def credential_label(
     The single source of truth for how a credential is named across every
     surface — the ``configure harness`` menus/listing and the ``/model``
     REPL readout — so a subscription always reads as ``"Subscription"``
-    (never the raw ``"claude"`` / brand name), a vendor key names the
-    vendor + ``"API Key"``, and Databricks names its profile. Pair with
-    :func:`kind_glyph` for the glyph prefix.
+    (never the raw ``"claude"`` / brand name), and a vendor key names the
+    vendor + ``"API Key"``. Pair with :func:`kind_glyph` for the glyph prefix.
 
     :param kind: The provider kind, e.g. ``"key"``, ``"subscription"``,
-        ``"gateway"``, ``"local"``, ``"databricks"``, or ``"cli-config"``.
+        ``"gateway"``, ``"local"``, or ``"cli-config"``.
     :param provider_name: The provider id keyed under ``providers:``,
         e.g. ``"openai"`` or ``"my-proxy"``.
-    :param profile: The Databricks profile name for a ``databricks``
-        credential, e.g. ``"oss"``; ``None`` for other kinds (and for a
-        databricks credential whose profile is unknown to the caller).
+    :param profile: Optional profile label for provider kinds that expose one;
+        ``None`` for most kinds.
     :param display_name: The provider's own display name for a
         ``cli-config`` credential — the ``name`` field of its
-        ``[model_providers.X]`` table, e.g. ``"Databricks AI Gateway"``;
+        ``[model_providers.X]`` table, e.g. ``"Corporate Gateway"``;
         ``None`` for other kinds (and when the table named none, falling
         back to *provider_name*).
     :returns: A human label, e.g. ``"Subscription"``, ``"Anthropic API
-        Key"``, ``"Databricks (oss)"``, ``"Databricks AI Gateway"``, or a
-        gateway's display name.
+        Key"``, ``"Corporate Gateway"``, or a gateway's display name.
     """
     if kind == SUBSCRIPTION_KIND:
         # Within a harness there is only one subscription, so the plan
         # name adds no information — just "Subscription".
         return "Subscription"
-    if kind == DATABRICKS_KIND:
-        return f"Databricks ({profile})" if profile else "Databricks"
     if kind == CLI_CONFIG_KIND:
         # The provider's own name field is the friendliest label there is
-        # ("Databricks AI Gateway"); the entry name ("codex-databricks") is
+        # ("Corporate Gateway"); the entry name ("codex-gateway") is
         # the readable fallback.
         return display_name or provider_name
     if kind == KEY_KIND:
@@ -407,11 +397,10 @@ def add_menu_options() -> list[AddOption]:
         Order is chosen so it reads well both in the full menu and in
         each family-scoped subset (:func:`add_menu_options_for_family`,
         which filters while preserving this order): the first-party API
-        key(s) and subscription(s) lead, the cross-vendor extras
-        (Gateway, OpenRouter) follow alphabetically, and Databricks sits
-        just above the catch-all "Other provider" at the bottom. Scoped
-        to one family this collapses to: API key → subscription →
-        Gateway [→ OpenRouter] → Databricks [→ Other].
+        key(s) and subscription(s) lead, and the cross-vendor extras
+        (Gateway, OpenRouter) follow alphabetically before the catch-all
+        "Other provider" at the bottom. Scoped to one family this collapses
+        to: API key → subscription → Gateway [→ OpenRouter] [→ Other].
     """
 
     def _opt(text: str, description: str, kind: str, **kw: object) -> AddOption:
@@ -469,20 +458,6 @@ def add_menu_options() -> list[AddOption]:
             KEY_KIND,
             provider="openrouter",
         ),
-        # Databricks sits just above the catch-all "Other provider". The
-        # option stays visible without the `databricks` extra (so it remains
-        # discoverable), but its description carries the install hint and
-        # selecting it aborts with the same hint (_configure_harness_add).
-        _opt(
-            "Databricks — workspace",
-            "Route harnesses through a Databricks workspace's Unity AI Gateway (via ucode)."
-            if databricks_sdk_installed()
-            # Markup-safe (rendered via Text.from_markup): no literal
-            # brackets, so the extra is named in prose here and the exact
-            # `goalrail[databricks]` command appears on selection.
-            else "Requires the Databricks extra — select for the install command.",
-            DATABRICKS_KIND,
-        ),
         _opt(
             "Other provider — API key",
             "Groq, DeepSeek, xAI, Mistral, Together AI, Fireworks, …",
@@ -507,18 +482,18 @@ def _add_option_families(opt: AddOption) -> frozenset[str]:
     Used to scope the add menu to the harness the user drilled into
     (``configure harness`` → Claude / Codex / Gemini / Pi → "Add a
     provider"): a Claude add should not offer an OpenAI-only key, and vice
-    versa. Gateways and Databricks serve the anthropic / openai / pi surfaces —
-    but NOT Gemini, which is key-only (the antigravity harness needs a real
-    GEMINI_API_KEY, not a proxy). An anthropic / openai API key can also drive
-    pi (it consumes both model families); a gemini key serves ONLY the Gemini
-    surface; subscriptions never drive pi (a CLI login is unusable outside its
-    own CLI).
+    versa. Gateways serve the anthropic / openai / pi surfaces — but NOT
+    Gemini, which is key-only (the antigravity harness needs a real
+    GEMINI_API_KEY, not a proxy). An anthropic / openai API key can also
+    drive pi (it consumes both model families); a gemini key serves ONLY the
+    Gemini surface; subscriptions never drive pi (a CLI login is unusable
+    outside its own CLI).
 
     :param opt: One add-menu option.
     :returns: The surfaces this option can configure — a subset of
         ``{"anthropic", "openai", "gemini", "pi"}``.
     """
-    if opt.kind == GATEWAY_KIND or opt.kind == DATABRICKS_KIND:
+    if opt.kind == GATEWAY_KIND:
         return frozenset({ANTHROPIC_FAMILY, OPENAI_FAMILY, PI_SURFACE})
     if opt.kind == BEDROCK_KIND:
         # Bedrock mode drives only the native Claude terminal (anthropic
@@ -551,8 +526,8 @@ def add_menu_options_for_family(family: str) -> list[AddOption]:
 
     Scopes :func:`add_menu_options` to *family* so the ``configure
     harness`` per-harness "Add a provider" flow only offers credentials
-    that can drive that harness (plus gateways / Databricks, which serve
-    every surface). Order is preserved from :func:`add_menu_options`.
+    that can drive that harness (plus gateways, which serve every surface).
+    Order is preserved from :func:`add_menu_options`.
 
     :param family: ``"anthropic"`` (Claude), ``"openai"`` (Codex), or
         ``"pi"`` (Pi).
@@ -657,19 +632,16 @@ def _entry_models_summary(entry: ProviderEntry) -> str:
     """Return a short model summary for a provider listing row.
 
     For inline-family kinds (``key`` / ``gateway`` / ``local``) this is
-    the family default model(s); subscription/databricks describe their
-    auth source instead (the model is picked by the CLI / profile).
+    the family default model(s); subscriptions describe their auth source
+    instead (the model is picked by the CLI).
 
     :param entry: The provider entry to summarize.
     :returns: A display string, e.g. ``"claude-sonnet-4-6"`` (a key with a
-        default), ``"base_url set"`` (a gateway with no default model),
-        ``"via claude CLI"`` (a subscription), or ``"profile: oss"`` (a
-        databricks profile).
+        default), ``"base_url set"`` (a gateway with no default model), or
+        ``"via claude CLI"`` (a subscription).
     """
     if entry.kind == SUBSCRIPTION_KIND:
         return f"via {entry.cli} CLI"
-    if entry.kind == DATABRICKS_KIND:
-        return f"profile: {entry.profile}"
     if entry.kind == CLI_CONFIG_KIND:
         return f"~/.{entry.cli}/config.toml: {entry.model_provider}"
     # Inline-family kinds: list each family's default model, else note the
@@ -847,21 +819,20 @@ def build_cli_config_provider_entry(
 
     A cli-config provider pins a custom model provider defined in the
     harness CLI's own config file (today: a ``[model_providers.X]`` table
-    in ``~/.codex/config.toml`` with self-contained auth, e.g. the
-    Databricks AI Gateway written by ``isaac configure codex``). The
-    provider definition and credential stay in that file; this entry only
-    records which provider the launch selects.
+    in ``~/.codex/config.toml`` with self-contained auth, e.g. a corporate
+    gateway). The provider definition and credential stay in that file; this
+    entry only records which provider the launch selects.
 
     :param cli: The CLI whose config file defines the provider —
         ``"codex"`` (the only CLI with config-file model providers today).
     :param model_provider: The ``[model_providers.X]`` id to pin, e.g.
-        ``"Databricks"``.
+        ``"corp-gateway"``.
     :param display_name: The provider table's ``name`` field, snapshotted
-        for display, e.g. ``"Databricks AI Gateway"``; ``None`` omits it
+        for display, e.g. ``"Corporate Gateway"``; ``None`` omits it
         (labels fall back to the entry name).
     :returns: A provider entry body, e.g. ``{"kind": "cli-config", "cli":
-        "codex", "model_provider": "Databricks", "display_name":
-        "Databricks AI Gateway"}``.
+        "codex", "model_provider": "corp-gateway", "display_name":
+        "Corporate Gateway"}``.
     """
     body: dict[str, object] = {
         "kind": CLI_CONFIG_KIND,
@@ -925,14 +896,3 @@ def build_gateway_provider_entry(
             block["models"] = {"default": models[family]}
         body[family] = block
     return body
-
-
-def build_databricks_provider_entry(profile: str) -> dict[str, object]:
-    """Build a ``kind: databricks`` provider entry body.
-
-    :param profile: The Databricks profile name from
-        ``~/.databrickscfg``, e.g. ``"oss"``.
-    :returns: A provider entry body, e.g.
-        ``{"kind": "databricks", "profile": "oss"}``.
-    """
-    return {"kind": DATABRICKS_KIND, "profile": profile}

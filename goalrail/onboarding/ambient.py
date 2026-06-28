@@ -43,8 +43,7 @@ DetectedKind = Literal["key", "subscription", "local", "cli-config"]
 # ``subscription`` is a logged-in CLI; ``local`` is a self-hosted endpoint;
 # ``cli-config`` is a custom model provider a harness CLI's own config file
 # defines (today: a ``[model_providers.X]`` table in ``~/.codex/config.toml``
-# that carries its own auth, e.g. the Databricks AI Gateway written by
-# ``isaac configure codex``).
+# that carries its own auth).
 KEY_KIND: DetectedKind = "key"
 SUBSCRIPTION_KIND: DetectedKind = "subscription"
 LOCAL_KIND: DetectedKind = "local"
@@ -101,12 +100,12 @@ class DetectedProvider:
         comes from, e.g. ``"$ANTHROPIC_API_KEY"``, ``"claude CLI login"``,
         or ``"http://localhost:11434"``.
     :param model_provider: For ``kind="cli-config"`` only: the custom
-        provider id the CLI's config file selects, e.g. ``"Databricks"``
+        provider id the CLI's config file selects, e.g. ``"My Gateway"``
         (the ``model_provider`` key in ``~/.codex/config.toml``). ``None``
         for other kinds.
     :param display_name: For ``kind="cli-config"`` only: the provider's
-        human display name from its config table (``name = "Databricks AI
-        Gateway"``), falling back to :attr:`model_provider` when the table
+        human display name from its config table (``name = "My Gateway"``),
+        falling back to :attr:`model_provider` when the table
         names none. ``None`` for other kinds.
     """
 
@@ -219,9 +218,9 @@ class CodexConfigProvider:
     """A custom, auth-carrying model provider found in ``~/.codex/config.toml``.
 
     :param provider_id: The ``model_provider`` id the config selects, i.e.
-        the key under ``[model_providers.<id>]``, e.g. ``"Databricks"``.
+        the key under ``[model_providers.<id>]``, e.g. ``"MyGateway"``.
     :param display_name: The provider table's ``name`` field, e.g.
-        ``"Databricks AI Gateway"``; falls back to :attr:`provider_id` when
+        ``"My Gateway"``; falls back to :attr:`provider_id` when
         the table names none.
     """
 
@@ -238,9 +237,7 @@ def _provider_table_has_self_contained_auth(table: dict[str, object]) -> bool:
     subprocess. Mirrors Codex's own provider auth fields (``openai/codex``,
     ``codex-rs/model-provider-info/src/lib.rs``):
 
-    - ``[X.auth]`` — a token-printing command (``command`` + ``args``), the
-      shape ``isaac configure codex`` writes (``jq`` reading a cached
-      Databricks Model Serving token);
+    - ``[X.auth]`` — a token-printing command (``command`` + ``args``);
     - ``experimental_bearer_token`` — an inline static bearer token;
     - ``[X.aws]`` — AWS SigV4 request signing (Bedrock-style);
     - ``http_headers`` containing an ``Authorization`` header — a static
@@ -259,7 +256,7 @@ def _provider_table_has_self_contained_auth(table: dict[str, object]) -> bool:
       territory (checked separately by the caller).
 
     :param table: The raw ``[model_providers.X]`` mapping parsed from
-        ``config.toml``, e.g. ``{"name": "Databricks AI Gateway",
+        ``config.toml``, e.g. ``{"name": "My Gateway",
         "base_url": "...", "auth": {"command": "jq", ...}}``.
     :returns: ``True`` when the table carries self-contained auth.
     """
@@ -295,8 +292,8 @@ def _effective_codex_model_provider(config: dict[str, object]) -> str | None:
     the top-level ``model_provider``.
 
     :param config: The parsed ``config.toml`` mapping, e.g.
-        ``{"model_provider": "Databricks", "model_providers": {...}}``.
-    :returns: The effective provider id, e.g. ``"Databricks"``, or ``None``
+        ``{"model_provider": "MyGateway", "model_providers": {...}}``.
+    :returns: The effective provider id, e.g. ``"MyGateway"``, or ``None``
         when neither the active profile nor the top level sets one (Codex
         then defaults to the built-in ``openai`` provider).
     """
@@ -389,7 +386,7 @@ def codex_config_detection() -> DetectedProvider | None:
     config's custom default provider was dismissed by a Remove).
 
     :returns: A ``kind="cli-config"`` :class:`DetectedProvider` (stable name
-        ``codex-<slug>``, e.g. ``"codex-databricks"``), or ``None`` when the
+        ``codex-<slug>``, e.g. ``"codex-my-gateway"``), or ``None`` when the
         config carries no custom, self-contained-auth default provider (see
         :func:`codex_config_custom_provider`).
     """
@@ -409,9 +406,9 @@ def codex_config_detection() -> DetectedProvider | None:
 def _slug(value: str) -> str:
     """Slugify a provider id into a config-friendly provider entry name part.
 
-    :param value: A Codex provider id, e.g. ``"Databricks"`` or
+    :param value: A Codex provider id, e.g. ``"My Gateway"`` or
         ``"My Proxy"``.
-    :returns: A lowercase, hyphenated slug, e.g. ``"databricks"`` or
+    :returns: A lowercase, hyphenated slug, e.g. ``"my-gateway"`` or
         ``"my-proxy"``; ``"provider"`` when nothing alphanumeric survives.
     """
     slug = "".join(ch if ch.isalnum() else "-" for ch in value.lower()).strip("-")
@@ -549,8 +546,8 @@ def detect_providers() -> list[DetectedProvider]:
        the credential lives in the Keychain and ``claude auth status`` reports
        a login (see :func:`_claude_login_detected`).
     3. A custom, auth-carrying model provider in ``~/.codex/config.toml``
-       (see :func:`codex_config_custom_provider`) — e.g. the Databricks AI
-       Gateway provider that ``isaac configure codex`` writes. Ordered
+       (see :func:`codex_config_custom_provider`) — e.g. a custom gateway
+       provider. Ordered
        before the codex login check so the auto-default matches Codex's own
        resolution (config.toml's default provider beats auth.json).
     4. A logged-in Codex CLI (``~/.codex/auth.json`` exists *and* carries a
@@ -618,10 +615,8 @@ def detect_providers() -> list[DetectedProvider]:
             )
         )
 
-    # 3. A custom model provider in ~/.codex/config.toml (e.g. the
-    #    Databricks AI Gateway written by ``isaac configure codex``, which
-    #    writes config.toml only — never auth.json — so the login check
-    #    below cannot see it). Ordered BEFORE the codex login check so that
+    # 3. A custom model provider in ~/.codex/config.toml. Ordered BEFORE
+    #    the codex login check so that
     #    on a machine with both, the auto-default matches what a plain
     #    ``codex`` invocation does: config.toml's default model_provider
     #    wins over auth.json.

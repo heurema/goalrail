@@ -241,16 +241,9 @@ def load_local_callable_tools(
         entry. Empty list when none are present (which is the
         case for native Goalrail specs).
     """
-    from goalrail.spec.types import ToolRuntime
-
     result: list[LocalCallableTool] = []
     for info in local_tools:
         if info.language != _GOALRAIL_CALLABLE_LANGUAGE:
-            continue
-        # UC function tools have path=None and are dispatched by
-        # the runner via the SQL Statement Execution API — they
-        # are not in-process callables and must not be wrapped.
-        if info.runtime == ToolRuntime.UC_FUNCTION:
             continue
         result.append(LocalCallableTool(info))
     return result

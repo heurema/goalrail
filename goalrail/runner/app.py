@@ -206,8 +206,8 @@ _WAKE_POST_TRANSIENT_4XX = frozenset({408, 409, 425, 429})
 
 # Cadence for ``session.heartbeat`` keepalive events on the runner's
 # ``GET /v1/sessions/{id}/stream`` endpoint. Between turns the event
-# queue is idle — without periodic bytes, an intermediate proxy (e.g.
-# the Databricks Apps ingress) can drop the long-lived HTTP connection.
+# queue is idle — without periodic bytes, an intermediate proxy can
+# drop the long-lived HTTP connection.
 # Matches the AP-side ``_SESSION_STREAM_HEARTBEAT_INTERVAL_S``.
 _SESSION_STREAM_HEARTBEAT_S = 15.0
 
@@ -222,7 +222,7 @@ def _get_runner_llm_client() -> Any:
     """Return the runner-process LLM client, creating it on first use.
 
     The client is constructed from the runner process's environment
-    variables, which include the Databricks credentials set up by the
+    variables, which include the credentials set up by the
     runner entry point. This is intentionally separate from the AP
     server's ``_get_llm_client()`` — the runner may have different
     (or more) credentials than the Goalrail server.
@@ -989,32 +989,13 @@ async def _auto_create_opencode_terminal(
     clear_bridge_state(bridge_dir)
 
     model_override = launch_config.model_override or _opencode_native_model_from_spec(agent_spec)
-    # Route opencode through the Databricks AI gateway when the spec names a
-    # profile. Unlike codex/claude/pi (which consume HARNESS_*_GATEWAY_* env the
-    # CLI translates), opencode reads provider/auth from its own config file, so
-    # synthesize an opencode.json into the per-session XDG config dir BEFORE the
-    # server boots. Best-effort: if the gateway can't be resolved (no profile,
-    # databricks-sdk absent, auth failure), opencode falls back to whatever
-    # provider config the ambient env/global config already gives it.
     from goalrail.opencode_native_bridge import xdg_config_home_for_bridge_dir
     from goalrail.opencode_native_provider import (
         build_opencode_model_default_config,
-        build_opencode_provider_config,
-        resolve_databricks_gateway,
         write_opencode_provider_config,
     )
 
-    gateway = resolve_databricks_gateway(
-        _opencode_native_profile_from_spec(agent_spec), model_id=model_override
-    )
-    if gateway is not None:
-        # Pin the per-prompt model to the synthesized provider/endpoint id, and
-        # write it as opencode's default model too so the TUI launches on it.
-        model_override = gateway.qualified_model
-        config = build_opencode_provider_config(gateway)
-        config["model"] = model_override
-        write_opencode_provider_config(xdg_config_home_for_bridge_dir(bridge_dir), config)
-    elif model_override:
+    if model_override:
         # No custom provider, but a model is pinned (``goalrail opencode --model`` or
         # the ``goalrail setup`` OpenCode default): write opencode's default model so
         # the native TUI and the first turn use it instead of ``opencode/big-pickle``.
@@ -1027,8 +1008,7 @@ async def _auto_create_opencode_terminal(
 
     # The server runs with a per-session XDG_DATA_HOME, so copy the user's
     # `opencode auth login` credentials in — otherwise it can't authenticate
-    # their providers and falls back to the no-auth default model. No-op on a
-    # remote runner (no local auth.json) / Databricks-gateway path.
+    # their providers and falls back to the no-auth default model.
     seed_opencode_auth(bridge_dir)
 
     server = OpenCodeNativeServer(bridge_dir=bridge_dir, workspace=launch_config.workspace)
@@ -1292,23 +1272,6 @@ def _opencode_native_model_from_spec(agent_spec: Any | None) -> str | None:
         return None
 
 
-def _opencode_native_profile_from_spec(agent_spec: Any | None) -> str | None:
-    """
-    Resolve the Databricks profile from a resolved agent spec, if any.
-
-    :param agent_spec: Optional resolved agent spec.
-    :returns: The spec's ``executor.config.profile``, or ``None``.
-    """
-    if agent_spec is None:
-        return None
-    try:
-        spec = getattr(agent_spec, "spec", agent_spec)
-        profile = spec.executor.config.get("profile")
-        return str(profile) if profile else None
-    except Exception:  # noqa: BLE001 - profile resolution is best effort.
-        return None
-
-
 def _pi_args_have_session_control(args: list[str]) -> bool:
     """
     Return whether user Pi args already specify session behavior.
@@ -1444,7 +1407,7 @@ async def _auto_create_pi_terminal(
         "GOALRAIL_PI_NATIVE_BRIDGE_DIR": str(bridge_dir),
     }
     # Route the runner-owned Pi process through the provider configured by
-    # ``goalrail setup`` (Databricks gateway / API key), so a separate
+    # ``goalrail setup`` (provider gateway / API key), so a separate
     # ``pi /login`` isn't required — the parity codex-native/claude-native
     # already have. Skipped when the user pinned their own provider/model via
     # terminal_launch_args, or when no usable provider is configured (Pi then
@@ -1694,7 +1657,7 @@ async def _auto_create_cursor_terminal(
     # embedded terminal. Host-spawned sessions have no CLI client to start this,
     # so the runner owns it — the cursor analog of the claude/codex transcript
     # forwarders. Reuses the runner's own server URL + refresh-capable auth.
-    from goalrail.runner._entry import _make_auth_token_factory, _RunnerDatabricksAuth
+    from goalrail.runner._entry import _make_auth_token_factory, _RunnerBearerAuth
 
     # Fail loud if the server URL isn't in the env (matches codex's
     # ``_required_runner_env``): silently defaulting to ``localhost:6767`` would
@@ -1703,7 +1666,7 @@ async def _auto_create_cursor_terminal(
     server_url = _required_runner_env("RUNNER_SERVER_URL")
     # Authorization rides solely on the refresh-capable auth (no static header
     # snapshot that would expire mid-session), matching the runner's server_client.
-    _runner_auth = _RunnerDatabricksAuth(_make_auth_token_factory())
+    _runner_auth = _RunnerBearerAuth(_make_auth_token_factory())
 
     from goalrail.cursor_native_forwarder import supervise_cursor_forwarder
     from goalrail.cursor_native_permissions import supervise_cursor_transcript_elicitations
@@ -1885,10 +1848,10 @@ async def _auto_create_goose_terminal(
     # chat view tracks the embedded terminal. Host-spawned sessions have no CLI
     # client to start this, so the runner owns it — reusing the runner's own
     # server URL + refresh-capable auth.
-    from goalrail.runner._entry import _make_auth_token_factory, _RunnerDatabricksAuth
+    from goalrail.runner._entry import _make_auth_token_factory, _RunnerBearerAuth
 
     server_url = _required_runner_env("RUNNER_SERVER_URL")
-    _runner_auth = _RunnerDatabricksAuth(_make_auth_token_factory())
+    _runner_auth = _RunnerBearerAuth(_make_auth_token_factory())
 
     from goalrail.goose_native_forwarder import supervise_goose_forwarder
     from goalrail.goose_native_permissions import supervise_goose_approval_mirror
@@ -2047,10 +2010,10 @@ async def _auto_create_hermes_terminal(
     # chat view tracks the embedded terminal. Host-spawned sessions have no CLI
     # client to start this, so the runner owns it — reusing the runner's own
     # server URL + refresh-capable auth.
-    from goalrail.runner._entry import _make_auth_token_factory, _RunnerDatabricksAuth
+    from goalrail.runner._entry import _make_auth_token_factory, _RunnerBearerAuth
 
     server_url = _required_runner_env("RUNNER_SERVER_URL")
-    _runner_auth = _RunnerDatabricksAuth(_make_auth_token_factory())
+    _runner_auth = _RunnerBearerAuth(_make_auth_token_factory())
 
     from goalrail.hermes_native_bridge import read_hermes_home
     from goalrail.hermes_native_forwarder import supervise_hermes_forwarder
@@ -2177,10 +2140,10 @@ async def _auto_create_kiro_terminal(
             "resource": session_resource_view_to_dict(terminal_view),
         },
     )
-    from goalrail.runner._entry import _make_auth_token_factory, _RunnerDatabricksAuth
+    from goalrail.runner._entry import _make_auth_token_factory, _RunnerBearerAuth
 
     server_url = _required_runner_env("RUNNER_SERVER_URL")
-    _runner_auth = _RunnerDatabricksAuth(_make_auth_token_factory())
+    _runner_auth = _RunnerBearerAuth(_make_auth_token_factory())
 
     from goalrail.kiro_native_session_forwarder import supervise_kiro_session_forwarder
 
@@ -2387,10 +2350,10 @@ async def _auto_create_qwen_terminal(
     # chat view tracks the embedded terminal. Host-spawned sessions have no CLI
     # client to start this, so the runner owns it — reusing the runner's own
     # server URL + refresh-capable auth.
-    from goalrail.runner._entry import _make_auth_token_factory, _RunnerDatabricksAuth
+    from goalrail.runner._entry import _make_auth_token_factory, _RunnerBearerAuth
 
     server_url = _required_runner_env("RUNNER_SERVER_URL")
-    _runner_auth = _RunnerDatabricksAuth(_make_auth_token_factory())
+    _runner_auth = _RunnerBearerAuth(_make_auth_token_factory())
 
     from goalrail.qwen_native_forwarder import supervise_qwen_forwarder
     from goalrail.qwen_native_permissions import supervise_qwen_approval_mirror
@@ -2677,9 +2640,9 @@ async def _auto_create_codex_terminal(
     bridge_dir = prepare_bridge_dir(session_id)
     socket_path = socket_path_for_bridge_dir(bridge_dir)
     codex_home = codex_home_for_bridge_dir(bridge_dir)
-    # Route across all offerings: a configured provider (goalrail setup),
-    # a Databricks ucode profile from provider config, or Codex's own
-    # login — parity with the in-process codex harness and the CLI path.
+    # Route across all offerings: a configured provider (goalrail setup)
+    # or Codex's own login — parity with the in-process codex harness and
+    # the CLI path.
     # Resolved before the fork/cold-resume branches below so any rollout
     # synthesis can stamp session_meta.model_provider with the provider
     # this launch actually routes through.
@@ -3092,7 +3055,7 @@ async def _codex_discover_thread_and_forward(
     )
     from goalrail.runner._entry import (
         _make_auth_token_factory,
-        _RunnerDatabricksAuth,
+        _RunnerBearerAuth,
     )
 
     try:
@@ -3151,7 +3114,7 @@ async def _codex_discover_thread_and_forward(
             async with httpx.AsyncClient(
                 base_url=server_url,
                 headers=headers,
-                auth=_RunnerDatabricksAuth(auth_factory),
+                auth=_RunnerBearerAuth(auth_factory),
                 timeout=httpx.Timeout(10.0),
             ) as _ext_client:
                 _ext_resp = await _ext_client.patch(
@@ -3182,7 +3145,7 @@ async def _codex_discover_thread_and_forward(
             app_server_url=codex_ws_url,
             thread_id=thread_id,
             client=event_client,
-            auth=_RunnerDatabricksAuth(auth_factory),
+            auth=_RunnerBearerAuth(auth_factory),
         )
     finally:
         # Tear down the listener and the per-session app-server whenever
@@ -3222,7 +3185,7 @@ async def _codex_forward_known_thread(
     from goalrail.codex_native_forwarder import supervise_forwarder
     from goalrail.runner._entry import (
         _make_auth_token_factory,
-        _RunnerDatabricksAuth,
+        _RunnerBearerAuth,
     )
 
     server_url = _required_runner_env("RUNNER_SERVER_URL")
@@ -3237,7 +3200,7 @@ async def _codex_forward_known_thread(
             bridge_dir=bridge_dir,
             app_server_url=codex_ws_url,
             thread_id=thread_id,
-            auth=_RunnerDatabricksAuth(auth_factory),
+            auth=_RunnerBearerAuth(auth_factory),
         )
     finally:
         leftover_app_server = _AUTO_CODEX_APP_SERVERS.pop(session_id, None)
@@ -3497,7 +3460,7 @@ async def _auto_create_antigravity_terminal(
     #
     # Reconstruct the server URL + refresh-capable auth from the runner's own
     # environment, exactly like ``_auto_create_claude_terminal``.
-    from goalrail.runner._entry import _make_auth_token_factory, _RunnerDatabricksAuth
+    from goalrail.runner._entry import _make_auth_token_factory, _RunnerBearerAuth
 
     server_url = _required_runner_env("RUNNER_SERVER_URL")
     auth_factory = _make_auth_token_factory()
@@ -3609,7 +3572,7 @@ async def _auto_create_antigravity_terminal(
         _run_antigravity_reader(
             base_url=server_url,
             headers=runner_headers,
-            auth=_RunnerDatabricksAuth(auth_factory),
+            auth=_RunnerBearerAuth(auth_factory),
             session_id=session_id,
             bridge_dir=bridge_dir,
         ),
@@ -4012,10 +3975,10 @@ def _cursor_native_model_from_spec(agent_spec: AgentSpec | ResolvedSpec | None) 
     Read the cursor-agent model id to launch the native TUI with, from a spec.
 
     Reads the canonical ``spec.executor.model`` field (the same field the
-    in-process cursor SDK harness consumes via ``_resolve_spec_model``). A
-    gateway-routed id (``databricks-*``) is not a valid ``cursor-agent`` model
-    id, so it is dropped (with a warning) — the caller then omits ``--model`` and
-    ``cursor-agent`` keeps its configured default rather than erroring on launch.
+    in-process cursor SDK harness consumes via ``_resolve_spec_model``).
+    Provider-qualified ids belong to generic gateway routing, not to Cursor's
+    native ``--model`` flag, so they are dropped and Cursor keeps its own
+    configured default.
 
     :param agent_spec: Agent spec object, or a resolved wrapper carrying a
         ``spec`` attribute. ``None`` means no spec was available.
@@ -4028,10 +3991,9 @@ def _cursor_native_model_from_spec(agent_spec: AgentSpec | ResolvedSpec | None) 
     model = spec.executor.model
     if not isinstance(model, str) or not model:
         return None
-    if model.startswith(("databricks-", "databricks/")):
+    if "/" in model:
         _logger.warning(
-            "cursor-native: pinned model %r is not a cursor-agent model id; "
-            "launching cursor-agent on its configured default instead.",
+            "Ignoring provider-qualified model %r because it is not a Cursor model; using auto",
             model,
         )
         return None
@@ -4554,7 +4516,7 @@ async def _auto_create_claude_terminal(
     # which launch Claude in a brand-new, untrusted directory.
     ensure_claude_workspace_trusted(Path(workspace))
 
-    from goalrail.runner._entry import _make_auth_token_factory, _RunnerDatabricksAuth
+    from goalrail.runner._entry import _make_auth_token_factory, _RunnerBearerAuth
 
     # The Goalrail server URL + auth are needed in two places below: the
     # PermissionRequest hook (so Claude's approval prompts route to the
@@ -4568,16 +4530,16 @@ async def _auto_create_claude_terminal(
     # The PermissionRequest hook runs in a separate subprocess that reads
     # static headers from permission_hook.json, so it gets a one-shot
     # token snapshot. The long-running transcript forwarder instead gets
-    # a refresh-capable ``httpx.Auth`` (below) so it survives the ~1h
-    # Databricks OAuth token expiry; a one-shot header would silently
-    # stop forwarding after the token lapses. ``_RunnerDatabricksAuth``
-    # with a ``None`` factory is a safe no-op (local unauthenticated).
+    # a refresh-capable ``httpx.Auth`` (below) so it survives expiring
+    # remote login tokens; a one-shot header would silently stop
+    # forwarding after the token lapses. ``_RunnerBearerAuth`` with a
+    # ``None`` factory is a safe no-op (local unauthenticated).
     _auth_token = _auth_factory() if _auth_factory is not None else None
     _runner_headers = {"Authorization": f"Bearer {_auth_token}"} if _auth_token else {}
-    _runner_auth = _RunnerDatabricksAuth(_auth_factory)
+    _runner_auth = _RunnerBearerAuth(_auth_factory)
 
     from goalrail.claude_native import (
-        ClaudeNativeUcodeConfig,
+        ClaudeNativeProviderConfig,
         augment_claude_args,
         build_native_claude_terminal_env,
         resolve_native_claude_config,
@@ -4804,28 +4766,18 @@ async def _auto_create_claude_terminal(
         resume_external_session_id is not None,
     )
 
-    # Derive the ucode (Databricks gateway) launch config from the
-    # runner's own profile so a daemon / web-UI-launched Claude
-    # authenticates to the gateway exactly like a CLI-launched one —
-    # the CLI injects this in ``_claude_terminal_request``; on this path
-    # the runner must, since it (not the CLI) launches the terminal.
-    # Best-effort: no profile / no ucode state / malformed state falls
-    # back to Claude's own native config (empty env). The runner env is
-    # an allowlist that excludes ``ANTHROPIC_API_KEY`` /
-    # ``CLAUDE_CODE_*``, so — unlike the CLI — there are no stray
-    # provider/session vars to unset before the gateway env applies.
-    # See designs/NATIVE_RUNNER_SERVER_LAUNCH.md.
-    # Resolve the launch config across all offerings — a configured provider
-    # (goalrail setup), a Databricks ucode profile from provider config, or
-    # Claude's own login — so a host-spawned native-claude session honors the
-    # provider selection just like the in-process claude-sdk harness and the
-    # CLI path.
-    claude_config: ClaudeNativeUcodeConfig | None = None
+    # Resolve the launch config across all offerings — configured provider
+    # (goalrail setup) or Claude's own login — so a host-spawned
+    # native-claude session honors the provider selection just like the
+    # in-process claude-sdk harness and the CLI path. Best-effort:
+    # missing/malformed provider config falls back to Claude's own native
+    # config (empty env).
+    claude_config: ClaudeNativeProviderConfig | None = None
     try:
         claude_config = resolve_native_claude_config(spec=None)
     except Exception:  # noqa: BLE001 — best-effort; fall back to native auth
         _logger.warning(
-            "native-claude: could not derive a provider/ucode launch config "
+            "native-claude: could not derive a provider launch config "
             "— FALLING BACK to Claude Code's own login; "
             "your configured provider will NOT be used. Check "
             "`goalrail setup --no-internal-beta` "
@@ -4844,7 +4796,7 @@ async def _auto_create_claude_terminal(
 
     base_claude_args = _build_claude_native_base_args(
         reasoning_effort=session_effort,
-        # Session override wins; the ucode gateway model is the default
+        # Session override wins; the provider gateway model is the default
         # when no per-session override is set. Both yield to an explicit
         # ``--model`` in the user's pass-through args (handled in the
         # helper).
@@ -4861,7 +4813,7 @@ async def _auto_create_claude_terminal(
     # ``bundle_dir`` / ``skills_filter`` (resolved by the caller, which
     # has the spec resolver) expose a bundle's ``skills/`` to Claude Code
     # via ``--plugin-dir`` — the CLI mirror of the SDK plugin wiring.
-    # ``api_key_helper`` (ucode) registers Claude's gateway token command.
+    # ``api_key_helper`` registers Claude's gateway token command.
     claude_args = augment_claude_args(
         base_claude_args,
         bridge_dir=bridge_dir,
@@ -4886,25 +4838,10 @@ async def _auto_create_claude_terminal(
         ),
         command="claude",
         args=list(claude_args),
-        # Tool Search env plus ucode gateway env (ANTHROPIC_BASE_URL
+        # Tool Search env plus provider gateway env (ANTHROPIC_BASE_URL
         # etc.) when derived. Empty provider config still forces
         # ENABLE_TOOL_SEARCH=true so MCP schemas are loaded on demand.
         env=build_native_claude_terminal_env(claude_config),
-        # Strip the ambient Databricks-SDK profile selection from
-        # the Claude tmux env. Claude's MCP servers inherit this env,
-        # and several construct ``WorkspaceClient`` without pinning
-        # ``auth_type``; when ``DATABRICKS_CONFIG_PROFILE`` is set,
-        # the SDK's auth resolver picks up that profile's cached
-        # OAuth token and ignores the explicit token the MCP was
-        # configured with — sending a bearer minted for the wrong
-        # workspace and getting back a 400 ``Invalid Token`` from
-        # the right one. Claude itself doesn't read this env var
-        # (provider routing is via ``ANTHROPIC_BASE_URL`` /
-        # ``apiKeyHelper``), so dropping it from the terminal env
-        # affects only the leak path. MCPs that genuinely need a
-        # specific profile must declare it in their own per-MCP env
-        # configuration rather than inheriting it from the runner.
-        env_unset=["DATABRICKS_CONFIG_PROFILE"],
         scrollback=50000,
         # Keep the private tmux server alive if the `claude` CLI exits (e.g. a
         # sub-agent worker whose CLI exits right after rendering its prompt on
@@ -5064,8 +5001,8 @@ async def _auto_create_repl_terminal(
     Auth parity with the native terminals: the spawned ``goalrail
     attach`` resolves credentials for ``--server`` the same way a
     user-launched CLI does (``GOALRAIL_REMOTE_AUTH_TOKEN`` env → stored
-    OIDC token from ``goalrail login`` → ``~/.databrickscfg``), which
-    holds because the runner lives on the user's machine.
+    token from ``goalrail login``), which holds because the runner lives
+    on the user's machine.
 
     :param session_id: Session/conversation identifier,
         e.g. ``"conv_abc123"``.
@@ -5378,11 +5315,10 @@ async def _session_labels_for_runner_spawn(
     try:
         labels = resp.json().get("labels")
     except ValueError:
-        # A 200 with a non-JSON body (e.g. an empty response from the
-        # Databricks Apps proxy when the server event loop is starved,
-        # or an HTML login page on an auth edge) must not abort the
-        # turn. Labels are a best-effort spawn hint; recover by using
-        # the session id, exactly as the timeout / non-200 paths do.
+        # A 200 with a non-JSON body (e.g. an empty proxy response or
+        # an HTML login page on an auth edge) must not abort the turn.
+        # Labels are a best-effort spawn hint; recover by using the
+        # session id, exactly as the timeout / non-200 paths do.
         _logger.warning(
             "Session labels response was not valid JSON; session=%s status=%s",
             session_id,
@@ -12012,7 +11948,7 @@ def create_runner_app(
         :param conv: Session id, key into the sticky-model state.
         :param result: The advisor turn result, or ``None`` (no verdict).
         :param user_model_override: The session's user model pin from the
-            inbound message body, e.g. ``"databricks-claude-sonnet-4-6"``,
+            inbound message body, e.g. ``"anthropic/claude-sonnet-4-6"``,
             or ``None``. When set, no advisor model is stamped this turn.
         """
         if user_model_override:
@@ -16545,23 +16481,17 @@ def create_runner_app(
         1. :class:`ProviderAuth` — resolve named provider from
            ``~/.goalrail/config.yaml``, extract ``api_key`` + ``base_url``
            from the ``openai`` family.
-        2. :class:`DatabricksAuth` — resolve the named profile from
-           ``~/.databrickscfg`` into ``base_url`` + ``api_key``.
-        3. :class:`ApiKeyAuth` — inline ``api_key`` and optional
+        2. :class:`ApiKeyAuth` — inline ``api_key`` and optional
            ``base_url``.
-        4. Global config ``auth:`` block (when spec declares no auth).
-        5. Legacy ``executor.config["profile"]`` or auto-Databricks
-           DEFAULT for ``databricks-*`` model prefixes.
+        3. Global config ``auth:`` block (when spec declares no auth).
 
         :param session_id: Session/conversation identifier, e.g.
             ``"conv_abc123"``.
-        :param model: LLM model string used to decide whether to
-            attempt Databricks profile resolution, e.g.
-            ``"databricks/databricks-gpt-5-5"``.
+        :param model: LLM model string used to select the provider family.
         :returns: A connection dict with ``"base_url"`` and ``"api_key"``
             keys, or ``None`` when no credentials could be resolved.
         """
-        from goalrail.spec.types import ApiKeyAuth, DatabricksAuth, ProviderAuth
+        from goalrail.spec.types import ApiKeyAuth, ProviderAuth
 
         spec_entry = _session_spec_cache.get(session_id)
         if spec_entry is None:
@@ -16576,18 +16506,14 @@ def create_runner_app(
         if isinstance(auth, ProviderAuth):
             return _resolve_provider_connection(auth.name, model)
 
-        # 2. DatabricksAuth → resolve profile from ~/.databrickscfg.
-        if isinstance(auth, DatabricksAuth):
-            return _resolve_databricks_connection(auth.profile, session_id)
-
-        # 3. ApiKeyAuth → inline key + optional base_url.
+        # 2. ApiKeyAuth → inline key + optional base_url.
         if isinstance(auth, ApiKeyAuth):
             conn: dict[str, str] = {"api_key": auth.api_key}
             if auth.base_url:
                 conn["base_url"] = auth.base_url
             return conn
 
-        # 4. Global config auth (when spec declares no auth at all).
+        # 3. Global config auth (when spec declares no auth at all).
         _spec_has_legacy_profile = bool(
             spec.executor.profile or (spec.executor.config or {}).get("profile")
         )
@@ -16595,21 +16521,11 @@ def create_runner_app(
             from goalrail.runtime.workflow import _load_global_auth
 
             global_auth = _load_global_auth()
-            if isinstance(global_auth, DatabricksAuth):
-                return _resolve_databricks_connection(global_auth.profile, session_id)
             if isinstance(global_auth, ApiKeyAuth):
                 conn = {"api_key": global_auth.api_key}
                 if global_auth.base_url:
                     conn["base_url"] = global_auth.base_url
                 return conn
-
-        # 5. Legacy fallback: executor.config.profile, executor.profile,
-        #    or auto-Databricks DEFAULT for databricks-* models.
-        if model.startswith(("databricks/", "databricks-")):
-            _db_profile = (
-                spec.executor.profile or (spec.executor.config or {}).get("profile") or "DEFAULT"
-            )
-            return _resolve_databricks_connection(_db_profile, session_id)
 
         return None
 
@@ -16644,9 +16560,6 @@ def create_runner_app(
             entry = providers.get(provider_name)
             if entry is None:
                 return None
-            # Databricks-kind providers route through profile resolution.
-            if entry.kind == "databricks" and entry.profile:
-                return _resolve_databricks_connection(entry.profile, provider_name)
             # Pick the family matching the model prefix; fall back to
             # whichever family the provider has.
             _is_anthropic = model.startswith(("anthropic/", "claude"))
@@ -16669,48 +16582,12 @@ def create_runner_app(
             )
             return None
 
-    def _resolve_databricks_connection(
-        profile: str,
-        context: str,
-    ) -> dict[str, str] | None:
-        """
-        Resolve Databricks credentials from a ``~/.databrickscfg`` profile.
-
-        :param profile: Databricks profile name, e.g. ``"oss"`` or
-            ``"DEFAULT"``.
-        :param context: Logging context (session_id or provider name).
-        :returns: A connection dict with ``"base_url"`` and ``"api_key"``,
-            or ``None`` on failure.
-        """
-        from goalrail.runtime.credentials.databricks import (
-            resolve_databricks_workspace,
-        )
-
-        try:
-            creds = resolve_databricks_workspace(profile)
-        except OSError:
-            _logger.warning(
-                "/v1/summarize: failed to resolve Databricks profile %r (context=%s)",
-                profile,
-                context,
-                exc_info=True,
-            )
-            return None
-        return {
-            "base_url": creds.host.rstrip("/") + "/serving-endpoints",
-            "api_key": creds.token,
-        }
-
     @app.post("/v1/summarize")
     async def summarize(request: Request) -> JSONResponse:
         """Summarize a message list using the runner's LLM credentials.
 
-        Accepts a JSON body with ``messages``, ``model``, an optional
-        ``connection`` dict, and an optional ``profile`` string.  For
-        Databricks models, ``profile`` is used to resolve fresh OAuth
-        credentials from the runner's own ``~/.databrickscfg`` — so
-        the runner's credentials are used, not the Goalrail server's static
-        token.
+        Accepts a JSON body with ``messages``, ``model``, and an optional
+        ``connection`` dict.
 
         :param request: FastAPI request carrying the JSON body.
         :returns: JSON with ``"text"`` (summary string) and
@@ -16730,10 +16607,9 @@ def create_runner_app(
                 },
             )
         # Resolve LLM connection for the summarization call. Precedence:
-        # 1. Explicit connection in the payload (non-Databricks callers).
-        # 2. Spec auth from the session's cached spec (DatabricksAuth
-        #    profile or ApiKeyAuth).
-        # 3. Ambient env-var auth (DATABRICKS_CONFIG_PROFILE / DEFAULT).
+        # 1. Explicit connection in the payload.
+        # 2. Spec auth from the session's cached spec.
+        # 3. Global auth from the runner-visible config.
         connection: dict[str, str] | None = body.get("connection") or None
         if connection is None:
             session_id: str | None = body.get("session_id")
@@ -17090,20 +16966,16 @@ def _build_spawn_env_from_spec(
             env[model_key] = model_override
 
     # Routing visibility: log the resolved gateway target so operators can
-    # confirm which provider a turn actually hits (api.anthropic.com /
-    # api.openai.com for a key, vs a Databricks profile). Logged here in the
-    # runner process (INFO is emitted) rather than the harness subprocess
-    # (which suppresses inner.* INFO). ``base_url`` is empty for the legacy
-    # ``profile:`` path (resolved downstream by ucode); the profile still
-    # identifies the Databricks target.
+    # confirm which provider a turn actually hits. Logged here in the runner
+    # process (INFO is emitted) rather than the harness subprocess (which
+    # suppresses inner.* INFO).
     if env is not None:
         prefix = f"HARNESS_{harness.upper().replace('-', '_')}"
         _logger.info(
-            "%s gateway routing: gateway=%s base_url=%s profile=%s model=%s",
+            "%s gateway routing: gateway=%s base_url=%s model=%s",
             harness,
             env.get(f"{prefix}_GATEWAY"),
             env.get(f"{prefix}_GATEWAY_BASE_URL"),
-            env.get(f"{prefix}_DATABRICKS_PROFILE"),
             env.get(_HARNESS_MODEL_ENV_KEY.get(harness, f"{prefix}_MODEL")),
         )
     return env

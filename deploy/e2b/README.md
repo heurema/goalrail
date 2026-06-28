@@ -200,8 +200,8 @@ server itself**, for a host that authenticates its dial-back with user
 credentials instead of a launch token. Managed launches never need this:
 the server injects a per-launch host token automatically. But a
 [CLI-launched](#cli-launched-sandboxes) host does when the server requires
-authentication — name the keys (e.g. `DATABRICKS_HOST` +
-`DATABRICKS_TOKEN`) in `GOALRAIL_E2B_SANDBOX_ENV` before `create`. See
+authentication — name the keys (e.g. `GOALRAIL_SERVER_URL` +
+`GOALRAIL_AUTH_TOKEN`) in `GOALRAIL_E2B_SANDBOX_ENV` before `create`. See
 [Connecting to an authenticated
 server](../modal/README.md#connecting-to-an-authenticated-server) in the
 Modal guide.

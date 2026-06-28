@@ -29,7 +29,6 @@ env:
   # Never let the test server pick up the runner's own credentials.
   ANTHROPIC_API_KEY: ""
   OPENAI_API_KEY: ""
-  DATABRICKS_TOKEN: ""
   CODEX: ""
   CLAUDE_CODE: ""
 

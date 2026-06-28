@@ -16,7 +16,7 @@
 #   - oidc — bring your own IdP. Set GOALRAIL_OIDC_* vars — see
 #     .env.example for full walkthroughs.
 #   - header — for deploys behind a proxy that injects
-#     X-Forwarded-Email (Databricks Apps, oauth2-proxy, etc).
+#     X-Forwarded-Email (hosted app, oauth2-proxy, etc).
 
 name: goalrail
 

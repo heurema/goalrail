@@ -47,9 +47,6 @@ export type ReconnectState = "host_offline" | "local_stranded";
  *    (`wrapper === "claude-code-native-ui"`) use `goalrail claude
  *    --resume <id>`; everything else uses the generic `goalrail run
  *    path/to/agent.yaml --resume <id>`.
- *
- * The Databricks profile stays a placeholder in every form — it's
- * per-deployment and not knowable from the browser.
  */
 export function buildReconnectCommand({
   conversationId,

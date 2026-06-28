@@ -25,9 +25,7 @@ Environment requirements (why this is opt-in, not pure-CI)
 
     GOALRAIL_E2E_CODEX_NATIVE=1 \
     .venv/bin/python -m pytest tests/e2e/test_codex_native_cli_resume_e2e.py \
-        --profile oss \
-        --llm-api-key "$(databricks auth token -p oss \
-            | python -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')" \
+        --llm-api-key "$OPENAI_API_KEY" \
         -v
 """
 
@@ -58,26 +56,21 @@ pytestmark = pytest.mark.skipif(
 def test_codex_native_cli_resume_restores_history(
     resume_test_server: str,
     tmp_path: Path,
-    request: pytest.FixtureRequest,
 ) -> None:
     """
     Resuming a codex-native conversation via the CLI restores its history.
 
-    Drives ``goalrail codex --server …`` (gateway routing via the
-    config-home auth block from the pytest ``--profile``) to teach Codex a
-    passphrase, resumes the conversation, sends a recall message through the
-    server, and asserts Codex replies with the passphrase — proving the
-    resumed thread loaded the prior turn instead of starting empty.
+    Drives ``goalrail codex --server ...`` to teach Codex a passphrase,
+    resumes the conversation, sends a recall message through the server, and
+    asserts Codex replies with the passphrase, proving the resumed thread
+    loaded the prior turn instead of starting empty.
 
     :param resume_test_server: Base URL of the allow-list-free test server.
     :param tmp_path: Per-test temp dir.
-    :param request: Pytest request — reads ``--profile`` for the LLM gateway.
     """
-    profile = request.config.getoption("--profile")
-    assert profile, "this test requires --profile (e.g. --profile oss) for the LLM gateway"
     assert_native_cli_resume_restores_history(
         harness="codex",
         server=resume_test_server,
-        profile=profile,
+        profile="",
         tmp_path=tmp_path,
     )

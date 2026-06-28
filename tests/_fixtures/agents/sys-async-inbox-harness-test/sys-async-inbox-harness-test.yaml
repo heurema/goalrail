@@ -3,9 +3,9 @@ description: |
   Test-only agent that exercises the harness inline drain path for
   ``sys_read_inbox``.
 
-  NOTE: original used executor.type: claude_sdk + databricks
-  profile. Lossy conversion: dropped the Databricks profile gating;
-  now uses the default openai-agents harness with OPENAI_API_KEY.
+  NOTE: original used executor.type: claude_sdk plus a profile-gated
+  gateway. Lossy conversion: dropped the profile gating; now uses the
+  default openai-agents harness with OPENAI_API_KEY.
 
 async: true
 

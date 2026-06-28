@@ -48,20 +48,17 @@ from .executor import (
 from .open_responses_sdk import (
     _OPENAI_KEY_PLACEHOLDER,
     _convert_messages_to_responses,
-    _databricks_openai_base_url,
 )
 
 logger = logging.getLogger(__name__)
 
 _OPENAI_AGENTS_DEFAULT_MODEL = "gpt-5.3-codex"
-_DATABRICKS_OPENAI_AGENTS_DEFAULT_MODEL = "databricks-gpt-5-5"
 
-# Total run attempts per turn (1 initial + retries). The Databricks
-# gateway occasionally returns a completed-but-empty turn (status
-# completed, no text / no tool calls / no output items); a single
-# retry recovers it. Kept small and hardcoded: more retries would
-# risk wedging long e2e turns under the shard timeout, and the
-# transient is rare.
+# Total run attempts per turn (1 initial + retries). Some gateway-backed
+# providers can occasionally return a completed-but-empty turn (status
+# completed, no text / no tool calls / no output items); a single retry
+# recovers it. Kept small and hardcoded: more retries would risk wedging long
+# e2e turns under the shard timeout, and the transient is rare.
 _EMPTY_TURN_MAX_ATTEMPTS = 2
 
 # SDK ``RunItem.type`` values that are bookkeeping, not user-visible
@@ -155,9 +152,8 @@ def _normalize_content_blocks_for_chat(
     ``input[0].content[0].filename``).  The openai-agents SDK's
     ``chatcmpl_converter`` also passes raw ``file_data`` strings to the Chat
     Completions ``file`` content type, which expects **plain base64** — not a
-    data URI.  Additionally, the Databricks GPT endpoint may not support the
-    ``file`` content block type at all, so textual files are converted to
-    ``input_text``.  Images are preserved as ``input_image`` with a
+    data URI. Textual files are converted to ``input_text`` for broad provider
+    compatibility. Images are preserved as ``input_image`` with a
     conventional ``data:image/<type>;base64,...`` URL so vision-capable
     Chat Completions providers can see the pixels.
 
@@ -356,27 +352,17 @@ def _ensure_agents_sdk() -> ModuleType:
 
 
 def _get_openai_async_client(
-    profile: str | None = None,
     api_key: str | None = None,
     retry_policy: RetryPolicy | None = None,
     base_url_override: str | None = None,
-    host_override: str | None = None,
-    databricks_auth_command: str | None = None,
-    model: str | None = None,
+    gateway_auth_command: str | None = None,
 ) -> AsyncOpenAIClient:
-    """Construct an AsyncOpenAI client for direct or Databricks-hosted use.
+    """Construct an AsyncOpenAI client for direct or gateway-hosted use.
 
-    For Databricks-backed profiles, the returned client uses an httpx
-    ``Auth`` callback that calls ``Config.authenticate()`` on every
-    HTTP request, so OAuth tokens are refreshed transparently and
-    long-running sessions survive the 1-hour access-token lifetime.
-
-    :param profile: Optional ``~/.databrickscfg`` profile name for the
-        Databricks path, e.g. ``"dev"``.
     :param api_key: Direct OpenAI-compatible API key, e.g.
         ``"sk-proj-..."``. When set, constructs
-        ``AsyncOpenAI(api_key=…)`` directly, bypassing all profile and
-        env-var lookups. Intended for specs that declare
+        ``AsyncOpenAI(api_key=…)`` directly, bypassing env-var lookups.
+        Intended for specs that declare
         ``executor.auth: {type: api_key, api_key: …}``.
     :param retry_policy: Optional retry policy. When provided, its
         ``policy.openai.kwargs()`` (max_retries, timeout) are spread
@@ -384,25 +370,10 @@ def _get_openai_async_client(
         the spec's budget. ``None`` falls back to a default policy
         with the project-wide budget.
     :param base_url_override: When set, use this as the client base URL.
-        In gateway host mode this is required and is populated from
-        ``HARNESS_OPENAI_AGENTS_GATEWAY_BASE_URL``.
-    :param host_override: Databricks workspace host, e.g.
-        ``"https://example.databricks.com"``. When set, skips profile host
-        lookup and requires ucode-provided gateway URL and auth command
-        values.
-    :param databricks_auth_command: Shell command from ucode state that
-        prints a bearer token, e.g.
-        ``"databricks auth token --host https://example.databricks.com ..."``.
-    :param model: The model name that will be used. When set to a
-        non-Databricks model (i.e. does not start with ``"databricks-"``),
-        both the explicit ``profile`` block and the ambient Databricks
-        credential fallback are skipped — the caller must supply
-        ``OPENAI_API_KEY`` (and optionally ``OPENAI_BASE_URL``) instead.
-    :raises DatabricksAuthError: When an explicit ``profile`` is given,
-        authentication fails, and no ``OPENAI_BASE_URL`` / ``OPENAI_API_KEY``
-        env-var fallbacks are available.
-    :raises OSError: If ucode host state is present but missing the
-        corresponding base URL or auth command.
+    :param gateway_auth_command: Shell command that prints a bearer token.
+        When set, ``base_url_override`` is required and the client refreshes
+        auth by running the command for each request.
+    :raises OSError: If gateway auth is configured without a base URL.
     """
     try:
         from openai import AsyncOpenAI
@@ -415,35 +386,28 @@ def _get_openai_async_client(
     policy = retry_policy if retry_policy is not None else RetryPolicy()
     retry_kwargs = policy.openai.kwargs()
 
-    if host_override:
+    if gateway_auth_command is not None:
         if base_url_override is None:
             raise OSError(
-                "OpenAIAgentsSDKExecutor with a gateway workspace host requires "
+                "OpenAIAgentsSDKExecutor with gateway auth requires "
                 "HARNESS_OPENAI_AGENTS_GATEWAY_BASE_URL."
             )
-        if databricks_auth_command is None:
-            raise OSError(
-                "OpenAIAgentsSDKExecutor with a gateway workspace host requires "
-                "HARNESS_OPENAI_AGENTS_GATEWAY_AUTH_COMMAND."
-            )
-        host = host_override.rstrip("/")
         return AsyncOpenAI(
             base_url=base_url_override,
             api_key=_OPENAI_KEY_PLACEHOLDER,
-            http_client=httpx.AsyncClient(auth=_ShellCommandBearerAuth(databricks_auth_command)),
+            http_client=httpx.AsyncClient(auth=_ShellCommandBearerAuth(gateway_auth_command)),
             **retry_kwargs,
         )
 
     # Explicit spec-level api_key (executor.auth: {type: api_key, …}).
-    # Checked before profile and env-var lookups so the spec is self-contained.
+    # Checked before env-var lookups so the spec is self-contained.
     # base_url_override is populated from HARNESS_OPENAI_AGENTS_GATEWAY_BASE_URL
     # when the spec also declares executor.auth.base_url.
     #
     # Fall back to the ambient OPENAI_BASE_URL when no override reached us.
-    # The api_key is frequently a gateway credential (e.g. a Databricks AI
-    # Gateway PAT detected from OPENAI_API_KEY), and the companion base_url
-    # can be dropped anywhere on the daemon → runner → harness propagation
-    # chain (the spec auth bake omits it when OPENAI_BASE_URL is absent at
+    # The api_key may be a gateway credential, and the companion base_url can
+    # be dropped anywhere on the daemon → runner → harness propagation chain
+    # (the spec auth bake omits it when OPENAI_BASE_URL is absent at
     # materialization time; a reused local daemon may predate the env var).
     # Without this fallback, a missing base_url silently routes the gateway
     # token to api.openai.com and every request 401s; honoring the ambient
@@ -457,83 +421,20 @@ def _get_openai_async_client(
             **retry_kwargs,
         )
 
-    is_databricks_model = model is None or model.startswith("databricks-")
-
-    # Databricks profile auth only applies when the model is Databricks-hosted.
-    # An explicit spec/provider profile wins over ambient env vars.
-    if is_databricks_model and profile:
-        from .databricks_executor import DatabricksAuthError, _resolve_databricks_auth
-
-        try:
-            auth, host = _resolve_databricks_auth(profile)
-            return AsyncOpenAI(
-                base_url=base_url_override or _databricks_openai_base_url(host),
-                api_key=_OPENAI_KEY_PLACEHOLDER,
-                http_client=httpx.AsyncClient(auth=auth),
-                **retry_kwargs,
-            )
-        except DatabricksAuthError as exc:
-            # Fall through to env-var credentials when available so that
-            # CI environments (OIDC tokens injected via OPENAI_BASE_URL /
-            # OPENAI_API_KEY) still work even if the named profile is not
-            # present in ~/.databrickscfg.  Log a warning so the fallback
-            # is visible rather than silent.  Re-raise only when there are
-            # no env-var fallbacks to fall through to.
-            if os.environ.get("OPENAI_BASE_URL") or os.environ.get("OPENAI_API_KEY"):
-                logger.warning(
-                    "Databricks profile %r authentication failed (%s); "
-                    "falling back to OPENAI_BASE_URL/OPENAI_API_KEY.",
-                    profile,
-                    exc,
-                )
-            else:
-                raise
-        except ImportError:
-            logger.warning(
-                "databricks-sdk is not installed; cannot resolve Databricks "
-                "profile %r. Falling back to OPENAI_BASE_URL/OPENAI_API_KEY.",
-                profile,
-            )
-
     if os.environ.get("OPENAI_BASE_URL"):
         return AsyncOpenAI(
-            base_url=os.environ["OPENAI_BASE_URL"],
+            base_url=base_url_override or os.environ["OPENAI_BASE_URL"],
             api_key=os.environ.get("OPENAI_API_KEY", _OPENAI_KEY_PLACEHOLDER),
             **retry_kwargs,
         )
 
     api_key = os.environ.get("OPENAI_API_KEY")
     if api_key:
-        return AsyncOpenAI(api_key=api_key, **retry_kwargs)
+        return AsyncOpenAI(api_key=api_key, base_url=base_url_override or None, **retry_kwargs)
 
-    # Non-Databricks model with no OpenAI credentials — fail loudly rather
-    # than silently routing to the Databricks AI Gateway, which will 404.
-    if not is_databricks_model:
-        raise ValueError(
-            f"Model {model!r} is not a Databricks-hosted model but no OpenAI "
-            "credentials were found. Set OPENAI_API_KEY (and optionally "
-            "OPENAI_BASE_URL) to use this model, or use a 'databricks-' "
-            "prefixed model name to route through Databricks."
-        )
-
-    # No profile, no env — final fallback via ambient Databricks credentials.
-    try:
-        from .databricks_executor import _resolve_databricks_auth
-
-        auth, host = _resolve_databricks_auth(profile)
-    except ImportError as exc:
-        raise ImportError(
-            "The 'databricks-sdk' package is required for Databricks "
-            "authentication but is not installed, and no OPENAI_API_KEY or "
-            "OPENAI_BASE_URL environment variables are set. Either install "
-            "the package (`pip install 'goalrail[databricks]'`) or set "
-            "OPENAI_API_KEY/OPENAI_BASE_URL for non-Databricks OpenAI access."
-        ) from exc
-    return AsyncOpenAI(
-        base_url=base_url_override or _databricks_openai_base_url(host),
-        api_key=_OPENAI_KEY_PLACEHOLDER,
-        http_client=httpx.AsyncClient(auth=auth),
-        **retry_kwargs,
+    raise ValueError(
+        "OpenAIAgentsSDKExecutor requires OPENAI_API_KEY or explicit gateway "
+        "auth via HARNESS_OPENAI_AGENTS_GATEWAY_AUTH_COMMAND."
     )
 
 
@@ -541,7 +442,7 @@ class _ShellCommandBearerAuth(httpx.Auth):
     """httpx Auth that refreshes a bearer token through a shell command.
 
     :param command: Shell command that prints the access token to stdout,
-        e.g. ``"databricks auth token --host https://example.databricks.com ..."``.
+        e.g. ``"printf %s sk-..."``.
     """
 
     def __init__(self, command: str) -> None:
@@ -569,7 +470,7 @@ class _ShellCommandBearerAuth(httpx.Auth):
         )
         token = result.stdout.strip()
         if result.returncode != 0 or not token:
-            raise RuntimeError("Databricks auth command failed to return a bearer token.")
+            raise RuntimeError("Gateway auth command failed to return a bearer token.")
         request.headers["Authorization"] = f"Bearer {token}"
         yield request
 
@@ -650,7 +551,7 @@ _ReplayValue: TypeAlias = Any  # type: ignore[explicit-any]
 
 
 def _sanitize_replay_item(value: _ReplayValue) -> _ReplayValue:
-    """Strip provider-only fields Databricks rejects during replay."""
+    """Strip provider-only fields that can break replay."""
     if isinstance(value, list):
         return [_sanitize_replay_item(item) for item in value]
     if not isinstance(value, dict):
@@ -771,16 +672,11 @@ def _build_reasoning_model_settings(effort: str | None) -> dict[str, object]:
     return {"reasoning": Reasoning(effort=openai_effort)}
 
 
-def _is_databricks_openai_client(client: AsyncOpenAIClient) -> bool:
-    """Return whether *client* targets a Databricks AI Gateway base URL."""
-    return "/ai-gateway/" in str(getattr(client, "base_url", ""))
-
-
 class _ReasoningBlockFilterStream:
     """Async stream wrapper that converts list-type ``delta.content`` to ``None``.
 
-    Kimi K2 (and similar reasoning models served via Databricks) sends
-    thinking/reasoning blocks as list-type content in streaming deltas:
+    Some reasoning models send thinking/reasoning blocks as list-type content
+    in streaming deltas:
     ``choices[0].delta.content = [{'type': 'reasoning', ...}]``.
     The openai-agents SDK's ``ChatCmplStreamHandler`` creates a
     ``ResponseTextDeltaEvent(delta=content)`` which Pydantic rejects for
@@ -961,25 +857,21 @@ class OpenAIAgentsSDKExecutor(Executor):
         self,
         *,
         client: AsyncOpenAIClient = None,
-        profile: str | None = None,
         api_key: str | None = None,
         use_responses: bool = True,
         model: str | None = None,
         retry_policy: RetryPolicy | None = None,
         base_url_override: str | None = None,
-        gateway_host: str | None = None,
         gateway_auth_command: str | None = None,
     ) -> None:
         """Create an OpenAIAgentsSDKExecutor.
 
         :param client: A preconfigured ``openai.AsyncOpenAI`` client.  When
             ``None`` the executor calls :func:`_get_openai_async_client`.
-        :param profile: Optional ``~/.databrickscfg`` profile name for the
-            Databricks fallback path, e.g. ``"<your-profile>"``.
         :param api_key: Direct OpenAI-compatible API key, e.g.
             ``"sk-proj-..."``. When set, constructs the client with this key
-            directly, bypassing profile resolution and env-var lookups. Set
-            from ``HARNESS_OPENAI_AGENTS_API_KEY`` when the agent spec
+            directly, bypassing env-var lookups. Set from
+            ``HARNESS_OPENAI_AGENTS_API_KEY`` when the agent spec
             declares ``executor.auth: {type: api_key, api_key: …}``.
         :param use_responses: When ``True`` the executor talks to the
             OpenAI ``/responses`` endpoint; when ``False`` it falls back to
@@ -999,18 +891,10 @@ class OpenAIAgentsSDKExecutor(Executor):
             ``None`` falls back to ``cfg.model`` then the executor's
             built-in default.
         :param base_url_override: Override the OpenAI-compatible base URL
-            instead of deriving it from the Databricks profile host.  Set
-            from ``HARNESS_OPENAI_AGENTS_GATEWAY_BASE_URL`` (written by
-            the Goalrail workflow layer). Required whenever ``gateway_host`` is set.
-        :param gateway_host: Gateway workspace host origin, e.g.
-            ``"https://example.databricks.com"``.  Set from
-            ``HARNESS_OPENAI_AGENTS_GATEWAY_HOST`` (written by the AP
-            workflow layer). When set, skips profile host lookup and requires
-            the gateway base URL and auth command values.
+            instead of using the OpenAI default. Set from
+            ``HARNESS_OPENAI_AGENTS_GATEWAY_BASE_URL``.
         :param gateway_auth_command: Shell command that prints a bearer token,
-            e.g.
-            ``"databricks auth token --host https://example.databricks.com ..."``
-            or ``"printf %s sk-..."``. Set from
+            e.g. ``"printf %s sk-..."``. Set from
             ``HARNESS_OPENAI_AGENTS_GATEWAY_AUTH_COMMAND``.
         """
         self._retry_policy = retry_policy if retry_policy is not None else RetryPolicy()
@@ -1018,13 +902,10 @@ class OpenAIAgentsSDKExecutor(Executor):
             client
             if client is not None
             else _get_openai_async_client(
-                profile=profile,
                 api_key=api_key,
                 retry_policy=self._retry_policy,
                 base_url_override=base_url_override,
-                host_override=gateway_host,
-                databricks_auth_command=gateway_auth_command,
-                model=model,
+                gateway_auth_command=gateway_auth_command,
             )
         )
         # Wrap the chat.completions path to strip list-type delta.content
@@ -1037,10 +918,8 @@ class OpenAIAgentsSDKExecutor(Executor):
         self._client = (
             _wrap_client_for_reasoning_models(raw_client) if not use_responses else raw_client
         )
-        self._profile = profile
         self._use_responses = use_responses
         self._model_override = model
-        self._databricks = _is_databricks_openai_client(self._client)
         self._tool_executor: ToolExecutor | None = None
         self._session_states: dict[str, _AgentsSessionState] = {}
 
@@ -1231,10 +1110,9 @@ class OpenAIAgentsSDKExecutor(Executor):
                 # The openai-agents SDK's chatcmpl_converter passes
                 # ``file_data`` directly to the Chat Completions ``file``
                 # content type, which expects plain base64 — not the data:
-                # URI that content_resolver produces.  The Databricks GPT
-                # endpoint may not support ``file`` content blocks at all.
-                # Converting to ``input_text`` is the universally compatible
-                # path: the model sees the file content as plain text.
+                # URI that content_resolver produces. Converting to
+                # ``input_text`` is the broad compatibility path: the model
+                # sees the file content as plain text.
                 normalized = _normalize_content_blocks_for_chat(content)
                 return [{"type": "message", "role": "user", "content": normalized}]
             return json.dumps(content)
@@ -1402,15 +1280,7 @@ class OpenAIAgentsSDKExecutor(Executor):
         # cfg.model (per-request /model override; agent name no longer
         # leaks here) wins over the spec default
         # (HARNESS_OPENAI_AGENTS_MODEL → self._model_override).
-        model = (
-            cfg.model
-            or self._model_override
-            or (
-                _DATABRICKS_OPENAI_AGENTS_DEFAULT_MODEL
-                if self._databricks
-                else _OPENAI_AGENTS_DEFAULT_MODEL
-            )
-        )
+        model = cfg.model or self._model_override or _OPENAI_AGENTS_DEFAULT_MODEL
         agents_sdk = cast(_AgentsSDK, _ensure_agents_sdk())
         session_key = self._session_key(messages)
         try:
@@ -1638,25 +1508,8 @@ class OpenAIAgentsSDKExecutor(Executor):
                     # maps it to ``context_length_exceeded`` and the
                     # runner surfaces the overflow to the user.
                     raise
-                from .databricks_executor import DatabricksAuthError
-
-                if isinstance(exc, DatabricksAuthError) or (
-                    exc.__cause__ is not None and isinstance(exc.__cause__, DatabricksAuthError)
-                ):
-                    # When exc IS the DatabricksAuthError, use str(exc) — it
-                    # carries the actionable "Run: databricks auth login -p X"
-                    # message. Its __cause__ is the raw SDK exception (e.g.
-                    # ValueError("token expired")), which is NOT actionable.
-                    # When exc.__cause__ IS the DatabricksAuthError (exc is a
-                    # wrapper), str(exc.__cause__) is correct.
-                    auth_msg = (
-                        str(exc) if isinstance(exc, DatabricksAuthError) else str(exc.__cause__)
-                    )
-                    logger.error("OpenAIAgentsSDKExecutor: auth failed: %s", auth_msg)
-                    yield ExecutorError(message=auth_msg)
-                else:
-                    logger.error("OpenAIAgentsSDKExecutor: run failed: %s", exc)
-                    yield ExecutorError(message=f"OpenAI Agents SDK error: {exc}")
+                logger.error("OpenAIAgentsSDKExecutor: run failed: %s", exc)
+                yield ExecutorError(message=f"OpenAI Agents SDK error: {exc}")
                 return
             finally:
                 # If the outer generator was aclose'd before the

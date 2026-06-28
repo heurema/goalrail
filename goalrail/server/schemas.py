@@ -763,7 +763,7 @@ class Usage(BaseModel):
         rate. Like ``cache_read_input_tokens``, this is separate from
         ``input_tokens``; ``0`` when not reported.
     :param model: The LLM model the harness actually used for this
-        turn, e.g. ``"claude-opus-4-8"`` or ``"databricks-gpt-5-5"``.
+        turn, e.g. ``"claude-opus-4-8"`` or ``"openai/gpt-5-5"``.
         Reported by relay executors so the server-side cost path can
         price the turn even when the agent spec pins no ``llm.model``
         (e.g. supervisors that delegate / use the harness default).
@@ -1170,7 +1170,7 @@ class SessionCreateRequest(BaseModel):
         (:class:`SessionCreateMetadata`). See
         designs/NATIVE_RUNNER_SERVER_LAUNCH.md.
     :param model_override: Optional per-session LLM model override to
-        persist at create time, e.g. ``"databricks-claude-sonnet-4-6"``.
+        persist at create time, e.g. ``"anthropic/claude-sonnet-4-6"``.
         Set by ``sys_session_send``'s per-dispatch ``model`` arg so the
         value is on the session row before the runner launches the
         harness (native CLIs read it as ``--model`` at terminal launch;
@@ -1407,7 +1407,7 @@ class ModelUsage(BaseModel):
 
     One value in the ``usage_by_model`` map on :class:`SessionResponse` /
     :class:`SessionUsageEvent`, keyed by the raw harness-reported model id
-    (e.g. ``"claude-sonnet-4-6"``, ``"databricks-gpt-5-5"``). Counts are
+    (e.g. ``"claude-sonnet-4-6"``, ``"openai/gpt-5-5"``). Counts are
     summed over the session's subtree (itself + sub-agent descendants), so a
     parent folds in sub-agents that ran a different model. Token buckets
     mirror the flat per-session breakdown.

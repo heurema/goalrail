@@ -63,7 +63,7 @@ def _capture_logger_snapshots() -> dict[str, _LoggerSnapshot]:
     :returns: Snapshot keyed by logger name.
     """
     snapshots: dict[str, _LoggerSnapshot] = {}
-    for name in ("", "goalrail", "goalrail_ui_sdk", "databricks.sdk"):
+    for name in ("", "goalrail", "goalrail_ui_sdk", "thirdparty.sdk"):
         logger = logging.getLogger(name)
         snapshots[name] = _LoggerSnapshot(
             handlers=list(logger.handlers),
@@ -243,31 +243,26 @@ def test_redirect_stderr_to_log_retargets_existing_logging_stderr_handlers(
     handler.setFormatter(logging.Formatter("%(levelname)s:%(name)s:%(message)s"))
     root.addHandler(handler)
     root.setLevel(logging.WARNING)
-    databricks_logger = logging.getLogger("databricks.sdk")
-    databricks_logger.handlers.clear()
-    databricks_logger.setLevel(logging.WARNING)
-    databricks_logger.propagate = True
+    thirdparty_logger = logging.getLogger("thirdparty.sdk")
+    thirdparty_logger.handlers.clear()
+    thirdparty_logger.setLevel(logging.WARNING)
+    thirdparty_logger.propagate = True
     ctx = cli_diagnostics.setup_cli_logging(["run", "agent.yaml"])
 
     cli_diagnostics.redirect_stderr_to_log()
-    databricks_logger.warning(
-        "Databricks CLI v0.295.0 does not support --force-refresh "
-        "(requires >= v0.296.0). The CLI's token cache may provide stale tokens."
-    )
+    thirdparty_logger.warning("third-party SDK warning during TUI")
     cli_diagnostics.restore_stderr()
-    databricks_logger.warning("after TUI")
+    thirdparty_logger.warning("after TUI")
 
     log_text = ctx.path.read_text(encoding="utf-8")
-    warning_line = (
-        "WARNING:databricks.sdk:Databricks CLI v0.295.0 does not support --force-refresh"
-    )
+    warning_line = "WARNING:thirdparty.sdk:third-party SDK warning during TUI"
     assert warning_line in log_text, (
         f"stderr-backed third-party logging should land in the CLI log: {log_text!r}"
     )
     assert "after TUI" not in log_text, (
         f"logging handlers should be restored after the TUI exits: {log_text!r}"
     )
-    assert terminal_stderr.getvalue() == "WARNING:databricks.sdk:after TUI\n", (
+    assert terminal_stderr.getvalue() == "WARNING:thirdparty.sdk:after TUI\n", (
         f"third-party logging painted into the terminal during TUI redirect: "
         f"{terminal_stderr.getvalue()!r}"
     )

@@ -12,8 +12,6 @@ canonical→gateway-local model-id normalization
 
 Enumeration is deterministic per provider kind:
 
-- ``databricks`` → ``GET <workspace>/api/2.0/serving-endpoints`` with a
-  token minted from the profile (source ``"gateway"``).
 - ``key`` with the ``anthropic`` family → ``GET <base_url>/v1/models``
   with ``x-api-key`` headers (source ``"anthropic-api"``).
 - ``key`` (openai family) / ``gateway`` / ``local`` →
@@ -30,7 +28,6 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import os
 import subprocess
 import threading
 from dataclasses import dataclass, replace
@@ -43,13 +40,11 @@ from goalrail._platform import default_shell_argv
 from goalrail.model_override import model_family_mismatch
 from goalrail.onboarding.provider_config import (
     ANTHROPIC_FAMILY,
-    DATABRICKS_KIND,
     KEY_KIND,
     OPENAI_FAMILY,
     SUBSCRIPTION_KIND,
     ProviderEntry,
 )
-from goalrail.runtime.credentials.databricks import resolve_databricks_workspace
 
 _logger = logging.getLogger(__name__)
 
@@ -65,13 +60,6 @@ _AUTH_COMMAND_TIMEOUT_S = 15.0
 # Header version the Anthropic models API requires (same value as
 # ``goalrail/llms/adapters/anthropic.py``).
 _ANTHROPIC_API_VERSION = "2023-06-01"
-
-# Name tokens that mark a Databricks serving endpoint as an LLM when the
-# endpoint carries no usable ``task`` field.
-_LLM_NAME_TOKENS = ("claude", "gpt", "codex", "gemini", "llama", "qwen", "kimi")
-
-# Chat-capable endpoint tasks ("llm/v1/chat"); embeddings/rerankers don't match.
-_LLM_TASK_TOKENS = ("chat", "completion")
 
 # Subscription CLIs expose no listing API: curated ids matching the bundled
 # catalog pin (claude) and the codex ids the codebase already references.
@@ -132,8 +120,8 @@ _FAMILY_PREFERENCE = (ANTHROPIC_FAMILY, OPENAI_FAMILY)
 class ModelEntry:
     """One model a worker can run.
 
-    :param id: Provider-local model id, e.g.
-        ``"databricks-claude-sonnet-4-6"`` or ``"gpt-5.4-mini"``.
+    :param id: Provider-local model id, e.g. ``"gpt-5.4-mini"`` or
+        ``"claude-sonnet-4-6"``.
     :param family: Vendor family token — ``"claude"``, ``"openai"``, or
         ``"other"``.
     :param context_window: Context window in tokens when the provider
@@ -155,7 +143,7 @@ class ModelListing:
     :param verified: ``True`` when the list was fetched live from the
         provider; ``False`` for static/curated or empty listings.
     :param models: The enumerated models, e.g.
-        ``(ModelEntry(id="databricks-gpt-5-4", family="openai"),)``.
+        ``(ModelEntry(id="gpt-5.4", family="openai"),)``.
     :param note: Human-readable provenance / failure explanation.
     """
 
@@ -170,12 +158,10 @@ class ResolvedModelProvider:
     """The model provider a worker's spawn/launch path would route through.
 
     :param kind: Provider kind — ``"key"`` / ``"gateway"`` / ``"local"``
-        / ``"subscription"`` / ``"databricks"`` from the provider config
+        / ``"subscription"`` from the provider config
         layer, or ``"none"`` when no usable provider resolved.
     :param family: ``"anthropic"`` / ``"openai"`` for inline-family
         kinds, else ``None``.
-    :param profile: Databricks profile for ``kind="databricks"``, e.g.
-        ``"my-profile"``; ``None`` falls back to the ``[DEFAULT]`` section.
     :param base_url: Endpoint base URL for inline-family kinds, e.g.
         ``"https://openrouter.ai/api/v1"``.
     :param api_key: Resolved static credential for inline-family kinds.
@@ -189,7 +175,6 @@ class ResolvedModelProvider:
 
     kind: str
     family: str | None = None
-    profile: str | None = None
     base_url: str | None = None
     api_key: str | None = None
     auth_command: str | None = None
@@ -239,7 +224,6 @@ def _listing_cache_key(provider: ResolvedModelProvider) -> tuple[str, ...]:
     return (
         provider.kind,
         provider.family or "",
-        provider.profile or "",
         provider.base_url or "",
         provider.cli or "",
         provider.detail,
@@ -265,7 +249,7 @@ def model_family_token(model_id: str) -> str:
     :func:`goalrail.model_override.model_family_mismatch`: Claude ids
     contain ``"claude"``; GPT ids contain ``"gpt"`` or ``"codex"``.
 
-    :param model_id: Model id, e.g. ``"databricks-claude-opus-4-8"``.
+    :param model_id: Model id, e.g. ``"claude-opus-4-8"``.
     :returns: ``"claude"``, ``"openai"``, or ``"other"``.
     """
     lower = model_id.lower()
@@ -331,8 +315,7 @@ def _resolve_model_provider_unsafe(spec: Any, harness: str | None) -> ResolvedMo
     Step 1 reuses :func:`~goalrail.runtime.workflow._resolve_provider_for_build`
     verbatim (the precedence the spawn-env builders and native launch
     paths share). Step 2 mirrors the builders' PER-HARNESS legacy
-    fallthrough (see :func:`_provider_from_legacy_auth`) — the builders
-    diverge in which legacy auth fields they actually consume.
+    fallthrough (see :func:`_provider_from_legacy_auth`).
 
     :param spec: The worker's (sub-)agent spec.
     :param harness: The worker's harness id, e.g. ``"pi"``.
@@ -358,12 +341,9 @@ def _resolve_model_provider_unsafe(spec: Any, harness: str | None) -> ResolvedMo
 def _provider_from_legacy_auth(spec: Any, harness_type: str) -> ResolvedModelProvider:  # type: ignore[explicit-any]  # structural spec stubs in tests
     """Mirror the per-harness legacy fallthrough of ``_build_*_spawn_env``.
 
-    The builders diverge: claude-sdk consumes spec/global ``auth:``
-    blocks AND legacy profiles; openai-agents consumes ``auth:`` blocks
-    and ``config["profile"]``; codex and pi consume ONLY
-    ``config["profile"]`` plus the ``databricks-*`` model prefix — their
-    builders never read ``auth:`` blocks, so reporting one as usable
-    would list models the spawned child cannot actually reach.
+    The builders diverge: claude-sdk and openai-agents consume spec/global
+    ``auth:`` blocks. Other harnesses rely on explicit provider config; if
+    none resolved, the catalog reports no usable provider.
 
     :param spec: The worker's (sub-)agent spec.
     :param harness_type: The workflow harness type, e.g. ``"codex"``.
@@ -373,58 +353,27 @@ def _provider_from_legacy_auth(spec: Any, harness_type: str) -> ResolvedModelPro
         return _legacy_claude_sdk_provider(spec)
     if harness_type in ("openai-agents-sdk", "antigravity"):
         # Both resolve spec/global ``auth:`` api-key blocks via this branch.
-        # NB: the antigravity spawn-env builder (unlike openai-agents) ignores
-        # ``config["profile"]`` — it's Gemini-native with no Databricks/gateway
-        # path — so for a profile-only antigravity spec this readout can
-        # over-report; api-key (and Vertex) specs resolve correctly.
         return _legacy_openai_agents_provider(spec)
-    return _legacy_profile_only_provider(spec, harness_type)
-
-
-def _databricks_prefix_provider(spec: Any) -> ResolvedModelProvider | None:  # type: ignore[explicit-any]  # structural spec stubs in tests
-    """Map a ``databricks-*`` spec model to the runner-env-profile gateway.
-
-    Mirrors the builders' shared model-prefix heuristic; the native
-    launch paths read the same ``DATABRICKS_CONFIG_PROFILE`` fallback.
-
-    :param spec: The worker's (sub-)agent spec.
-    :returns: A databricks provider, or ``None`` when the model carries
-        no ``databricks-`` / ``databricks/`` prefix.
-    """
-    model = spec.executor.model
-    if isinstance(model, str) and model.startswith(("databricks-", "databricks/")):
-        return ResolvedModelProvider(
-            kind=DATABRICKS_KIND,
-            profile=os.environ.get("DATABRICKS_CONFIG_PROFILE"),
-            detail="databricks-* model prefix",
-        )
-    return None
+    return _legacy_no_provider(spec, harness_type)
 
 
 def _legacy_claude_sdk_provider(spec: Any) -> ResolvedModelProvider:  # type: ignore[explicit-any]  # structural spec stubs in tests
     """Mirror ``_build_claude_sdk_spawn_env``'s legacy auth branch.
 
-    Spec ``auth:`` (databricks / api_key) → legacy profile
-    (``config["profile"]`` first, matching the builder's read order) →
-    global ``auth:`` → ``databricks-*`` model prefix → none. The
-    api_key path routes via ``apiKeyHelper`` to the vendor API, so
-    ``auth.base_url`` is NOT consumed — listings use the vendor default.
+    Spec ``auth:`` (api_key) → global ``auth:`` → none. The api_key path
+    routes via ``apiKeyHelper`` to the vendor API, so ``auth.base_url`` is
+    NOT consumed — listings use the vendor default.
 
     :param spec: The worker's (sub-)agent spec.
     :returns: A :class:`ResolvedModelProvider`.
     """
     from goalrail.onboarding.configure_models import default_base_url_for_family
     from goalrail.runtime.workflow import _load_global_auth
-    from goalrail.spec.types import ApiKeyAuth, DatabricksAuth
+    from goalrail.spec.types import ApiKeyAuth
 
     auth = spec.executor.auth
-    legacy_profile = spec.executor.config.get("profile") or spec.executor.profile
-    if auth is None and not legacy_profile:
+    if auth is None:
         auth = _load_global_auth()
-    if isinstance(auth, DatabricksAuth):
-        return ResolvedModelProvider(
-            kind=DATABRICKS_KIND, profile=auth.profile or None, detail="databricks auth"
-        )
     if isinstance(auth, ApiKeyAuth) and auth.api_key:
         return ResolvedModelProvider(
             kind=KEY_KIND,
@@ -433,34 +382,24 @@ def _legacy_claude_sdk_provider(spec: Any) -> ResolvedModelProvider:  # type: ig
             api_key=auth.api_key,
             detail="api_key auth",
         )
-    if legacy_profile:
-        return ResolvedModelProvider(
-            kind=DATABRICKS_KIND, profile=str(legacy_profile), detail="spec profile"
-        )
-    prefix = _databricks_prefix_provider(spec)
-    if prefix is not None:
-        return prefix
     return ResolvedModelProvider(kind=NONE_KIND, detail="no model provider configured")
 
 
 def _legacy_openai_agents_provider(spec: Any) -> ResolvedModelProvider:  # type: ignore[explicit-any]  # structural spec stubs in tests
     """Mirror ``_build_openai_agents_sdk_spawn_env``'s legacy auth branch.
 
-    Spec ``auth:`` (api_key with its base_url / databricks) → global
-    ``auth:`` (only when the spec declares no auth or legacy profile) →
-    ``config["profile"]`` → ``databricks-*`` model prefix → none.
+    Spec ``auth:`` (api_key with its base_url) → global ``auth:`` → none.
 
     :param spec: The worker's (sub-)agent spec.
     :returns: A :class:`ResolvedModelProvider`.
     """
     from goalrail.onboarding.configure_models import default_base_url_for_family
     from goalrail.runtime.workflow import _load_global_auth
-    from goalrail.spec.types import ApiKeyAuth, DatabricksAuth
+    from goalrail.spec.types import ApiKeyAuth
 
     spec_auth = spec.executor.auth
-    auth = spec_auth if isinstance(spec_auth, (ApiKeyAuth, DatabricksAuth)) else None
-    has_legacy_profile = bool(spec.executor.profile or spec.executor.config.get("profile"))
-    if auth is None and not has_legacy_profile:
+    auth = spec_auth if isinstance(spec_auth, ApiKeyAuth) else None
+    if auth is None:
         auth = _load_global_auth()
     if isinstance(auth, ApiKeyAuth) and auth.api_key:
         return ResolvedModelProvider(
@@ -470,45 +409,21 @@ def _legacy_openai_agents_provider(spec: Any) -> ResolvedModelProvider:  # type:
             api_key=auth.api_key,
             detail="api_key auth",
         )
-    if isinstance(auth, DatabricksAuth):
-        return ResolvedModelProvider(
-            kind=DATABRICKS_KIND, profile=auth.profile or None, detail="databricks auth"
-        )
-    profile = spec.executor.config.get("profile")
-    if profile:
-        return ResolvedModelProvider(
-            kind=DATABRICKS_KIND, profile=str(profile), detail="spec profile"
-        )
-    prefix = _databricks_prefix_provider(spec)
-    if prefix is not None:
-        return prefix
     return ResolvedModelProvider(kind=NONE_KIND, detail="no model provider configured")
 
 
-def _legacy_profile_only_provider(spec: Any, harness_type: str) -> ResolvedModelProvider:  # type: ignore[explicit-any]  # structural spec stubs in tests
-    """Mirror the codex / pi builders' legacy branch (profile + prefix only).
-
-    ``_build_codex_spawn_env`` / ``_build_pi_spawn_env`` never read
-    ``auth:`` blocks or ``executor.profile`` — only ``config["profile"]``
-    and the ``databricks-*`` model prefix route anywhere.
+def _legacy_no_provider(spec: Any, harness_type: str) -> ResolvedModelProvider:  # type: ignore[explicit-any]  # structural spec stubs in tests
+    """Report no legacy provider for harnesses without direct auth fallback.
 
     :param spec: The worker's (sub-)agent spec.
     :param harness_type: The workflow harness type, e.g. ``"codex"``.
     :returns: A :class:`ResolvedModelProvider`.
     """
-    profile = spec.executor.config.get("profile")
-    if profile:
-        return ResolvedModelProvider(
-            kind=DATABRICKS_KIND, profile=str(profile), detail="spec profile"
-        )
-    prefix = _databricks_prefix_provider(spec)
-    if prefix is not None:
-        return prefix
     if spec.executor.auth is not None or spec.executor.profile:
         return ResolvedModelProvider(
             kind=NONE_KIND,
             detail=(
-                f"the {harness_type} spawn path does not consume legacy auth:/profile "
+                f"the {harness_type} spawn path does not consume legacy auth/profile "
                 "fields; configure a 'providers:' entry instead"
             ),
         )
@@ -525,10 +440,6 @@ def _provider_from_entry(entry: ProviderEntry, harness_type: str) -> ResolvedMod
     """
     from goalrail.errors import GoalrailError
 
-    if entry.kind == DATABRICKS_KIND:
-        return ResolvedModelProvider(
-            kind=DATABRICKS_KIND, profile=entry.profile, detail=f"provider {entry.name!r}"
-        )
     if entry.kind == SUBSCRIPTION_KIND:
         return ResolvedModelProvider(
             kind=SUBSCRIPTION_KIND, cli=entry.cli, detail=f"provider {entry.name!r}"
@@ -729,9 +640,7 @@ def _listing_for_provider(
     if cached is not None:
         return cached
     try:
-        if provider.kind == DATABRICKS_KIND:
-            listing = _fetch_databricks_listing(provider, transport=transport)
-        elif provider.kind == KEY_KIND and provider.family == ANTHROPIC_FAMILY:
+        if provider.kind == KEY_KIND and provider.family == ANTHROPIC_FAMILY:
             listing = _fetch_anthropic_listing(provider, transport=transport)
         else:
             listing = _fetch_openai_compatible_listing(provider, transport=transport)
@@ -768,74 +677,6 @@ def _static_subscription_listing(provider: ResolvedModelProvider) -> ModelListin
             f"curated aliases for the {provider.cli or 'unknown'} CLI login "
             "(subscription logins expose no model-listing API; availability "
             "depends on the logged-in plan)"
-        ),
-    )
-
-
-def _is_llm_endpoint(name: str, task: str) -> bool:
-    """Decide whether a serving endpoint is a chat-capable LLM.
-
-    :param name: Endpoint name, e.g. ``"databricks-claude-opus-4-8"``.
-    :param task: Endpoint ``task`` field, e.g. ``"llm/v1/chat"`` —
-        empty when the API omits it.
-    :returns: ``True`` for chat-capable LLM endpoints; embeddings and
-        other non-chat tasks are excluded.
-    """
-    task_lower = task.lower()
-    if task_lower:
-        # An explicit task is authoritative: only chat/completions
-        # endpoints qualify (embeddings carry "llm/v1/embeddings").
-        return any(token in task_lower for token in _LLM_TASK_TOKENS)
-    name_lower = name.lower()
-    return any(token in name_lower for token in _LLM_NAME_TOKENS)
-
-
-def _fetch_databricks_listing(
-    provider: ResolvedModelProvider,
-    *,
-    transport: httpx.BaseTransport | None,
-) -> ModelListing:
-    """List LLM serving endpoints on the provider's Databricks workspace.
-
-    :param provider: A ``kind="databricks"`` provider descriptor.
-    :param transport: Optional httpx transport override for tests.
-    :returns: A ``source="gateway"`` listing of LLM endpoint names.
-    :raises httpx.HTTPError: On transport/HTTP failures.
-    :raises OSError: When the profile resolves no credentials.
-    """
-    creds = resolve_databricks_workspace(provider.profile)
-    with httpx.Client(transport=transport, timeout=_HTTP_TIMEOUT_S) as client:
-        resp = client.get(
-            f"{creds.host}/api/2.0/serving-endpoints",
-            headers={"Authorization": f"Bearer {creds.token}"},
-        )
-        resp.raise_for_status()
-        payload = resp.json()
-    endpoints = payload.get("endpoints") if isinstance(payload, dict) else None
-    models: list[ModelEntry] = []
-    for endpoint in endpoints if isinstance(endpoints, list) else []:
-        if not isinstance(endpoint, dict):
-            continue
-        name = endpoint.get("name")
-        if not isinstance(name, str) or not name:
-            continue
-        task = endpoint.get("task")
-        if not _is_llm_endpoint(name, task if isinstance(task, str) else ""):
-            continue
-        state = endpoint.get("state")
-        ready = state.get("ready") if isinstance(state, dict) else None
-        # Only an explicitly non-READY endpoint is skipped; an absent
-        # state field stays included (the API may omit it).
-        if isinstance(ready, str) and ready and ready.upper() != "READY":
-            continue
-        models.append(ModelEntry(id=name, family=model_family_token(name)))
-    return ModelListing(
-        source="gateway",
-        verified=True,
-        models=tuple(models),
-        note=(
-            "LLM serving endpoints on the Databricks workspace gateway "
-            f"(profile {provider.profile or 'DEFAULT'!r})"
         ),
     )
 

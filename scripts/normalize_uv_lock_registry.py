@@ -1,8 +1,8 @@
 """Normalize the package index in ``uv.lock`` to the public PyPI URL.
 
 Local ``uv`` runs resolve against whatever index is configured on the
-developer's machine (e.g. the Databricks PyPI proxy via ``UV_INDEX_URL``
-or ``~/.config/uv``), and ``uv`` rewrites every
+developer's machine (for example a private PyPI proxy via ``UV_INDEX_URL`` or
+``~/.config/uv``), and ``uv`` rewrites every
 ``source = { registry = "<url>" }`` entry in ``uv.lock`` to that index.
 For this OSS repo the committed lockfile must always point at public
 PyPI (``https://pypi.org/simple``) so the lock is reproducible for

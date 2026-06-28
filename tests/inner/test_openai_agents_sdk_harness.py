@@ -57,24 +57,21 @@ def test_create_app_returns_fastapi_with_required_routes() -> None:
     assert "/v1/sessions/{conversation_id}/events" in paths
 
 
-def test_executor_factory_reads_databricks_profile_env(
+def test_executor_factory_reads_gateway_env(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """``HARNESS_OPENAI_AGENTS_DATABRICKS_PROFILE`` + ``_MODEL`` thread through.
+    """Gateway URL/auth + model env vars thread through.
 
     Locks in the canonical env-var contract the parametrized
     harness wrap e2e (``test_harness_wrap_e2e.py``) sets — and
     that the AP-side spawn-env builder
     (``_build_openai_agents_sdk_spawn_env`` in workflow.py)
-    emits. Single canonical spelling, no ``DATABRICKS=true``
-    truthy gate.
+    emits.
     """
-    monkeypatch.setenv("HARNESS_OPENAI_AGENTS_DATABRICKS_PROFILE", "test-profile")
-    monkeypatch.setenv("HARNESS_OPENAI_AGENTS_GATEWAY_HOST", "https://example.databricks.com")
-    monkeypatch.setenv("HARNESS_OPENAI_AGENTS_MODEL", "databricks-gpt-5-4-mini")
+    monkeypatch.setenv("HARNESS_OPENAI_AGENTS_MODEL", "openai/gpt-5-4-mini")
     monkeypatch.setenv(
         "HARNESS_OPENAI_AGENTS_GATEWAY_BASE_URL",
-        "https://example.databricks.com/ai-gateway/codex/v1",
+        "https://goalrail.example/ai-gateway/codex/v1",
     )
     monkeypatch.setenv("HARNESS_OPENAI_AGENTS_GATEWAY_AUTH_COMMAND", "printf token")
 
@@ -84,22 +81,18 @@ def test_executor_factory_reads_databricks_profile_env(
         self: Any,
         *,
         client: Any = None,
-        profile: str | None = None,
         api_key: str | None = None,
         use_responses: bool = True,
         model: str | None = None,
         context_window: int | None = None,
         base_url_override: str | None = None,
-        gateway_host: str | None = None,
         gateway_auth_command: str | None = None,
     ) -> None:
         captured["client"] = client
-        captured["profile"] = profile
         captured["api_key"] = api_key
         captured["use_responses"] = use_responses
         captured["model"] = model
         captured["base_url_override"] = base_url_override
-        captured["gateway_host"] = gateway_host
         captured["gateway_auth_command"] = gateway_auth_command
 
     with patch(
@@ -108,10 +101,8 @@ def test_executor_factory_reads_databricks_profile_env(
     ):
         openai_agents_sdk_harness._build_openai_agents_sdk_executor()
 
-    assert captured["profile"] == "test-profile"
-    assert captured["model"] == "databricks-gpt-5-4-mini"
-    assert captured["gateway_host"] == "https://example.databricks.com"
-    assert captured["base_url_override"] == "https://example.databricks.com/ai-gateway/codex/v1"
+    assert captured["model"] == "openai/gpt-5-4-mini"
+    assert captured["base_url_override"] == "https://goalrail.example/ai-gateway/codex/v1"
     assert captured["gateway_auth_command"] == "printf token"
     # ``use_responses`` defaults True when env var absent.
     assert captured["use_responses"] is True
@@ -139,74 +130,20 @@ def test_executor_factory_use_responses_default_true(
 
 
 @pytest.mark.parametrize(
-    "model",
-    ["databricks-kimi-k2-6", "databricks/databricks-kimi-k2-6"],
-)
-def test_executor_factory_databricks_kimi_defaults_to_chat_completions(
-    monkeypatch: pytest.MonkeyPatch,
-    model: str,
-) -> None:
-    """
-    Databricks Kimi model names default to ``use_responses=False``.
-
-    This is the compatibility path for Databricks-hosted Kimi models:
-    YAML examples should only need to declare the model, not remember
-    the endpoint flag. Both the bare serving endpoint name and the
-    provider-qualified model spelling get the same default.
-    """
-    monkeypatch.setenv("HARNESS_OPENAI_AGENTS_MODEL", model)
-    monkeypatch.delenv("HARNESS_OPENAI_AGENTS_USE_RESPONSES", raising=False)
-
-    captured: dict[str, Any] = {}
-
-    def _fake_init(self: Any, **kwargs: Any) -> None:
-        captured.update(kwargs)
-
-    with patch(
-        "goalrail.inner.openai_agents_sdk_harness.OpenAIAgentsSDKExecutor.__init__",
-        _fake_init,
-    ):
-        openai_agents_sdk_harness._build_openai_agents_sdk_executor()
-
-    # Kimi defaults to Chat Completions; True here would route example
-    # YAMLs to Responses and recreate the issue-935 failure.
-    assert captured["use_responses"] is False
-
-
-@pytest.mark.parametrize(
     ("model", "expected_use_responses"),
     [
-        # Databricks-hosted NON-GPT models default to chat/completions: the
-        # gateway only serves GPT over the Responses wire.
-        ("databricks-claude-sonnet-4-6", False),
-        ("databricks/databricks-claude-sonnet-4-6", False),
-        ("databricks-meta-llama-3.3-70b-instruct", False),
-        ("databricks-kimi-k2-6", False),
-        # Databricks GPT models keep the Responses-API default.
-        ("databricks-gpt-5-4-mini", True),
-        ("databricks/databricks-gpt-5-5", True),
-        # Non-Databricks ids keep the existing Responses default (the rule is
-        # scoped to gateway-hosted models).
+        ("openai/gpt-5-4-mini", True),
         ("gpt-5.5", True),
         ("qwen/qwen3.7-plus", True),
         ("claude-opus-4-8", True),
     ],
 )
-def test_executor_factory_non_gpt_databricks_defaults_to_chat_completions(
+def test_executor_factory_models_keep_responses_default(
     monkeypatch: pytest.MonkeyPatch,
     model: str,
     expected_use_responses: bool,
 ) -> None:
-    """
-    Databricks-hosted NON-GPT models default to ``use_responses=False``.
-
-    Generalizes the original Kimi-only carve-out: every ``databricks-*`` id
-    without the ``gpt`` token is served over chat/completions by the gateway,
-    so the harness derives the endpoint default from the model name. GPT and
-    non-Databricks ids keep the Responses default. A wrong default here would
-    point the SDK at ``/responses`` for a chat-only model and recreate the
-    issue-935 failure for the whole non-GPT family, not just Kimi.
-    """
+    """Model names no longer change the default wire API."""
     monkeypatch.setenv("HARNESS_OPENAI_AGENTS_MODEL", model)
     monkeypatch.delenv("HARNESS_OPENAI_AGENTS_USE_RESPONSES", raising=False)
 
@@ -224,16 +161,11 @@ def test_executor_factory_non_gpt_databricks_defaults_to_chat_completions(
     assert captured["use_responses"] is expected_use_responses
 
 
-def test_executor_factory_databricks_kimi_respects_truthy_use_responses_env(
+def test_executor_factory_respects_truthy_use_responses_env(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """
-    Explicit env config wins even for Databricks Kimi models.
-
-    The model compatibility rule is only the default, not a silent
-    override of the spec-derived ``use_responses`` setting.
-    """
-    monkeypatch.setenv("HARNESS_OPENAI_AGENTS_MODEL", "databricks-kimi-k2-6")
+    """Explicit env config wins for the OpenAI Agents SDK wire API."""
+    monkeypatch.setenv("HARNESS_OPENAI_AGENTS_MODEL", "qwen/qwen3.7-plus")
     monkeypatch.setenv("HARNESS_OPENAI_AGENTS_USE_RESPONSES", "true")
 
     captured: dict[str, Any] = {}
@@ -295,14 +227,14 @@ def test_executor_factory_no_env_returns_blank_config(
 
     Simulates a developer running the runner manually with their
     own ambient ``OPENAI_BASE_URL`` / ``OPENAI_API_KEY`` set. The
-    wrap should pass ``profile=None`` / ``model=None`` to the
-    executor so its fallback resolution path (env vars, then
-    default ~/.databrickscfg profile) takes over.
+    wrap should pass ``model=None`` and no harness-specific base URL or API key
+    to the executor so its ambient fallback path can take over.
     """
     for env_var in (
         "HARNESS_OPENAI_AGENTS_MODEL",
-        "HARNESS_OPENAI_AGENTS_DATABRICKS_PROFILE",
         "HARNESS_OPENAI_AGENTS_USE_RESPONSES",
+        "HARNESS_OPENAI_AGENTS_GATEWAY_BASE_URL",
+        "HARNESS_OPENAI_AGENTS_API_KEY",
     ):
         monkeypatch.delenv(env_var, raising=False)
 
@@ -317,6 +249,7 @@ def test_executor_factory_no_env_returns_blank_config(
     ):
         openai_agents_sdk_harness._build_openai_agents_sdk_executor()
 
-    assert captured["profile"] is None
+    assert captured["api_key"] is None
     assert captured["model"] is None
+    assert captured["base_url_override"] is None
     assert captured["use_responses"] is True

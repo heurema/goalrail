@@ -44,6 +44,7 @@ platform :ios do
     # archived binary — and nothing in the repo changes (no agvtool, no churn).
     xcargs = ["-allowProvisioningUpdates"]
     xcargs << "CURRENT_PROJECT_VERSION=#{options[:build_number]}" if options[:build_number]
+    xcargs << "DEVELOPMENT_TEAM=#{ENV['GOALRAIL_APPLE_TEAM_ID']}" if ENV["GOALRAIL_APPLE_TEAM_ID"]
     build_app(
       scheme: "Goalrail",
       configuration: "Release",

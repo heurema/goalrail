@@ -1,53 +1,39 @@
-# `tests/e2e/` — prerequisites & how to run
+# `tests/e2e/` - prerequisites & how to run
 
-These tests start a real `goalrail` server subprocess, upload real agent bundles, and call real LLM APIs. They are **excluded from the default `pytest` run** via `addopts = --ignore=tests/e2e` in `pyproject.toml`. To exercise them you must opt in with `--llm-api-key` (and optionally `--profile`).
+These tests start a real `goalrail` server subprocess, upload real agent
+bundles, and call real LLM APIs. They are **excluded from the default `pytest`
+run** via `addopts = --ignore=tests/e2e` in `pyproject.toml`. To exercise them
+against a real provider you must opt in with `--llm-api-key`.
 
-## ALWAYS RUN INTEGRATION + UNIT TESTS IN THE BACKGROUND
+## Always Run Integration + Unit Tests In The Background
 
-The e2e suite takes 5–10 minutes even fully parallel; the unit suite takes 5–7 minutes parallel. **Never block your terminal (or an interactive Claude Code session) on a foreground run** — kick them off backgrounded and monitor:
+The e2e suite takes 5-10 minutes even fully parallel; the unit suite takes 5-7
+minutes parallel. Do not block an interactive agent terminal on a foreground
+run. Start it backgrounded and monitor a known log path:
 
 ```bash
-# Pattern: launch with `&`, tee to a known log path. The `env -u`
-# strips host shell vars so the spawned server only sees the
-# `--llm-api-key` value (which `live_server` re-injects into the
-# subprocess env as OPENAI_API_KEY). Without the strip, a stale
-# `OPENAI_API_KEY` in the parent shell silently shadows the test
-# flag's value.
-#
-# Set $PROFILE to your Databricks profile name (no default — pick
-# one from ~/.databrickscfg that's authorized for the serving
-# endpoints you want to hit), and $TOKEN to a fresh workspace PAT
-# for that profile (e.g. `TOKEN=$(databricks auth token --profile
-# "$PROFILE" | jq -r .access_token)`).
-(env -u DATABRICKS_TOKEN -u OPENAI_API_KEY \
+export OPENAI_API_KEY=sk-...
+
+(env -u ANTHROPIC_API_KEY \
   uv run --no-sync pytest tests/e2e/ \
-    --llm-api-key="$TOKEN" --profile="$PROFILE" \
+    --llm-api-key="$OPENAI_API_KEY" \
     -n 8 --dist=loadscope \
     --tb=line -q -rfs 2>&1 | tee /tmp/e2e.log) &
 
-# Monitor: poll the log for the terminal summary line, OR tail it
-until grep -qE "passed in [0-9]|failed in [0-9]|short test summary" /tmp/e2e.log 2>/dev/null; do sleep 10; done
+until grep -qE "passed in [0-9]|failed in [0-9]|short test summary" /tmp/e2e.log 2>/dev/null; do
+  sleep 10
+done
 grep -E "passed in [0-9]|failed in [0-9]" /tmp/e2e.log | tail -1
 ```
 
-This applies to **both** the unit suite (`uv run pytest -n 8 --dist=loadfile`) and the e2e suite. Inside Claude Code, use `Bash(run_in_background=true)` plus a separate `Bash` polling loop with `until grep -q ...` to wait for the terminal marker — that pattern frees the assistant to continue with other work and surfaces the summary as a single notification.
+This applies to both the unit suite (`uv run pytest -n 8 --dist=loadfile`) and
+the e2e suite.
 
-## Prerequisites
+## LLM Credentials
 
-### LLM credentials — pick ONE
+### Direct Provider Key
 
-**Option A (preferred): Databricks profile.** Recommended on machines that already have `~/.databrickscfg` set up. Routes the spawned server through `<workspace-host>/serving-endpoints` and rewrites bundle `llm.model` values to their Databricks-served equivalents (see `_DATABRICKS_MODEL_MAP` in `tests/e2e/conftest.py`).
-
-```bash
-export PROFILE=<your-profile>
-TOKEN=$(databricks auth token --profile "$PROFILE" | jq -r .access_token)
-uv run pytest tests/e2e/ \
-  --llm-api-key="$TOKEN" \
-  --profile="$PROFILE" \
-  -n 8 --dist=loadscope
-```
-
-**Option B: OpenAI API key.** Routes the spawned server at `api.openai.com` with the bare key. Bundles use their original `llm.model` values (`gpt-5.4`, `gpt-4o`, `claude-sonnet-4-20250514`, …).
+Use a real OpenAI-compatible key directly:
 
 ```bash
 export OPENAI_API_KEY=sk-...
@@ -56,56 +42,76 @@ uv run pytest tests/e2e/ \
   -n 8 --dist=loadscope
 ```
 
-### Binaries on `PATH`
+### OpenAI-Compatible Gateway
 
-Some tests gate on local binaries. Install whichever you need; tests for missing binaries skip individually rather than failing the suite.
-
-| Binary  | Required by                                           | Install                                                |
-|---------|-------------------------------------------------------|--------------------------------------------------------|
-| `tmux`  | `test_sys_terminal_e2e.py`, `test_repl_terminal_overview_e2e.py`, `tests/inner/test_terminal*.py`, `tests/terminals/`, `tests/tools/builtins/test_sys_terminal.py` | `brew install tmux` (macOS) / `apt install tmux` (Debian) |
-| `claude` | `claude-sdk` harness rows (`test_per_harness_claude_sdk.py` and any `[claude-sdk]` parametrize) | Anthropic Claude CLI — see `claude-agent-sdk` docs    |
-| `codex`  | `codex` harness rows (`test_per_harness_codex.py`, `test_run_goalrail_coding_supervisor.py`)                              | OpenAI Codex CLI                                       |
-| `pi`     | `pi` harness rows (`test_per_harness_pi.py`)                                                            | Internal CLI — see project docs                        |
-| `databricks` | Required only when using `--profile <name>`                                                         | `brew install databricks` (macOS) / official installer |
-| `goalrail` | A handful of CLI-backed tests (`test_repl_approval_e2e.py`, `test_dispatch_fork_repl_e2e.py`)        | `uv sync` makes the CLI available via `uv run goalrail …`. |
-
-### Python environment
-
-- `uv sync --extra dev --extra claude-sdk --extra openai-agents` from the repo root to install pytest, pytest-xdist, filelock, and harness SDKs.
-- The `databricks-sdk` is a runtime dep, so `databricks auth token` works from any shell once `~/.databrickscfg` is set up.
-
-## Recommended invocation
+Set `GOALRAIL_E2E_OPENAI_BASE_URL` when the key belongs to an
+OpenAI-compatible gateway rather than `api.openai.com`:
 
 ```bash
-# Parallel + Databricks profile (the fastest, most representative path).
-# Export PROFILE first; the snippet reuses it twice.
-export PROFILE=<your-profile>
-TOKEN=$(databricks auth token --profile "$PROFILE" | jq -r .access_token)
+export GOALRAIL_E2E_OPENAI_BASE_URL=https://gateway.example.com/v1
+export GOALRAIL_E2E_LLM_API_KEY=...
+
 uv run pytest tests/e2e/ \
-  --llm-api-key="$TOKEN" \
-  --profile="$PROFILE" \
+  --llm-api-key="$GOALRAIL_E2E_LLM_API_KEY" \
   -n 8 --dist=loadscope
 ```
 
-- `-n 8` is the empirical sweet spot on a 12-core laptop — fastest wall time and the same flake count as `-n auto` (12). `-n 4` is more stable (zero timing-ordering flakes; matches main's failure set exactly) but ~25% slower. Bump up if your host has more cores.
-- `--dist=loadscope` keeps tests within one file on a single worker so the session-scoped `live_server` + agent-upload fixtures only spawn once per worker per file.
-- `--profile <name>` (optional) routes through the named Databricks workspace's serving-endpoints and rewrites bundle `llm.model` values to Databricks equivalents. Without it the spawned server hits `api.openai.com`.
+When the gateway URL is set, the spawned server receives `OPENAI_BASE_URL` and
+agent bundle model names are rewritten via `_GATEWAY_MODEL_MAP` in
+`tests/e2e/conftest.py`.
 
-## Skip-reason cheat-sheet
+## Binaries On `PATH`
 
-When tests skip, check the `-rs` summary for one of these reasons:
+Some tests gate on local binaries. Install whichever you need; tests for
+missing binaries skip individually rather than failing the suite.
 
-| Reason                                         | Fix                                                      |
-|------------------------------------------------|----------------------------------------------------------|
-| `tmux not installed; …`                        | Install tmux                                             |
-| `tmux, pi, and provider API key required`      | Install tmux + pi + set `OPENAI_API_KEY` (or `--profile`)|
-| `OPENAI_API_KEY not set`                        | `export OPENAI_API_KEY=…` or pass `--llm-api-key`        |
-| `Integration tests require --integration flag` | Add `--integration` to the pytest invocation             |
-| `<harness>'s CLI not on PATH`                  | Install the named binary (`claude` / `codex` / `pi`)     |
-| `requires --profile <name>`                    | Pass `--profile <name>`                                  |
-| `test uses an LLM judge that hits api.openai.com directly` | Either drop `--profile` (so `--llm-api-key` is used as the OpenAI key), or keep `--profile` and also export a real `OPENAI_API_KEY=sk-…` in your shell (don't strip it via `env -u`). Skipping is the default to avoid spending OpenAI quota on every CI run. |
+| Binary | Required by | Install |
+| --- | --- | --- |
+| `tmux` | terminal and REPL e2e tests | `brew install tmux` (macOS) / `apt install tmux` (Debian) |
+| `claude` | `claude-sdk` and `claude-native` rows | Anthropic Claude CLI |
+| `codex` | `codex` and `codex-native` rows | OpenAI Codex CLI |
+| `pi` | `pi` harness rows | Internal CLI, see project docs |
+| `goalrail` | CLI-backed e2e tests | `uv sync` makes it available via `uv run goalrail ...` |
 
-## Parallel-safety notes
+## Python Environment
 
-- `patched_databrickscfg` (in `tests/e2e/goalrail/conftest.py`) acquires a cross-process `FileLock` on `~/.databrickscfg.e2e-lock` for the backup → patch → restore sequence, so xdist workers serialize on the rewrite. Tests not using that fixture parallelize freely.
-- A few tests still write to fixed `/tmp/...` paths (`test_harness_wrap_e2e.py`, `test_example_agent_with_os_env_fork.py`). They serialize naturally because each is a single test, but if you add new tests that also write to those paths you'll need to coordinate.
+Run this from the repo root:
+
+```bash
+uv sync --extra dev --extra claude-sdk --extra openai-agents
+```
+
+## Recommended Invocation
+
+```bash
+export OPENAI_API_KEY=sk-...
+uv run pytest tests/e2e/ \
+  --llm-api-key="$OPENAI_API_KEY" \
+  -n 8 --dist=loadscope
+```
+
+- `-n 8` is the empirical sweet spot on a 12-core laptop. `-n 4` is more stable
+  but slower.
+- `--dist=loadscope` keeps tests within one file on a single worker so the
+  session-scoped `live_server` and agent-upload fixtures spawn once per worker
+  per file.
+- `--profile` is no longer supported. Use `GOALRAIL_E2E_OPENAI_BASE_URL` for
+  gateway routing.
+
+## Skip-Reason Cheat Sheet
+
+| Reason | Fix |
+| --- | --- |
+| `tmux not installed; ...` | Install `tmux` |
+| `tmux, pi, and provider API key required` | Install `tmux` + `pi` + set `OPENAI_API_KEY` |
+| `OPENAI_API_KEY not set` | `export OPENAI_API_KEY=...` or pass `--llm-api-key` |
+| `Integration tests require --integration flag` | Add `--integration` |
+| `<harness>'s CLI not on PATH` | Install the named binary (`claude` / `codex` / `pi`) |
+| `test uses an LLM judge that hits api.openai.com directly` | Export a real `OPENAI_API_KEY=sk-...` when gateway mode is enabled |
+
+## Parallel-Safety Notes
+
+- A few tests still write to fixed `/tmp/...` paths
+  (`test_harness_wrap_e2e.py`, `test_example_agent_with_os_env_fork.py`). They
+  serialize naturally because each is a single test, but coordinate any new
+  tests that reuse those paths.

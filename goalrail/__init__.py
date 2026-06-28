@@ -70,10 +70,6 @@ from goalrail.inner.tools import (  # noqa: E402 — must follow md5 patch
 )
 
 try:
-    from goalrail.inner.databricks_executor import DatabricksExecutor
-except (OSError, ImportError):
-    DatabricksExecutor = None  # type: ignore[misc,assignment]
-try:
     from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
 except ImportError:
     ClaudeSDKExecutor = None  # type: ignore[misc,assignment]
@@ -104,7 +100,6 @@ __all__ = [
     "CodexExecutor",
     "Connection",
     "Credentials",
-    "DatabricksExecutor",
     "Executor",
     "ExecutorConfig",
     "ExecutorError",

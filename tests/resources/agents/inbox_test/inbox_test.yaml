@@ -48,7 +48,7 @@ prompt: |
 
 executor:
   harness: claude-sdk
-  model: databricks-claude-sonnet-4-6
+  model: anthropic/claude-sonnet-4-6
   profile: test-profile
 
 async: true

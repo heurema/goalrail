@@ -17,14 +17,14 @@ _SEEN_MODELS: list[str] = []
 
 @pytest.mark.llm_flaky(reruns=2)
 def test_llm_flaky_rotates_model_per_attempt() -> None:
-    _SEEN_MODELS.append(_model_pools.resolve_model("databricks-claude-sonnet-4-6", spread=False))
+    _SEEN_MODELS.append(_model_pools.resolve_model("anthropic/claude-sonnet-4-6", spread=False))
     if len(_SEEN_MODELS) < 3:
         # Force a rerun; fails loudly if llm_flaky -> flaky is broken.
         raise AssertionError(f"forcing rerun, attempt {len(_SEEN_MODELS)} of 3")
     # 2-member anthropic chain: 3 attempts rotate sonnet -> opus ->
     # sonnet. A constant list means rotation never happened.
     assert _SEEN_MODELS == [
-        "databricks-claude-sonnet-4-6",
-        "databricks-claude-opus-4-6",
-        "databricks-claude-sonnet-4-6",
+        "anthropic/claude-sonnet-4-6",
+        "anthropic/claude-opus-4-6",
+        "anthropic/claude-sonnet-4-6",
     ]

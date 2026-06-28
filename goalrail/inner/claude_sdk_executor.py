@@ -14,15 +14,9 @@ Requirements:
 Environment (direct Anthropic):
     ANTHROPIC_API_KEY – API key for Claude
 
-Environment (Databricks-hosted Claude via native Anthropic Messages API):
-    DATABRICKS_CONFIG_PROFILE – optional Databricks profile selector
-    ~/.databrickscfg          – host + token profile for workspace access
-    (or ~/.databrickscfg with a profile containing host + token)
-
-    The executor builds ANTHROPIC_BASE_URL plus an invocation-local
-    apiKeyHelper setting from Databricks credentials so Claude Code can
-    refresh auth through ``databricks auth token`` while routing through
-    the Databricks gateway.
+Environment (gateway-hosted Claude via native Anthropic Messages API):
+    HARNESS_CLAUDE_SDK_GATEWAY_BASE_URL – Anthropic-compatible base URL
+    HARNESS_CLAUDE_SDK_GATEWAY_AUTH_COMMAND – command that prints a bearer token
 """
 
 from __future__ import annotations
@@ -47,12 +41,10 @@ from goalrail._platform import stable_user_id
 from goalrail.inner import _proc
 from goalrail.inner.bundle_skills import ensure_bundle_plugin_manifest
 from goalrail.llms._usage_observer import notify_from_dict as _notify_usage_from_dict
-from goalrail.onboarding.databricks_config import DATABRICKS_CLAUDE_DEFAULT_MODEL
 from goalrail.reasoning_effort import CLAUDE_EFFORTS, validate_effort
 from goalrail.spec.types import RetryPolicy
 
 from ._subprocess_lifecycle import close_anyio_subprocess_transport
-from .claude_gateway_shim import DATABRICKS_CLAUDE_ADAPTIVE_THINKING_PREFIXES, ClaudeGatewayShim
 from .datamodel import OSEnvSandboxSpec, OSEnvSpec
 from .executor import (
     Executor,
@@ -81,16 +73,14 @@ logger = logging.getLogger(__name__)
 
 # Default auth-token refresh cadence (ms) for the vendor-neutral gateway
 # transport when ``HARNESS_CLAUDE_SDK_GATEWAY_AUTH_REFRESH_INTERVAL_MS`` is
-# unset. Not Databricks-specific: the same fallback applies to any gateway
-# producer (Databricks AI gateway or a generic key/gateway provider).
+# unset.
 _GATEWAY_AUTH_REFRESH_MS = 900_000
 
 # ---------------------------------------------------------------------------
 # TypeAliases for Goalrail JSON-shaped boundary values. The SDK exchanges
 # heterogeneous dicts at the transport and tool boundaries — named aliases
 # here keep the executor ``object``-free while isolating the justified
-# ``explicit-any`` boundary to a single place, mirroring the peer
-# ``openai_agents_sdk_executor`` / ``databricks_executor`` conventions.
+# ``explicit-any`` boundary to a single place.
 # ---------------------------------------------------------------------------
 
 # Parsed tool arguments / tool result dict — JSON-shaped bags exchanged
@@ -552,11 +542,6 @@ def _best_effort_close(resource: _Stream | _Process) -> None:
         _call_optional_method(transport_obj, _CLOSE_ATTR)
 
 
-# Default model for the Databricks-profile gateway path (no gateway base URL
-# supplied directly), used when no spec/cfg model is set. On the ucode-cached
-# path the Goalrail producer resolves the model instead (see workflow.py).
-_DATABRICKS_CLAUDE_DEFAULT_MODEL = DATABRICKS_CLAUDE_DEFAULT_MODEL
-
 _CLAUDE_API_KEY_HELPER_ENV_KEY = "GOALRAIL_CLAUDE_API_KEY_HELPER"
 
 
@@ -710,16 +695,14 @@ def _find_system_claude() -> str | None:
     """Find a system-installed ``claude`` CLI binary on PATH.
 
     Returns the absolute path, or None if not found.  Prefers the system
-    install over the SDK's bundled CLI because the bundled version may be
-    older and send beta flags the Databricks gateway doesn't support.
+    install over the SDK's bundled CLI because the bundled version may lag
+    behind fixes present in the host CLI.
     """
     return shutil.which("claude")
 
 
 def _resolve_gateway_env(
-    profile: str | None = None,
     *,
-    host_override: str | None = None,
     base_url_override: str | None = None,
     auth_command_override: str | None = None,
     auth_refresh_interval_ms: int | None = None,
@@ -727,124 +710,41 @@ def _resolve_gateway_env(
     """Build Claude Code gateway env from the gateway transport values.
 
     The vendor-neutral gateway transport is a base URL + a bearer-token
-    command + a refresh TTL. When the gateway base URL and auth command are
-    supplied directly (the generic-provider producer, or ucode), they are
-    used verbatim. When only a Databricks profile is supplied (no override
-    values), the Databricks-specific fallback derives both from
-    ``~/.databrickscfg``:
-      1. ~/.databrickscfg profile credentials
-      2. ~/.databrickscfg (explicit profile, DEFAULT, or first valid section)
-    Returns an empty dict if no credentials are available.
+    command + a refresh TTL. The workflow producer must resolve those values
+    before constructing the executor.
 
     The bearer token itself is not returned. Claude Code receives an
     invocation-local ``apiKeyHelper`` setting and refresh TTL instead, so
     the CLI can periodically re-run the auth command during long sessions
     instead of inheriting a one-hour token snapshot.
 
-    :param profile: Optional Databricks profile name from
-        ``~/.databrickscfg`` (used only on the profile-derivation fallback).
-    :param host_override: Gateway workspace host origin, e.g.
-        ``"https://example.databricks.com"``. When set, skips
-        ``~/.databrickscfg`` host lookup and requires the gateway base URL
-        and auth command values.
     :param base_url_override: When set, use this as ``ANTHROPIC_BASE_URL``
-        instead of deriving it from the profile host.  Populated from
-        ``HARNESS_CLAUDE_SDK_GATEWAY_BASE_URL``.
+        Populated from ``HARNESS_CLAUDE_SDK_GATEWAY_BASE_URL``.
     :param auth_command_override: Shell command that prints a bearer token,
-        e.g. ``"databricks auth token --host ..."`` or ``"printf %s sk-..."``.
+        e.g. ``"printf %s sk-..."``.
     :param auth_refresh_interval_ms: Refresh TTL in milliseconds, e.g.
         ``900000``.
     :returns: Environment values plus an internal apiKeyHelper command
-        consumed by :meth:`ClaudeSDKExecutor.run_turn`, or ``{}`` when
-        no credentials are available.
-    :raises OSError: If a gateway host is present but missing the
-        corresponding base URL or auth command.
+        consumed by :meth:`ClaudeSDKExecutor.run_turn`.
+    :raises OSError: If the base URL or auth command is missing.
     """
-    host = host_override.rstrip("/") if host_override else None
-    if host is None and base_url_override is not None and auth_command_override is not None:
-        # Generic-provider gateway: explicit base_url + auth command,
-        # no Databricks host or profile required (e.g. ApiKeyAuth with
-        # a mock LLM server URL).
-        return {
-            "ANTHROPIC_BASE_URL": base_url_override,
-            "CLAUDE_CODE_API_KEY_HELPER_TTL_MS": str(
-                auth_refresh_interval_ms or _GATEWAY_AUTH_REFRESH_MS
-            ),
-            "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": "1",
-            _CLAUDE_API_KEY_HELPER_ENV_KEY: auth_command_override,
-        }
-    if host is None:
-        try:
-            from .databricks_executor import _read_databrickscfg
-
-            creds = _read_databrickscfg(profile)
-        except ImportError:
-            creds = None
-
-        if creds is None:
-            return {}
-        host = creds.host.rstrip("/")
-        base_url = (
-            base_url_override if base_url_override is not None else f"{host}/ai-gateway/anthropic"
+    if base_url_override is None:
+        raise OSError(
+            "ClaudeSDKExecutor(gateway=True) requires HARNESS_CLAUDE_SDK_GATEWAY_BASE_URL."
         )
-        auth_command = (
-            auth_command_override
-            if auth_command_override is not None
-            else _databricks_claude_auth_command(host, profile)
+    if auth_command_override is None:
+        raise OSError(
+            "ClaudeSDKExecutor(gateway=True) requires HARNESS_CLAUDE_SDK_GATEWAY_AUTH_COMMAND."
         )
-    else:
-        if base_url_override is None:
-            raise OSError(
-                "ClaudeSDKExecutor(gateway=True) with a gateway workspace host "
-                "requires HARNESS_CLAUDE_SDK_GATEWAY_BASE_URL."
-            )
-        if auth_command_override is None:
-            raise OSError(
-                "ClaudeSDKExecutor(gateway=True) with a gateway workspace host "
-                "requires HARNESS_CLAUDE_SDK_GATEWAY_AUTH_COMMAND."
-            )
-        base_url = base_url_override
-        auth_command = auth_command_override
 
     return {
-        "ANTHROPIC_BASE_URL": base_url,
+        "ANTHROPIC_BASE_URL": base_url_override,
         "CLAUDE_CODE_API_KEY_HELPER_TTL_MS": str(
             auth_refresh_interval_ms or _GATEWAY_AUTH_REFRESH_MS
         ),
         "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": "1",
-        _CLAUDE_API_KEY_HELPER_ENV_KEY: auth_command,
+        _CLAUDE_API_KEY_HELPER_ENV_KEY: auth_command_override,
     }
-
-
-def _databricks_claude_auth_command(host: str, profile: str | None = None) -> str:
-    """Return the legacy Databricks CLI auth helper command for Claude.
-
-    :param host: Databricks workspace host, e.g.
-        ``"https://example.databricks.com"``.
-    :param profile: Optional ``~/.databrickscfg`` profile name, e.g.
-        ``"oss"``. Preferred over ``--host`` when known: two profiles can
-        share one host, which makes ``databricks auth token --host`` fail
-        ("Use --profile to specify which profile") → empty token → 401.
-        ``--profile`` is always unambiguous.
-    :returns: Shell command that prints a bearer token.
-    """
-    # --profile is unambiguous; --host fails when two profiles share a host.
-    selector = f"--profile {json.dumps(profile)}" if profile else f"--host {json.dumps(host)}"
-    # `--force-refresh` proactively refreshes a still-valid cached token
-    # (guards against a mid-session 401 on long gateway connections) but
-    # only exists in Databricks CLI >= v0.296.0. Probe `--help` and pass it
-    # only when supported: older CLIs reject the unknown flag → empty token
-    # → silent 401. Plain `auth token` still auto-refreshes expired tokens.
-    return (
-        'if [ -n "${DATABRICKS_BEARER:-}" ]; then '
-        'printf "%s\\n" "$DATABRICKS_BEARER"; '
-        "else force=''; "
-        "if databricks auth token --help 2>&1 | grep -q force-refresh; "
-        "then force=--force-refresh; fi; "
-        "env -u DATABRICKS_CONFIG_PROFILE "
-        f"databricks auth token {selector} "
-        "$force --output json | jq -r '.access_token'; fi"
-    )
 
 
 def _parse_optional_int(value: str | None) -> int | None:
@@ -1061,8 +961,8 @@ class ClaudeSDKExecutor(Executor):
     is set.  Even without ``os_env``, Goalrail tries to place the Claude CLI
     itself in a tight default sandbox on supported Linux hosts.
 
-    Unlike DatabricksExecutor, the SDK manages its own tool-call loop.  This
-    executor yields events reconstructed from the SDK message stream:
+    The SDK manages its own tool-call loop.  This executor yields events
+    reconstructed from the SDK message stream:
     - ToolCallRequest for each ToolUseBlock (for history building)
     - TextChunk for streaming text
     - TurnComplete with the final result
@@ -1072,10 +972,8 @@ class ClaudeSDKExecutor(Executor):
     turns by keeping a live Claude SDK client per Goalrail session.
 
     Gateway support: pass ``gateway=True`` to route through a vendor-neutral
-    gateway (base URL + bearer-token command + model). The Databricks AI
-    gateway is one producer of this transport (credentials resolved from
-    ~/.databrickscfg via ``databricks_profile``); generic ``key`` / ``gateway``
-    providers are another (base URL + auth command supplied directly).
+    gateway (base URL + bearer-token command + model). The workflow producer
+    must supply the base URL and auth command directly.
     """
 
     def __init__(
@@ -1086,7 +984,6 @@ class ClaudeSDKExecutor(Executor):
         model: str | None = None,
         permission_mode: str = "auto",
         gateway: bool = False,
-        databricks_profile: str | None = None,
         gateway_host: str | None = None,
         base_url_override: str | None = None,
         gateway_auth_command: str | None = None,
@@ -1112,28 +1009,16 @@ class ClaudeSDKExecutor(Executor):
                 so the agent runs autonomously with background safety checks).
             gateway: If True, route through a vendor-neutral gateway
                 (base URL + bearer-token command + model). Enables the
-                gateway path regardless of which producer fed it (the
-                Databricks AI gateway or a generic provider).
-            databricks_profile: Databricks-specific config profile from
-                ~/.databrickscfg, e.g. ``"<your-profile>"``.  Only used by the
-                Databricks producer path (deriving base URL / auth command
-                from the profile when ucode did not supply them, and for
-                ``databricks auth token`` refresh). ``None`` falls back to the
-                SDK's own profile resolution (``DATABRICKS_CONFIG_PROFILE``
-                then the first valid section of ``~/.databrickscfg``).
-            gateway_host: Gateway workspace host origin, e.g.
-                ``"https://example.databricks.com"``.  Set from
-                ``HARNESS_CLAUDE_SDK_GATEWAY_HOST`` (written by the AP
-                workflow layer). When set, skips profile host lookup and
-                requires the gateway base URL and auth command values.
+                gateway path for any explicit provider gateway.
+            gateway_host: Optional gateway host origin. Set from
+                ``HARNESS_CLAUDE_SDK_GATEWAY_HOST`` when a workflow producer
+                has one.
             base_url_override: Override the Anthropic base URL instead of
-                constructing it from the Databricks profile host.  Set from
-                ``HARNESS_CLAUDE_SDK_GATEWAY_BASE_URL`` (written by the AP
-                workflow layer). Required whenever ``gateway_host`` is set.
+                using the built-in Anthropic default. Set from
+                ``HARNESS_CLAUDE_SDK_GATEWAY_BASE_URL``. Required when
+                ``gateway=True``.
             gateway_auth_command: Shell command that prints a bearer token,
-                e.g.
-                ``"databricks auth token --host https://example.databricks.com ..."``
-                or ``"printf %s sk-or-..."``. Set from
+                e.g. ``"printf %s sk-or-..."``. Set from
                 ``HARNESS_CLAUDE_SDK_GATEWAY_AUTH_COMMAND``.
             gateway_auth_refresh_interval_ms: Refresh TTL as a string,
                 e.g. ``"900000"``. Set from
@@ -1170,22 +1055,12 @@ class ClaudeSDKExecutor(Executor):
                 :data:`_CLAUDE_API_KEY_HELPER_ENV_KEY` so it reaches
                 the SDK's ``settings.apiKeyHelper`` option at turn time.
         """
-        # Fail loud: a ``databricks-*`` model requires the gateway transport.
-        if not gateway and model is not None and model.startswith("databricks-"):
-            raise ValueError(
-                f"Model {model!r} is a Databricks-hosted model but gateway "
-                "routing is disabled (gateway=False). "
-                "Set executor.profile in the agent spec, or configure a "
-                "Databricks provider with `goalrail setup`, to route through "
-                "the Databricks Anthropic gateway."
-            )
         self._cwd = cwd
         self._os_env_spec = os_env
         self._os_env = os_env is not None
         self._model_override = model
         self._permission_mode = permission_mode
         self._gateway = gateway
-        self._databricks_profile = databricks_profile
         self._gateway_host = gateway_host.rstrip("/") if gateway_host else None
         self._base_url_override = base_url_override
         self._gateway_auth_command = gateway_auth_command
@@ -1221,8 +1096,6 @@ class ClaudeSDKExecutor(Executor):
         self._crashed_sessions: dict[str, str] = {}
 
         # Prefer system-installed claude over the SDK's bundled CLI.
-        # The bundled CLI may be older and send beta flags that the
-        # Databricks gateway doesn't support.
         self._cli_wrapper_path: str | None = None
         self._cli_path: str | None = _find_system_claude()
         if self._cli_path:
@@ -1249,37 +1122,15 @@ class ClaudeSDKExecutor(Executor):
         else:
             logger.info("No system claude found; SDK will use bundled CLI")
 
-        # True when the gateway transport was derived from a ~/.databrickscfg
-        # profile (no gateway host or base URL supplied directly). Gates the
-        # Databricks-specific default model in :meth:`run_turn`; the neutral
-        # generic-provider gateway path leaves this False so it never selects
-        # a ``databricks-*`` model.
-        self._gateway_uses_databricks_profile = bool(
-            gateway and self._gateway_host is None and base_url_override is None
-        )
-
-        # Lazily-started local proxy that restores request fields the
-        # Claude CLI strips on the gateway path (thinking.display).
-        # Started on the first gateway turn — __init__ has no event loop.
-        self._gateway_shim: ClaudeGatewayShim | None = None
-
         # Eagerly resolve the gateway transport env so errors surface at
         # construction time.
         self._extra_env: dict[str, str] = {}
         if gateway:
             self._extra_env = _resolve_gateway_env(
-                databricks_profile,
-                host_override=self._gateway_host,
                 base_url_override=base_url_override,
                 auth_command_override=self._gateway_auth_command,
                 auth_refresh_interval_ms=self._gateway_auth_refresh_interval_ms,
             )
-            if not self._extra_env:
-                raise OSError(
-                    "ClaudeSDKExecutor(gateway=True) requires gateway credentials "
-                    "from the gateway base URL / auth command or a valid "
-                    "~/.databrickscfg profile."
-                )
 
         # Retry policy → Anthropic SDK env vars passed to the Claude
         # CLI subprocess. ``ANTHROPIC_MAX_RETRIES`` and
@@ -1303,37 +1154,6 @@ class ClaudeSDKExecutor(Executor):
             with suppress(Exception):
                 pathlib.Path(self._cli_wrapper_path).unlink(missing_ok=True)
 
-    async def _route_options_through_gateway_shim(self, options: SdkOptions) -> None:
-        """
-        Point a new client's ``ANTHROPIC_BASE_URL`` at the local shim.
-
-        On the gateway path the Claude CLI strips ``thinking.display``
-        from its requests (experimental betas are disabled there),
-        which silences opus thinking; the shim restores the field. See
-        the :mod:`~goalrail.inner.claude_gateway_shim` module
-        docstring for the full failure chain. No-op off the gateway
-        path.
-
-        :param options: SDK options about to be passed to
-            ``ClaudeSDKClient``; ``options.env["ANTHROPIC_BASE_URL"]``
-            is rewritten in place to the shim's loopback URL.
-        :raises RuntimeError: If the gateway path produced options
-            without an ``ANTHROPIC_BASE_URL`` — a config bug that
-            would silently bypass the shim.
-        """
-        if not self._gateway:
-            return
-        env = getattr(options, "env", None)
-        if not isinstance(env, dict) or "ANTHROPIC_BASE_URL" not in env:
-            raise RuntimeError(
-                "ClaudeSDKExecutor(gateway=True) built SDK options without "
-                "env['ANTHROPIC_BASE_URL']; cannot route through the gateway shim."
-            )
-        if self._gateway_shim is None:
-            self._gateway_shim = ClaudeGatewayShim(upstream_base_url=env["ANTHROPIC_BASE_URL"])
-        await self._gateway_shim.start()
-        env["ANTHROPIC_BASE_URL"] = self._gateway_shim.base_url
-
     async def _get_or_create_client(
         self,
         sdk: _ClaudeSDK,
@@ -1344,7 +1164,6 @@ class ClaudeSDKExecutor(Executor):
     ) -> _ClaudeClient:
         state = self._clients.get(session_key)
         if state is None:
-            await self._route_options_through_gateway_shim(options)
             # Tee CLI stderr so the connect timeout error carries the
             # tail; ``_on_stderr`` alone only logs at DEBUG.
             connect_stderr: list[str] = []
@@ -1365,10 +1184,8 @@ class ClaudeSDKExecutor(Executor):
                 #
                 # ANTHROPIC_API_KEY is also stripped so the CLI uses its
                 # subscription auth rather than a developer API key that
-                # would charge separately. Safe even in Databricks mode:
-                # ``options.settings`` explicitly sets apiKeyHelper and
-                # ``options.env`` sets the Databricks base URL, so the
-                # Claude CLI does not need an inherited Anthropic key.
+                # would charge separately. Gateway auth is supplied through
+                # the invocation-local apiKeyHelper when configured.
                 with _unset_env_var("CLAUDECODE"), _unset_env_var("ANTHROPIC_API_KEY"):
                     await asyncio.wait_for(client.connect(), timeout=_CONNECT_TIMEOUT_SECONDS)
             except asyncio.TimeoutError as exc:
@@ -1468,9 +1285,6 @@ class ClaudeSDKExecutor(Executor):
         session_keys = list(self._clients)
         for session_key in session_keys:
             await self.close_session(session_key)
-        if self._gateway_shim is not None:
-            await self._gateway_shim.aclose()
-            self._gateway_shim = None
 
     async def interrupt_session(self, session_key: str) -> bool:
         state = self._clients.get(session_key)
@@ -1899,18 +1713,10 @@ class ClaudeSDKExecutor(Executor):
                     continue
                 allowed_tools.append(f"mcp__goalrail__{raw_tname}")
 
-        # cfg.model > spec model > Databricks default (only on the
-        # Databricks-profile gateway path) > None (lets the SDK pick its own
-        # default). The neutral generic-provider gateway path never falls back
-        # to a ``databricks-*`` model: the Goalrail producer always resolves a
-        # concrete model (spec > provider default > catalog default) before
-        # spawning, so no ``databricks-*`` default is injected there.
+        # cfg.model > spec model > None (lets the SDK pick its own default).
         model = cfg.model or self._model_override
-        if model is None and self._gateway_uses_databricks_profile:
-            model = _DATABRICKS_CLAUDE_DEFAULT_MODEL
 
-        # Build env: Databricks gateway settings derived from profile-backed
-        # creds. CLAUDECODE removal happens around the subprocess spawn in
+        # Build env. CLAUDECODE removal happens around the subprocess spawn in
         # ``_get_or_create_client`` via ``_unset_env_var`` — setting it to
         # ``""`` here would still leave an empty key in the child env.
         env = dict(self._extra_env)
@@ -2014,21 +1820,6 @@ class ClaudeSDKExecutor(Executor):
             return
         if reasoning_effort is not None:
             options_kwargs["effort"] = reasoning_effort
-        # Databricks opus/fable endpoints reject thinking.type="enabled"
-        # (HTTP 400); they require "adaptive" instead (those tiers are
-        # adaptive-only). Sonnet is fine, so scope to those tiers only.
-        # This is Databricks-specific: it is gated on the ``databricks-
-        # claude-opus-`` / ``databricks-claude-fable-`` model prefixes, so
-        # it never fires for a generic gateway model.
-        if (
-            self._gateway
-            and isinstance(model, str)
-            and model.startswith(DATABRICKS_CLAUDE_ADAPTIVE_THINKING_PREFIXES)
-            and "thinking" not in options_kwargs
-        ):
-            # display="summarized" so Opus 4.7+ / Fable streams thinking text
-            # (their default is "omitted").
-            options_kwargs["thinking"] = {"type": "adaptive", "display": "summarized"}
         options = sdk.ClaudeAgentOptions(**options_kwargs)
         if self._cli_path:
             options.cli_path = self._cli_path
@@ -2446,7 +2237,7 @@ class ClaudeSDKExecutor(Executor):
                                 terminal_error = (
                                     "Claude SDK provider authentication failed"
                                     f" ({retry_error}, status={error_status}). "
-                                    "Check your selected ~/.databrickscfg profile."
+                                    "Check the configured gateway auth command."
                                 )
                                 break
 
@@ -2454,7 +2245,7 @@ class ClaudeSDKExecutor(Executor):
                                 terminal_error = (
                                     "Claude SDK provider endpoint was not found "
                                     f"({retry_error}, status={error_status}). "
-                                    "Check ANTHROPIC_BASE_URL / Databricks endpoint configuration."
+                                    "Check ANTHROPIC_BASE_URL / gateway endpoint configuration."
                                 )
                                 break
                         elif getattr(system_msg, "hook_event_name", None) == "PreCompact":

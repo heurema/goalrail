@@ -57,11 +57,11 @@ describe("buildReconnectCommand", () => {
   it("emits `goalrail host` for host_offline (no --resume, no YAML)", () => {
     const cmd = buildReconnectCommand({
       conversationId: "conv_host1",
-      serverUrl: "https://example.databricksapps.com",
+      serverUrl: "https://goalrail.example",
       state: "host_offline",
     });
     expect(cmd).toContain("goalrail host");
-    expect(cmd).toContain("--server https://example.databricksapps.com");
+    expect(cmd).toContain("--server https://goalrail.example");
     // The --profile flag was removed from the CLI; emitting it here would
     // hand users a command that errors with "No such option".
     expect(cmd).not.toContain("--profile");
@@ -76,7 +76,7 @@ describe("buildReconnectCommand", () => {
     // down the host relaunches whatever runtime it needs, so host wins.
     const cmd = buildReconnectCommand({
       conversationId: "conv_host_claude",
-      serverUrl: "https://x.databricksapps.com",
+      serverUrl: "https://x.goalrail.example",
       wrapper: "claude-code-native-ui",
       state: "host_offline",
     });
@@ -87,19 +87,19 @@ describe("buildReconnectCommand", () => {
   it("emits the generic run form for a local_stranded session", () => {
     const cmd = buildReconnectCommand({
       conversationId: "conv_abc123",
-      serverUrl: "https://example.databricksapps.com",
+      serverUrl: "https://goalrail.example",
       state: "local_stranded",
     });
     expect(cmd).toContain("goalrail run path/to/agent.yaml");
     expect(cmd).toContain("--resume conv_abc123");
-    expect(cmd).toContain("--server https://example.databricksapps.com");
+    expect(cmd).toContain("--server https://goalrail.example");
     expect(cmd).not.toContain("--profile");
   });
 
   it("emits `goalrail claude --resume` for a claude-native local_stranded session", () => {
     const cmd = buildReconnectCommand({
       conversationId: "conv_claude1",
-      serverUrl: "https://x.databricksapps.com",
+      serverUrl: "https://x.goalrail.example",
       wrapper: "claude-code-native-ui",
       state: "local_stranded",
     });
@@ -113,7 +113,7 @@ describe("buildReconnectCommand", () => {
   it("falls back to the run form for an unknown wrapper (local_stranded)", () => {
     const cmd = buildReconnectCommand({
       conversationId: "conv_other",
-      serverUrl: "https://x.databricksapps.com",
+      serverUrl: "https://x.goalrail.example",
       wrapper: "some-future-wrapper",
       state: "local_stranded",
     });
@@ -130,7 +130,7 @@ describe("<ReconnectSessionDialog />", () => {
         open
         onOpenChange={onOpenChange}
         conversationId="conv_abc123"
-        serverUrl="https://example.databricksapps.com"
+        serverUrl="https://goalrail.example"
         state="host_offline"
         isOwner
         {...props}
@@ -251,7 +251,7 @@ describe("<ReconnectSessionDialog />", () => {
         open={false}
         onOpenChange={() => {}}
         conversationId="conv_abc123"
-        serverUrl="https://example.databricksapps.com"
+        serverUrl="https://goalrail.example"
         state="host_offline"
         isOwner
       />,

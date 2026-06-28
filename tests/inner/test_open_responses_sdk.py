@@ -18,7 +18,6 @@ from goalrail.inner.open_responses_sdk import (
     OpenResponsesExecutor,
     _convert_messages_to_responses,
     _convert_tools_to_responses,
-    _databricks_openai_base_url,
     _normalize_response_output_items,
 )
 
@@ -646,7 +645,7 @@ class TestOpenResponsesExecutor(unittest.TestCase):
                 client.responses.calls.append(kwargs)
                 if "previous_response_id" in kwargs:
                     raise RuntimeError(
-                        "BAD_REQUEST: Databricks does not support the "
+                        "BAD_REQUEST: provider does not support the "
                         "`previous_response_id` parameter"
                     )
                 return [
@@ -848,34 +847,3 @@ class TestOpenAIClientConfig(unittest.TestCase):
                 api_key="test-key",
                 **RetryPolicy().openai.kwargs(),
             )
-
-    def test_client_uses_databricks_config(self):
-        from goalrail.inner.databricks_executor import DatabricksCredentials
-        from goalrail.inner.open_responses_sdk import _get_openai_client
-        from goalrail.spec.types import RetryPolicy
-
-        with (
-            patch.dict("os.environ", {}, clear=True),
-            patch(
-                "goalrail.inner.databricks_executor._read_databrickscfg",
-                return_value=DatabricksCredentials(
-                    host="https://example.cloud.databricks.com",
-                    token="dapi_test",
-                ),
-            ),
-            patch("openai.OpenAI") as openai_cls,
-        ):
-            _get_openai_client()
-            openai_cls.assert_called_once_with(
-                base_url="https://example.cloud.databricks.com/ai-gateway/openai/v1",
-                api_key="dapi_test",
-                **RetryPolicy().openai.kwargs(),
-            )
-
-
-class TestDatabricksBaseUrl(unittest.TestCase):
-    def test_databricks_openai_base_url_normalizes_trailing_slash(self):
-        self.assertEqual(
-            _databricks_openai_base_url("https://example.cloud.databricks.com/"),
-            "https://example.cloud.databricks.com/ai-gateway/openai/v1",
-        )

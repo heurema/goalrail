@@ -172,10 +172,8 @@ def repl_env(
       ``run`` flag; config is the supported path). ``GOALRAIL_CONFIG_HOME``
       points at the same dir so the CLI reads it too.
 
-    Because ``HOME`` is redirected, ``DATABRICKS_CONFIG_FILE`` is pinned
-    to the real ``~/.databrickscfg`` so ``--profile`` lookups still
-    resolve, and ``GOALRAIL_SKIP_ONBOARD`` guards against any other
-    first-run prompt (these tests exercise REPL approval, not onboarding).
+    ``GOALRAIL_SKIP_ONBOARD`` guards against any other first-run prompt
+    (these tests exercise REPL approval, not onboarding).
 
     ``OPENAI_BASE_URL`` is pointed at the session-scoped mock LLM
     server so the REPL subprocess's inner OpenAI harness routes all
@@ -188,7 +186,6 @@ def repl_env(
     :param tmp_path_factory: Pytest temp-path factory for the fake HOME.
     :returns: Env mapping for ``pexpect.spawn``.
     """
-    real_databrickscfg = Path.home() / ".databrickscfg"
     fake_home = tmp_path_factory.mktemp("repl_home")
     config_home = fake_home / ".goalrail"
     config_home.mkdir(parents=True, exist_ok=True)
@@ -203,7 +200,6 @@ def repl_env(
         "OPENAI_BASE_URL": f"{mock_llm_server_url}/v1",
         "HOME": str(fake_home),
         "GOALRAIL_CONFIG_HOME": str(config_home),
-        "DATABRICKS_CONFIG_FILE": str(real_databrickscfg),
         "GOALRAIL_SKIP_ONBOARD": "1",
         # Force ANSI on — pexpect captures everything, stripping
         # happens per-assertion via _strip_ansi.

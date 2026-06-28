@@ -29,7 +29,7 @@ Covered paths:
 ## Intentionally Left Out
 
 - Local server user-facing path text and docs/e2e comments.
-- Provider-specific credential stores outside Goalrail state, such as Codex, OpenCode, Databricks CLI, or Gemini/Antigravity stores.
+- Provider-specific credential stores outside Goalrail state, such as Codex, OpenCode, provider CLI, or Gemini/Antigravity stores.
 - Fresh default remains `~/.goalrail` through `data_home_path()` until a later explicit migration/default-flip decision.
 
 ## Tests

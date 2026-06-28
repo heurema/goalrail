@@ -191,24 +191,6 @@ jobs:
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
         run: echo "LLM_API_KEY=${LLM_API_KEY}" >> "$GITHUB_ENV"
 
-      - name: Write gateway profile (~/.databrickscfg)
-        if: steps.trigger.outputs.skip != 'true' && steps.creds.outputs.available == 'true'
-        env:
-          GATEWAY_BASE_URL: ${{ secrets.GATEWAY_BASE_URL }}
-          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
-        run: |
-          # Use python to write the config safely — avoids interpolating
-          # secrets into a heredoc where special chars could break YAML.
-          python3 -c "
-          import pathlib, os
-          cfg = '[default]\nhost  = {host}\ntoken = {token}\n'.format(
-              host=os.environ['GATEWAY_BASE_URL'].removesuffix('/serving-endpoints'),
-              token=os.environ['LLM_API_KEY'],
-          )
-          pathlib.Path.home().joinpath('.databrickscfg').write_text(cfg)
-          "
-          echo "DATABRICKS_BEARER=${LLM_API_KEY}" >> "$GITHUB_ENV"
-
       - name: Write Goalrail provider config
         if: steps.trigger.outputs.skip != 'true' && steps.creds.outputs.available == 'true'
         env:
@@ -222,22 +204,21 @@ jobs:
           python3 -c "
           import pathlib, os, json
           gw = os.environ['GATEWAY_BASE_URL']
-          host = gw.removesuffix('/serving-endpoints')
           cfg = {
               'providers': {
-                  'databricks-gateway': {
+                  'ci-gateway': {
                       'kind': 'gateway',
                       'default': ['anthropic', 'openai'],
                       'anthropic': {
-                          'base_url': gw + '/anthropic',
+                          'base_url': gw,
                           'api_key_ref': 'env:LLM_API_KEY',
-                          'models': {'default': 'databricks-claude-opus-4-8'},
+                          'models': {'default': 'claude-opus-4-8'},
                       },
                       'openai': {
-                          'base_url': host + '/ai-gateway/codex/v1',
+                          'base_url': gw,
                           'api_key_ref': 'env:LLM_API_KEY',
                           'wire_api': 'responses',
-                          'models': {'default': 'databricks-gpt-5-5'},
+                          'models': {'default': 'gpt-5.5'},
                       },
                   }
               }

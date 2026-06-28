@@ -171,7 +171,6 @@ def _normalize_provider(provider: str) -> str:
 COMMON_PROVIDERS: list[str] = [
     "openai",
     "anthropic",
-    "databricks",
     "bedrock",
     "gemini",
     "vertex_ai",
@@ -549,27 +548,6 @@ _PROVIDER_AUTH_MODES: dict[str, dict[str, dict[str, Any]]] = {
             ],
         },
     },
-    "databricks": {
-        "pat_token": {
-            "display_name": "Personal Access Token",
-            "description": "Use Databricks Personal Access Token",
-            "default": True,
-            "fields": [
-                {
-                    "name": "api_key",
-                    "description": "Databricks Personal Access Token",
-                    "secret": True,
-                    "required": True,
-                },
-                {
-                    "name": "api_base",
-                    "description": "Databricks workspace URL",
-                    "secret": False,
-                    "required": True,
-                },
-            ],
-        },
-    },
     "sagemaker": {
         "access_keys": {
             "display_name": "Access Keys",
@@ -610,7 +588,6 @@ _PROVIDER_DISPLAY_NAMES: dict[str, str] = {
     "vertex_ai": "Google Vertex AI",
     "azure": "Azure OpenAI",
     "groq": "Groq",
-    "databricks": "Databricks",
     "xai": "xAI",
     "cohere": "Cohere",
     "mistral": "Mistral AI",
@@ -675,7 +652,7 @@ def get_provider_config(provider: str) -> ProviderConfig:
     Return the auth configuration for a provider.
 
     For providers with multiple auth modes (bedrock, azure, vertex_ai,
-    databricks, sagemaker), returns the full structure. For simple
+    sagemaker), returns the full structure. For simple
     API-key providers, returns a single default auth mode.
 
     :param provider: Provider name, e.g. ``"openai"`` or ``"bedrock"``.

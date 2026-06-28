@@ -110,21 +110,20 @@ def test_claude_terminal_request_pins_launch_cwd(tmp_path, monkeypatch) -> None:
 
 def test_claude_terminal_request_injects_claude_config() -> None:
     """
-    Ucode config reaches the terminal env, settings, and model argv.
+    Provider config reaches the terminal env, settings, and model argv.
 
     This test pins the native ``goalrail claude`` launch boundary:
-    a regression that reads ucode but forgets to pass the resulting
-    Databricks gateway values to the terminal resource would leave
-    Claude Code on its default provider path.
+    a regression that resolves provider config but forgets to pass it to the
+    terminal resource would leave Claude Code on its default provider path.
     """
-    config = claude_native.ClaudeNativeUcodeConfig(
+    config = claude_native.ClaudeNativeProviderConfig(
         env={
-            "ANTHROPIC_BASE_URL": "https://example.databricks.com/ai-gateway/anthropic",
+            "ANTHROPIC_BASE_URL": "https://goalrail.example/ai-gateway/anthropic",
             "CLAUDE_CODE_API_KEY_HELPER_TTL_MS": "900000",
             "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": "1",
         },
         api_key_helper="printf token",
-        model="databricks-claude-opus-test",
+        model="anthropic/claude-opus-test",
     )
 
     body = claude_native._claude_terminal_request(
@@ -137,7 +136,7 @@ def test_claude_terminal_request_injects_claude_config() -> None:
     spec = body["spec"]
     assert spec["command"] == "env"
     assert spec["env"] == {
-        "ANTHROPIC_BASE_URL": "https://example.databricks.com/ai-gateway/anthropic",
+        "ANTHROPIC_BASE_URL": "https://goalrail.example/ai-gateway/anthropic",
         "CLAUDE_CODE_API_KEY_HELPER_TTL_MS": "900000",
         "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": "1",
         "ENABLE_TOOL_SEARCH": "true",
@@ -153,7 +152,7 @@ def test_claude_terminal_request_injects_claude_config() -> None:
         "--print",
         "hi",
         "--model",
-        "databricks-claude-opus-test",
+        "anthropic/claude-opus-test",
     ]
     settings = json.loads(args[args.index("--settings") + 1])
     assert settings["apiKeyHelper"] == "printf token"
@@ -162,16 +161,16 @@ def test_claude_terminal_request_injects_claude_config() -> None:
 
 def test_claude_terminal_request_preserves_user_model_arg() -> None:
     """
-    User-selected Claude model wins over the ucode default.
+    User-selected Claude model wins over the provider default.
 
-    The ucode model is a default, not a forced override. If this
+    The provider model is a default, not a forced override. If this
     regresses, users who pass ``--model`` would silently get the
     workspace default instead of the model they explicitly requested.
     """
-    config = claude_native.ClaudeNativeUcodeConfig(
-        env={"ANTHROPIC_BASE_URL": "https://example.databricks.com/ai-gateway/anthropic"},
+    config = claude_native.ClaudeNativeProviderConfig(
+        env={"ANTHROPIC_BASE_URL": "https://goalrail.example/ai-gateway/anthropic"},
         api_key_helper="printf token",
-        model="databricks-claude-opus-test",
+        model="anthropic/claude-opus-test",
     )
 
     body = claude_native._claude_terminal_request(
@@ -194,248 +193,6 @@ def test_claude_terminal_request_preserves_user_model_arg() -> None:
         "hi",
     ]
     assert args.count("--model") == 1
-
-
-def test_ucode_config_for_profile_reads_allowlisted_claude_state(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """
-    Profile-backed native Claude config reads only required ucode fields.
-
-    The extra ``ANTHROPIC_AUTH_TOKEN`` in fake ucode env is deliberate:
-    the native wrapper must not blindly forward arbitrary state-file
-    environment values into the terminal launch body.
-    """
-    from goalrail.onboarding.ucode_state import UcodeAgentState, UcodeWorkspaceState
-
-    workspace_state = UcodeWorkspaceState(
-        workspace_url="https://example.databricks.com",
-        agents={
-            "claude": UcodeAgentState(
-                model="databricks-claude-opus-test",
-                base_url="https://example.databricks.com/ai-gateway/anthropic",
-                auth_command="printf token",
-                auth_refresh_interval_ms=123456,
-                env={
-                    "ANTHROPIC_BASE_URL": "https://example.databricks.com/ai-gateway/anthropic",
-                    "ANTHROPIC_AUTH_TOKEN": "must-not-leak",
-                },
-            )
-        },
-    )
-    monkeypatch.setattr(
-        "goalrail.onboarding.databricks_config.get_workspace_url_for_profile",
-        lambda profile: "https://example.databricks.com",
-    )
-    monkeypatch.setattr(
-        "goalrail.onboarding.ucode_state.read_ucode_state",
-        lambda workspace_url: workspace_state,
-    )
-
-    config = claude_native._ucode_config_for_profile("test-profile")
-
-    assert config == claude_native.ClaudeNativeUcodeConfig(
-        env={
-            "ANTHROPIC_BASE_URL": "https://example.databricks.com/ai-gateway/anthropic",
-            "CLAUDE_CODE_API_KEY_HELPER_TTL_MS": "123456",
-            "CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS": "1",
-        },
-        api_key_helper="printf token",
-        model="databricks-claude-opus-test",
-    )
-
-
-def test_ucode_config_for_profile_sets_model_tier_env_vars(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """
-    ANTHROPIC_DEFAULT_*_MODEL env vars are set from workspace claude_models.
-
-    When ``claude_models`` lists all four tiers the corresponding
-    ``ANTHROPIC_DEFAULT_FABLE_MODEL``, ``ANTHROPIC_DEFAULT_OPUS_MODEL``,
-    ``ANTHROPIC_DEFAULT_SONNET_MODEL``, and ``ANTHROPIC_DEFAULT_HAIKU_MODEL``
-    vars are injected into the terminal env so that Claude Code's ``/model``
-    picker natively shows Databricks gateway model IDs instead of normalising
-    them to canonical Anthropic names.
-    """
-    from goalrail.onboarding.ucode_state import UcodeAgentState, UcodeWorkspaceState
-
-    workspace_state = UcodeWorkspaceState(
-        workspace_url="https://example.databricks.com",
-        claude_models={
-            "fable": "databricks-claude-fable-5",
-            "opus": "databricks-claude-opus-4-7",
-            "sonnet": "databricks-claude-sonnet-4-6",
-            "haiku": "databricks-claude-haiku-4-5",
-        },
-        agents={
-            "claude": UcodeAgentState(
-                model="databricks-claude-opus-4-7",
-                base_url="https://example.databricks.com/ai-gateway/anthropic",
-                auth_command="printf token",
-            )
-        },
-    )
-    monkeypatch.setattr(
-        "goalrail.onboarding.databricks_config.get_workspace_url_for_profile",
-        lambda profile: "https://example.databricks.com",
-    )
-    monkeypatch.setattr(
-        "goalrail.onboarding.ucode_state.read_ucode_state",
-        lambda workspace_url: workspace_state,
-    )
-
-    config = claude_native._ucode_config_for_profile("test-profile")
-
-    assert config is not None
-    assert config.env["ANTHROPIC_DEFAULT_FABLE_MODEL"] == "databricks-claude-fable-5"
-    assert config.env["ANTHROPIC_DEFAULT_OPUS_MODEL"] == "databricks-claude-opus-4-7"
-    assert config.env["ANTHROPIC_DEFAULT_SONNET_MODEL"] == "databricks-claude-sonnet-4-6"
-    assert config.env["ANTHROPIC_DEFAULT_HAIKU_MODEL"] == "databricks-claude-haiku-4-5"
-
-
-def test_ucode_config_for_profile_sets_only_present_tier_env_vars(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """
-    Only tiers present in claude_models get ANTHROPIC_DEFAULT_* env vars.
-
-    If ``claude_models`` only has one tier (e.g. ``"sonnet"``), only
-    ``ANTHROPIC_DEFAULT_SONNET_MODEL`` is set — the other three are absent.
-    """
-    from goalrail.onboarding.ucode_state import UcodeAgentState, UcodeWorkspaceState
-
-    workspace_state = UcodeWorkspaceState(
-        workspace_url="https://example.databricks.com",
-        claude_models={"sonnet": "databricks-claude-sonnet-4-6"},
-        agents={
-            "claude": UcodeAgentState(
-                model="databricks-claude-sonnet-4-6",
-                base_url="https://example.databricks.com/ai-gateway/anthropic",
-                auth_command="printf token",
-            )
-        },
-    )
-    monkeypatch.setattr(
-        "goalrail.onboarding.databricks_config.get_workspace_url_for_profile",
-        lambda profile: "https://example.databricks.com",
-    )
-    monkeypatch.setattr(
-        "goalrail.onboarding.ucode_state.read_ucode_state",
-        lambda workspace_url: workspace_state,
-    )
-
-    config = claude_native._ucode_config_for_profile("test-profile")
-
-    assert config is not None
-    assert config.env["ANTHROPIC_DEFAULT_SONNET_MODEL"] == "databricks-claude-sonnet-4-6"
-    assert "ANTHROPIC_DEFAULT_FABLE_MODEL" not in config.env
-    assert "ANTHROPIC_DEFAULT_OPUS_MODEL" not in config.env
-    assert "ANTHROPIC_DEFAULT_HAIKU_MODEL" not in config.env
-
-
-def test_ucode_config_for_profile_omits_model_tier_vars_when_no_claude_models(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """
-    No ANTHROPIC_DEFAULT_* env vars are set when claude_models is empty.
-
-    Older ucode state files may not include ``claude_models``.  In that
-    case the env dict must not gain any spurious default model overrides.
-    """
-    from goalrail.onboarding.ucode_state import UcodeAgentState, UcodeWorkspaceState
-
-    workspace_state = UcodeWorkspaceState(
-        workspace_url="https://example.databricks.com",
-        claude_models={},
-        agents={
-            "claude": UcodeAgentState(
-                model="databricks-claude-opus-4-7",
-                base_url="https://example.databricks.com/ai-gateway/anthropic",
-                auth_command="printf token",
-            )
-        },
-    )
-    monkeypatch.setattr(
-        "goalrail.onboarding.databricks_config.get_workspace_url_for_profile",
-        lambda profile: "https://example.databricks.com",
-    )
-    monkeypatch.setattr(
-        "goalrail.onboarding.ucode_state.read_ucode_state",
-        lambda workspace_url: workspace_state,
-    )
-
-    config = claude_native._ucode_config_for_profile("test-profile")
-
-    assert config is not None
-    for key in config.env:
-        assert not key.startswith("ANTHROPIC_DEFAULT_"), (
-            f"Unexpected model-tier env var {key!r} when claude_models is empty"
-        )
-
-
-def test_ucode_config_for_profile_defaults_model_when_ucode_omits_it(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """
-    A ucode state with no model defaults to the Databricks gateway model.
-
-    Some workspaces (e.g. the OSS integration gateway) cache the gateway
-    URL + auth command but neither a per-agent ``model`` nor any
-    ``claude_models`` tiers. Without a default the native Claude CLI falls
-    back to its host-config model (an Anthropic-direct id like ``opus[1m]``)
-    that the Databricks gateway rejects with "model ... may not exist".
-    """
-    from goalrail.onboarding.ucode_state import UcodeAgentState, UcodeWorkspaceState
-
-    workspace_state = UcodeWorkspaceState(
-        workspace_url="https://example.databricks.com",
-        claude_models={},
-        agents={
-            "claude": UcodeAgentState(
-                model=None,
-                base_url="https://example.databricks.com/ai-gateway/anthropic",
-                auth_command="printf token",
-            )
-        },
-    )
-    monkeypatch.setattr(
-        "goalrail.onboarding.databricks_config.get_workspace_url_for_profile",
-        lambda profile: "https://example.databricks.com",
-    )
-    monkeypatch.setattr(
-        "goalrail.onboarding.ucode_state.read_ucode_state",
-        lambda workspace_url: workspace_state,
-    )
-
-    config = claude_native._ucode_config_for_profile("test-profile")
-
-    assert config is not None
-    # The verified routable gateway endpoint name, not the CLI's own default.
-    assert config.model == "databricks-claude-opus-4-8"
-
-
-def test_ucode_config_for_profile_fails_loud_on_malformed_claude_state(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A selected malformed Claude ucode entry surfaces a setup error."""
-    from goalrail.onboarding.ucode_state import UcodeAgentState, UcodeWorkspaceState
-
-    workspace_state = UcodeWorkspaceState(
-        workspace_url="https://example.databricks.com",
-        agents={"claude": UcodeAgentState(auth_command="printf token")},
-    )
-    monkeypatch.setattr(
-        "goalrail.onboarding.databricks_config.get_workspace_url_for_profile",
-        lambda profile: "https://example.databricks.com",
-    )
-    monkeypatch.setattr(
-        "goalrail.onboarding.ucode_state.read_ucode_state",
-        lambda workspace_url: workspace_state,
-    )
-
-    with pytest.raises(click.ClickException, match="missing Claude base URL"):
-        claude_native._ucode_config_for_profile("test-profile")
 
 
 def test_attach_url_encodes_path_components() -> None:
@@ -2626,7 +2383,7 @@ async def test_attach_with_reconnect_sees_in_place_header_mutation(
     An earlier version had a real bug here: ``_recover`` rebinds the
     nonlocal ``headers`` variable in its closure scope, but the
     reconnect loop received the *original* dict reference at start
-    time. A rotated Databricks bearer would not reach the new WS
+    time. A rotated gateway bearer would not reach the new WS
     handshake — every reconnect would fail with 401 and the loop
     would spin forever printing "reconnecting...".
 
@@ -2986,7 +2743,7 @@ async def test_attach_reconnects_through_real_websocket_bounce(
     a server redeploy ended the user's Claude session. The fix wraps
     the attach in a reconnect loop guarded by a recovery callback;
     this test drives that loop against a real websockets server that
-    closes its first two connections with codes a Databricks Apps
+    closes its first two connections with codes a deployed app
     redeploy can produce (4500 internal-error, then 1011
     server-error). The third connection holds open until the test's
     stdin pipe sends EOF, simulating the user pressing Ctrl+D.
@@ -4150,7 +3907,7 @@ async def test_prepare_claude_terminal_cold_resume_injects_external_session_id(
         *,
         command: str,
         bridge_dir: Path,
-        claude_config: claude_native.ClaudeNativeUcodeConfig | None = None,
+        claude_config: claude_native.ClaudeNativeProviderConfig | None = None,
     ) -> str:
         """
         Capture the launch args without invoking the real runner.
@@ -4162,7 +3919,7 @@ async def test_prepare_claude_terminal_cold_resume_injects_external_session_id(
             this is the load-bearing capture.
         :param command: Executable name (ignored).
         :param bridge_dir: Bridge directory (ignored).
-        :param claude_config: Optional ucode config (ignored).
+        :param claude_config: Optional provider config (ignored).
         :returns: A fixed terminal id.
         """
         captured_terminal_args["session_id"] = session_id
@@ -4293,7 +4050,7 @@ async def test_prepare_claude_terminal_fresh_session_is_not_cold_resumed(
         *,
         command: str,
         bridge_dir: Path,
-        claude_config: claude_native.ClaudeNativeUcodeConfig | None = None,
+        claude_config: claude_native.ClaudeNativeProviderConfig | None = None,
     ) -> str:
         """Return a fixed terminal id without spawning anything."""
         del _client, _session_id, _claude_args, command, bridge_dir, claude_config
@@ -5669,7 +5426,6 @@ def _isolated_provider_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setenv("HOME", str(tmp_path))
     for var in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY"):
         monkeypatch.delenv(var, raising=False)
-    monkeypatch.delenv("DATABRICKS_CONFIG_PROFILE", raising=False)
     return tmp_path
 
 
@@ -5688,7 +5444,7 @@ def _no_auth_claude_spec() -> Any:
 def test_provider_config_for_native_claude_key_injects_base_url_and_helper() -> None:
     """A ``key`` provider becomes ANTHROPIC_BASE_URL + a printf apiKeyHelper.
 
-    Mirrors what ucode injects, but from a configured OSS key — so a native
+    Mirrors provider auth injection from a configured OSS key, so a native
     Claude Code terminal routes through the provider. The static key must be
     delivered via the helper (the runner env strips ANTHROPIC_API_KEY), and
     the base_url + default model carried through. Failure means a native
@@ -5881,8 +5637,7 @@ def test_resolve_native_claude_config_subscription_uses_cli_login(
 
     A subscription means "use whatever ~/.claude is logged into" (e.g. a
     Claude Enterprise seat), NOT a gateway. The resolver must return None so
-    the native launch leaves Claude's own login alone — and must NOT fall
-    back to ucode.
+    the native launch leaves Claude's own login alone.
     """
     _seed_config(
         _isolated_provider_config,
@@ -5891,60 +5646,6 @@ def test_resolve_native_claude_config_subscription_uses_cli_login(
 
     cfg = claude_native.resolve_native_claude_config(spec=_no_auth_claude_spec())
     assert cfg is None
-
-
-def test_resolve_native_claude_config_global_databricks_auth_uses_ucode(
-    _isolated_provider_config: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Spec-less with a global ``auth: databricks`` block → ucode with its profile.
-
-    Preserves the Databricks behavior after the ``--profile`` flag removal:
-    a databricks user (no OSS provider configured) who set up a global
-    ``auth:`` block via ``goalrail setup`` still routes a bare
-    ``goalrail claude`` launch through ucode, keyed on the auth block's
-    own profile. We assert the resolver delegates to
-    `_ucode_config_for_profile` with that profile.
-    """
-    (_isolated_provider_config / "config.yaml").write_text(
-        yaml.safe_dump({"auth": {"type": "databricks", "profile": "oss"}})
-    )
-    sentinel = claude_native.ClaudeNativeUcodeConfig(
-        env={"ANTHROPIC_BASE_URL": "https://db.example/gw"},
-        api_key_helper="databricks auth token",
-        model="databricks-claude",
-    )
-    seen: dict[str, str | None] = {}
-
-    def _fake_ucode(profile: str | None) -> claude_native.ClaudeNativeUcodeConfig:
-        seen["profile"] = profile
-        return sentinel
-
-    monkeypatch.setattr(claude_native, "_ucode_config_for_profile", _fake_ucode)
-
-    cfg = claude_native.resolve_native_claude_config(spec=None)
-    assert cfg is sentinel
-    # The global auth block's profile was threaded to the ucode path.
-    assert seen["profile"] == "oss"
-
-
-def test_resolve_native_claude_config_databricks_provider_uses_ucode(
-    _isolated_provider_config: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """A databricks provider default delegates to ucode with its profile."""
-    _seed_config(
-        _isolated_provider_config,
-        {"databricks": {"kind": "databricks", "default": True, "profile": "oss"}},
-    )
-    seen: dict[str, str | None] = {}
-    monkeypatch.setattr(
-        claude_native,
-        "_ucode_config_for_profile",
-        lambda profile: seen.setdefault("profile", profile),
-    )
-
-    claude_native.resolve_native_claude_config(spec=_no_auth_claude_spec())
-    # The databricks provider's own profile drove the ucode lookup.
-    assert seen["profile"] == "oss"
 
 
 def test_resolve_native_claude_config_ambient_key(

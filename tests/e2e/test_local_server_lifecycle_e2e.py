@@ -56,8 +56,6 @@ _HOST_ONLINE_TIMEOUT_S = 45.0
 # Env vars that would leak the coding-agent harness's own creds / config
 # into the server under test (CLAUDE.md hygiene) or break HOME isolation.
 _ENV_TO_CLEAR = (
-    "DATABRICKS_TOKEN",
-    "DATABRICKS_CONFIG_PROFILE",
     "ANTHROPIC_API_KEY",
     "OPENAI_API_KEY",
     "CLAUDE_CODE",
@@ -117,7 +115,7 @@ def _isolated_env(home: Path) -> dict[str, str]:
     """Build a subprocess env with an isolated ``$HOME`` and no leaked creds.
 
     Header-auth (the default) single-user loopback mode: no accounts, no
-    Databricks profile. PYTHONPATH pins the worktree checkout so the
+    provider profile. PYTHONPATH pins the worktree checkout so the
     subprocess imports the branch under test, not a stale installed wheel.
 
     :param home: The tmp home dir; ``<home>/.goalrail`` holds the pidfile,

@@ -578,7 +578,7 @@ async def test_elicitation_post_retries_gateway_5xx(
     """
     A 5xx (proxy gateway error on a severed long-poll) is retried.
 
-    The Databricks Apps proxy answers a killed upstream long-poll with
+    A proxy can answer a killed upstream long-poll with
     502/504 rather than a clean transport error; the verdict may still
     be pending server-side, so the forwarder must re-park rather than
     treat it as final.

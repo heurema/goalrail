@@ -7,6 +7,7 @@ import io
 import logging
 import os
 import tarfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -26,7 +27,7 @@ from goalrail.runner._entry import (
     _runner_parent_pid_from_env,
     _runner_tunnel_binding_token_from_env,
     _runner_workspace_from_env,
-    _RunnerDatabricksAuth,
+    _RunnerBearerAuth,
     _server_url_from_env,
     main,
 )
@@ -110,10 +111,11 @@ def test_server_url_from_env_strips_configured_value(
     assert _server_url_from_env() == "http://127.0.0.1:8123"
 
 
-def test_make_auth_token_factory_returns_factory_when_databricks_creds_available(
+def test_make_auth_token_factory_returns_factory_when_stored_token_available(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
-    """The factory is created when Databricks SDK credentials exist.
+    """The factory is created when a stored Goalrail login token exists.
 
     The runner uses this factory to refresh tokens on each WebSocket
     reconnect and each httpx callback. Without it, tokens expire
@@ -122,36 +124,34 @@ def test_make_auth_token_factory_returns_factory_when_databricks_creds_available
     :param monkeypatch: Pytest environment patch fixture.
     :returns: None.
     """
-    from goalrail.inner.databricks_executor import _DatabricksBearerAuth
+    from goalrail.cli_auth import store_token
 
-    class _Cfg:
-        """Config double whose authenticate() yields a Bearer header."""
-
-        def authenticate(self) -> dict[str, str]:
-            return {"Authorization": "Bearer fresh-token"}
-
-    # The factory resolves SDK auth via _resolve_databricks_auth (reused
-    # once) and reads tokens through _DatabricksBearerAuth.current_token().
-    monkeypatch.delenv("RUNNER_SERVER_URL", raising=False)  # skip OIDC branch
     monkeypatch.setattr(
-        "goalrail.inner.databricks_executor._resolve_databricks_auth",
-        lambda profile=None: (_DatabricksBearerAuth(_Cfg(), profile_name=None), "https://ex.test"),
+        "goalrail.cli_auth._token_file_path",
+        lambda: tmp_path / "auth_tokens.json",
+    )
+    store_token(
+        server_url="https://server.example.com",
+        token="fresh-token",
+        user_id="alice@example.com",
+        expires_at=time.time() + 3600,
     )
 
-    factory = _make_auth_token_factory()
+    factory = _make_auth_token_factory("https://server.example.com")
 
     # Factory must be created so the runner can refresh tokens.
     # If None, the runner has no way to mint fresh tokens on reconnect.
     assert factory is not None, (
-        "_make_auth_token_factory returned None despite Databricks credentials being available."
+        "_make_auth_token_factory returned None despite stored Goalrail token being available."
     )
     assert factory() == "fresh-token"
 
 
-def test_make_auth_token_factory_returns_none_without_databricks_creds(
+def test_make_auth_token_factory_returns_none_without_bearer_creds(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
-    """Without Databricks credentials the factory is ``None``.
+    """Without stored Goalrail token the factory is ``None``.
 
     Local unauthenticated servers don't need auth — the runner
     connects over loopback without a bearer token.
@@ -159,25 +159,16 @@ def test_make_auth_token_factory_returns_none_without_databricks_creds(
     :param monkeypatch: Pytest environment patch fixture.
     :returns: None.
     """
-    from goalrail.inner.databricks_executor import DatabricksAuthError
-
-    def _no_creds(profile: str | None = None) -> tuple[Any, str]:
-        """Stand in for _resolve_databricks_auth with no credentials."""
-        raise DatabricksAuthError("no Databricks credentials configured")
-
-    # No stored OIDC token and SDK resolution fails → factory is None, so the
-    # runner connects to a local unauthenticated server without a bearer.
-    monkeypatch.delenv("RUNNER_SERVER_URL", raising=False)  # skip OIDC branch
     monkeypatch.setattr(
-        "goalrail.inner.databricks_executor._resolve_databricks_auth",
-        _no_creds,
+        "goalrail.cli_auth._token_file_path",
+        lambda: tmp_path / "auth_tokens.json",
     )
 
-    assert _make_auth_token_factory() is None
+    assert _make_auth_token_factory("https://server.example.com") is None
 
 
-def test_runner_databricks_auth_injects_fresh_token_per_request() -> None:
-    """``_RunnerDatabricksAuth`` calls the factory on every request.
+def test_runner_bearer_auth_injects_fresh_token_per_request() -> None:
+    """``_RunnerBearerAuth`` calls the factory on every request.
 
     This is the mechanism that keeps the runner's httpx client
     authenticated after the initial OAuth token expires. If the
@@ -197,7 +188,7 @@ def test_runner_databricks_auth_injects_fresh_token_per_request() -> None:
         call_count += 1
         return f"tok-{call_count}"
 
-    auth = _RunnerDatabricksAuth(_counting_factory)
+    auth = _RunnerBearerAuth(_counting_factory)
     request = httpx.Request("GET", "http://server/v1/agents")
 
     # First request gets tok-1.
@@ -220,12 +211,12 @@ def test_runner_databricks_auth_injects_fresh_token_per_request() -> None:
     )
 
 
-def test_runner_databricks_auth_noop_without_factory() -> None:
+def test_runner_bearer_auth_noop_without_factory() -> None:
     """No factory means no auth header — local unauthenticated servers.
 
     :returns: None.
     """
-    auth = _RunnerDatabricksAuth(None)
+    auth = _RunnerBearerAuth(None)
     request = httpx.Request("GET", "http://localhost:8000/health")
     gen = auth.auth_flow(request)
     sent = next(gen)
@@ -233,7 +224,7 @@ def test_runner_databricks_auth_noop_without_factory() -> None:
 
 
 def _drive_auth_flow(
-    auth: _RunnerDatabricksAuth,
+    auth: _RunnerBearerAuth,
     request: httpx.Request,
     response: httpx.Response,
 ) -> list[str]:
@@ -270,72 +261,6 @@ def _drive_auth_flow(
 @pytest.mark.parametrize(
     "location",
     [
-        # Real-world shape captured from the Goalrail HTTP path: the Apps
-        # front door redirects directly to ``/oidc/...authorize``
-        # with a ``redirect_uri`` of ``.../.auth/callback``.
-        (
-            "https://example.cloud.databricks.com/oidc/oauth2/v2.0/"
-            "authorize?redirect_uri="
-            "https%3A%2F%2Fapp.databricksapps.com%2F.auth%2Fcallback"
-        ),
-        # Path-only form (some Apps deployments).
-        "/oidc/oauth2/v2.0/authorize",
-        # Apps callback path, on the off chance it surfaces directly.
-        "/.auth/callback?code=abc",
-    ],
-)
-def test_runner_databricks_auth_remints_on_login_redirect(location: str) -> None:
-    """A 302→login redirect re-mints the bearer and retries.
-
-    This is the ``ness-tool-spin`` regression: the Databricks Apps
-    front door bounces an expired bearer with a 302 to
-    ``/oidc/...`` (or to a login HTML page whose ``next_url`` is
-    the OIDC authorize endpoint) instead of returning 401, so a
-    handler that only re-mints on 401 silently fails. Without the
-    retry, ``ProxyMcpManager.call_tool`` raises and tool spinners
-    in the UI never resolve.
-
-    :param location: Redirect ``Location`` header value to test.
-    :returns: None.
-    """
-    minted_tokens: list[str] = []
-
-    def _factory() -> str:
-        """Mint sequential tokens so the test can tell first vs retry apart.
-
-        :returns: A unique token string per call.
-        """
-        token = f"tok-{len(minted_tokens) + 1}"
-        minted_tokens.append(token)
-        return token
-
-    auth = _RunnerDatabricksAuth(_factory)
-    request = httpx.Request("POST", "http://server/v1/sessions/conv_x/mcp")
-    redirect = httpx.Response(302, headers={"Location": location})
-
-    captured = _drive_auth_flow(auth, request, redirect)
-
-    # First yield carries the original (now-stale) token; second yield
-    # carries the freshly-minted token. Two yields means the retry
-    # happened — without the fix this collapses to one yield and the
-    # caller surfaces the 302 as a hard error.
-    assert len(captured) == 2, (
-        f"Expected one retry on login-redirect, got {len(captured)} yield(s). "
-        f"If 1, the auth flow stopped after the redirect instead of "
-        f"re-minting; this is the bug ProxyMcpManager hits as "
-        f"\"MCP proxy call failed ... Redirect response '302 Found'\"."
-    )
-    assert captured[0] == "Bearer tok-1"
-    assert captured[1] == "Bearer tok-2"
-    # Two factory calls means a fresh token was minted for the retry,
-    # not the cached stale one. If 1, the retry replayed the same
-    # bearer and the Apps proxy would 302 again in production.
-    assert minted_tokens == ["tok-1", "tok-2"]
-
-
-@pytest.mark.parametrize(
-    "location",
-    [
         # Unrelated app-level redirect — must NOT trigger a re-mint.
         "/v1/agents/agent_abc",
         "https://other.example.com/some/path",
@@ -343,14 +268,13 @@ def test_runner_databricks_auth_remints_on_login_redirect(location: str) -> None
         "",
     ],
 )
-def test_runner_databricks_auth_does_not_remint_on_unrelated_redirect(
+def test_runner_bearer_auth_does_not_remint_on_unrelated_redirect(
     location: str,
 ) -> None:
-    """A 3xx that isn't an Apps login bounce must NOT re-mint.
+    """A 3xx redirect must NOT re-mint.
 
-    Re-minting on every redirect would hide real application bugs and
-    waste an OAuth token round-trip per follow. Only ``/oidc/`` and
-    ``/.auth/`` redirects are treated as auth signals.
+    Re-minting on redirects would hide real application bugs and waste a
+    token lookup per follow. The runner refreshes only on HTTP 401.
 
     :param location: Non-login redirect ``Location`` value.
     :returns: None.
@@ -366,7 +290,7 @@ def test_runner_databricks_auth_does_not_remint_on_unrelated_redirect(
         factory_calls += 1
         return "tok"
 
-    auth = _RunnerDatabricksAuth(_factory)
+    auth = _RunnerBearerAuth(_factory)
     request = httpx.Request("GET", "http://server/v1/agents/agent_abc")
     redirect = httpx.Response(302, headers={"Location": location} if location else {})
 
@@ -382,7 +306,7 @@ def test_runner_databricks_auth_does_not_remint_on_unrelated_redirect(
     assert factory_calls == 1
 
 
-def test_runner_databricks_auth_remints_on_401() -> None:
+def test_runner_bearer_auth_remints_on_401() -> None:
     """The classic 401 path still re-mints (regression guard).
 
     The login-redirect fix added a parallel branch alongside the 401
@@ -401,7 +325,7 @@ def test_runner_databricks_auth_remints_on_401() -> None:
         minted_tokens.append(token)
         return token
 
-    auth = _RunnerDatabricksAuth(_factory)
+    auth = _RunnerBearerAuth(_factory)
     request = httpx.Request("GET", "http://server/v1/agents")
     unauthorized = httpx.Response(401)
 
@@ -409,78 +333,6 @@ def test_runner_databricks_auth_remints_on_401() -> None:
 
     assert len(captured) == 2
     assert captured[1] == "Bearer tok-2"
-
-
-@pytest.mark.asyncio
-async def test_runner_databricks_auth_end_to_end_through_mock_transport() -> None:
-    """End-to-end: a 302→/oidc/ becomes a 200 after the bearer refresh.
-
-    This is the integration-shaped variant of the unit tests above.
-    It exercises the actual ``httpx.AsyncClient`` send pipeline (auth
-    flow → transport → auth flow → transport) so a regression in how
-    the Auth class plugs into httpx is caught here, not just in
-    isolation. Mirrors the production flow:
-
-    1. Runner posts to ``/v1/sessions/{id}/mcp`` with stale bearer.
-    2. Goalrail front door bounces with ``302 → /oidc/...authorize``.
-    3. Runner re-mints, retries with fresh bearer, server returns 200.
-
-    Without the login-redirect branch in ``auth_flow``, step 3 never
-    happens and the call surfaces as a hard 302 to ``ProxyMcpManager``.
-
-    :returns: None.
-    """
-    minted_tokens: list[str] = []
-    seen_authz: list[str] = []
-
-    def _factory() -> str:
-        """Mint sequential tokens so the server can tell stale from fresh.
-
-        :returns: Token string ``tok-1``, ``tok-2``, ...
-        """
-        token = f"tok-{len(minted_tokens) + 1}"
-        minted_tokens.append(token)
-        return token
-
-    def _handler(request: httpx.Request) -> httpx.Response:
-        """Reject the first bearer with a 302→OIDC; accept the second.
-
-        :param request: Incoming httpx request from the client.
-        :returns: 302 on the first call, 200 on the second.
-        """
-        seen_authz.append(request.headers.get("authorization", ""))
-        if len(seen_authz) == 1:
-            return httpx.Response(
-                302,
-                headers={
-                    "Location": (
-                        "https://workspace.example.com/oidc/oauth2/v2.0/authorize?state=abc"
-                    ),
-                },
-            )
-        return httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "result": {}})
-
-    transport = httpx.MockTransport(_handler)
-    async with httpx.AsyncClient(
-        base_url="http://ap.example.com",
-        auth=_RunnerDatabricksAuth(_factory),
-        transport=transport,
-    ) as client:
-        resp = await client.post(
-            "/v1/sessions/conv_abc/mcp",
-            json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
-        )
-
-    # 200 means the retry happened, the fresh bearer was accepted, and
-    # the caller (ProxyMcpManager in production) sees a normal success.
-    # If this assertion fails with status_code == 302, the auth flow
-    # is not re-minting on the login-redirect path — the original bug.
-    assert resp.status_code == 200
-    # The server saw two distinct bearers: the stale one, then the
-    # fresh one. Equal tokens here would mean the retry replayed the
-    # cached value instead of asking the factory for a new one.
-    assert seen_authz == ["Bearer tok-1", "Bearer tok-2"]
-    assert minted_tokens == ["tok-1", "tok-2"]
 
 
 def test_runner_tunnel_binding_token_from_env_returns_none_without_token(
@@ -843,7 +695,7 @@ async def test_runner_shutdown_closes_terminal_registry(
 ) -> None:
     """The --server local runner shuts down terminal-owned resources.
 
-    ``examples/databricks_coding_agent.yaml`` exposes terminal tools,
+    ``examples/bearer_coding_agent.yaml`` exposes terminal tools,
     and in ``goalrail run --server`` mode those terminals are owned
     by the local tunnel runner. This test drives the runner app
     startup/shutdown hooks directly and verifies shutdown includes the
@@ -1236,74 +1088,6 @@ def test_main_preserves_unexpected_runtime_errors(
         main()
 
     assert capsys.readouterr().err == ""
-
-
-def test_make_auth_token_factory_resolves_sdk_auth_once(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """
-    The token factory resolves Databricks SDK auth ONCE and reuses it across
-    every token fetch, instead of rebuilding ``Config`` per call.
-
-    This is the regression guard for the per-request Databricks CLI auth tax
-    (~0.5s/call) that dominated runner establish and per-turn latency on App
-    backends: each token fetch used to build a fresh ``Config`` and shell out
-    to ``databricks auth token``. If the factory regresses to per-call
-    resolution, ``resolve_calls`` jumps from 1 to the number of invocations
-    and this test fails.
-
-    :param monkeypatch: Pytest monkeypatch fixture.
-    :returns: None.
-    """
-    import goalrail.inner.databricks_executor as dbx
-
-    class _CountingConfig:
-        """Config double whose authenticate() counts calls."""
-
-        def __init__(self) -> None:
-            self.authenticate_calls = 0
-
-        def authenticate(self) -> dict[str, str]:
-            self.authenticate_calls += 1
-            return {"Authorization": "Bearer tok-abc"}
-
-    cfg = _CountingConfig()
-    resolve_calls = {"n": 0}
-
-    def _fake_resolve(profile: str | None = None) -> tuple[Any, str]:
-        """Stand in for _resolve_databricks_auth; counts resolutions."""
-        resolve_calls["n"] += 1
-        return (
-            dbx._DatabricksBearerAuth(cfg, profile_name="oss"),
-            "https://ex.databricks.com",
-        )
-
-    monkeypatch.setattr(dbx, "_resolve_databricks_auth", _fake_resolve)
-    # No stored OIDC token → the factory falls through to the SDK path.
-    monkeypatch.setattr("goalrail.cli_auth.load_token", lambda _url: None)
-
-    factory = _make_auth_token_factory(server_url="https://ex.databricks.com")
-    assert factory is not None
-
-    tokens = [factory() for _ in range(5)]
-
-    # Bare bearer returned on every call (current_token strips the prefix).
-    # A failure means the SDK path didn't supply the token through reuse.
-    assert tokens == ["tok-abc"] * 5
-    # THE FIX: SDK auth resolved exactly once for the probe + 5 calls. A
-    # value > 1 means per-call resolution (the old _read_databrickscfg
-    # behavior, i.e. the per-request CLI auth tax) has regressed.
-    assert resolve_calls["n"] == 1, (
-        f"_resolve_databricks_auth called {resolve_calls['n']}x; expected 1 "
-        f"(resolve-once-and-cache). >1 means the per-request auth tax "
-        f"regressed."
-    )
-    # authenticate() runs once per token fetch: the factory's own probe (1)
-    # plus the 5 explicit calls = 6. These are cheap in-memory SDK cache
-    # hits, NOT CLI shell-outs — that's the behavior the fix preserves.
-    assert cfg.authenticate_calls == 6, (
-        f"Expected 6 authenticate() calls (probe + 5), got {cfg.authenticate_calls}."
-    )
 
 
 @pytest.mark.parametrize(

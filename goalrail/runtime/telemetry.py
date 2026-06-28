@@ -617,12 +617,10 @@ def init() -> None:
 
         enable_tracing()
     except ImportError:
-        # mlflow is an optional dependency (`goalrail[tracing]`). When it
-        # is absent, tracing is simply disabled — degrade quietly rather
-        # than logging a full traceback on every server start.
-        _logger.info(
-            "MLflow not installed; tracing disabled. Install `goalrail[tracing]` to enable it."
-        )
+        # mlflow is an optional external dependency. When it is absent,
+        # tracing is simply disabled — degrade quietly rather than logging
+        # a full traceback on every server start.
+        _logger.info("MLflow not installed; tracing disabled. Install `mlflow` to enable it.")
     except Exception:
         _logger.exception("failed to initialize MLflow tracing")
 

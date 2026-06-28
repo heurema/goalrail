@@ -61,22 +61,20 @@ def test_executor_factory_reads_env_vars(
     Locks in the v1 config-flow contract: env vars set in AP's
     process before spawning the subprocess (which inherits
     them) are how the wrap learns its config. Verifies model,
-    databricks, profile, cwd, pi_path all thread through.
+    gateway, cwd, pi_path all thread through.
     """
     monkeypatch.setenv("HARNESS_PI_MODEL", "test-model-id")
     monkeypatch.setenv("HARNESS_PI_GATEWAY", "true")
-    monkeypatch.setenv("HARNESS_PI_DATABRICKS_PROFILE", "test-profile")
-    monkeypatch.setenv("HARNESS_PI_GATEWAY_HOST", "https://example.databricks.com")
     monkeypatch.setenv(
         "HARNESS_PI_GATEWAY_BASE_URL",
-        "https://example.databricks.com/ai-gateway/anthropic",
+        "https://goalrail.example/ai-gateway/anthropic",
     )
     monkeypatch.setenv(
         "HARNESS_PI_GATEWAY_BASE_URLS",
         json.dumps(
             {
-                "claude": "https://example.databricks.com/ai-gateway/anthropic",
-                "openai": "https://example.databricks.com/ai-gateway/codex/v1",
+                "claude": "https://goalrail.example/ai-gateway/anthropic",
+                "openai": "https://goalrail.example/ai-gateway/codex/v1",
             }
         ),
     )
@@ -94,8 +92,6 @@ def test_executor_factory_reads_env_vars(
         model: str | None,
         pi_path: str | None,
         gateway: bool,
-        databricks_profile: str | None,
-        gateway_host: str | None,
         base_url_override: str | None,
         base_urls_override: dict[str, str] | None,
         gateway_auth_command: str | None,
@@ -106,8 +102,6 @@ def test_executor_factory_reads_env_vars(
         captured["model"] = model
         captured["pi_path"] = pi_path
         captured["gateway"] = gateway
-        captured["databricks_profile"] = databricks_profile
-        captured["gateway_host"] = gateway_host
         captured["base_url_override"] = base_url_override
         captured["base_urls_override"] = base_urls_override
         captured["gateway_auth_command"] = gateway_auth_command
@@ -122,12 +116,10 @@ def test_executor_factory_reads_env_vars(
     # constructor kwarg.
     assert captured["model"] == "test-model-id"
     assert captured["gateway"] is True
-    assert captured["databricks_profile"] == "test-profile"
-    assert captured["gateway_host"] == "https://example.databricks.com"
-    assert captured["base_url_override"] == "https://example.databricks.com/ai-gateway/anthropic"
+    assert captured["base_url_override"] == "https://goalrail.example/ai-gateway/anthropic"
     assert captured["base_urls_override"] == {
-        "claude": "https://example.databricks.com/ai-gateway/anthropic",
-        "openai": "https://example.databricks.com/ai-gateway/codex/v1",
+        "claude": "https://goalrail.example/ai-gateway/anthropic",
+        "openai": "https://goalrail.example/ai-gateway/codex/v1",
     }
     assert captured["gateway_auth_command"] == "printf token"
     assert captured["cwd"] == "/tmp/test-cwd"
@@ -234,7 +226,7 @@ def test_executor_factory_falls_back_on_malformed_os_env_json(
         ("anything else", False),
     ],
 )
-def test_databricks_env_var_truthy_parsing(
+def test_gateway_env_var_truthy_parsing(
     raw_value: str,
     expected: bool,
     monkeypatch: pytest.MonkeyPatch,

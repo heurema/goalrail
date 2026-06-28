@@ -38,7 +38,7 @@ def test_send_message_renders_assistant_response(
     - The composer is mis-wired (``ChatPage.tsx`` regression).
     - The agent never received the request (server / runtime
       regression — check the live_server log).
-    - The LLM never responded (Databricks credentials missing or
+    - The LLM never responded (provider credentials missing or
       hello_world model unavailable).
     - The SDK reducer didn't render output (TS reducer parity drift
       vs ``goalrail_client/_stream.py`` — see
@@ -65,7 +65,7 @@ def test_send_message_renders_assistant_response(
 
     # Wait for a real assistant bubble (NOT the "Working…" shimmer
     # — that has data-testid="working-indicator" instead). 60s budget
-    # covers cold-start LLM latency under Databricks routing without
+    # covers cold-start LLM latency under gateway routing without
     # masking a true hang. ``re.compile(r"\S")`` matches any non-
     # whitespace character — a rendered bubble whose MessageContent
     # is empty would mean the streaming reducer fired but produced

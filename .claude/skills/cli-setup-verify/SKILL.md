@@ -43,7 +43,7 @@ harness state). The sandbox isolates every write three ways:
   unless you pass `--keep-env-creds`.
 
 **`--inherit-home` opts out** of `HOME` isolation — use it only to reach a real
-credentialed REPL via ambient `~/.claude` / `~/.databrickscfg` auth. It is
+credentialed REPL via ambient `~/.claude` / `~/provider config` auth. It is
 **less safe**: a non-help command then writes `cli-*.log` into the real
 `~/.goalrail/logs`.
 

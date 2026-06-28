@@ -15,14 +15,13 @@ from goalrail.errors import ErrorCode, GoalrailError
 # Known providers and their default base URLs.
 # API keys come from connection_params at call time (llm.connection config),
 # not from environment variables. Providers that require connection_params
-# for their base URL (Bedrock, Vertex, Databricks) have None here.
+# for their base URL (Bedrock, Vertex) have None here.
 PROVIDER_CONFIGS: dict[str, str | None] = {
     "openai": "https://api.openai.com/v1",
     "anthropic": "https://api.anthropic.com/v1",
     "gemini": "https://generativelanguage.googleapis.com/v1beta",
     "bedrock": None,
     "vertex": None,
-    "databricks": None,
     "groq": "https://api.groq.com/openai/v1",
     "deepseek": "https://api.deepseek.com/v1",
     "xai": "https://api.x.ai/v1",
@@ -32,6 +31,7 @@ PROVIDER_CONFIGS: dict[str, str | None] = {
 }
 
 _DEFAULT_PROVIDER = "openai"
+_REMOVED_LEGACY_MODEL_PREFIXES = ("databricks-",)
 
 
 @dataclass
@@ -60,6 +60,13 @@ def parse_model_string(model: str) -> RoutedModel:
     :returns: A :class:`RoutedModel` with ``provider`` and ``model``.
     :raises GoalrailError: If the provider prefix is not recognized.
     """
+    if model.lower().startswith(_REMOVED_LEGACY_MODEL_PREFIXES):
+        raise GoalrailError(
+            "Legacy gateway-prefixed model ids are no longer supported. Configure an explicit "
+            "provider/model id or a provider-backed base_url instead.",
+            code=ErrorCode.INVALID_INPUT,
+        )
+
     if "/" in model:
         provider, model_name = model.split("/", 1)
     else:
@@ -79,9 +86,7 @@ def parse_model_string(model: str) -> RoutedModel:
 # Used by :func:`infer_harness_from_model` when a spec doesn't name
 # a harness explicitly.
 _HARNESS_FOR_MODEL_PREFIX: dict[str, str] = {
-    "databricks-claude-": "claude-sdk",
     "anthropic/claude-": "claude-sdk",
-    "databricks-gpt-": "openai-agents",
     "openai/gpt-": "openai-agents",
     "gpt-": "openai-agents",
 }
@@ -98,7 +103,7 @@ def infer_harness_from_model(model: str) -> str:
     validator surface a "harness required" error if one is needed.
 
     :param model: Model string from the spec's ``llm.model`` or
-        ``executor.model`` field, e.g. ``"databricks-claude-sonnet-4"``.
+        ``executor.model`` field, e.g. ``"anthropic/claude-sonnet-4"``.
     :returns: A harness name such as ``"claude-sdk"`` or
         ``"openai-agents"``, or ``""`` when *model* is unrecognised.
     """

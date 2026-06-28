@@ -43,8 +43,7 @@ class Host:
     :param host_id: Stable identifier from the host's local
         ``~/.goalrail/config.yaml``, e.g. ``"host_a1b2c3d4..."``.
     :param name: Human-readable name, e.g. ``"corey-laptop"``.
-    :param owner: User ID from the Databricks auth Bearer token,
-        e.g. ``"corey.zumar@databricks.com"``.
+    :param owner: Authenticated user ID, e.g. ``"alice@example.com"``.
     :param status: ``"online"`` or ``"offline"``.
     :param created_at: Unix epoch seconds of first registration.
     :param updated_at: Unix epoch seconds the row was last touched —
@@ -215,7 +214,7 @@ class HostStore:
         :param name: Human-readable name from ``config.yaml``, e.g.
             ``"corey-laptop"``.
         :param owner: Authenticated user ID from the Bearer token,
-            e.g. ``"corey.zumar@databricks.com"``.
+            e.g. ``"alice@example.com"``.
         :param allow_host_id_reown: When ``True`` and a row already
             exists for *host_id* under a different ``(owner, name)``,
             re-own that row in place (preserving the ``host_id`` and its
@@ -352,7 +351,7 @@ class HostStore:
             e.g. ``"host_a1b2c3d4..."``.
         :param name: New host name to record, e.g. ``"corey-laptop"``.
         :param owner: New owner to record, e.g. ``"local"`` or
-            ``"corey.zumar@databricks.com"``.
+            ``"alice@example.com"``.
         :param configured_harnesses_json: JSON-encoded readiness map from
             the connecting host's hello, e.g.
             ``'{"claude-sdk": true}'``, or ``None`` when unreported.
@@ -492,8 +491,7 @@ class HostStore:
         Returns both online and offline hosts, ordered by
         ``updated_at`` descending (most recently active first).
 
-        :param owner: User ID to filter by, e.g.
-            ``"corey.zumar@databricks.com"``.
+        :param owner: User ID to filter by, e.g. ``"alice@example.com"``.
         :returns: List of :class:`Host` entities.
         """
         with self._session() as session:

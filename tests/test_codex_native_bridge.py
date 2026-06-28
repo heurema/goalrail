@@ -90,7 +90,7 @@ def test_read_codex_config_model_returns_top_level_model(bridge_dir: Path) -> No
     returned the wrong key or None, a ``/model`` downgrade would never take
     effect on the next tool call.
     """
-    _write_config(bridge_dir, 'model_provider = "databricks"\nmodel = "gpt-5.4"\n')
+    _write_config(bridge_dir, 'model_provider = "enterprise-gateway"\nmodel = "gpt-5.4"\n')
 
     assert read_codex_config_model(bridge_dir) == "gpt-5.4"
 

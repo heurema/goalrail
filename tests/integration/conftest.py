@@ -6,7 +6,7 @@ pytest invocation, selected by ``--harness`` with the model pinned by
 ``--model`` (nightly.yml runs one matrix leg per harness)::
 
     pytest tests/integration/ --integration \\
-        --harness claude-sdk --model databricks-claude-sonnet-4-6 \\
+        --harness claude-sdk --model anthropic/claude-sonnet-4-6 \\
         --profile <name> --llm-api-key $KEY -v
 
 Not to be confused with ``tests/server/integration/`` (mock-LLM server
@@ -34,7 +34,7 @@ from tests.e2e.conftest import (  # noqa: F401  (re-exported pytest fixtures)
     _enforce_min_runner_version,
     _enforce_min_server_version,
     create_runner_bound_session,
-    databricks_workspace_host,
+    gateway_base_url,
     http_client,
     live_runner_id,
     live_server,
@@ -48,7 +48,7 @@ from tests.e2e.conftest import (  # noqa: F401  (re-exported pytest fixtures)
 from tests.integration.model_selection import resolve_default_model
 
 # Harnesses the journey suite supports. The legacy ``--harness``
-# default ("databricks") is deliberately NOT accepted: each invocation
+# default ("gateway") is deliberately NOT accepted: each invocation
 # must say which wrapped harness it is exercising.
 _SUPPORTED_HARNESSES = frozenset({"claude-sdk", "codex", "openai-agents"})
 
@@ -149,7 +149,7 @@ def model_name(request: pytest.FixtureRequest, harness_name: str) -> str:
 
     :param request: Pytest fixture request.
     :param harness_name: Harness under test, e.g. ``"codex"``.
-    :returns: e.g. ``"databricks-claude-sonnet-4-6"``.
+    :returns: e.g. ``"anthropic/claude-sonnet-4-6"``.
     """
     if _is_mock_mode(request.config):
         return "mock-model"

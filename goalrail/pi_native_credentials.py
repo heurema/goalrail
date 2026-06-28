@@ -10,7 +10,7 @@ This module closes that gap. It resolves the provider configured for the Pi
 surface (``~/.goalrail/config.yaml``) and writes a per-session ``models.json``
 into a *managed* Pi config dir (selected via ``PI_CODING_AGENT_DIR``), so the
 runner-owned ``pi`` process authenticates exactly like the configured harness —
-mirroring how codex-native routes through the Databricks AI Gateway.
+mirroring the generic provider routing used by other native harnesses.
 
 The managed config dir is per-session (like codex-native's managed
 ``CODEX_HOME``), so this never mutates the user's global ``~/.pi/agent``.
@@ -28,7 +28,6 @@ from typing import Any
 from goalrail.onboarding.provider_config import (
     ANTHROPIC_FAMILY,
     CHAT_WIRE_API,
-    DATABRICKS_KIND,
     GATEWAY_KIND,
     KEY_KIND,
     LOCAL_KIND,
@@ -48,16 +47,6 @@ PI_CODING_AGENT_DIR_ENV_VAR = "PI_CODING_AGENT_DIR"
 # ``--provider`` can select it.
 _PI_PROVIDER_ID = "goalrail"
 
-# Default model for the Databricks AI Gateway's Anthropic surface — the same
-# default the in-process Databricks executor pins. Used when the session
-# carries no explicit model override.
-_DATABRICKS_PI_DEFAULT_MODEL = "databricks-claude-sonnet-4-6"
-
-# Databricks AI Gateway Anthropic Messages surface. Pi speaks this protocol
-# natively (``api: anthropic-messages``); the gateway authenticates with a
-# workspace bearer token, so we set ``authHeader`` (Authorization: Bearer).
-_DATABRICKS_ANTHROPIC_GATEWAY_PATH = "/ai-gateway/anthropic"
-
 
 @dataclass(frozen=True)
 class PiProviderConfig:
@@ -67,7 +56,7 @@ class PiProviderConfig:
     :param base_url: Endpoint base URL the ``pi`` CLI talks to.
     :param api: Pi API type, e.g. ``"anthropic-messages"`` or
         ``"openai-responses"``.
-    :param model: Model id to select, e.g. ``"databricks-claude-sonnet-4-6"``.
+    :param model: Model id to select, e.g. ``"claude-sonnet-4-6"``.
     :param api_key: Credential value for ``models.json`` ``apiKey`` — a literal
         key, an env-var name, or a ``"!command"`` shell form (resolved by Pi at
         request time, used for short-lived gateway tokens).
@@ -93,37 +82,6 @@ class PiProviderConfig:
         if self.auth_header:
             provider["authHeader"] = True
         return {"providers": {self.provider_id: provider}}
-
-
-def _databricks_pi_provider(entry: ProviderEntry, *, model: str | None) -> PiProviderConfig | None:
-    """Resolve a Databricks-profile provider into Pi gateway config.
-
-    :param entry: The resolved default provider entry (``kind="databricks"``).
-    :param model: Session model override, or ``None`` to use the default.
-    :returns: The Pi provider config, or ``None`` when the profile's host
-        can't be resolved (caller falls back to Pi's own login).
-    """
-    # Imported lazily: codex_executor pulls in heavy inner deps, and this
-    # module is imported on the runner's session-create path.
-    from goalrail.inner.codex_executor import _databricks_codex_auth_command
-    from goalrail.inner.databricks_executor import _read_databrickscfg_host
-
-    host = _read_databrickscfg_host(entry.profile)
-    if not host:
-        return None
-    host = host.rstrip("/")
-    auth_command = _databricks_codex_auth_command(host, entry.profile)
-    return PiProviderConfig(
-        provider_id=_PI_PROVIDER_ID,
-        base_url=f"{host}{_DATABRICKS_ANTHROPIC_GATEWAY_PATH}",
-        api="anthropic-messages",
-        model=model or _DATABRICKS_PI_DEFAULT_MODEL,
-        # Pi resolves a "!command" apiKey at request time, so the gateway
-        # bearer token is refreshed per request (the auth command itself
-        # force-refreshes), matching codex-native's refresh semantics.
-        api_key=f"!{auth_command}",
-        auth_header=True,
-    )
 
 
 def _inline_family_pi_provider(
@@ -206,8 +164,6 @@ def resolve_pi_native_provider(
         )
         if entry is None:
             return None
-        if entry.kind == DATABRICKS_KIND:
-            return _databricks_pi_provider(entry, model=model)
         if entry.kind in (KEY_KIND, GATEWAY_KIND, LOCAL_KIND):
             return _inline_family_pi_provider(entry, model=model)
         # subscription / cli-config: a CLI's own login can't be reused outside

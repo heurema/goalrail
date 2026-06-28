@@ -112,7 +112,7 @@ class Session:
         Set or clear the per-request LLM model override.
 
         :param model: A non-empty model identifier, e.g.
-            ``"databricks-claude-sonnet-4-6"``. Whitespace is trimmed;
+            ``"claude-sonnet-4-6"``. Whitespace is trimmed;
             ``None`` clears so subsequent requests fall back to the
             agent spec's model.
         :raises ValueError: When *model* is empty after trimming. No

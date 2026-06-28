@@ -1,17 +1,7 @@
 """CLI-side auth storage for ``goalrail login``.
 
-Persists per-server auth state in the effective runtime data home,
-keyed by server URL. Two record shapes live side by side:
-
-- **Session JWTs** from the browser-based OIDC / accounts login flow
-  (``{"token": ..., "user_id": ..., "expires_at": ...}``).
-- **Databricks Apps pointer records**
-  (``{"auth_type": "databricks", "workspace_host": ...}``) written by
-  ``goalrail login <apps-url>``. These deliberately store NO token:
-  Databricks OAuth access tokens expire after ~1 hour, so the record
-  just names the workspace whose host-keyed Databricks CLI OAuth cache
-  (``databricks auth login --host <ws>``) mints fresh bearers on
-  demand.
+Persists per-server session JWTs from the browser-based OIDC / accounts login
+flow in the effective runtime data home, keyed by server URL.
 
 See ``designs/OIDC_AUTH.md`` §CLI Login Flow.
 """
@@ -106,42 +96,6 @@ def store_token(
     )
 
 
-def store_databricks_auth(
-    server_url: str,
-    workspace_host: str,
-    user_id: str | None = None,
-    org_id: str | None = None,
-) -> None:
-    """Persist a Databricks Apps auth pointer record for a server.
-
-    Unlike :func:`store_token` this stores no bearer: Databricks OAuth
-    access tokens expire after ~1 hour, so the record only names the
-    workspace host whose ``databricks auth login --host <ws>`` OAuth
-    cache the auth chain should mint fresh tokens from (see
-    ``goalrail.inner.databricks_executor._resolve_databricks_auth``).
-
-    :param server_url: The Databricks Apps server URL, e.g.
-        ``"https://myapp-123.aws.databricksapps.com"``.
-    :param workspace_host: The workspace that fronts the app, e.g.
-        ``"https://example.databricks.com"``.
-    :param user_id: The authenticated user's email when known, e.g.
-        ``"alice@example.com"``. Display-only.
-    :param org_id: The workspace org id when known (from the
-        ``x-databricks-org-id`` response header), e.g.
-        ``"2850744067564480"``. Used to build workspace web-UI links
-        (the ``?o=`` query param).
-    """
-    entry: dict[str, str | float] = {
-        "auth_type": "databricks",
-        "workspace_host": workspace_host.rstrip("/"),
-    }
-    if user_id:
-        entry["user_id"] = user_id
-    if org_id:
-        entry["org_id"] = org_id
-    _store_entry(server_url, entry)
-
-
 def _load_entry(server_url: str) -> dict[str, str | float] | None:
     """Load the raw stored record for a server, if any.
 
@@ -167,9 +121,7 @@ def load_token(server_url: str) -> str | None:
     """Load a stored session token for a server.
 
     Returns ``None`` if no token is stored, the token has expired,
-    or the file is unreadable. Databricks pointer records (which hold
-    no token) also return ``None`` — resolve those via
-    :func:`load_databricks_workspace_host` instead.
+    or the file is unreadable.
 
     :param server_url: The server URL, e.g.
         ``"http://localhost:6767"``.
@@ -186,38 +138,6 @@ def load_token(server_url: str) -> str | None:
 
     token = entry.get("token")
     return token if isinstance(token, str) else None
-
-
-def load_databricks_workspace_host(server_url: str) -> str | None:
-    """Load the workspace host from a Databricks Apps pointer record.
-
-    :param server_url: The server URL, e.g.
-        ``"https://myapp-123.aws.databricksapps.com"``.
-    :returns: The workspace host, e.g.
-        ``"https://example.databricks.com"``, or ``None`` when the
-        stored record (if any) is not a Databricks pointer record.
-    """
-    entry = _load_entry(server_url)
-    if entry is None or entry.get("auth_type") != "databricks":
-        return None
-    host = entry.get("workspace_host")
-    return host if isinstance(host, str) and host else None
-
-
-def load_databricks_org_id(server_url: str) -> str | None:
-    """Load the workspace org id from a Databricks pointer record.
-
-    :param server_url: The server URL, e.g.
-        ``"https://example.databricks.com/api/2.0/goalrail"``.
-    :returns: The org id, e.g. ``"2850744067564480"``, or ``None``
-        when the stored record (if any) is not a Databricks pointer
-        record or carries no org id.
-    """
-    entry = _load_entry(server_url)
-    if entry is None or entry.get("auth_type") != "databricks":
-        return None
-    org_id = entry.get("org_id")
-    return org_id if isinstance(org_id, str) and org_id else None
 
 
 def clear_token(server_url: str) -> None:

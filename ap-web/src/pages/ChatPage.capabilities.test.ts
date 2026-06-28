@@ -104,7 +104,7 @@ describe("isModelImplicitlySelected", () => {
   it("matches an exact spec equality", () => {
     // WHY: the identity branch — a fully-qualified id that equals the bound
     // spec is selected.
-    expect(isModelImplicitlySelected("databricks-gpt-5-4", "databricks-gpt-5-4")).toBe(true);
+    expect(isModelImplicitlySelected("openai/gpt-5-4", "openai/gpt-5-4")).toBe(true);
   });
 
   it("matches a path-suffix without a substring false-positive elsewhere", () => {

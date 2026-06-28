@@ -189,9 +189,8 @@ class ExecutorAdapter(HarnessApp):
     The per-harness wrap supplies an ``executor_factory`` —
     a zero-arg callable that constructs the inner executor. The
     adapter calls it lazily on the first turn (so heavyweight
-    constructors like :class:`ClaudeSDKExecutor`'s eager
-    Databricks credential resolution don't fire at FastAPI
-    boot, only when a real conversation starts).
+    constructors don't fire at FastAPI boot, only when a real
+    conversation starts).
 
     The factory's return value is cached as Layer 1 state on the
     adapter instance — reused across turns for the conversation's
@@ -202,8 +201,7 @@ class ExecutorAdapter(HarnessApp):
         :class:`Executor`. Tests pass a ``lambda:
         MockExecutor()``; production wraps pass a lambda that
         constructs the real per-harness Executor with config
-        appropriate to the spec, e.g. ``lambda:
-        ClaudeSDKExecutor(databricks=True, databricks_profile="<your-profile>")``.
+        appropriate to the spec.
     :param session_key: Stable identifier the inner executor uses
         to scope per-session state (clients, subprocesses). The
         adapter passes this to ``executor.close_session()`` and

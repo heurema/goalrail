@@ -318,13 +318,13 @@ describe("ForkSessionDialog", () => {
     // A fork-of-a-fork: the source's bound agent is a session-scoped clone
     // named "<builtin> (fork ag_…)". The dedup must strip that suffix so the
     // built-in it derives from is still hidden (no duplicate of "Same as
-    // source"). Source here is databricks_coding_agent (openai-agents).
+    // source"). Source here is coding_agent (openai-agents).
     const agents = [
       ...AVAILABLE_AGENTS,
       {
         id: "ag_dbx",
-        name: "databricks_coding_agent",
-        display_name: "databricks_coding_agent",
+        name: "coding_agent",
+        display_name: "coding_agent",
         description: null,
         harness: "openai-agents",
       },
@@ -333,7 +333,7 @@ describe("ForkSessionDialog", () => {
     useSessionAgentMock.mockReturnValue({
       data: {
         id: "ag_dbx_fork",
-        name: "databricks_coding_agent (fork ag_5c78e6a)",
+        name: "coding_agent (fork ag_5c78e6a)",
         harness: "openai-agents",
       },
     } as unknown as ReturnType<typeof useSessionAgent>);

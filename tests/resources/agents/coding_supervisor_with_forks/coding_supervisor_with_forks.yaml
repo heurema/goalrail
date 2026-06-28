@@ -69,7 +69,7 @@ prompt: |
   Prefer delegating substantial work to workers rather than doing it yourself.
 
 executor:
-  model: databricks-claude-sonnet-4-6
+  model: anthropic/claude-sonnet-4-6
 
 async: true
 cancellable: true
@@ -90,7 +90,7 @@ tools:
       what you did. Your environment is an isolated copy — edit freely.
     max_sessions: 4
     executor:
-      model: databricks-claude-sonnet-4-6
+      model: anthropic/claude-sonnet-4-6
     os_env:
       type: caller_process
       fork: true
@@ -106,7 +106,7 @@ tools:
       what you did. Your environment is an isolated copy — edit freely.
     max_sessions: 4
     executor:
-      model: databricks-claude-sonnet-4-6
+      model: anthropic/claude-sonnet-4-6
     os_env:
       type: caller_process
       fork: true

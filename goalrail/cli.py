@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import collections.abc
 import contextlib
 import copy
 import hashlib
@@ -15,7 +14,6 @@ import subprocess
 import sys
 import tempfile
 import time
-import types
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from importlib import resources
@@ -32,7 +30,6 @@ from rich.table import Table
 from goalrail._env_compat import config_home_path, data_home_path
 from goalrail._platform import IS_WINDOWS, resolve_repo_symlink
 from goalrail._startup_profile import StartupProfiler
-from goalrail.cli_sandbox import lakebox as _lakebox_alias_group
 from goalrail.cli_sandbox import sandbox as _sandbox_group
 from goalrail.harness_aliases import canonicalize_harness
 from goalrail.host.local_server import (
@@ -47,15 +44,8 @@ from goalrail.host.local_server import (
 )
 from goalrail.inner import _proc, ui
 from goalrail.onboarding.sandboxes import available_providers as _sandbox_providers
-from goalrail.onboarding.ucode_setup import (
-    build_ucode_configure_command,
-    find_ucode_command,
-    model_gateway_workspace_urls,
-)
 
 if TYPE_CHECKING:
-    import httpx
-
     from goalrail._runner_startup import RunnerStartupProgress
     from goalrail.onboarding.ambient import DetectedProvider
     from goalrail.onboarding.provider_config import ProviderEntry
@@ -138,14 +128,6 @@ _ConfigValue: TypeAlias = (
 
 _GLOBAL_AGENTS_DIR: Path = Path.home() / ".goalrail" / "agents"
 _DEFAULT_GLOBAL_AGENTS_DIR: Path = _GLOBAL_AGENTS_DIR
-_INTERNAL_BETA_DEFAULT_AGENT_NAME: str = "databricks_coding_agent.yaml"
-_INTERNAL_BETA_BUNDLED_AGENTS: tuple[str, ...] = (
-    "databricks_coding_agent.yaml",
-    "knowledge_work_agent.yaml",
-)
-# _INTERNAL_BETA_DEFAULT_SERVER (internal Databricks Apps host) moved to
-# goalrail.onboarding.internal_beta (excluded from the OSS build); the
-# internal-beta setup branch and the sandbox CLI import it from there.
 _CLAUDE_STARTUP_PROFILE_ENV_VAR = "GOALRAIL_CLAUDE_STARTUP_PROFILE"
 # Brand shown for an auto-configured CLI login in the credentials callout —
 # the product the login authenticates, not the CLI name (the codex CLI logs in
@@ -207,7 +189,6 @@ _LOCAL_DAEMON_ENV_ALLOWLIST: frozenset[str] = frozenset(
 _LOCAL_DAEMON_ENV_PREFIXES: tuple[str, ...] = (
     "ANTHROPIC_DEFAULT_",
     "AZURE_OPENAI_",
-    "DATABRICKS_",
     "MLFLOW_",
     "OTEL_",
     "GOALRAIL_",
@@ -306,15 +287,14 @@ def _load_global_config() -> dict[str, Any]:  # type: ignore[explicit-any]
     Top-level default keys (``default_agent``, ``server``,
     ``model``, ``harness``) hold plain string values.  The optional
     ``auto_open_conversation`` key is a boolean. The optional
-    ``auth:`` key holds a nested mapping —
-    ``{"type": "databricks", "profile": "oss"}`` or
-    ``{"type": "api_key", "api_key": "…"}`` — written by
-    ``goalrail setup`` and used by the runtime to supply executor
-    credentials when an agent spec does not declare ``executor.auth``.
+    ``auth:`` key holds a nested mapping such as
+    ``{"type": "api_key", "api_key": "…"}`` — written by ``goalrail setup``
+    and used by the runtime to supply executor credentials when an agent spec
+    does not declare ``executor.auth``.
 
     :returns: Parsed YAML as a dict, e.g.
         ``{"default_agent": "examples/hello_world.yaml",
-        "auth": {"type": "databricks", "profile": "oss"}}``.
+        "auth": {"type": "api_key", "api_key": "env:OPENAI_API_KEY"}}``.
     """
     path = _effective_global_config_path()
     if not path.exists():
@@ -364,7 +344,7 @@ def _peek_default_agent_harness(target: str) -> str | None:
     confirm a match".
 
     :param target: The configured ``default_agent`` value, e.g.
-        ``"/Users/me/.goalrail/agents/databricks_coding_agent.yaml"``.
+        ``"/Users/me/.goalrail/agents/hello_world.yaml"``.
     :returns: The canonical harness, e.g. ``"openai-agents-sdk"``, or ``None``.
     """
     if "://" in target:
@@ -638,7 +618,7 @@ def _save_global_config(  # type: ignore[explicit-any]
     :param settings: Key/value pairs to set, e.g.
         ``{"default_agent": "/abs/path/agent.yaml",
         "auto_open_conversation": True,
-        "auth": {"type": "databricks", "profile": "oss"}}``.
+        "auth": {"type": "api_key", "api_key": "env:OPENAI_API_KEY"}}``.
     :param unset_keys: Keys to remove from the config, e.g.
         ``("server",)``.
     :param deep_merge_keys: Keys whose mapping value should be merged
@@ -672,8 +652,7 @@ def _materialize_bundled_example(name: str) -> Path:
     user-editable copy under ``~/.goalrail/agents`` and never overwrite an
     existing file so local edits survive reinstalls and reruns.
 
-    :param name: Filename of the bundled example (e.g.
-        ``"databricks_coding_agent.yaml"``).
+    :param name: Filename of the bundled example (e.g. ``"hello_world.yaml"``).
     :returns: Absolute path to the materialized agent YAML.
     """
     agent_path = _effective_global_agents_dir() / name
@@ -690,24 +669,6 @@ def _materialize_bundled_example(name: str) -> Path:
     text = text.replace(executable_placeholder, sys.executable)
     agent_path.write_text(text, encoding="utf-8")
     return agent_path
-
-
-def _materialize_internal_beta_agents() -> Path:
-    """
-    Materialize every bundled internal-beta example and return the default's path.
-
-    :returns: Absolute path to the default agent YAML
-        (:data:`_INTERNAL_BETA_DEFAULT_AGENT_NAME`).
-    """
-    default_path: Path | None = None
-    for name in _INTERNAL_BETA_BUNDLED_AGENTS:
-        path = _materialize_bundled_example(name)
-        if name == _INTERNAL_BETA_DEFAULT_AGENT_NAME:
-            default_path = path
-    assert default_path is not None, (
-        f"_INTERNAL_BETA_BUNDLED_AGENTS must include {_INTERNAL_BETA_DEFAULT_AGENT_NAME}"
-    )
-    return default_path
 
 
 def _save_local_config(
@@ -902,22 +863,15 @@ def _create_artifact_store(location: str) -> Any:  # type: ignore[explicit-any] 
     """
     Create an artifact store based on the location URI scheme.
 
-    ``dbfs:/Volumes/...`` URIs use
-    :class:`DatabricksVolumesArtifactStore` (requires
-    ``databricks-sdk``). All other locations use
-    :class:`LocalArtifactStore`.
+    Local paths use :class:`LocalArtifactStore`. Legacy DBFS artifact
+    locations are no longer supported.
 
     :param location: Artifact storage location, e.g.
-        ``"./artifacts"`` for local or
-        ``"dbfs:/Volumes/cat/schema/vol"`` for UC Volumes.
+        ``"./artifacts"`` for local storage.
     :returns: An :class:`ArtifactStore` instance.
     """
     if location.startswith("dbfs:/Volumes/"):
-        from goalrail.stores.artifact_store.databricks_volumes import (
-            DatabricksVolumesArtifactStore,
-        )
-
-        return DatabricksVolumesArtifactStore(location)
+        raise click.ClickException("DBFS artifact stores are no longer supported.")
 
     from goalrail.stores.artifact_store.local import LocalArtifactStore
 
@@ -1150,7 +1104,6 @@ _CLICK_SUBCOMMANDS: frozenset[str] = frozenset(
         "host",
         "kimi",
         "kiro",
-        "lakebox",
         "login",
         "opencode",
         "pane-picker",
@@ -1455,10 +1408,10 @@ class _HostDaemonRecord:
 
     :param pid: Process id of the background daemon, e.g. ``4242``.
     :param target: Normalized daemon target, e.g.
-        ``"https://example.databricksapps.com"`` or ``"local"``.
+        ``"https://goalrail.example.com"`` or ``"local"``.
     :param mode: Launch mode, either ``"server"`` or ``"local"``.
     :param server_url: Normalized requested server URL for ``"server"``
-        mode, e.g. ``"https://example.databricksapps.com"``. ``None``
+        mode, e.g. ``"https://goalrail.example.com"``. ``None``
         for local mode.
     :param log_path: Daemon log file path, e.g.
         ``"/Users/me/.goalrail/logs/host-daemon/daemon-abc.log"``.
@@ -1527,7 +1480,7 @@ class _DaemonSessionsResult:
     Sessions fetched for one daemon target.
 
     :param base_url: Goalrail server base URL, e.g.
-        ``"https://example.databricksapps.com"``. ``None`` when a
+        ``"https://goalrail.example.com"``. ``None`` when a
         local daemon's server cannot be discovered.
     :param sessions: Session rows owned by the daemon host id.
     :param error: Human-readable error text, or ``None`` on success.
@@ -1587,7 +1540,7 @@ def _normalize_daemon_target(server_url: str | None) -> str:
     Normalize a daemon target key.
 
     :param server_url: Requested Goalrail server URL, e.g.
-        ``"https://example.databricksapps.com/"``. ``None`` or empty
+        ``"https://goalrail.example.com"``. ``None`` or empty
         string selects local mode.
     :returns: ``"local"`` for local mode, otherwise the URL without a
         trailing slash.
@@ -1651,7 +1604,7 @@ def _daemon_record_path(target: str) -> Path:
     Return the registry JSON path for *target*.
 
     :param target: Normalized daemon target, e.g.
-        ``"https://example.databricksapps.com"`` or ``"local"``.
+        ``"https://goalrail.example.com"`` or ``"local"``.
     :returns: JSON registry path for the target.
     """
     digest = hashlib.sha256(target.encode("utf-8")).hexdigest()[:16]
@@ -2101,7 +2054,7 @@ def _foreground_daemon_record(
     Build the registry record for the current foreground host process.
 
     :param target: Normalized daemon target, e.g.
-        ``"https://example.databricksapps.com"`` or ``"local"``.
+        ``"https://goalrail.example.com"`` or ``"local"``.
     :param server_url: Concrete Goalrail server URL being connected to, e.g.
         ``"http://127.0.0.1:8123"``.
     :param host_id: Local host id, e.g. ``"host_abc123"``.
@@ -2257,9 +2210,9 @@ def _build_host_daemon_env(
     Build the environment for the background host daemon.
 
     Remote daemons connect to an already-running Goalrail server, so they only
-    need process essentials, TLS trust, and Databricks auth. Local daemons
-    also start the local Goalrail server; that server is the user's local runtime
-    and must inherit Goalrail config plus provider credentials such as
+    need process essentials and TLS trust. Local daemons also start the local
+    Goalrail server; that server is the user's local runtime and must inherit
+    Goalrail config plus provider credentials such as
     ``OPENAI_API_KEY`` and ``OPENAI_BASE_URL``. Both modes are allowlisted:
     local mode carries the runtime/provider vars needed by the local server,
     but unrelated shell secrets are not inherited merely because the daemon
@@ -2268,8 +2221,8 @@ def _build_host_daemon_env(
     local-server credentials do not leak into runner subprocesses.
 
     :param server_url: Goalrail server URL for remote mode, e.g.
-        ``"https://example.databricksapps.com"``, or a falsey value
-        such as ``None`` / ``""`` for local daemon mode.
+        ``"https://goalrail.example.com"``, or a falsey value such as
+        ``None`` / ``""`` for local daemon mode.
     :returns: Environment dict for ``subprocess.Popen``.
     """
     from goalrail.host.connect import (
@@ -2288,10 +2241,9 @@ def _build_host_daemon_env(
         }
     else:
         # Allowlist the remote daemon's environment (W8): pass process
-        # essentials + TLS trust + the user's Databricks auth (the daemon
-        # authenticates to the server with it), but not unrelated provider
-        # secrets like ANTHROPIC_API_KEY / OPENAI_API_KEY.
-        daemon_env_prefixes = (*_RUNNER_ENV_ALLOWLIST_PREFIXES, "DATABRICKS_")
+        # essentials + TLS trust, but not unrelated provider secrets like
+        # ANTHROPIC_API_KEY / OPENAI_API_KEY.
+        daemon_env_prefixes = _RUNNER_ENV_ALLOWLIST_PREFIXES
         env = {
             key: value
             for key, value in os.environ.items()
@@ -2335,56 +2287,6 @@ def _host_daemon_alive() -> bool:
 _LOCAL_SERVER_DISCOVER_TIMEOUT_S = 120.0
 
 
-def _ensure_databricks_server_auth(server: str) -> None:
-    """Sign in (or fail with the login hint) for Databricks-fronted servers.
-
-    Probes ``/v1/me`` with whatever credentials the auth chain can mint
-    today. A non-200 answer that carries the Databricks edge signature
-    (302 to the workspace OAuth page, or a DatabricksRealm 401) means
-    the run would otherwise die much later with an opaque "non-JSON
-    response (status=302)" traceback from the session-create call. On a
-    TTY we run the same flow ``goalrail login`` would and continue;
-    headless invocations get the exact command to run instead.
-
-    Non-Databricks postures are deliberately left alone: local accounts
-    servers auto-authenticate downstream (magic-link redeem), and
-    header-mode servers answer 200 outright.
-
-    :param server: Remote server base URL without a trailing slash,
-        e.g. ``"https://myapp-123.aws.databricksapps.com"``.
-    :raises click.ClickException: When the server is Databricks-fronted,
-        no credentials resolve, and stdin is not a TTY (or the login
-        flow itself fails).
-    """
-    import httpx as _httpx
-
-    from goalrail.chat import _remote_headers
-
-    try:
-        probe = _httpx.get(
-            f"{server}/v1/me",
-            headers=_remote_headers(server_url=server),
-            timeout=10.0,
-        )
-    except _httpx.HTTPError:
-        # Unreachable / transient: let the connect path raise its own,
-        # already-actionable error rather than failing the pre-flight.
-        return
-    if probe.status_code == 200:
-        return
-    workspace_host = _databricks_workspace_login_target(server, probe)
-    if workspace_host is None:
-        return
-    login_cmd = f"goalrail login {server}"
-    if not sys.stdin.isatty():
-        raise click.ClickException(
-            f"Not signed in to {server} (Databricks-fronted; /v1/me answered "
-            f"HTTP {probe.status_code}). Run `{login_cmd}` and retry."
-        )
-    click.echo(f"Not signed in to {server} — running `{login_cmd}` first.")
-    _databricks_login(server, workspace_host)
-
-
 def _ensure_backend(server: str | None) -> str:
     """Ensure the host daemon is running and return the Goalrail server URL.
 
@@ -2412,14 +2314,8 @@ def _ensure_backend(server: str | None) -> str:
     if server:
         # Remote / explicit-server mode: the server isn't ours to restart, so
         # there's no auth-mode-flip "re-run" to surface (config_changed is
-        # always False for a non-local target). Expand a bare workspace URL
-        # to its /api/2.0/goalrail mount, then sign in first when the
-        # server is Databricks-fronted and we hold no usable credentials —
-        # otherwise the session-create call deep in the REPL bring-up
-        # surfaces the edge redirect as an opaque non-JSON-response
-        # traceback.
+        # always False for a non-local target).
         server = _resolve_server_url(server)
-        _ensure_databricks_server_auth(server)
         with runner_startup_progress(initial_message=STARTUP_PHASE_CONNECTING_REMOTE):
             _ensure_host_daemon(server)
         return server
@@ -2547,11 +2443,9 @@ def _start_cli_runner_process(
     ``goalrail server`` passes its loopback URL; ``run --server``
     passes the remote Goalrail server URL.
 
-    For remote Databricks-fronted servers, the runner subprocess
-    authenticates via the stored ``goalrail login`` record (or
-    ambient Databricks SDK credentials). Tokens are refreshed
-    transparently on each WebSocket reconnect and HTTP callback —
-    no static token is passed via environment variable.
+    For remote servers, the runner subprocess authenticates through the
+    host tunnel token and the stored ``goalrail login`` record when one is
+    available; no static provider token is passed via environment variable.
 
     :param server_url: Server base URL, e.g.
         ``"http://127.0.0.1:6767"``.
@@ -3060,7 +2954,7 @@ def server(
     # and needs the server to accept exactly that runner's tunnel.
     # When unset the server accepts any token-bound runner
     # (runner_tunnel_tokens=None) — the standard posture for deployed
-    # servers where runners authenticate via Databricks OAuth.
+    # servers that authenticate runners upstream.
     _tunnel_token = os.environ.get("GOALRAIL_RUNNER_TUNNEL_TOKEN")
     _runner_tunnel_tokens: frozenset[str] | None = (
         frozenset({_tunnel_token}) if _tunnel_token else None
@@ -4126,7 +4020,7 @@ def _reject_native_on_windows(harness: str) -> None:
     is_flag=True,
     default=False,
     help=(
-        "Use your existing Claude Code configuration instead of Databricks auth. "
+        "Use your existing Claude Code configuration instead of Goalrail-managed auth. "
         "When set, any configured provider is ignored and Claude "
         "authenticates via its own ``~/.claude/`` settings."
     ),
@@ -4168,7 +4062,7 @@ def claude(
     # :param server: Remote Goalrail server URL, or None for local.
     # :param resume: None, picker sentinel, or a conversation id.
     # :param session_id: Legacy ``--session`` id; mutually exclusive with ``--resume``.
-    # :param use_claude_config: When True, skip ucode/Databricks auth and use
+    # :param use_claude_config: When True, skip Goalrail-managed auth and use
     #     existing Claude config.
     # :param profile_startup: When True, print startup timing marks.
     # :param claude_args: Pass-through args for ``claude``.
@@ -4179,7 +4073,7 @@ def claude(
       goalrail claude
       goalrail claude --resume conv_abc123
       goalrail claude --resume                  # interactive picker
-      goalrail claude --server https://<app>.databricksapps.com
+      goalrail claude --server https://goalrail.example.com
     """
     _reject_native_on_windows("claude")
     startup_profiler = StartupProfiler.from_env(
@@ -4306,7 +4200,7 @@ def codex(
       goalrail codex
       goalrail codex --resume conv_abc123
       goalrail codex --resume                  # interactive picker
-      goalrail codex --server https://<app>.databricksapps.com
+      goalrail codex --server https://goalrail.example.com
     """
     _reject_native_on_windows("codex")
     choice = _split_resume_value(resume)
@@ -4416,7 +4310,7 @@ def opencode(
       goalrail opencode
       goalrail opencode --resume conv_abc123
       goalrail opencode --resume                  # interactive picker
-      goalrail opencode --server https://<app>.databricksapps.com
+      goalrail opencode --server https://goalrail.example.com
     """
     from goalrail.opencode_native import run_opencode_native
 
@@ -5121,7 +5015,7 @@ def antigravity(
       goalrail antigravity
       goalrail antigravity --resume conv_abc123
       goalrail antigravity --resume                  # interactive picker
-      goalrail antigravity --server https://<app>.databricksapps.com
+      goalrail antigravity --server https://goalrail.example.com
     """
     # Validate option combinations BEFORE any side effects (daemon spawn,
     # server discovery) -- see the same comment in the claude command.
@@ -5292,7 +5186,7 @@ def polly(run_args: tuple[str, ...]) -> None:
     Examples:
       goalrail polly
       goalrail polly -p "review the last commit"
-      goalrail polly --server https://<app>.databricksapps.com
+      goalrail polly --server https://goalrail.example.com
     """
     _run_bundled_agent("polly", run_args)
 
@@ -5449,8 +5343,8 @@ def resume(
     \b
     Examples:
       goalrail resume conv_abc123
-      goalrail resume conv_abc123 --server https://<app>.databricksapps.com
-      goalrail resume --server https://<app>.databricksapps.com
+      goalrail resume conv_abc123 --server https://goalrail.example.com
+      goalrail resume --server https://goalrail.example.com
     """
     from goalrail.resume_dispatch import run_resume
 
@@ -6170,7 +6064,7 @@ def _resolve_attach_server(server: str | None, configured_server: str | None) ->
     when none of those is available and the caller fails loud.
 
     :param server: Explicit ``--server`` value, e.g.
-        ``"https://example.databricksapps.com"``, or ``None``.
+        ``"https://goalrail.example.com"``, or ``None``.
     :param configured_server: The ``server`` default from config (the
         ``server`` key of the effective merged config), or ``None``.
     :returns: Normalized base URL without a trailing slash, or ``None``.
@@ -6267,7 +6161,7 @@ def attach(
     \b
     Examples:
       goalrail attach conv_abc123
-      goalrail attach conv_abc123 --server https://<app>.databricksapps.com
+      goalrail attach conv_abc123 --server https://goalrail.example.com
     """
     cfg = _load_effective_config()
     base_url = _resolve_attach_server(server, cfg.get("server"))
@@ -6398,7 +6292,7 @@ def run(
       goalrail run examples/hello_world.yaml
       goalrail run examples/hello_world.yaml --harness codex --model gpt-5.4-mini
       goalrail run --server http://localhost:6767
-      goalrail run examples/databricks_coding_agent.yaml --server https://<app>.databricksapps.com
+      goalrail run examples/hello_world.yaml --server https://goalrail.example.com
     """
     # Apply config defaults for any value the user did not pass explicitly.
     # Explicit CLI args always take precedence; project-local config overrides
@@ -6569,7 +6463,7 @@ class _HostGroup(click.Group):
         remote server addresses.
 
         :param token: Leading positional token, e.g.
-            ``"https://example.databricksapps.com"`` or ``""``.
+            ``"https://goalrail.example.com"`` or ``""``.
         :returns: ``True`` if the token should bind to ``--server``.
         """
         return token == "" or _is_server_url(token)
@@ -6619,8 +6513,8 @@ def host(ctx: click.Context, server: str | None) -> None:
 
     \b
     Examples:
-      goalrail host https://goalrail-app.databricksapps.com
-      goalrail host --server https://goalrail-app.databricksapps.com
+      goalrail host https://goalrail.example.com
+      goalrail host --server https://goalrail.example.com
       goalrail host ""   # spawn + connect to a local server
 
     The server URL may be given positionally (``goalrail host
@@ -6630,7 +6524,7 @@ def host(ctx: click.Context, server: str | None) -> None:
     :param ctx: Click invocation context. ``ctx.invoked_subcommand`` is
         set when a management subcommand such as ``"status"`` is running.
     :param server: Remote Goalrail server URL, e.g.
-        ``"https://example.databricksapps.com"``. ``None`` falls back
+        ``"https://goalrail.example.com"``. ``None`` falls back
         to config; empty string selects local mode.
     """
     ctx.ensure_object(dict)
@@ -6706,7 +6600,7 @@ def _resolve_host_server(server: str | None) -> str | None:
     Resolve a host-management server from CLI or config.
 
     :param server: Explicit ``--server`` value, e.g.
-        ``"https://example.databricksapps.com"``. ``None`` falls back
+        ``"https://goalrail.example.com"``. ``None`` falls back
         to config; empty string selects local mode.
     :returns: Normalized server URL, or ``None`` for local mode.
     """
@@ -6742,7 +6636,7 @@ def _selected_daemon_records(
     Select daemon records for a host-management command.
 
     :param server: Explicit ``--server`` value, e.g.
-        ``"https://example.databricksapps.com"``. ``None`` may mean
+        ``"https://goalrail.example.com"``. ``None`` may mean
         all targets or config/local depending on ``default_all``.
     :param all_targets: Whether ``--all`` was passed.
     :param default_all: Whether no selector should mean all records.
@@ -6771,7 +6665,7 @@ def _host_http_json(
     Send one management request to a Goalrail server.
 
     :param base_url: Goalrail server base URL, e.g.
-        ``"https://example.databricksapps.com"``.
+        ``"https://goalrail.example.com"``.
     :param method: HTTP method, e.g. ``"GET"`` or ``"POST"``.
     :param path: Request path beginning with ``/``, e.g.
         ``"/v1/hosts/host_abc"``.
@@ -6911,7 +6805,7 @@ def _fetch_session_pages(
     Fetch every available session page from a server.
 
     :param base_url: Goalrail server base URL, e.g.
-        ``"https://example.databricksapps.com"``.
+        ``"https://goalrail.example.com"``.
     :param connected_only: When ``True``, ask the server for connected
         sessions only.
     :returns: Accumulated sessions result. ``error`` is ``None`` on success.
@@ -6983,7 +6877,7 @@ def _runner_online_map(
     Resolve live runner connectivity for sessions.
 
     :param base_url: Goalrail server base URL, e.g.
-        ``"https://example.databricksapps.com"``.
+        ``"https://goalrail.example.com"``.
     :param sessions: Session rows containing ``runner_id`` values.
     :returns: Map of ``runner_id`` to ``True`` / ``False``. ``None``
         means the runner status could not be resolved.
@@ -7021,7 +6915,7 @@ def _annotate_sessions_with_runner_online(
     Add ``runner_online`` to session rows.
 
     :param base_url: Goalrail server base URL, e.g.
-        ``"https://example.databricksapps.com"``.
+        ``"https://goalrail.example.com"``.
     :param sessions: Session rows returned by ``GET /v1/sessions``.
     :returns: Copies of the session rows with ``runner_online`` added.
     """
@@ -7440,7 +7334,7 @@ def host_status(
 
     :param ctx: Click context carrying group-level options.
     :param server: Optional server target to inspect, e.g.
-        ``"https://example.databricksapps.com"``.
+        ``"https://goalrail.example.com"``.
     :param all_targets: Whether to inspect every known daemon target.
     :param json_output: Whether to emit machine-readable JSON.
     """
@@ -7470,7 +7364,7 @@ def _stop_session_on_server(
     Stop one Goalrail session via the server lifecycle event API.
 
     :param base_url: Goalrail server base URL, e.g.
-        ``"https://example.databricksapps.com"``.
+        ``"https://goalrail.example.com"``.
     :param session_id: Session id, e.g. ``"conv_abc123"``.
     :raises click.ClickException: If the server rejects the stop event.
     """
@@ -7589,7 +7483,7 @@ def host_stop(
 
     :param ctx: Click context carrying group-level options.
     :param server: Optional server target to stop, e.g.
-        ``"https://example.databricksapps.com"``.
+        ``"https://goalrail.example.com"``.
     :param all_targets: Whether to stop every known daemon target.
     :param daemon_only: Skip server-side session stop calls when ``True``.
     :param force: Continue after failures and use SIGKILL if needed.
@@ -7626,7 +7520,7 @@ def host_stop_session(
     :param session_ids: Session ids to stop, e.g.
         ``["conv_abc123", "conv_def456"]``.
     :param server: Goalrail server URL that owns the sessions, e.g.
-        ``"https://example.databricksapps.com"``. ``None`` falls back
+        ``"https://goalrail.example.com"``. ``None`` falls back
         to config/local discovery.
     :param force: Continue after individual stop failures.
     """
@@ -7879,7 +7773,7 @@ def config_set(is_global: bool, settings: tuple[str, ...]) -> None:
     \b
     Examples:
       goalrail config set default_agent=examples/hello_world.yaml
-      goalrail config set --global server=https://<app>.databricksapps.com
+      goalrail config set --global server=https://goalrail.example.com
     """
     if is_global:
         parsed = _parse_config_settings(settings, resolve_paths=True)
@@ -7998,151 +7892,6 @@ def _node_dependency_problem() -> str | None:
         f"{_NODE_MIN_VERSION_HINT}. Symptom if unfixed: "
         "'TypeError: webidl.util.markAsUncloneable is not a function'."
     )
-
-
-@contextlib.contextmanager
-def _isolated_databricks_cfg() -> collections.abc.Generator[None, None, None]:
-    """Run Databricks setup against a temp config containing only our three profiles.
-
-    The temp file starts with just the canonical internal-beta profile
-    sections (see ``DEFAULT_PROFILES``) seeded from the original when they
-    exist, so there is exactly one section per workspace host and
-    ``databricks auth token --host X`` never hits the "multiple profiles
-    match" ambiguity error.
-
-    The user's real config is never modified while this context is active.
-    On normal exit the three sections are merged back into the original.
-    On SIGTERM / SIGINT the temp file is removed and the original is left
-    exactly as it was.  SIGKILL cannot be caught, but the original is
-    always safe because we never touch it.
-
-    Uses ``DATABRICKS_CONFIG_FILE`` so both subprocess CLI calls *and*
-    the direct configparser writes in ``goalrail.onboarding.setup``
-    (via ``_databrickscfg_path()``) all operate on the temp file. Also
-    strips every entry in ``CONFLICTING_ENV_VARS`` for the duration of
-    the context so a stale Databricks credential env var (see that list)
-    can't shadow ``--host`` inside ``databricks auth token``.
-    """
-    import configparser
-    import signal
-    import tempfile
-
-    from goalrail.onboarding.internal_beta import DEFAULT_PROFILES
-    from goalrail.onboarding.setup import CONFLICTING_ENV_VARS
-
-    original_cfg = Path.home() / ".databrickscfg"
-    saved_env: dict[str, str | None] = {
-        "DATABRICKS_CONFIG_FILE": os.environ.get("DATABRICKS_CONFIG_FILE"),
-    }
-    for var in CONFLICTING_ENV_VARS:
-        saved_env[var] = os.environ.pop(var, None)
-
-    def _restore_env() -> None:
-        for var, prev in saved_env.items():
-            if prev is None:
-                os.environ.pop(var, None)
-            else:
-                os.environ[var] = prev
-
-    # Temp file contains only the canonical internal-beta profile sections
-    # (see DEFAULT_PROFILES), seeded from the original when they already
-    # exist. Everything else is excluded so there is exactly one
-    # section per workspace host and `databricks auth token --host X`
-    # never hits the "multiple profiles match" ambiguity error.
-    orig_cfg = configparser.ConfigParser()
-    if original_cfg.exists():
-        orig_cfg.read(original_cfg)
-    cfg = configparser.ConfigParser()
-    for spec in DEFAULT_PROFILES:
-        if orig_cfg.has_section(spec.name):
-            cfg[spec.name] = dict(orig_cfg[spec.name])
-
-    goalrail_dir = Path.home() / ".goalrail"
-    goalrail_dir.mkdir(exist_ok=True)
-    tmp_fd, tmp_name = tempfile.mkstemp(
-        prefix="databrickscfg-setup-",
-        dir=goalrail_dir,
-        suffix=".tmp",
-    )
-    try:
-        with os.fdopen(tmp_fd, "w") as f:
-            cfg.write(f)
-    except Exception:
-        os.unlink(tmp_name)
-        raise
-    tmp_path = Path(tmp_name)
-
-    os.environ["DATABRICKS_CONFIG_FILE"] = tmp_name
-
-    def _on_signal(signum: int, _frame: types.FrameType | None) -> None:
-        tmp_path.unlink(missing_ok=True)
-        _restore_env()
-        # Restore the original handler before re-raising so signal chaining
-        # (e.g. Click's Ctrl-C → Abort) is preserved rather than falling
-        # back to SIG_DFL which would kill the process through the OS.
-        signal.signal(signum, prev_sigterm if signum == signal.SIGTERM else prev_sigint)
-        signal.raise_signal(signum)
-
-    prev_sigterm = signal.signal(signal.SIGTERM, _on_signal)
-    prev_sigint = signal.signal(signal.SIGINT, _on_signal)
-
-    write_tmp: Path | None = None
-    try:
-        yield
-        # Merge canonical sections written by setup back into the real cfg.
-        tmp_cfg = configparser.ConfigParser()
-        tmp_cfg.read(tmp_path)
-        orig_cfg = configparser.ConfigParser()
-        if original_cfg.exists():
-            orig_cfg.read(original_cfg)
-        for spec in DEFAULT_PROFILES:
-            if tmp_cfg.has_section(spec.name):
-                orig_cfg[spec.name] = dict(tmp_cfg[spec.name])
-        write_tmp = original_cfg.with_suffix(".tmp")
-        with write_tmp.open("w") as f:
-            orig_cfg.write(f)
-        write_tmp.replace(original_cfg)
-        write_tmp = None
-    finally:
-        tmp_path.unlink(missing_ok=True)
-        if write_tmp is not None:
-            write_tmp.unlink(missing_ok=True)
-        signal.signal(signal.SIGTERM, prev_sigterm)
-        signal.signal(signal.SIGINT, prev_sigint)
-        _restore_env()
-
-
-def _run_configure_databricks() -> None:
-    """
-    Configure coding harnesses to use Databricks Unity AI Gateway.
-
-    Shells out to ``ucode configure`` to authenticate workspaces and set
-    up harnesses (Claude SDK, Codex, OpenAI Agents, Pi). After setup,
-    Goalrail reads ``~/.ucode/state.json`` to pick per-harness model
-    defaults and base URLs.
-
-    :returns: None.
-    :raises click.ClickException: If ucode command resolution,
-        configuration, or state verification fails.
-    """
-    ucode_command = find_ucode_command()
-    # ucode only configures the model-serving gateway, so it gets the
-    # gateway workspace(s) only — not the MCP-only profiles, which are
-    # authenticated during profile onboarding and have no ucode role.
-    workspace_urls = model_gateway_workspace_urls()
-    click.echo("Running `ucode configure --workspaces ...`...")
-
-    result = subprocess.run(
-        build_ucode_configure_command(ucode_command, workspace_urls=workspace_urls),
-        check=False,
-    )
-    if result.returncode != 0:
-        raise click.ClickException(
-            f"`ucode configure` exited with code {result.returncode}; "
-            "see the command output above for details."
-        )
-
-    click.echo("ucode configuration complete. Goalrail will use state.json for harness setup.")
 
 
 def _warn_missing_harness_dependencies() -> None:
@@ -8402,8 +8151,8 @@ def _family_credential_label(  # type: ignore[explicit-any]  # config is a yaml-
 def _configure_harness_add(family: str | None = None) -> str | None:
     """Run the interactive ``add a provider`` flow and persist the entry.
 
-    Prompts for the provider kind (key / subscription / gateway /
-    databricks), gathers the kind-specific fields, deep-merges the single
+    Prompts for the provider kind (key / subscription / gateway / bedrock),
+    gathers the kind-specific fields, deep-merges the single
     entry under ``providers:`` (an add never rewrites siblings), and makes
     it the default for any family it serves that has **no** default yet
     (so a first provider just works; an existing default is left for the
@@ -8424,7 +8173,6 @@ def _configure_harness_add(family: str | None = None) -> str | None:
         add_menu_options_for_family,
         build_bedrock_provider_entry,
         build_cli_config_provider_entry,
-        build_databricks_provider_entry,
         build_gateway_provider_entry,
         build_key_provider_entry,
         build_subscription_provider_entry,
@@ -8440,7 +8188,6 @@ def _configure_harness_add(family: str | None = None) -> str | None:
         BEDROCK_KIND,
         CHAT_WIRE_API,
         CLI_CONFIG_KIND,
-        DATABRICKS_KIND,
         OPENAI_FAMILY,
         PI_SURFACE,
         RESPONSES_WIRE_API,
@@ -8450,11 +8197,12 @@ def _configure_harness_add(family: str | None = None) -> str | None:
         set_default_provider,
     )
 
-    # The ucode agent that backs each harness surface's model serving. When the
-    # user adds Databricks from a specific harness page, we configure ucode for
-    # ONLY that harness (not all of claude/codex/pi) so ucode touches just the
-    # one tool the user is wiring up.
-    _FAMILY_UCODE_AGENT = {ANTHROPIC_FAMILY: "claude", OPENAI_FAMILY: "codex", PI_SURFACE: "pi"}
+    # CLI login backing each subscription option.
+    _FAMILY_SUBSCRIPTION_CLI = {
+        ANTHROPIC_FAMILY: "claude",
+        OPENAI_FAMILY: "codex",
+        PI_SURFACE: "pi",
+    }
 
     # A flat, credential-aware menu: the user picks "OpenAI — API key" or
     # "Claude — subscription" directly (rather than a bare kind then
@@ -8463,7 +8211,7 @@ def _configure_harness_add(family: str | None = None) -> str | None:
     # harness, the menu is scoped to that harness's surface.
     options = add_menu_options_for_family(family) if family is not None else add_menu_options()
     # A custom provider defined by the user's own ~/.codex/config.toml
-    # (e.g. isaac's Databricks AI Gateway) that is not currently configured
+    # (for example a corporate gateway) that is not currently configured
     # gets its own add option. This is the only way back after Remove —
     # removal dismisses the detection so it stops auto-adopting, and there
     # is nothing to type/paste here (the credential lives in that file).
@@ -8625,7 +8373,9 @@ def _configure_harness_add(family: str | None = None) -> str | None:
             raise click.ClickException("internal: subscription option missing a cli login")
         from goalrail.onboarding.harness_install import harness_install_spec, harness_login
 
-        login_family = {agent: fam for fam, agent in _FAMILY_UCODE_AGENT.items()}.get(cli_name)
+        login_family = {agent: fam for fam, agent in _FAMILY_SUBSCRIPTION_CLI.items()}.get(
+            cli_name
+        )
         if login_family is None:
             raise click.ClickException(f"internal: no login family for cli {cli_name!r}")
         spec = harness_install_spec(login_family)
@@ -8776,100 +8526,8 @@ def _configure_harness_add(family: str | None = None) -> str | None:
             default_model=default_model,
         )
 
-    else:  # databricks
-        # Gate on the `databricks` extra: a `kind: databricks` provider mints
-        # workspace OAuth tokens via databricks-sdk at runtime
-        # (goalrail/runtime/credentials/databricks.py), and the SDK is no
-        # longer a default dependency. Abort before any side effect (the
-        # `databricks auth login` browser flow, `ucode configure`) so the
-        # user isn't signed into a workspace that routing then can't use.
-        from goalrail.onboarding.databricks_config import (
-            DATABRICKS_EXTRA_INSTALL_HINT,
-            databricks_sdk_installed,
-        )
-
-        if not databricks_sdk_installed():
-            from rich.markup import escape as _rich_escape
-
-            # The status renders through Text.from_markup, where the literal
-            # `[databricks]` in the install command would parse as a tag.
-            return (
-                "✗ Databricks routing needs the databricks extra — "
-                f"{_rich_escape(DATABRICKS_EXTRA_INSTALL_HINT)}"
-            )
-
-        # The intro + URL prompt render inline, exactly like every other add
-        # flow (the add-menu picker already erased its own frame on exit via
-        # `clear_on_exit`) — entering the Databricks option should NOT blank the
-        # whole screen. The one clear we keep is *after* the subprocess (below):
-        # `databricks auth login` + `ucode configure` print a lot, and the
-        # in-place menu redraw we return to can only erase its own frame, so we
-        # wipe that leftover output once the login finishes.
-        # Ask only for the workspace URL — never a profile name. The flow
-        # below authenticates that one workspace and runs `ucode configure`
-        # against it, scoped to the harness the user drilled into. This is
-        # the one place Goalrail triggers a Databricks CLI / ucode login;
-        # it never happens on a bare `run`, so a user who only wants their
-        # own provider is never routed through Databricks unexpectedly.
-        from goalrail.onboarding.configure_models import family_label
-        from goalrail.onboarding.databricks_config import normalize_workspace_url
-        from goalrail.onboarding.interactive import clear_screen
-        from goalrail.onboarding.setup import login_databricks_workspace
-        from goalrail.onboarding.ucode_setup import (
-            configure_ucode_for_workspace,
-            ucode_workspace_exists,
-        )
-
-        _routed = f"{family_label(family)}'s" if family is not None else "your harnesses'"
-        console.print(
-            f"  [dim]Routes {_routed} model calls through this workspace's "
-            "Databricks Unity AI Gateway (via ucode), so usage is governed and "
-            "billed there. This signs you into the workspace and runs "
-            "`ucode configure` for it.[/dim]"
-        )
-        workspace_url = prompt_text(
-            "Databricks workspace URL (e.g. https://example.cloud.databricks.com)"
-        ).strip()
-        if not workspace_url:  # blank — abort the add
-            return None
-        if not workspace_url.startswith(("http://", "https://")):
-            workspace_url = f"https://{workspace_url}"
-        # Reduce to scheme://host. Users paste the URL from a browser address
-        # bar, whose `/browse?o=...` path breaks both the saved profile host
-        # and `ucode configure` (the Databricks CLI keys OAuth tokens by host,
-        # so a path-laden value yields "no access token").
-        normalized_workspace_url = normalize_workspace_url(workspace_url)
-        if normalized_workspace_url != workspace_url.rstrip("/"):
-            console.print(
-                f"  [dim]Using {normalized_workspace_url} — ignored the extra "
-                "path from the pasted URL.[/dim]"
-            )
-        workspace_url = normalized_workspace_url
-
-        # 1. Authenticate the workspace (returns the ~/.databrickscfg profile
-        #    name) and 2. run `ucode configure` against it for model serving —
-        #    scoped to the harness the user drilled into (or both when added
-        #    from the un-scoped menu), so ucode configures only what's needed.
-        if family is not None:
-            ucode_agents = [_FAMILY_UCODE_AGENT[family]]
-        else:
-            ucode_agents = sorted(_FAMILY_UCODE_AGENT.values())
-        profile = login_databricks_workspace(workspace_url, console=console)
-        configure_ucode_for_workspace(workspace_url, agents=ucode_agents)
-        # Fail loud if ucode didn't actually record state for the workspace —
-        # otherwise routing would silently fall back and confuse the user.
-        if not ucode_workspace_exists(workspace_url):
-            raise click.ClickException(
-                f"`ucode configure` finished but recorded no state for {workspace_url}. "
-                "Re-run and check the ucode output above."
-            )
-        # Wipe the verbose login + ucode output so the menu we return to (with a
-        # "✓ Added databricks" status) renders on a clean screen.
-        clear_screen()
-        # Databricks name is fixed — no prompt. The provider keys on the
-        # profile; runtime resolves profile → workspace URL → ucode state.
-        name = "databricks"
-        entry = build_databricks_provider_entry(profile)
+    else:
+        raise click.ClickException(f"unsupported provider kind: {kind}")
 
     from goalrail.onboarding.configure_models import family_label
     from goalrail.onboarding.provider_config import (
@@ -8890,16 +8548,7 @@ def _configure_harness_add(family: str | None = None) -> str | None:
     # drives pi via the fallback, so claiming the explicit pi scope then
     # would silently re-route pi away from it.
     parsed = load_providers({"providers": {name: entry}})[name]
-    # Databricks routing is configured in ucode PER HARNESS (we only ran
-    # `ucode configure` for the surface the user drilled into), so it must only
-    # become the default for THAT surface — defaulting the other harnesses too
-    # would route them through a workspace ucode never configured for them.
-    # Other kinds (a gateway serving both families with one base_url + key)
-    # still default every surface they serve.
-    if entry["kind"] == DATABRICKS_KIND and family is not None:
-        default_families = [family]
-    else:
-        default_families = sorted(provider_families(parsed))
+    default_families = sorted(provider_families(parsed))
     became_default: list[str] = []
     for fam in default_families:
         cfg = _load_global_config()
@@ -8942,67 +8591,6 @@ def _adopt_detected_providers() -> list[str]:
     return list(to_adopt)
 
 
-def _promote_global_auth_to_provider() -> str | None:
-    """Backfill a databricks providers entry from an existing global ``auth:`` block.
-
-    Older ``goalrail setup`` runs configured Databricks only via the top-level
-    ``auth: {type: databricks}`` block — which ``configure harnesses`` does not
-    read — so the readout showed no Databricks provider (and an ambient CLI
-    login as the default) even though routing used Databricks. This promotes
-    that block into a first-class ``kind: databricks`` providers entry the next
-    time ``configure harnesses`` opens, so existing configs self-heal without
-    re-running ``goalrail setup``.
-
-    Becomes the default only for families with no existing **provider** default —
-    mirroring routing precedence (explicit provider default > ``auth:`` block),
-    so an explicitly-chosen default is left untouched while a config that only
-    ever had the ``auth:`` block gets Databricks as its default (matching what
-    routing already does at runtime). Must run BEFORE
-    :func:`_adopt_detected_providers` so Databricks claims the default ahead of
-    an ambient CLI login (``auth:`` outranks ambient detection in routing too).
-
-    :returns: ``"databricks"`` if a provider was backfilled, else ``None`` (no
-        databricks ``auth:`` block, or a databricks provider already exists).
-    """
-    from goalrail.onboarding.configure_models import build_databricks_provider_entry
-    from goalrail.onboarding.provider_config import (
-        load_providers,
-        provider_entry_settings,
-        provider_families,
-        set_default_provider,
-        surface_default_provider,
-    )
-
-    config = _load_global_config()
-    auth = config.get("auth")
-    if not isinstance(auth, dict) or auth.get("type") != "databricks":
-        return None
-    profile = auth.get("profile")
-    if not isinstance(profile, str) or not profile:
-        return None
-    name = "databricks"
-    if name in load_providers(config):
-        return None  # already a first-class provider — nothing to backfill
-
-    entry = build_databricks_provider_entry(profile)
-    _save_global_config(
-        provider_entry_settings(name, entry, make_default=False),
-        deep_merge_keys=("providers",),
-    )
-    parsed = load_providers({"providers": {name: entry}})[name]
-    for fam in sorted(provider_families(parsed)):
-        cfg = _load_global_config()
-        # Effective check (matters for the pi surface): a default that
-        # already drives the surface — explicitly or via pi's fallback —
-        # outranks the legacy auth: block, exactly like routing does.
-        if surface_default_provider(cfg, fam) is not None:
-            continue  # respect an existing provider default (it outranks auth:)
-        block = cfg.get("providers")
-        if isinstance(block, dict):
-            _save_global_config({"providers": set_default_provider(block, name, fam)})
-    return name
-
-
 def _compact_credential_label(det: DetectedProvider) -> str:
     """A short, brand-qualified label for an auto-configured credential.
 
@@ -9027,8 +8615,8 @@ def _compact_credential_label(det: DetectedProvider) -> str:
         # (see _CLI_LOGIN_BRAND) but keeps an added CLI readable, not crashing.
         brand = _CLI_LOGIN_BRAND.get(det.name, det.name)
         return f"{brand} Subscription"
-    # A cli-config detection carries the provider's own display name
-    # ("Databricks AI Gateway"); other kinds ignore the keyword.
+    # A cli-config detection carries the provider's own display name; other
+    # kinds ignore the keyword.
     return credential_label(det.kind, det.name, display_name=det.display_name)
 
 
@@ -9070,17 +8658,12 @@ def _adopt_ambient_credentials(progress: RunnerStartupProgress | None = None) ->
 
     The shared front half of both a bare ``goalrail run``'s first-run path
     (:func:`_resolve_first_run_plan`) and the ``configure harnesses`` picker
-    (:func:`_run_configure_harnesses_interactive`): it (1) backfills a legacy
-    databricks ``auth:`` block into a real provider, (2) adopts any
+    (:func:`_run_configure_harnesses_interactive`): it adopts any
     ambient-detected credential (env API key, logged-in ``claude`` / ``codex``
     CLI, local Ollama) not already configured as an ordinary provider entry,
-    and (3) prints a callout naming exactly the credentials it just
+    then prints a callout naming exactly the credentials it just
     auto-configured. Idempotent: a second open adopts nothing, so no callout
     prints.
-
-    The callout is scoped to *machine* credentials — the ambient detections —
-    not the databricks ``auth:`` backfill, which promotes an existing config
-    block rather than something newly "found on your machine".
 
     :param progress: Optional spinner handle (from
         :func:`goalrail._runner_startup.runner_startup_progress`) covering the
@@ -9093,7 +8676,6 @@ def _adopt_ambient_credentials(progress: RunnerStartupProgress | None = None) ->
     :returns: The provider names adopted this call, e.g. ``["anthropic"]``;
         empty when every detection was already configured.
     """
-    _promote_global_auth_to_provider()
     adopted = _adopt_detected_providers()
     # Clear the search spinner (if any) before printing — the callout writes to
     # stdout while the spinner animates on stderr, and on a shared TTY the two
@@ -9127,13 +8709,12 @@ def _credential_label(name: str, entry: ProviderEntry) -> str:
     A logged-in CLI reads as ``"Subscription"`` (within a harness there is only
     one, so the plan name adds no information); an API-key provider names the
     vendor and the credential type (``"Anthropic API Key"`` / ``"OpenAI API
-    Key"``); Databricks as ``"Databricks (<profile>)"``; a gateway / local
-    endpoint as its display name — so menus and summaries avoid raw provider
-    ids and the word "provider".
+    Key"``); a gateway / local endpoint as its display name — so menus and
+    summaries avoid raw provider ids and the word "provider".
 
     :param name: The provider id keyed under ``providers:``, e.g. ``"openai"``.
     :param entry: The parsed provider entry.
-    :returns: A human label, e.g. ``"Anthropic API Key"`` or ``"Databricks (oss)"``.
+    :returns: A human label, e.g. ``"Anthropic API Key"`` or ``"Corporate Gateway"``.
     """
     from goalrail.onboarding.configure_models import credential_label
 
@@ -10087,7 +9668,7 @@ def _print_kimi_auth_help() -> None:
     Kimi authenticates against Moonshot AI's backend rather than a Goalrail
     credential: ``kimi login`` (OAuth or a Moonshot API key) for the default
     provider, and ``kimi provider add`` to register any other provider (an
-    OpenAI-compatible endpoint, a Databricks gateway, …) in
+    OpenAI-compatible endpoint, a corporate gateway, …) in
     ``~/.kimi/config.toml``. Goalrail has no per-spawn provider override for
     upstream kimi, so all of this lives in the kimi CLI's own config —
     Goalrail-side injection remains a deferred follow-up.
@@ -10381,7 +9962,6 @@ def _manage_credential(provider: str, family: str) -> str | None:
     from goalrail.onboarding.configure_models import family_label
     from goalrail.onboarding.interactive import select
     from goalrail.onboarding.provider_config import (
-        DATABRICKS_KIND,
         SUBSCRIPTION_KIND,
         load_providers,
         surface_default_provider,
@@ -10420,12 +10000,6 @@ def _manage_credential(provider: str, family: str) -> str | None:
     # login persists and ambient detection re-adopts it on the next open).
     if entry.kind == SUBSCRIPTION_KIND:
         return _remove_subscription(provider, family)
-    # A databricks provider was wired by `ucode configure`, which edits
-    # harness configs outside ~/.goalrail/config.yaml — so removing it
-    # also cleans those edits up (otherwise codex keeps routing through
-    # the workspace gateway).
-    if entry.kind == DATABRICKS_KIND:
-        return _remove_databricks_provider(provider)
     return _remove_credential(provider)
 
 
@@ -10485,54 +10059,6 @@ def _remove_subscription(provider: str, family: str) -> str | None:
     )
 
 
-def _remove_databricks_provider(provider: str) -> str:
-    """Remove a databricks provider and clean up ucode's harness wiring.
-
-    A ``kind: databricks`` provider was wired by running ``ucode configure``
-    (the add flow), which writes harness configs *outside*
-    ``~/.goalrail/config.yaml`` — most damagingly, for Codex < 0.134.0 it
-    rewrites the user's real ``~/.codex/config.toml`` (top-level
-    ``profile = "ucode"``) so even the bare ``codex`` CLI routes through the
-    workspace gateway, and ``ucode revert`` does not undo that edit. Removing
-    the provider therefore undoes that wiring as part of the removal — no
-    extra confirm, matching how a key provider's ``Remove`` acts immediately.
-    The cleanup only ever touches ucode-namespaced artifacts (the ``profile``
-    selector only when it equals ``"ucode"``; see
-    :mod:`goalrail.onboarding.ucode_cleanup`), so the user's own settings
-    are never at risk. Removal applies to every harness the provider
-    serves — a databricks entry routes both Claude and Codex.
-
-    :param provider: The databricks provider id, e.g. ``"databricks"``.
-    :returns: A confirmation message for the level-2 status line reporting
-        the removal and what wiring was cleaned (nothing extra is appended
-        when no ucode wiring existed). Side effects: may edit
-        ``~/.codex/config.toml``, delete ucode sidecar files, run
-        ``claude mcp remove``, and write ``~/.goalrail/config.yaml``.
-    """
-    from goalrail.errors import GoalrailError
-    from goalrail.onboarding.ucode_cleanup import remove_ucode_wiring
-
-    cleanup_note = ""
-    try:
-        removal = remove_ucode_wiring()
-    except (GoalrailError, OSError) as exc:
-        # The entry removal below still proceeds — the user asked for it —
-        # but say exactly what was left behind instead of failing silently.
-        cleanup_note = f" — ucode cleanup incomplete: {exc}"
-    else:
-        cleaned: list[str] = []
-        if removal.codex_config_stripped:
-            cleaned.append("cleaned ~/.codex/config.toml")
-        if removal.removed_sidecars:
-            cleaned.append(f"deleted {len(removal.removed_sidecars)} ucode sidecar file(s)")
-        if removal.web_search_mcp_removed:
-            cleaned.append("unregistered ucode's web_search MCP")
-        if cleaned:
-            cleanup_note = f" — {', '.join(cleaned)}"
-    removed_msg = _remove_credential(provider) or f"✓ Removed {provider}"
-    return f"{removed_msg}{cleanup_note}"
-
-
 def _set_harness_default(provider: str, family: str) -> str | None:
     """Make *provider* the default for *family* and persist wholesale.
 
@@ -10564,7 +10090,7 @@ def _clear_detection_dismissal(name: str) -> None:
     config.toml provider from the add menu — so the detection behaves like
     an ordinary one again.
 
-    :param name: The detection name to un-dismiss, e.g. ``"codex-databricks"``.
+    :param name: The detection name to un-dismiss, e.g. ``"codex-gateway"``.
     :returns: None. Side effect: writes ``~/.goalrail/config.yaml`` when the
         name was dismissed; no write otherwise.
     """
@@ -10757,8 +10283,6 @@ def _print_opencode_auth_help() -> None:
         "    • [bold]opencode auth login[/bold] — sign in to a provider (OpenAI, Anthropic, …);\n"
         "      stored in ~/.local/share/opencode/auth.json.\n"
         "    • Provider env vars (OPENAI_API_KEY / ANTHROPIC_API_KEY / …) are auto-detected.\n"
-        "    • Databricks gateway: set an agent ``profile`` (configured under Claude / Codex);\n"
-        "      Goalrail synthesizes opencode's per-session provider config from it.\n"
         "  Goalrail stores no OpenCode credential of its own.\n"
         "  [dim]Tip:[/dim] 'Set default model' picks which model `goalrail opencode` launches on\n"
         "  (otherwise OpenCode uses its built-in default, opencode/big-pickle)."
@@ -10772,9 +10296,7 @@ def _manage_opencode_harness() -> None:
     ``~/.local/share/opencode/auth.json``) or ambient provider env vars — so,
     like the Goose / Qwen drill-ins, this reports which providers OpenCode can
     reach and offers to launch its native login; it never stores a key through
-    Goalrail. (For the Databricks-gateway path the agent's ``profile`` is
-    synthesized into opencode's per-session config instead — set under
-    Claude / Codex.)
+    Goalrail.
 
     OpenCode is npm-installable, so a missing CLI gates the drill-in with an
     install offer.
@@ -10871,10 +10393,9 @@ def _run_configure_harnesses_interactive() -> None:
 
     Invoked by ``goalrail setup --no-internal-beta`` and the bare-``run``
     first-run path, so both drive the identical flow.
-    Opening it backfills a legacy databricks ``auth:`` block into a real
-    provider and adopts any ambient-detected credential — announcing the
-    newly auto-configured machine credentials in a callout — then loops on
-    the level-1 harness overview (Claude / Codex / Pi / Cursor / Antigravity /
+    Opening it adopts any ambient-detected credential — announcing the newly
+    auto-configured machine credentials in a callout — then loops on the
+    level-1 harness overview (Claude / Codex / Pi / Cursor / Antigravity /
     Qwen Code / Kimi Code / Quit) until the user quits or presses Esc.
 
     :returns: None. Side effect: may write ``~/.goalrail/config.yaml`` via
@@ -10926,12 +10447,10 @@ def _run_configure_harnesses_interactive() -> None:
     # failure when the harness later can't launch.
     _warn_missing_harness_dependencies()
 
-    # Backfill a databricks provider from a legacy global auth: block FIRST (it
-    # outranks ambient detection in routing), then adopt ambient detections.
-    # The databricks backfill is silent (it just shows up in the harness summary
-    # line); newly-adopted machine credentials get a one-time callout naming
-    # what was auto-configured and from where. The detection scan can take a
-    # beat (on macOS it shells out to ``claude auth status`` to read the
+    # Adopt ambient detections. Newly-adopted machine credentials get a
+    # one-time callout naming what was auto-configured and from where. The
+    # detection scan can take a beat (on macOS it shells out to
+    # ``claude auth status`` to read the
     # Keychain), so surface a spinner over just that step — it clears before the
     # callout (and the menu) paints, and is a no-op off a TTY.
     from goalrail._runner_startup import runner_startup_progress
@@ -10956,9 +10475,8 @@ def _run_configure_harnesses_interactive() -> None:
     # not a Goalrail credential), so it dispatches to its own drill-in.
     _QWEN = "\x00qwen"
     # Sentinel marking the OpenCode row — native-server harness with no Goalrail
-    # credential of its own (it routes through the bound agent's Databricks
-    # gateway profile or ambient provider env), so it dispatches to its own
-    # binary-install/info drill-in.
+    # credential of its own, so it dispatches to its own binary-install/info
+    # drill-in.
     _OPENCODE = "\x00opencode"
     # Sentinel marking the Goose row — like Qwen/Antigravity/Cursor it is not a
     # provider family (Goose owns its own auth via ``goose configure``, not an
@@ -11107,9 +10625,8 @@ def _run_configure_harnesses_interactive() -> None:
         selectable.append(False)
         row_target.append(None)
         # OpenCode (native-server harness): readiness is just whether the
-        # ``opencode`` CLI is installed — it has no Goalrail-stored credential,
-        # routing through the bound agent's Databricks gateway profile or
-        # ambient provider env. Its drill-in installs the CLI and explains that.
+        # ``opencode`` CLI is installed — it has no Goalrail-stored credential;
+        # auth lives in OpenCode's own config or provider env vars.
         # OpenCode: ready = CLI installed AND a provider reachable (a stored
         # ``opencode auth login`` credential or a provider env key). Drill-in
         # manages its native login. (Gateway path uses the agent profile.)
@@ -11303,8 +10820,7 @@ def _run_configure_harnesses_interactive() -> None:
     "--internal-beta/--no-internal-beta",
     default=False,
     help="Run the standard model/credential setup (default): choose a "
-    "provider for each harness and set your defaults. Pass --internal-beta "
-    "to configure Databricks internal-beta defaults and authentication.",
+    "provider for each harness and set your defaults.",
 )
 def setup(internal_beta: bool) -> None:
     """
@@ -11313,8 +10829,7 @@ def setup(internal_beta: bool) -> None:
     By default this runs the standard model/credential picker — choose a
     provider for each harness and set your defaults, then start a session
     with ``goalrail run``. (List configured credentials with
-    ``goalrail config list``.) Pass ``--internal-beta`` to configure
-    Databricks internal-beta defaults and authentication instead.
+    ``goalrail config list``.)
     """
     from goalrail.inner import ui
 
@@ -11322,62 +10837,10 @@ def setup(internal_beta: bool) -> None:
     ui.print_landing(tagline="all your agents, one cli")
 
     if internal_beta:
-        # The internal-beta workspace defaults are excluded from the public OSS
-        # build. Fail loud with a clear message instead of an ImportError deep
-        # in the onboarding flow when someone passes --internal-beta there.
-        try:
-            import goalrail.onboarding.internal_beta  # noqa: F401
-        except ImportError:
-            raise click.ClickException(
-                "Databricks internal-beta setup is not available in this build. "
-                "Run `goalrail setup` for the standard model/credential setup."
-            ) from None
-        # Internal-beta routing mints workspace OAuth tokens via
-        # databricks-sdk at runtime, and the SDK ships in the `databricks`
-        # extra rather than the default install. Fail loud up front instead
-        # of completing the whole login flow and breaking on the first turn.
-        from goalrail.onboarding.databricks_config import (
-            DATABRICKS_EXTRA_INSTALL_HINT,
-            databricks_sdk_installed,
+        raise click.ClickException(
+            "`goalrail setup --internal-beta` is no longer supported. "
+            "Run `goalrail setup` to configure providers."
         )
-
-        if not databricks_sdk_installed():
-            raise click.ClickException(
-                "Databricks internal-beta setup needs the databricks extra "
-                f"(databricks-sdk). Reinstall with:\n  {DATABRICKS_EXTRA_INSTALL_HINT}"
-            )
-        # Surface missing external tooling (Node, tmux) before the Databricks
-        # bootstrap so a fresh machine sees every gap at once.
-        _warn_missing_harness_dependencies()
-        from goalrail.onboarding.internal_beta import _INTERNAL_BETA_DEFAULT_SERVER
-        from goalrail.onboarding.sandboxes.lakebox import install_demo_databricks_cli
-        from goalrail.onboarding.setup import run_onboarding
-
-        # Install the demo `databricks` CLI (with the `lakebox`
-        # subcommand) BEFORE profile onboarding — `run_onboarding`
-        # shells out to `databricks auth login`, and a fresh machine
-        # might not have the binary on PATH at all. Idempotent: skips
-        # the installer when the demo CLI is already present, but
-        # still persists ~/.local/bin in the user's shell rc files.
-        install_demo_databricks_cli()
-        with _isolated_databricks_cfg():
-            if not run_onboarding():
-                raise click.ClickException("onboarding did not complete; see output above.")
-            _run_configure_databricks()
-        agent_path = _materialize_internal_beta_agents()
-        _save_global_config(
-            {
-                "default_agent": str(agent_path),
-                "profile": "oss",
-                "server": _INTERNAL_BETA_DEFAULT_SERVER,
-                # auth: block provides the default executor credentials for
-                # agents that do not declare executor.auth themselves.
-                "auth": {"type": "databricks", "profile": "oss"},
-            }
-        )
-        click.echo(f"Set default_agent={agent_path} in {_effective_global_config_path()}")
-        click.echo("Type `goalrail claude` to get started with Claude Code on Goalrail.")
-        return
 
     # --no-internal-beta: the standard model/credential picker. It warns
     # about missing Node/tmux itself, configures providers/defaults, and
@@ -11389,12 +10852,8 @@ def setup(internal_beta: bool) -> None:
 # The provider-agnostic sandbox CLI lives in goalrail/cli_sandbox.py.
 # Provider launcher modules are optional and may be absent from a given
 # distribution; hide the group when none are available.
-# `goalrail lakebox` is kept as an alias for `goalrail sandbox …
-# --provider lakebox`, registered only when the lakebox provider ships.
 if _sandbox_providers():
     cli.add_command(_sandbox_group)
-    if "lakebox" in _sandbox_providers():
-        cli.add_command(_lakebox_alias_group)
 
 # ─── debug group ──────────────────────────────────────────────────
 #
@@ -11586,40 +11045,6 @@ def debug_migrate_accounts_to_oidc(
         click.echo("\nDone. Flip GOALRAIL_AUTH_PROVIDER=oidc and restart.\n")
 
 
-def _workspace_mount_probe_matches(candidate: str, probe: httpx.Response) -> bool:
-    """Whether a ``/api/2.0/goalrail`` mount probe answered like goalrail.
-
-    :param candidate: The probed mount base URL, e.g.
-        ``"https://example.databricks.com/api/2.0/goalrail"``.
-    :param probe: The ``GET <candidate>/v1/me`` response.
-    :returns: ``True`` when the mount answered 200 (goalrail itself) or
-        with a Databricks-fronted shape (302 to ``/oidc/`` or 401 with
-        the ``DatabricksRealm`` challenge).
-    """
-    return probe.status_code == 200 or (
-        _databricks_workspace_login_target(candidate, probe) is not None
-    )
-
-
-def _cached_workspace_bearer(workspace_host: str) -> str | None:
-    """Best-effort bearer for *workspace_host* from the OAuth cache.
-
-    Unlike :func:`_databricks_workspace_token`, a missing ``databricks``
-    extra is not an error here — probe callers simply fall back to
-    unauthenticated behavior.
-
-    :param workspace_host: The workspace host, e.g.
-        ``"https://example.databricks.com"``.
-    :returns: A bearer token, or ``None`` when the ``databricks`` extra
-        is not installed or no cached grant resolves for the host.
-    """
-    from goalrail.onboarding.databricks_config import databricks_sdk_installed
-
-    if not databricks_sdk_installed():
-        return None
-    return _databricks_workspace_token(workspace_host)
-
-
 _LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 
 
@@ -11627,7 +11052,7 @@ def _with_default_scheme(server_url: str) -> str:
     """Prepend a scheme to a schemeless server URL, defaulting to https.
 
     The internal user guide hands out workspace URLs without a scheme
-    (e.g. ``example.cloud.databricks.com/goalrail``), so a missing
+    (e.g. ``goalrail.example.com``), so a missing
     scheme defaults to ``https`` to let that URL be pasted verbatim.
     Loopback hosts (``localhost``, ``127.0.0.1``, ``::1``) default to
     ``http`` instead — local dev servers are plain http (the examples
@@ -11635,9 +11060,9 @@ def _with_default_scheme(server_url: str) -> str:
     is returned unchanged.
 
     :param server_url: The user-supplied server URL, possibly
-        schemeless, e.g. ``"example.cloud.databricks.com/goalrail"``.
+        schemeless, e.g. ``"goalrail.example.com"``.
     :returns: The URL with a scheme, e.g.
-        ``"https://example.cloud.databricks.com/goalrail"``.
+        ``"https://goalrail.example.com"``.
     """
     from urllib.parse import urlsplit
 
@@ -11649,355 +11074,20 @@ def _with_default_scheme(server_url: str) -> str:
     return f"{scheme}://{server_url}"
 
 
-def _workspace_api_server_url(server: str) -> str:
-    """Expand a bare Databricks workspace URL to its goalrail API base.
-
-    ``https://<workspace>`` hosts serve the workspace web app at the
-    root; workspace-hosted goalrail lives at ``/api/2.0/goalrail``.
-    Users naturally paste the bare host, so when a path-less server URL
-    answers like a Databricks workspace web app (a non-goalrail reply
-    carrying the ``server: databricks`` header) AND the
-    ``/api/2.0/goalrail`` mount answers like the API proxy, the
-    expanded URL is adopted. Detection is behavioral — no hostname
-    patterns — and URLs that already carry a path are returned
-    untouched without any probe, the one exception being the
-    guide-issued web-UI URL (``https://<ws>/goalrail``): its bare root
-    is probed so the pasted web URL logs in just like the bare host
-    (a root that is not a workspace leaves the URL untouched).
-
-    Some workspace edges (Azure) answer the anonymous mount probe with
-    a plain 404 — not the AWS proxy's 401-with-``DatabricksRealm``
-    challenge — so a mount that works for authenticated callers is
-    invisible to the anonymous probe. When the host-keyed Databricks
-    OAuth cache holds a grant for the workspace (the user ran
-    ``databricks auth login``), the mount probe is retried with that
-    bearer before giving up.
-
-    :param server: The user-supplied server URL, e.g.
-        ``"https://example.databricks.com"``.
-    :returns: The normalized base URL without a trailing slash, e.g.
-        ``"https://example.databricks.com/api/2.0/goalrail"`` — or the
-        input (normalized) when expansion does not apply.
-    """
-    from urllib.parse import urlsplit, urlunsplit
-
-    import httpx as _httpx
-
-    from goalrail.conversation_browser import WORKSPACE_API_PATH, WORKSPACE_UI_PATH
-
-    server = server.rstrip("/")
-    parsed = urlsplit(server)
-    # The internal user guide hands out the workspace web-UI URL
-    # (``https://<ws>/goalrail``) for browser access; accept it for login
-    # too by expanding its bare root to the API mount. A root that does
-    # not answer as a Databricks workspace leaves the pasted URL
-    # untouched, so a non-workspace server served under ``/goalrail``
-    # still works.
-    if parsed.scheme == "https" and parsed.path == WORKSPACE_UI_PATH:
-        root = urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))
-        expanded = _workspace_api_server_url(root)
-        return expanded if expanded != root else server
-    if parsed.path not in ("", "/") or parsed.scheme != "https":
-        return server
-    try:
-        probe = _httpx.get(f"{server}/v1/me", timeout=10.0)
-    except _httpx.HTTPError:
-        return server
-    # Already something we understand at the root: a Goalrail server
-    # (200 / 401-with-login_url JSON) or a Databricks Apps edge /
-    # API proxy (the login-target detector recognizes both).
-    if probe.status_code == 200:
-        return server
-    if _databricks_workspace_login_target(server, probe) is not None:
-        return server
-    server_header = probe.headers.get("server")
-    if server_header is None or server_header.lower() != "databricks":
-        return server
-    candidate = urlunsplit((parsed.scheme, parsed.netloc, WORKSPACE_API_PATH, "", ""))
-    try:
-        api_probe = _httpx.get(f"{candidate}/v1/me", timeout=10.0)
-    except _httpx.HTTPError:
-        return server
-    if _workspace_mount_probe_matches(candidate, api_probe):
-        click.echo(f"Using {candidate} (Databricks workspace-hosted Goalrail).")
-        return candidate
-    # The anonymous probe came back inconclusive (404 on Azure even
-    # when the mount exists). Retry it with a cached workspace bearer;
-    # either way, say what was decided — this branch is only reached
-    # for genuine workspace web hosts, where a silent decline strands
-    # the user on a bare URL that can only 404.
-    token = _cached_workspace_bearer(server)
-    if token is not None:
-        try:
-            authed_probe = _httpx.get(
-                f"{candidate}/v1/me",
-                headers={"Authorization": f"Bearer {token}"},
-                timeout=10.0,
-            )
-        except _httpx.HTTPError:
-            authed_probe = None
-        if authed_probe is not None and _workspace_mount_probe_matches(candidate, authed_probe):
-            click.echo(f"Using {candidate} (Databricks workspace-hosted Goalrail).")
-            return candidate
-        click.echo(
-            f"Note: {server} answers like a Databricks workspace, but "
-            f"{candidate} did not answer as a Goalrail server even with "
-            f"the cached workspace credentials. Connecting to {server} as "
-            "given; if Goalrail is hosted on this workspace, refresh the "
-            f"login with `databricks auth login --host {server}` or pass "
-            "the full mount URL."
-        )
-        return server
-    click.echo(
-        f"Note: {server} answers like a Databricks workspace, but "
-        f"{candidate} did not answer the anonymous probe "
-        f"(HTTP {api_probe.status_code}). Some edges hide the mount from "
-        "unauthenticated requests — if Goalrail is hosted on this "
-        f"workspace, run `databricks auth login --host {server}` and "
-        "retry, or pass the full mount URL."
-    )
-    return server
-
-
 def _resolve_server_url(server: str) -> str:
     """
     Normalize a user-supplied ``--server`` value to the Goalrail API base.
 
     Every ``--server`` entry point (and ``login``) needs the same
-    normalization, so they all route through here: strip a trailing slash,
-    default a schemeless URL to ``https`` (``http`` for loopback hosts),
-    then expand a bare Databricks workspace URL — or the ``/goalrail``
-    web-UI URL the internal user guide hands out — to the
-    ``/api/2.0/goalrail`` mount.
+    normalization, so they all route through here: strip a trailing slash and
+    default a schemeless URL to ``https`` (``http`` for loopback hosts).
 
     :param server: A non-empty ``--server`` value, e.g.
-        ``"example.cloud.databricks.com/goalrail"``.
-    :returns: The normalized API base URL without a trailing slash, e.g.
-        ``"https://example.cloud.databricks.com/api/2.0/goalrail"``.
+        ``"goalrail.example.com"``.
+    :returns: The normalized server URL without a trailing slash, e.g.
+        ``"https://goalrail.example.com"``.
     """
-    return _workspace_api_server_url(_with_default_scheme(server.rstrip("/")))
-
-
-def _databricks_workspace_login_target(server: str, probe: httpx.Response) -> str | None:
-    """Return the workspace host when *server* sits behind Databricks auth.
-
-    Recognizes the two Databricks-fronted deployment shapes from the
-    unauthenticated probe alone — no hostname pattern matching, so
-    custom domains work too:
-
-    - **Databricks Apps**: the Apps edge answers with a 302 to the
-      fronting workspace's OIDC authorize endpoint
-      (``https://<workspace>/oidc/oauth2/v2.0/authorize?...``); the
-      redirect names the workspace to authenticate against.
-    - **Workspace-hosted goalrail** (e.g.
-      ``https://<workspace>/api/2.0/goalrail``): the workspace API
-      proxy answers 401 with ``WWW-Authenticate: Bearer
-      realm="DatabricksRealm"``; the workspace is the URL's own host.
-
-    :param server: The server URL the user is logging in to, e.g.
-        ``"https://myapp-123.aws.databricksapps.com"``.
-    :param probe: The unauthenticated ``GET /v1/me`` probe response.
-    :returns: The workspace host, e.g.
-        ``"https://example.databricks.com"``, or ``None`` when the
-        response matches neither Databricks shape.
-    """
-    from urllib.parse import urlparse
-
-    if probe.status_code in (302, 303, 307):
-        raw_location = probe.headers.get("location")
-        if raw_location is None:
-            return None
-        location = urlparse(raw_location)
-        if location.scheme != "https" or not location.netloc:
-            return None
-        if not location.path.startswith("/oidc/"):
-            return None
-        return f"https://{location.netloc}"
-
-    if probe.status_code == 401:
-        www_authenticate = probe.headers.get("www-authenticate")
-        if www_authenticate and "databricksrealm" in www_authenticate.lower():
-            parsed = urlparse(server)
-            if parsed.scheme == "https" and parsed.netloc:
-                return f"https://{parsed.netloc}"
-
-    return None
-
-
-def _databricks_login(server: str, workspace_host: str) -> None:
-    """Log in to a Databricks-fronted Goalrail server.
-
-    Covers both Databricks Apps deployments and workspace-hosted
-    goalrail (``https://<workspace>/api/2.0/goalrail``). Reuses an
-    existing host-keyed Databricks CLI OAuth grant when one resolves;
-    otherwise runs ``databricks auth login --host <workspace>``
-    (browser flow). The minted token is verified against the server
-    before anything is stored; a *cached* grant that fails
-    verification (e.g. a stale token-cache entry minted for a
-    different workspace) triggers one fresh browser login and a
-    re-verify before failing loud. On success, a pointer record is
-    stored in ``~/.goalrail/auth_tokens.json`` — no profile name is
-    created or consulted anywhere.
-
-    :param server: The server URL, e.g.
-        ``"https://myapp-123.aws.databricksapps.com"``.
-    :param workspace_host: The Databricks workspace to authenticate
-        against, e.g. ``"https://example.databricks.com"``.
-    :raises click.ClickException: When the ``databricks`` extra or CLI
-        binary is missing, the workspace login fails, or the server
-        rejects the workspace token.
-    """
-    from goalrail.onboarding.databricks_config import (
-        DATABRICKS_EXTRA_INSTALL_HINT,
-        databricks_sdk_installed,
-    )
-
-    click.echo(f"{server} authenticates via the Databricks workspace {workspace_host}.")
-
-    if not databricks_sdk_installed():
-        raise click.ClickException(
-            "Logging in to a Databricks-fronted server (a Databricks App or "
-            "workspace-hosted Goalrail) requires the `databricks` extra "
-            f"(databricks-sdk is not installed). Reinstall with:\n  "
-            f"{DATABRICKS_EXTRA_INSTALL_HINT}"
-        )
-
-    token = _databricks_workspace_token(workspace_host)
-    fresh_login_done = False
-    if token is None:
-        token = _login_and_mint_workspace_token(workspace_host)
-        fresh_login_done = True
-
-    # Verify the workspace token actually gets through the edge to THIS
-    # server (the user may lack access to it), and learn our identity
-    # for the success message.
-    verify = _verify_databricks_server_token(server, token)
-    if verify.status_code != 200 and not fresh_login_done:
-        # A cached grant can be stale or minted for a different
-        # workspace (the CLI token cache is host-keyed but not
-        # validated against the issuer). One fresh browser login
-        # replaces the bad cache entry; then re-verify.
-        click.echo(
-            f"The cached Databricks credentials were rejected by {server} "
-            f"(HTTP {verify.status_code}) — refreshing the workspace login."
-        )
-        token = _login_and_mint_workspace_token(workspace_host)
-        verify = _verify_databricks_server_token(server, token)
-    if verify.status_code != 200:
-        raise click.ClickException(
-            f"{workspace_host} accepted the login, but {server} rejected the token "
-            f"(HTTP {verify.status_code}). Check that your user has access to this app."
-        )
-    user_id: str | None = None
-    with contextlib.suppress(ValueError):
-        raw_user = verify.json().get("user_id")
-        user_id = raw_user if isinstance(raw_user, str) else None
-
-    from goalrail.cli_auth import store_databricks_auth
-
-    store_databricks_auth(
-        server,
-        workspace_host,
-        user_id=user_id,
-        # Workspace responses carry the org id; recorded so browser
-        # links can append the ``?o=<org>`` workspace selector.
-        org_id=verify.headers.get("x-databricks-org-id"),
-    )
-    who = f" as {user_id}" if user_id else ""
-    click.echo(
-        f"Logged in{who}. Commands targeting {server} now mint workspace tokens automatically."
-    )
-
-
-def _login_and_mint_workspace_token(workspace_host: str) -> str:
-    """Run the browser login for a workspace and mint a bearer from it.
-
-    :param workspace_host: The workspace host, e.g.
-        ``"https://example.databricks.com"``.
-    :returns: A fresh bearer token for the workspace.
-    :raises click.ClickException: When the Databricks CLI binary is
-        missing, the login exits non-zero, or no token resolves after
-        a successful login.
-    """
-    _run_databricks_browser_login(workspace_host)
-    token = _databricks_workspace_token(workspace_host)
-    if token is None:
-        raise click.ClickException(
-            f"Workspace login completed but no token resolves for {workspace_host}. "
-            f"Run `databricks auth token --host {workspace_host}` to debug."
-        )
-    return token
-
-
-def _run_databricks_browser_login(workspace_host: str) -> None:
-    """Run ``databricks auth login --host <workspace>`` (browser flow).
-
-    :param workspace_host: The workspace host, e.g.
-        ``"https://example.databricks.com"``.
-    :raises click.ClickException: When the Databricks CLI binary is
-        missing or the login exits non-zero.
-    """
-    databricks_bin = shutil.which("databricks")
-    if databricks_bin is None:
-        raise click.ClickException(
-            "The Databricks CLI is required to log in to a workspace. "
-            "Install it first: https://docs.databricks.com/dev-tools/cli/install.html"
-        )
-    click.echo(f"Opening browser to log in to {workspace_host} ...")
-    result = subprocess.run(
-        [databricks_bin, "auth", "login", "--host", workspace_host],
-        check=False,
-    )
-    if result.returncode != 0:
-        raise click.ClickException(
-            f"`databricks auth login --host {workspace_host}` failed "
-            f"(exit {result.returncode}). If the workspace is unreachable from "
-            "this machine (VPN / IP access lists), resolve that and retry."
-        )
-
-
-def _verify_databricks_server_token(server: str, token: str) -> httpx.Response:
-    """Probe ``GET /v1/me`` on *server* with a workspace bearer.
-
-    :param server: The server URL, e.g.
-        ``"https://myapp-123.aws.databricksapps.com"``.
-    :param token: The workspace bearer token to present.
-    :returns: The probe response (200 means the token is accepted and
-        the body carries ``user_id``).
-    :raises click.ClickException: When the server is unreachable.
-    """
-    import httpx as _httpx
-
-    try:
-        return _httpx.get(
-            f"{server}/v1/me",
-            headers={"Authorization": f"Bearer {token}"},
-            timeout=10.0,
-        )
-    except _httpx.HTTPError as exc:
-        raise click.ClickException(
-            f"Could not reach {server}/v1/me to verify login: {exc}"
-        ) from exc
-
-
-def _databricks_workspace_token(workspace_host: str) -> str | None:
-    """Mint a bearer for a workspace from the host-keyed OAuth cache.
-
-    :param workspace_host: The workspace host, e.g.
-        ``"https://example.databricks.com"``.
-    :returns: A bearer token, or ``None`` when no cached grant
-        resolves (the caller should run ``databricks auth login``).
-    """
-    from goalrail.inner.databricks_executor import (
-        DatabricksAuthError,
-        _resolve_databricks_auth,
-    )
-
-    try:
-        auth, _host = _resolve_databricks_auth(host=workspace_host)
-        return auth.current_token()
-    except (DatabricksAuthError, ValueError):
-        return None
+    return _with_default_scheme(server.rstrip("/")).rstrip("/")
 
 
 def _remember_default_server(server: str) -> None:
@@ -12017,7 +11107,7 @@ def _remember_default_server(server: str) -> None:
     available signal of intent.
 
     :param server: Normalized server URL the login succeeded against, e.g.
-        ``"https://example.databricks.com/api/2.0/goalrail"``.
+        ``"https://goalrail.example.com"``.
     """
     _save_global_config({"server": server})
     click.echo(f"Set {server} as your default server.")
@@ -12038,12 +11128,6 @@ def login(server_url: str) -> None:
       stores the session JWT when the browser flow completes.
     - header mode: no login needed (proxy injects identity); we
       print a hint and exit successfully.
-    - Databricks-fronted (a Databricks App, or Goalrail hosted on
-      a workspace API path): detected from the probe response — we
-      log in to the workspace via ``databricks auth login --host
-      <workspace>`` (browser) and store a pointer record so later
-      commands mint fresh workspace tokens automatically. Requires
-      the ``databricks`` extra.
 
     Subsequent ``goalrail run --server <url>`` commands then
     use the stored token via the runner / host-tunnel auth chain. A
@@ -12055,14 +11139,12 @@ def login(server_url: str) -> None:
     \b
     Example:
       goalrail login http://localhost:6767
-      goalrail login example.cloud.databricks.com/goalrail  # https:// assumed
+      goalrail login goalrail.example.com  # https:// assumed
       goalrail          # connects to the server just logged in to
 
     :param server_url: The remote server URL, e.g.
         ``"http://localhost:6767"``. A missing scheme defaults to
-        ``https://`` (``http://`` for loopback hosts), and the workspace
-        web-UI URL (``<ws>/goalrail``) is accepted alongside the bare
-        workspace root.
+        ``https://`` (``http://`` for loopback hosts).
     """
     import httpx as _httpx
 
@@ -12071,22 +11153,14 @@ def login(server_url: str) -> None:
     # ── Step 0: Probe the server's auth mode. ──────────────────
     # /v1/me returns a JSON ``login_url`` on 401 — "/login" for
     # accounts, "/auth/login" for OIDC, and no login_url at all
-    # for header mode. A 302 to a workspace OAuth page (Databricks
-    # Apps) or a 401 with a DatabricksRealm challenge (workspace-
-    # hosted goalrail) means Databricks fronts the server. This
-    # lets one CLI command handle every posture without a flag.
+    # for header mode. This lets one CLI command handle every supported
+    # posture without a flag.
     try:
         probe = _httpx.get(f"{server}/v1/me", timeout=10.0)
     except _httpx.HTTPError as exc:
         raise click.ClickException(
             f"Could not reach {server}/v1/me: {exc}\nIs the server running?"
         ) from exc
-
-    databricks_workspace = _databricks_workspace_login_target(server, probe)
-    if databricks_workspace is not None:
-        _databricks_login(server, databricks_workspace)
-        _remember_default_server(server)
-        return
 
     detected_login_url: str | None = None
     if probe.status_code == 401:
@@ -12315,7 +11389,7 @@ def pane_split(direction: str | None, parent_pane: str) -> None:
     # tmux's ``split-window`` / ``new-window`` defaults to the
     # tmux server's cwd (often the user's HOME), which means
     # relative agent paths in the parent's launch argv (e.g.
-    # ``examples/databricks_coding_agent.yaml``) don't resolve in
+    # ``examples/hello_world.yaml``) don't resolve in
     # the new pane and the spawned REPL exits with "agent path
     # not found" within seconds.
     parent_cwd = subprocess.run(

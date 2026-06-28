@@ -52,7 +52,7 @@ Triggered on every new issue. The bot classifies, deduplicates, resolves what it
 - Close issues (the lifecycle bot handles that)
 - Re-triage after initial classification (maintainers can override freely)
 
-**Tool:** `goalrail run .github/triage/` via GitHub Actions workflow, triggered `on: issues: [opened]`. The triage agent is a tool-less Claude SDK harness that outputs structured JSON; all GitHub mutations (labeling, assignment, comments) happen in trusted workflow steps that validate against allowlists. LLM credentials route through the Databricks gateway (`LLM_API_KEY` + `GATEWAY_BASE_URL`). Permissions: `issues: write` only.
+**Tool:** `goalrail run .github/triage/` via GitHub Actions workflow, triggered `on: issues: [opened]`. The triage agent is a tool-less Claude SDK harness that outputs structured JSON; all GitHub mutations (labeling, assignment, comments) happen in trusted workflow steps that validate against allowlists. LLM credentials route through the OpenAI-compatible gateway (`LLM_API_KEY` + `GATEWAY_BASE_URL`). Permissions: `issues: write` only.
 
 **Most issues never need a maintainer.** The bot + lifecycle automation resolves them:
 
@@ -107,7 +107,7 @@ The bot applies labels but does NOT post comments (except for duplicate flagging
 
 Use `goalrail run .github/triage/` as the triage engine — a tool-less Claude SDK harness that outputs structured JSON, with all GitHub mutations in trusted workflow steps.
 
-**Why:** `claude-code-action` requires a direct Anthropic API key (`ANTHROPIC_API_KEY`), which we don't have — our LLM access routes through the Databricks gateway. More critically, `claude-code-action` gives the LLM shell access and a GitHub token, creating a prompt injection → secret exfiltration attack surface (a crafted issue body could trick the agent into running `printenv` → `gh issue comment`). The Goalrail approach eliminates this structurally: the LLM has no tools, no shell, and no `GH_TOKEN` — it only outputs JSON that is validated against allowlists before any GitHub mutation occurs.
+**Why:** `claude-code-action` requires a direct Anthropic API key (`ANTHROPIC_API_KEY`), which we don't have — our LLM access routes through the OpenAI-compatible gateway. More critically, `claude-code-action` gives the LLM shell access and a GitHub token, creating a prompt injection → secret exfiltration attack surface (a crafted issue body could trick the agent into running `printenv` → `gh issue comment`). The Goalrail approach eliminates this structurally: the LLM has no tools, no shell, and no `GH_TOKEN` — it only outputs JSON that is validated against allowlists before any GitHub mutation occurs.
 
 **Alternatives considered:**
 
@@ -169,7 +169,7 @@ Use `actions/first-interaction` to post a short welcome message on a contributor
 
 - **Structural prompt injection defense** - the triage agent has NO tools, NO shell access, and NO `GH_TOKEN`. It outputs structured JSON only. All GitHub mutations (labeling, assignment, duplicate comments) happen in trusted workflow steps that validate the JSON against hardcoded allowlists. Even a successful prompt injection cannot exfiltrate secrets or perform unauthorized actions.
 - **Trusted/untrusted step separation** - issue content is fetched by a trusted step (via `gh issue view`) and passed to the LLM as data. The LLM's output is parsed by a trusted step that only accepts values from allowlists (`ALLOWED_TYPES`, `ALLOWED_COMPONENTS`, `ALLOWED_PRIORITIES`). No attacker-controlled string is ever interpolated into shell commands or workflow expressions.
-- **LLM credentials route through the gateway** - `LLM_API_KEY` + `GATEWAY_BASE_URL` via Databricks, not a direct Anthropic API key. The `GH_TOKEN` is only available in trusted steps, never in the LLM step.
+- **LLM credentials route through the gateway** - `LLM_API_KEY` + `GATEWAY_BASE_URL` via gateway, not a direct Anthropic API key. The `GH_TOKEN` is only available in trusted steps, never in the LLM step.
 - **Workflow has `issues: write` only** - no code access, no `contents: write`
 - **No bot-driven code changes** - all code changes go through the existing PR + maintainer approval + security scan pipeline
 - **Duplicate closure has a veto** - reporter reacts 👎 to block

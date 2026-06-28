@@ -36,16 +36,16 @@ def _spec(model: str | None) -> AgentSpec:
         (None, None),
         ("", None),
         # Gateway-routed ids are not cursor-agent model ids → dropped.
-        ("databricks-claude-opus", None),
-        ("databricks/claude-opus", None),
+        ("anthropic/claude-opus", None),
+        ("openai/gpt-5", None),
     ],
     ids=[
         "cursor-id-passthrough",
         "cursor-id-gpt5",
         "no-model",
         "empty-model",
-        "databricks-dash-dropped",
-        "databricks-slash-dropped",
+        "anthropic-provider-id-dropped",
+        "openai-provider-id-dropped",
     ],
 )
 def test_cursor_native_model_from_spec(model: str | None, expected: str | None) -> None:
@@ -63,8 +63,8 @@ def test_cursor_native_model_from_spec_warns_on_dropped_model(
 ) -> None:
     """Dropping a non-cursor id warns so the silent fallback is visible."""
     with caplog.at_level(logging.WARNING):
-        assert _cursor_native_model_from_spec(_spec("databricks-claude-opus")) is None
-    assert any("databricks-claude-opus" in rec.getMessage() for rec in caplog.records)
+        assert _cursor_native_model_from_spec(_spec("anthropic/claude-opus")) is None
+    assert any("anthropic/claude-opus" in rec.getMessage() for rec in caplog.records)
 
 
 def _msg(role: str, text: str) -> dict:

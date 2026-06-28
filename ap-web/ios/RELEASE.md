@@ -24,6 +24,7 @@ follow-up).
    ```sh
    cp fastlane/.env.example fastlane/.env
    # edit fastlane/.env: set ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_PATH
+   # set GOALRAIL_APPLE_TEAM_ID if your Apple ID belongs to multiple teams
    ```
    `.env` is git-ignored and is loaded automatically by fastlane.
 
@@ -35,7 +36,8 @@ bundle exec fastlane beta
 ```
 
 This bumps the build number to one past the latest on TestFlight, archives the
-Release configuration (HTTPS-only, automatic signing under team `8RMX4WU6F8`),
+Release configuration (HTTPS-only, automatic signing under `GOALRAIL_APPLE_TEAM_ID`
+when configured),
 and uploads the `.ipa`. The build appears in App Store Connect → TestFlight after
 Apple finishes processing.
 

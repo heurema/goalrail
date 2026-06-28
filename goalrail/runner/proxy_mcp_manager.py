@@ -51,8 +51,8 @@ class ProxyMcpManager:
         ``"conv_abc123"``.  Used to build the proxy endpoint URL:
         ``/v1/sessions/{session_id}/mcp``.
     :param ap_client: An :class:`httpx.AsyncClient` pointed at the Goalrail server.
-        Must already carry the runner's service auth (e.g. Databricks bearer
-        token) so requests are accepted by the Goalrail server's auth middleware.
+        Must already carry the runner's service auth so requests are accepted
+        by the Goalrail server's auth middleware.
     """
 
     def __init__(

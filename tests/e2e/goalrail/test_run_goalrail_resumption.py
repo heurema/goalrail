@@ -49,9 +49,7 @@ from pathlib import Path
 from tests.e2e.goalrail.conftest import configure_mock_llm
 
 # ``openai-agents`` is picked because it honors
-# ``OPENAI_BASE_URL`` / ``OPENAI_API_KEY`` directly — no
-# ``~/.databrickscfg`` patching required (which would be
-# awkward when HOME is a tmp_path).
+# ``OPENAI_BASE_URL`` / ``OPENAI_API_KEY`` directly.
 _MODEL = "mock-model"
 _HARNESS = "openai-agents"
 

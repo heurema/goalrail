@@ -29,7 +29,7 @@ were migrated in the same change.
 ### Fixed — Gap 1: harness auto-selection based on model name
 
 Pure goalrail' CLI auto-picks a harness from the model's
-prefix: `databricks-claude-*` → `claude-sdk`, `databricks-gpt-*`
+prefix: `gateway-claude-*` → `claude-sdk`, `gateway-gpt-*`
 → `openai-agents`, etc. The `--goalrail` adapter's validator refused
 specs without an explicit `harness:` field, so every YAML that
 relied on pure-goalrail auto-selection failed at spec-load:
@@ -88,7 +88,7 @@ now accept `parent_harness`. The harness resolution order is
 (3) `_infer_harness_from_model` on the resolved model.
 Importantly, the **effective** parent harness (post auto-pick)
 is propagated — not the raw YAML value — so a parent that
-declares only `model: databricks-gpt-5-4-mini` auto-picks
+declares only `model: openai/gpt-5-4-mini` auto-picks
 `openai-agents` and passes that concrete harness down to its
 children.
 
@@ -185,4 +185,4 @@ Verified by:
   never appears in output — the tool was short-circuited, not
   dispatched).
 - The full rejection + happy-path e2e sweep: 11/11 passing in
-  ~125s against the real Databricks gateway.
+  ~125s against the real gateway.

@@ -121,7 +121,7 @@ def mock_credentials_env(
 
     Wires ``OPENAI_BASE_URL`` to the session-scoped mock LLM server
     so all LLM calls go to deterministic canned responses instead of
-    a real Databricks gateway.
+    a real provider.
 
     :param mock_llm_server_url: Base URL of the mock LLM server,
         e.g. ``"http://127.0.0.1:12345"``.
@@ -135,13 +135,11 @@ def mock_credentials_env(
     # Strip vars that could interfere with the mock path.
     for stale in (
         "ANTHROPIC_API_KEY",
-        "DATABRICKS_TOKEN",
         "CLAUDE_CODE",
         "CLAUDECODE",
         "CLAUDE_CODE_ENTRYPOINT",
         "CLAUDE_CODE_EXECPATH",
         "CODEX",
-        "DATABRICKS_CONFIG_PROFILE",
     ):
         env.pop(stale, None)
     env["GOALRAIL_SKIP_ONBOARD"] = "1"

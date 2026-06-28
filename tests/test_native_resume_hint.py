@@ -24,11 +24,11 @@ def test_format_native_resume_command_includes_remote_context() -> None:
     """
     command = format_native_resume_command(
         native_command="claude",
-        server="https://example.databricks.com",
+        server="https://goalrail.example",
         session_id="conv_abc",
     )
 
-    assert command == ("goalrail claude --server https://example.databricks.com --resume conv_abc")
+    assert command == ("goalrail claude --server https://goalrail.example --resume conv_abc")
 
 
 def test_cold_resume_hint_not_restored_is_honest_on_stderr(

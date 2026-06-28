@@ -21,9 +21,9 @@ spawn: true
 # Markdown / text edits, skills) itself. No model/profile is pinned, so the
 # brain runs on whatever Claude provider is configured as the default
 # (`goalrail setup --no-internal-beta`) — an Anthropic API key, a Claude
-# subscription, an OpenAI-compatible gateway, or a Databricks workspace. With
-# no model named the claude-sdk harness resolves the configured provider's
-# default Claude model (the bundled catalog default is claude-opus-4-8).
+# subscription, or an OpenAI-compatible gateway. With no model named the
+# claude-sdk harness resolves the configured provider's default Claude model
+# (the bundled catalog default is claude-opus-4-8).
 executor:
   type: goalrail
   context_window: 1000000

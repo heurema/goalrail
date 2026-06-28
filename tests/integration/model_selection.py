@@ -11,7 +11,7 @@ def resolve_default_model(model: str, harness_name: str) -> str:
     Codex opts out of hash-spreading because its CI leg is pinned to the
     higher-headroom model after lower-headroom GPT models hit gateway 429s.
 
-    :param model: Model from ``--model``, e.g. ``"databricks-gpt-5-5"``.
+    :param model: Model from ``--model``, e.g. ``"openai/gpt-5-5"``.
     :param harness_name: Harness under test, e.g. ``"codex"``.
     :returns: The resolved model to register on the inline test agent.
     """

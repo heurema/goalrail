@@ -8,16 +8,15 @@ name: Flake stress (E2E)
 #
 # Why a SEPARATE workflow from flake-stress.yml: the original was built for
 # NON-LLM (server/unit) targets. It runs creds-stripped (`env -u
-# OPENAI_API_KEY -u ANTHROPIC_API_KEY -u DATABRICKS_TOKEN`) and never passes
-# `--llm-api-key`/`--profile`, so every `tests/e2e/` attempt errors at
+# OPENAI_API_KEY -u ANTHROPIC_API_KEY`) and never passes
+# `--llm-api-key`, so every `tests/e2e/` attempt errors at
 # setup: tests/e2e/conftest.py's session-scoped `llm_api_key` fixture raises
 # `pytest.UsageError("tests/e2e/ requires --llm-api-key <KEY>")`. This
-# variant injects the Databricks gateway credentials exactly like e2e.yml
-# (write ~/.databrickscfg from secrets, set DATABRICKS_BEARER) and runs
-# pytest with `--llm-api-key "$LLM_API_KEY" --profile <profile>` so the e2e
-# fixtures resolve. Use it to verify a de-flaked / un-suppressed e2e test
-# (point at the fix branch, expect 0/N) or quantify a flake rate (point at
-# main). The original flake-stress.yml stays intact for server/unit targets.
+# variant injects the configured gateway credentials and runs pytest with
+# `--llm-api-key "$LLM_API_KEY"` so the e2e fixtures resolve. Use it to verify a
+# de-flaked / un-suppressed e2e test (point at the fix branch, expect 0/N) or
+# quantify a flake rate (point at main). The original flake-stress.yml stays
+# intact for server/unit targets.
 #
 # Examples:
 #   gh workflow run flake-stress-e2e.yml --ref main \
@@ -48,10 +47,6 @@ on:
         description: "pytest-xdist --dist mode (loadfile|worksteal|loadscope|load|each|no, default: loadscope)"
         required: false
         default: "loadscope"
-      profile:
-        description: "Databricks config profile written to ~/.databrickscfg and passed to --profile (default: default)"
-        required: false
-        default: "default"
       extra_pytest_args:
         description: "Extra pytest args appended to the command, e.g. '-x' (default: empty)"
         required: false
@@ -67,8 +62,7 @@ env:
   # Pin the PyPI index for uv/pip resolution (same as flake-stress.yml).
   UV_INDEX_URL: https://pypi.org/simple
   PIP_INDEX_URL: https://pypi.org/simple
-  # Never let the test server pick up the runner's own credentials; the
-  # gateway key flows ONLY via ~/.databrickscfg + --llm-api-key (e2e.yml).
+  # Never let the test server pick up the runner's own credentials.
   ANTHROPIC_API_KEY: ""
   OPENAI_API_KEY: ""
   CODEX: ""
@@ -91,7 +85,6 @@ jobs:
           WORKERS: ${{ github.event.inputs.workers }}
           DIST: ${{ github.event.inputs.dist }}
           TEST_TARGET: ${{ github.event.inputs.test_target }}
-          PROFILE: ${{ github.event.inputs.profile }}
           EXTRA_ARGS: ${{ github.event.inputs.extra_pytest_args }}
         run: |
           set -euo pipefail
@@ -114,12 +107,6 @@ jobs:
               exit 1
               ;;
           esac
-          # profile names a ~/.databrickscfg section header and the
-          # --profile value; restrict to config-section-safe chars.
-          if ! [[ "$PROFILE" =~ ^[a-zA-Z0-9._-]+$ ]]; then
-            echo "::error::profile must match [a-zA-Z0-9._-]+, got '$PROFILE'"
-            exit 1
-          fi
           # test_target / extra_pytest_args reach a shell; restrict to
           # legitimate pytest node-id chars so hostile input can't smuggle
           # command substitution (belt-and-suspenders atop authz dispatch).
@@ -177,7 +164,7 @@ jobs:
           ARR=$(python3 -c "import json,os; print(json.dumps(list(range(1, int(os.environ['ATTEMPTS'])+1))))")
           echo "attempts_json=$ARR" >> "$GITHUB_OUTPUT"
           echo "Will run $ATTEMPTS attempts of: $TEST_TARGET"
-          echo "Config: -n $WORKERS --dist=$DIST --profile=$PROFILE  extra='$EXTRA_ARGS'"
+          echo "Config: -n $WORKERS --dist=$DIST extra='$EXTRA_ARGS'"
 
   repro:
     name: Attempt ${{ matrix.attempt }}
@@ -217,22 +204,6 @@ jobs:
         # pytest step reads it from env (never a ${{ }} shell interpolation).
         run: echo "LLM_API_KEY=${{ secrets.LLM_API_KEY }}" >> "$GITHUB_ENV"
 
-      - name: Write gateway profile (~/.databrickscfg)
-        env:
-          GATEWAY_BASE_URL: ${{ secrets.GATEWAY_BASE_URL }}
-          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
-          PROFILE: ${{ github.event.inputs.profile }}
-        run: |
-          # Strip the /serving-endpoints suffix the conftest re-appends.
-          host="${GATEWAY_BASE_URL%/serving-endpoints}"
-          cat > "$HOME/.databrickscfg" <<EOF
-          [$PROFILE]
-          host  = $host
-          token = $LLM_API_KEY
-          EOF
-          # PAT passthrough for the codex / claude-sdk auth commands.
-          echo "DATABRICKS_BEARER=$LLM_API_KEY" >> "$GITHUB_ENV"
-
       - name: Install project and dev dependencies
         # Matches e2e.yml; ``--extra all`` pulls the harness SDKs so the
         # executor adapters import at collection time.
@@ -260,21 +231,20 @@ jobs:
         # Inputs validated by prep. Word-splitting on $TEST_TARGET /
         # $EXTRA_ARGS is intentional (multi-token); bound via env (not
         # ``${{ }}``) to avoid expression injection at the shell. LLM_API_KEY
-        # / DATABRICKS_BEARER arrive from $GITHUB_ENV (set above), so the key
-        # never appears in a ${{ }} interpolation here.
+        # arrives from $GITHUB_ENV (set above), so the key never appears in a
+        # ${{ }} interpolation here.
         shell: bash
         timeout-minutes: 40
         env:
           TEST_TARGET: ${{ github.event.inputs.test_target }}
           WORKERS: ${{ github.event.inputs.workers }}
           DIST: ${{ github.event.inputs.dist }}
-          PROFILE: ${{ github.event.inputs.profile }}
           EXTRA_ARGS: ${{ github.event.inputs.extra_pytest_args }}
           # Spread interchangeable gateway models across tests + drain the
           # low-quota gpt-5-4 model, so sustained 429s don't masquerade as
           # flakes (mirrors e2e.yml).
           GOALRAIL_TEST_MODEL_SPREAD: "1"
-          GOALRAIL_TEST_MODEL_POOL_GPT: "databricks-gpt-5-5,databricks-gpt-5-4-mini"
+          GOALRAIL_TEST_MODEL_POOL_GPT: "gpt-5.5,gpt-5.4-mini"
         run: |
           mkdir -p artifacts "artifacts/basetemp-${{ matrix.attempt }}"
           # --junitxml emits per-test results eagerly so diagnostics survive a
@@ -284,13 +254,10 @@ jobs:
           # rather than letting loadscope requeue deadlock the controller.
           # NOTE: deliberately NO --showlocals (unlike e2e.yml / flake-stress.yml):
           # it would dump the llm_api_key fixture / env dicts into the junit
-          # <failure> CDATA, and junit is uploaded as an artifact. --harness
-          # databricks matches e2e.yml (also the conftest default).
+          # <failure> CDATA, and junit is uploaded as an artifact.
           # shellcheck disable=SC2086
           uv run pytest $TEST_TARGET \
             --llm-api-key "$LLM_API_KEY" \
-            --profile "$PROFILE" \
-            --harness databricks \
             -n "$WORKERS" --dist="$DIST" \
             --max-worker-restart=0 \
             --timeout=180 \

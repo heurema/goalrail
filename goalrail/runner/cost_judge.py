@@ -111,7 +111,7 @@ class _ResponsesLike(Protocol):
         asserts the result is a :class:`Response`.
 
         :param input: Responses-API input items (one user message).
-        :param model: The judge model id, e.g. ``"databricks-claude-haiku-4-5"``.
+        :param model: The judge model id, e.g. ``"anthropic/claude-haiku-4-5"``.
         :param connection_params: Per-provider connection overrides, or
             ``None`` for adapter defaults.
         :param timeout: Request timeout in seconds, or ``None``.
@@ -131,7 +131,7 @@ class _JudgeConfig:
         ``{"cheap": ("m1",), "expensive": ("m2",)}`` — both the menu the
         judge picks a model from and the clamp source for a strayed pin.
     :param judge_model: The model the judge call itself runs on, e.g.
-        ``"databricks-claude-haiku-4-5"``.
+        ``"anthropic/claude-haiku-4-5"``.
     :param connection: Per-provider connection overrides for the judge
         call, e.g. ``{"base_url": ..., "api_key": ...}``; ``None`` uses
         adapter defaults.
@@ -448,7 +448,7 @@ def _resolve_judge_model(  # type: ignore[explicit-any]  # executor_config is a 
         for configured tiers).
     :param executor_config: The spec's ``executor.config`` dict (carries
         the ``cost_optimize`` marker), or ``None``.
-    :returns: The judge model id, e.g. ``"databricks-claude-haiku-4-5"``.
+    :returns: The judge model id.
     :raises ValueError: When no configured tier has any model (the
         catalog is unusable — config validation should have caught this).
     """
@@ -463,95 +463,11 @@ def _resolve_judge_model(  # type: ignore[explicit-any]  # executor_config is a 
     raise ValueError("cost_optimize tiers have no models; cannot resolve a judge model")
 
 
-@dataclass(frozen=True)
-class _RoutedJudgeCall:
-    """
-    The judge call's provider routing after Databricks normalization.
-
-    :param model: The model to hand to the generic client, e.g.
-        ``"databricks/databricks-claude-haiku-4-5"``.
-    :param connection: Connection overrides for the call, e.g.
-        ``{"base_url": "https://…/serving-endpoints", "api_key": "…"}``,
-        or ``None`` for adapter defaults.
-    """
-
-    model: str
-    connection: dict[str, str] | None
-
-
-def _resolve_workspace_creds(profile: str | None) -> Any:  # type: ignore[explicit-any]  # WorkspaceCreds (lazy import keeps module import side-effect free)
-    """
-    Indirection over Databricks credential resolution for testability.
-
-    :param profile: Profile name from ``~/.databrickscfg``, or ``None``
-        for env / DEFAULT-section resolution.
-    :returns: The resolved
-        :class:`~goalrail.runtime.credentials.databricks.WorkspaceCreds`.
-    :raises OSError: When no usable credentials exist.
-    """
-    from goalrail.runtime.credentials.databricks import resolve_databricks_workspace
-
-    return resolve_databricks_workspace(profile)
-
-
-def _route_databricks_judge_model(
-    judge_model: str,
-    connection: dict[str, str] | None,
-    databricks_profile: str | None,
-) -> _RoutedJudgeCall:
-    """
-    Route a Databricks judge model through the ``databricks`` adapter.
-
-    A bare ``databricks-*`` id carries no provider prefix, so the generic
-    client would route it to the default ``openai`` adapter
-    (``api.openai.com``) and the judge would fail open on EVERY turn —
-    exactly the model shape polly's shipped tier catalog uses. Prefix the
-    model ``databricks/`` so it reaches the Databricks adapter, and (when
-    the caller passed no explicit connection) resolve the gateway
-    host/token from *databricks_profile* — the same profile the brain's
-    claude-sdk gateway routing resolves. A failed credential resolution
-    leaves the connection ``None`` (the adapter then auto-resolves from
-    ambient ``DATABRICKS_CONFIG_PROFILE`` / DEFAULT config); the judge
-    stays fail-open either way.
-
-    :param judge_model: The resolved judge model id, e.g.
-        ``"databricks-claude-haiku-4-5"`` (returned unchanged when it is
-        not a Databricks id).
-    :param connection: Explicit connection overrides from the spec, or
-        ``None`` (resolve from *databricks_profile*).
-    :param databricks_profile: The Databricks profile the brain's gateway
-        routing uses, e.g. ``"my-workspace"``, or ``None`` (ambient
-        resolution).
-    :returns: The routed model + connection for the judge call.
-    """
-    if not judge_model.startswith(("databricks-", "databricks/")):
-        return _RoutedJudgeCall(model=judge_model, connection=connection)
-    if not judge_model.startswith("databricks/"):
-        judge_model = f"databricks/{judge_model}"
-    if connection is None:
-        try:
-            creds = _resolve_workspace_creds(databricks_profile)
-        except OSError as exc:
-            _logger.warning(
-                "cost_judge: could not resolve Databricks credentials "
-                "(profile=%r): %s; judge call will use ambient adapter defaults",
-                databricks_profile,
-                exc,
-            )
-            return _RoutedJudgeCall(model=judge_model, connection=None)
-        connection = {
-            "base_url": creds.host.rstrip("/") + "/serving-endpoints",
-            "api_key": creds.token,
-        }
-    return _RoutedJudgeCall(model=judge_model, connection=connection)
-
-
 def build_llm_judge(  # type: ignore[explicit-any]  # executor_config is a YAML-shaped dict
     *,
     tiers: dict[str, tuple[str, ...]],
     executor_config: Mapping[str, Any] | None,
     connection: dict[str, str] | None,
-    databricks_profile: str | None = None,
     client: LLMClientLike | None = None,
 ) -> LLMJudge:
     """
@@ -566,17 +482,8 @@ def build_llm_judge(  # type: ignore[explicit-any]  # executor_config is a YAML-
         the ``advisor_model`` override.
     :param connection: Per-provider connection overrides for the judge
         call (the orchestrator's own connection), or ``None``.
-    :param databricks_profile: The Databricks profile the brain's gateway
-        routing resolves for this spec (see
-        :func:`goalrail.runner.cost_advisor._databricks_profile_for_spec`),
-        or ``None``. Used only when the judge model is a Databricks id and
-        *connection* is ``None``.
     :param client: LLM client override; ``None`` builds the real
-        :class:`goalrail.llms.client.Client`. Tests pass a scripted stub —
-        the Databricks judge-model routing (provider prefix + credential
-        resolution) applies only on the real-client path, since an
-        injected stub makes no provider call and credential I/O would be a
-        pure side effect in unit tests.
+        :class:`goalrail.llms.client.Client`. Tests pass a scripted stub.
     :returns: The wired judge.
     :raises ValueError: When no judge model can be resolved from *tiers*.
     """
@@ -585,8 +492,6 @@ def build_llm_judge(  # type: ignore[explicit-any]  # executor_config is a YAML-
     if client is not None:
         effective_client = client
     else:
-        routed = _route_databricks_judge_model(judge_model, connection, databricks_profile)
-        judge_model, connection = routed.model, routed.connection
         from goalrail.llms.client import Client
 
         effective_client = Client()

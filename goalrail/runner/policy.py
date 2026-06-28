@@ -8,8 +8,8 @@ runner has to run these policies itself to keep parity.
 Scope:
 
 - ``function``-type policies with ``on:`` containing ``tool_call``
-  or ``tool_result``. The example ``google_policy`` in
-  ``examples/databricks_coding_agent.yaml`` is the canonical case.
+  or ``tool_result``. The built-in Google/GitHub policies are the
+  canonical cases.
 - ``label`` and ``prompt`` types stay server-side — they need the
   ``ConversationStore`` and the LLM classifier respectively, which
   the runner doesn't have. Specs that wire those types to MCP tools

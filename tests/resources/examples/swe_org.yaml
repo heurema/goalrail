@@ -9,14 +9,9 @@
 #   - examples/secure_research_agent.yaml
 #
 # Usage:
-#   goalrail examples/swe_org.yaml --profile <your-profile>
-#   goalrail examples/swe_org.yaml --profile <your-profile>
-#   goalrail examples/swe_org.yaml --profile <your-profile> -p "Audit this repo"
-#
-# `--profile` resolves a Databricks workspace from `~/.databrickscfg`
-# and exposes `databricks-*` model names through the workspace's serving
-# gateway. Drop `--profile` if you've set OPENAI_API_KEY / Anthropic
-# credentials directly and want to run against those providers.
+#   export OPENAI_API_KEY=<your-key>
+#   goalrail examples/swe_org.yaml
+#   goalrail examples/swe_org.yaml -p "Audit this repo"
 #
 # Goals:
 # - Root agent acts like an engineering director / tech lead.
@@ -89,7 +84,7 @@ prompt: |
 
 # Root model: good general coordinator / synthesizer.
 executor:
-  model: databricks-gpt-5-5
+  model: openai/gpt-5-5
 
 # Enable async child work and inbox-style results.
 async: true
@@ -160,7 +155,7 @@ tools:
     os_env: inherit
     executor:
       # Stronger reasoning for backend / architecture work.
-      model: databricks-claude-sonnet-4-6
+      model: anthropic/claude-sonnet-4-6
     tools:
       # Inherit selected parent tools into this child.
       search_web: inherit
@@ -200,7 +195,7 @@ tools:
     os_env: inherit
     executor:
       # Faster/cheaper model for more iterative UI-oriented work.
-      model: databricks-gpt-5-4-mini
+      model: openai/gpt-5-4-mini
     tools:
       search_web: inherit
       summarize_text: inherit
@@ -236,7 +231,7 @@ tools:
     max_sessions: 3
     os_env: inherit
     executor:
-      model: databricks-gpt-5-4-mini
+      model: openai/gpt-5-4-mini
     tools:
       search_web: inherit
       summarize_text: inherit
@@ -272,7 +267,7 @@ tools:
     max_sessions: 4
     os_env: inherit
     executor:
-      model: databricks-claude-sonnet-4-6
+      model: anthropic/claude-sonnet-4-6
     tools:
       summarize_text: inherit
       calculate: inherit
@@ -308,7 +303,7 @@ tools:
     os_env: inherit
     executor:
       # Deliberately different from the root and frontend agent.
-      model: databricks-claude-sonnet-4-6
+      model: anthropic/claude-sonnet-4-6
     tools:
       search_web: inherit
       summarize_text: inherit

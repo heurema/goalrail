@@ -29,7 +29,7 @@ export const COST_CONTROL_PLAN_LABEL = "cost_control.plan";
  *
  * @param tier Price tier the advisor judged for the turn.
  * @param model Model id the tier resolved to, e.g.
- *   `"databricks-claude-haiku-4-5"`.
+ *   `"anthropic/claude-haiku-4-5"`.
  * @param applied `true` when routing was applied; `false` in
  *   advise/shadow mode.
  * @param rationale Advisor's explanation; `null` when absent.
@@ -82,7 +82,7 @@ export function parseCostRoutingVerdict(
   };
 }
 
-// The tier-defining token of Claude model ids ("databricks-claude-haiku-4-5" → "haiku").
+// The tier-defining token of Claude model ids ("anthropic/claude-haiku-4-5" -> "haiku").
 const MODEL_FAMILY_HINTS = ["haiku", "sonnet", "opus"] as const;
 
 /**
@@ -90,7 +90,7 @@ const MODEL_FAMILY_HINTS = ["haiku", "sonnet", "opus"] as const;
  *
  * Lossy is fine — the tooltip is a glance surface, not an audit log.
  *
- * @param model Model id, e.g. `"databricks-claude-haiku-4-5"`.
+ * @param model Model id, e.g. `"anthropic/claude-haiku-4-5"`.
  * @returns The short display name, e.g. `"haiku"`.
  */
 export function shortModelName(model: string): string {
@@ -98,7 +98,7 @@ export function shortModelName(model: string): string {
   for (const family of MODEL_FAMILY_HINTS) {
     if (lower.includes(family)) return family;
   }
-  return lower.startsWith("databricks-") ? model.slice("databricks-".length) : model;
+  return model.includes("/") ? model.split("/").pop() || model : model;
 }
 
 // Lucide "waypoints" geometry — a routing topology: four nodes joined by

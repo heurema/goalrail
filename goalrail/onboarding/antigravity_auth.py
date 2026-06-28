@@ -36,11 +36,11 @@ ANTIGRAVITY_EXTRA_INSTALL_COMMAND = 'pip install "goalrail[antigravity]"'
 def antigravity_sdk_installed() -> bool:
     """Return whether the ``google-antigravity`` SDK (the optional extra) is importable.
 
-    Setup uses this to detect a missing SDK and offer to install it. Mirrors
-    :func:`goalrail.onboarding.databricks_config.databricks_sdk_installed`: uses
-    :func:`importlib.util.find_spec` to avoid importing the heavy SDK, and guards the
-    ``ModuleNotFoundError`` ``find_spec`` raises when the parent ``google`` namespace
-    package is absent (it raises instead of returning ``None``).
+    Setup uses this to detect a missing SDK and offer to install it.
+    :func:`importlib.util.find_spec` avoids importing the heavy SDK, and the
+    guard catches the ``ModuleNotFoundError`` it raises when the parent
+    ``google`` namespace package is absent (it raises instead of returning
+    ``None``).
 
     :returns: ``True`` when ``google.antigravity`` is importable.
     """

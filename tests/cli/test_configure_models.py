@@ -22,10 +22,9 @@ credential opens level 3 — ``Make default`` (only when not already the
 default), ``Remove``, and ``← Back``. Going back / exiting is also Esc on a TTY
 or ``q`` on the numbered fallback. Under ``CliRunner`` stdin is not a TTY, so
 the selector routes through the **numbered fallback** (1-based; ``q`` aborts).
-The add menu is scoped to the
-harness entered (Claude → Anthropic key / Claude sub / gateway / databricks;
-Codex → OpenAI key / ChatGPT sub / OpenRouter key / gateway / other /
-databricks). The add flow no longer asks "make default?": a credential
+The add menu is scoped to the harness entered (Claude → Anthropic key / Claude
+sub / gateway / Bedrock; Codex → OpenAI key / ChatGPT sub / OpenRouter key /
+gateway / other). The add flow no longer asks "make default?": a credential
 auto-becomes the default for any family with no existing default.
 
 The per-family-default invariant (a Claude default and a Codex default
@@ -38,7 +37,6 @@ from __future__ import annotations
 import os
 
 import pytest
-import tomllib
 import yaml
 from click.testing import CliRunner
 
@@ -83,7 +81,6 @@ def isolated_config(tmp_path, monkeypatch):
         "GEMINI_API_KEY",
         "ANTIGRAVITY_API_KEY",
         "OPENROUTER_API_KEY",
-        "DATABRICKS_TOKEN",
         "CURSOR_API_KEY",
     ):
         monkeypatch.delenv(var, raising=False)
@@ -310,8 +307,8 @@ def test_configure_models_add_gateway_openrouter_chat_wire(isolated_config) -> N
     """
     # L1 2=Codex → L2 1=+Add → scoped openai menu 3="Gateway — custom base
     # URL + key" (order: OpenAI key, ChatGPT sub, Gateway, OpenRouter,
-    # Databricks, Other) → name; base_url; key; surfaces select 2="Codex /
-    # OpenAI only"; wire 2=Chat; default model "qwen/q" → L2 q=back → L1 q=exit.
+    # Other) → name; base_url; key; surfaces select 2="Codex / OpenAI only";
+    # wire 2=Chat; default model "qwen/q" → L2 q=back → L1 q=exit.
     stdin = (
         "\n".join(
             [
@@ -521,17 +518,17 @@ def test_add_menu_options_are_friendly_and_credential_aware() -> None:
 
 
 def test_add_menu_options_ordering() -> None:
-    """The add menu orders: API key → subscription → extras → Databricks → Other.
+    """The add menu orders: API key → subscription → extras → Other → Bedrock.
 
     Proves the user-requested ordering, in both the full menu and each
     family-scoped subset (the menu actually shown after drilling into a
     harness): the first-party API key(s) and subscription(s) lead, the
-    cross-vendor extras follow alphabetically (Gateway before OpenRouter),
-    and Databricks sits just above the catch-all "Other". A regression to
-    the old interleaved order (or Other above Databricks) fails here.
+    cross-vendor extras follow alphabetically (Gateway before OpenRouter), and
+    the catch-all "Other" stays below the presets. Bedrock is appended last so
+    it never shifts established rows.
     """
     # Full menu: first-party keys (OpenAI, Anthropic, Gemini), then
-    # subscriptions, then Gateway, OpenRouter, Databricks, Other.
+    # subscriptions, then Gateway, OpenRouter, Other, Bedrock.
     full = [o.label.split(None, 1)[1] for o in add_menu_options()]
     assert full == [
         "OpenAI — API key",
@@ -541,121 +538,36 @@ def test_add_menu_options_ordering() -> None:
         "Claude — subscription (Pro/Max)",
         "Gateway — custom base URL + key (e.g. OpenRouter)",
         "OpenRouter — API key",
-        "Databricks — workspace",
         "Other provider — API key",
         # Bedrock is appended last so it never shifts the established order.
         "AWS Bedrock — API key",
     ]
 
-    # Codex (openai) scoped: API key, subscription, Gateway, OpenRouter,
-    # Databricks, Other — Databricks immediately above Other.
+    # Codex (openai) scoped: API key, subscription, Gateway, OpenRouter, Other.
     codex = [o.label.split(None, 1)[1] for o in add_menu_options_for_family(OPENAI_FAMILY)]
     assert codex == [
         "OpenAI — API key",
         "ChatGPT — subscription",
         "Gateway — custom base URL + key (e.g. OpenRouter)",
         "OpenRouter — API key",
-        "Databricks — workspace",
         "Other provider — API key",
     ]
-    assert codex.index("Databricks — workspace") < codex.index("Other provider — API key")
 
-    # Claude (anthropic) scoped: API key, subscription, Gateway, Databricks
+    # Claude (anthropic) scoped: API key, subscription, Gateway, Bedrock
     # (no OpenRouter / Other — those are openai-family).
     claude = [o.label.split(None, 1)[1] for o in add_menu_options_for_family(ANTHROPIC_FAMILY)]
     assert claude == [
         "Anthropic — API key",
         "Claude — subscription (Pro/Max)",
         "Gateway — custom base URL + key (e.g. OpenRouter)",
-        "Databricks — workspace",
         "AWS Bedrock — API key",
     ]
 
     # Gemini (antigravity) scoped: API key only — Gemini is key-only (no
-    # subscription/gateway/Databricks), and it must NOT appear in the
-    # openai-family "Other provider" catch-all (asserted via `codex` above).
+    # subscription/gateway), and it must NOT appear in the openai-family
+    # "Other provider" catch-all (asserted via `codex` above).
     gemini = [o.label.split(None, 1)[1] for o in add_menu_options_for_family(GEMINI_FAMILY)]
     assert gemini == ["Gemini — API key"]
-
-
-def test_add_menu_databricks_option_gated_on_extra(monkeypatch) -> None:
-    """The Databricks option stays visible without the SDK, with the hint.
-
-    The `databricks` extra (databricks-sdk) is no longer a default
-    dependency, so the add menu gates the Databricks flow on it: the option
-    is never hidden (discoverability), but its description switches from
-    the routing explanation to the install hint when the SDK is absent.
-    A failure means a bare-OSS user either loses the option entirely or
-    sees the routing description for a flow that would abort on selection.
-    """
-    # Patch the symbol configure_models bound at import — the menu builder
-    # calls this exact name, so the patch deterministically simulates a
-    # bare install without touching the process-wide importlib machinery.
-    monkeypatch.setattr(
-        "goalrail.onboarding.configure_models.databricks_sdk_installed",
-        lambda: False,
-    )
-    options = add_menu_options()
-    databricks = next(o for o in options if o.label.endswith("Databricks — workspace"))
-    # The label (and thus menu presence/ordering) is unchanged; only the
-    # description carries the gate.
-    assert databricks.kind == "databricks"
-    assert databricks.description == (
-        "Requires the Databricks extra — select for the install command."
-    )
-
-    # With the SDK present (the dev/CI env — no patch), the description
-    # explains the routing instead of demanding an install.
-    monkeypatch.undo()
-    options = add_menu_options()
-    databricks = next(o for o in options if o.label.endswith("Databricks — workspace"))
-    assert "Unity AI Gateway" in databricks.description
-
-
-def test_configure_models_add_databricks_aborts_without_extra(
-    isolated_config, monkeypatch
-) -> None:
-    """Selecting Databricks without the SDK aborts before any side effect.
-
-    Drives the real add flow (Claude → +Add → Databricks) with the SDK
-    absent. The gate must return to the menu without prompting for a
-    workspace URL, running `databricks auth login`, `ucode configure`, or
-    writing a provider entry. A failure here (non-zero exit via the raising
-    login stub, or a written provider) means the gate ran after a side
-    effect — exactly the bug it exists to prevent: signing the user into a
-    workspace that routing then can't use.
-    """
-    # cli.py's databricks branch resolves databricks_sdk_installed from the
-    # source module at call time, so patching the module attribute is seen.
-    monkeypatch.setattr(
-        "goalrail.onboarding.databricks_config.databricks_sdk_installed",
-        lambda: False,
-    )
-
-    def _login_must_not_run(*args: object, **kwargs: object) -> str:
-        """Stub that fails the test if the Databricks login is reached."""
-        raise AssertionError(
-            "login_databricks_workspace ran despite the missing databricks "
-            "extra — the gate must abort before the browser login."
-        )
-
-    monkeypatch.setattr(
-        "goalrail.onboarding.setup.login_databricks_workspace",
-        _login_must_not_run,
-    )
-
-    # L1: 1=Claude → L2 (empty): 1=+Add → Claude-scoped menu: 4=Databricks
-    # (key, subscription, gateway, then Databricks) → gate aborts back to
-    # L2: q=back → L1: q=exit. If the gate were broken, the next stdin line
-    # ("q") would be consumed as the workspace URL and the login stub would
-    # raise, failing the invoke with a non-zero exit code.
-    stdin = "\n".join(["1", "1", "4", "q", "q"]) + "\n"
-    result = CliRunner().invoke(cli, ["setup", "--no-internal-beta"], input=stdin)
-    assert result.exit_code == 0, result.output
-
-    # No provider entry was persisted — the add aborted cleanly.
-    cfg = _config_yaml(isolated_config)
-    assert cfg.get("providers", {}) == {}
 
 
 @pytest.mark.parametrize(
@@ -665,8 +577,6 @@ def test_configure_models_add_databricks_aborts_without_extra(
         ("subscription", "codex-subscription", None, "Subscription"),
         ("key", "anthropic", None, "Anthropic API Key"),
         ("key", "openai", None, "OpenAI API Key"),
-        ("databricks", "databricks", "oss", "Databricks (oss)"),
-        ("databricks", "databricks", None, "Databricks"),
         ("gateway", "my-proxy", None, "My-Proxy"),  # display-name fallback
     ],
 )
@@ -677,14 +587,14 @@ def test_credential_label_by_kind(
 
     Proves the single source of truth used by BOTH ``configure harnesses``
     and the ``/model`` readout: a subscription is always "Subscription"
-    (never the brand/cli name), a vendor key is "<Vendor> API Key", and
-    Databricks names its profile. A drift here would make the two surfaces
-    disagree — the exact inconsistency the shared helper was added to fix.
+    (never the brand/cli name), and a vendor key is "<Vendor> API Key". A drift
+    here would make the two surfaces disagree — the exact inconsistency the
+    shared helper was added to fix.
     """
     assert credential_label(kind, name, profile=profile) == expected
 
 
-@pytest.mark.parametrize("kind", ["key", "subscription", "gateway", "databricks", "local"])
+@pytest.mark.parametrize("kind", ["key", "subscription", "gateway", "local"])
 def test_kind_glyph_uniform_display_width(kind: str) -> None:
     """Every kind glyph renders at a uniform 2-cell width on modern terminals.
 
@@ -834,85 +744,6 @@ def test_remove_subscription_declined_keeps_it_and_login(isolated_config, monkey
     cfg = _config_yaml(isolated_config)
     # The subscription survived the declined removal.
     assert "claude-subscription" in cfg["providers"]
-
-
-def _write_databricks_provider(config_home) -> None:
-    """Persist a ``kind: databricks`` provider entry to the isolated config.
-
-    :param config_home: The tmp config-home directory (``isolated_config``).
-    """
-    config_path = os.path.join(config_home, "config.yaml")
-    with open(config_path, "w") as f:
-        yaml.safe_dump({"providers": {"databricks": {"kind": "databricks", "profile": "myws"}}}, f)
-
-
-def test_remove_databricks_cleans_ucode_wiring_without_asking(isolated_config) -> None:
-    """Remove on a databricks provider strips ucode's wiring as part of removal.
-
-    A databricks provider was wired by `ucode configure`, which (for codex
-    < 0.134.0) edits the user's real ~/.codex/config.toml — so a bare
-    entry-delete would leave codex routing through the workspace gateway.
-    Cleanup is the removal's expected behavior, so there is NO extra confirm:
-    the stdin below carries no confirm digit, and an unexpected prompt would
-    consume the trailing ``q``s and leave the entry in place (failing the
-    config assertion). Exercises the real cleanup against files under the
-    isolated tmp HOME — no stubs — so it also proves the default-path
-    resolution (``~/.codex/...``) and the user-key preservation.
-    """
-    _write_databricks_provider(isolated_config)
-    codex_dir = isolated_config / ".codex"
-    codex_dir.mkdir()
-    # The exact shape ucode's legacy layout leaves behind, merged into a
-    # user-owned key that must survive.
-    (codex_dir / "config.toml").write_text(
-        'model = "gpt-5.4"\n'
-        'profile = "ucode"\n'
-        "\n"
-        "[profiles.ucode]\n"
-        'model_provider = "ucode-databricks"\n'
-        "\n"
-        "[model_providers.ucode-databricks]\n"
-        'base_url = "https://example.databricks.com/ai-gateway/codex/v1"\n',
-        encoding="utf-8",
-    )
-    (codex_dir / "ucode.config.toml").write_text(
-        'model_provider = "ucode-databricks"\n', encoding="utf-8"
-    )
-    # L1 1=Claude → L2 1=select databricks → L3 2=Remove (acts immediately)
-    # → L2 q → L1 q.
-    stdin = "\n".join(["1", "1", "2", "q", "q"]) + "\n"
-    result = CliRunner().invoke(cli, ["setup", "--no-internal-beta"], input=stdin)
-    assert result.exit_code == 0, result.output
-    cfg = _config_yaml(isolated_config)
-    # The provider entry is gone from config.yaml.
-    assert "databricks" not in cfg.get("providers", {})
-    doc = tomllib.loads((codex_dir / "config.toml").read_text(encoding="utf-8"))
-    # The invasive selector was stripped — bare codex no longer routes
-    # through the workspace. If present, Remove never invoked the cleanup.
-    assert "profile" not in doc
-    assert "profiles" not in doc
-    assert "model_providers" not in doc
-    # The user's own key survived the strip with its exact value.
-    assert doc["model"] == "gpt-5.4"
-    # ucode's sidecar is deleted too.
-    assert not (codex_dir / "ucode.config.toml").exists()
-
-
-def test_remove_databricks_without_ucode_wiring_still_removes(isolated_config) -> None:
-    """Remove works when no ucode wiring exists on the machine.
-
-    The cleanup steps must all no-op gracefully (missing ~/.codex,
-    ~/.claude.json, sidecars) rather than erroring and blocking the
-    entry removal.
-    """
-    _write_databricks_provider(isolated_config)
-    # L1 1=Claude → L2 1=select databricks → L3 2=Remove → L2 q → L1 q.
-    stdin = "\n".join(["1", "1", "2", "q", "q"]) + "\n"
-    result = CliRunner().invoke(cli, ["setup", "--no-internal-beta"], input=stdin)
-    assert result.exit_code == 0, result.output
-    cfg = _config_yaml(isolated_config)
-    # The provider entry is gone despite there being nothing to clean.
-    assert "databricks" not in cfg.get("providers", {})
 
 
 def test_render_listing_excludes_configured_subscription_clis(
@@ -1135,23 +966,23 @@ def test_configure_models_add_other_provider_prompts_for_name(
 ) -> None:
     """The "Other provider" path is the one key case that still prompts for a name.
 
-    Per the UX rule (only gateway / "other" prompt for a name; presets,
-    subscriptions, and databricks derive theirs), adding via "Other provider
-    — API key" lets the user name the entry — useful for a custom name or
-    two configs for the same vendor. The pasted key is stored under that
-    chosen name (``keychain:<name>``), not the catalog id, so custom names
-    don't collide. A failure means the "other" path stopped prompting or
-    keyed the secret by the wrong identifier.
+    Per the UX rule (only gateway / "other" prompt for a name; presets and
+    subscriptions derive theirs), adding via "Other provider — API key" lets
+    the user name the entry — useful for a custom name or two configs for the
+    same vendor. The pasted key is stored under that chosen name
+    (``keychain:<name>``), not the catalog id, so custom names don't collide. A
+    failure means the "other" path stopped prompting or keyed the secret by the
+    wrong identifier.
     """
     # The first "other" provider is xai (an openai-family vendor); clear its
     # env var so detection doesn't add a "use the detected key?" prompt.
     monkeypatch.delenv("XAI_API_KEY", raising=False)
     # "Other" is openai-family, so it lives in the Codex add menu. L1 2=Codex
-    # → L2 1=+Add → openai menu 6="Other provider — API key" (order: OpenAI
-    # key, ChatGPT sub, Gateway, OpenRouter, Databricks, Other) → which
+    # → L2 1=+Add → openai menu 5="Other provider — API key" (order: OpenAI
+    # key, ChatGPT sub, Gateway, OpenRouter, Other) → which
     # provider → xAI(1) → NAME "my-xai" → key → default model blank → L2
     # q=back → L1 q=exit.
-    stdin = "\n".join(["2", "1", "6", "1", "my-xai", "sk-xai-test", "", "q", "q"]) + "\n"
+    stdin = "\n".join(["2", "1", "5", "1", "my-xai", "sk-xai-test", "", "q", "q"]) + "\n"
     result = CliRunner().invoke(cli, ["setup", "--no-internal-beta"], input=stdin)
     assert result.exit_code == 0, result.output
 
@@ -1246,7 +1077,7 @@ def test_configure_models_add_openrouter_key_uses_vendor_endpoint_and_chat_wire(
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     # OpenRouter key is openai-family → Codex add menu. L1 2=Codex → L2
     # 1=+Add → openai menu 4="OpenRouter — API key" (order: OpenAI key,
-    # ChatGPT sub, Gateway, OpenRouter, Databricks, Other) → key → default
+    # ChatGPT sub, Gateway, OpenRouter, Other) → key → default
     # model blank → L2 q=back → L1 q=exit.
     stdin = "\n".join(["2", "1", "4", "sk-or-test", "", "q", "q"]) + "\n"
     result = CliRunner().invoke(cli, ["setup", "--no-internal-beta"], input=stdin)
@@ -1255,246 +1086,6 @@ def test_configure_models_add_openrouter_key_uses_vendor_endpoint_and_chat_wire(
     entry = _config_yaml(isolated_config)["providers"]["openrouter"]["openai"]
     assert entry["base_url"] == "https://openrouter.ai/api/v1"  # NOT api.openai.com
     assert entry["wire_api"] == "chat"  # OpenRouter is Chat-Completions-only
-
-
-def test_promote_global_auth_backfills_databricks_for_existing_configs(isolated_config) -> None:
-    """An old ``auth:``-only config self-heals into a databricks provider.
-
-    Before this PR, ``setup`` wrote only the global ``auth: {type: databricks}``
-    block, invisible to ``configure harnesses``. Existing users would still see no
-    databricks even after upgrading — unless they re-ran ``setup``.
-    ``_promote_global_auth_to_provider`` backfills that block into a first-class
-    ``kind: databricks`` providers entry on the next ``configure harnesses`` open,
-    defaulting both families (the config only ever had the auth: block, so
-    routing already used databricks for both).
-    """
-    from goalrail.cli import _promote_global_auth_to_provider, _save_global_config
-
-    _save_global_config({"auth": {"type": "databricks", "profile": "oss"}})
-
-    assert _promote_global_auth_to_provider() == "databricks"
-
-    cfg = load_config()
-    providers = load_providers(cfg)
-    assert "databricks" in providers
-    assert providers["databricks"].profile == "oss"
-    assert get_default_provider(cfg, "anthropic").name == "databricks"
-    assert get_default_provider(cfg, "openai").name == "databricks"
-
-    # Idempotent: a databricks provider already exists, so re-opening configure
-    # does not double-promote (would otherwise churn the config every open).
-    assert _promote_global_auth_to_provider() is None
-
-
-def test_promote_global_auth_respects_explicit_default(isolated_config) -> None:
-    """Promotion mirrors routing precedence: an explicit provider default wins.
-
-    Routing puts an explicit ``providers:`` default ahead of the ``auth:`` block,
-    so when a family already has a provider default, the backfilled databricks
-    must NOT steal it — it only claims families with no existing default. Here
-    an explicit anthropic key default is kept while databricks takes openai.
-    """
-    from goalrail.cli import _promote_global_auth_to_provider, _save_global_config
-
-    _save_global_config(
-        {
-            "auth": {"type": "databricks", "profile": "oss"},
-            "providers": {
-                "anthropic": {
-                    "kind": "key",
-                    "default": True,
-                    "anthropic": {
-                        "base_url": "https://api.anthropic.com",
-                        "api_key_ref": "keychain:anthropic",
-                        "models": {"default": "claude-opus-4-8"},
-                    },
-                },
-            },
-        }
-    )
-
-    assert _promote_global_auth_to_provider() == "databricks"
-
-    cfg = load_config()
-    # Explicit anthropic default untouched; databricks only took the open
-    # (openai) family — exactly what routing would resolve.
-    assert get_default_provider(cfg, "anthropic").name == "anthropic"
-    assert get_default_provider(cfg, "openai").name == "databricks"
-
-
-def test_promote_global_auth_noop_without_databricks_auth(isolated_config) -> None:
-    """No databricks ``auth:`` block → nothing to backfill (returns None)."""
-    from goalrail.cli import _promote_global_auth_to_provider, _save_global_config
-
-    # An api_key auth block (not databricks) must not synthesize a databricks
-    # provider, and a config with no auth: block at all is a clean no-op.
-    _save_global_config({"auth": {"type": "api_key", "api_key": "sk-x"}})
-    assert _promote_global_auth_to_provider() is None
-    assert "databricks" not in load_providers(load_config())
-
-
-def _databricks_add_menu_index() -> int:
-    """Return the 1-based numbered-fallback position of the Databricks option.
-
-    Computed from the live Claude-scoped add menu rather than hardcoded, so a
-    future reordering of :func:`add_menu_options` doesn't silently point this
-    test's piped stdin at the wrong row.
-
-    :returns: The 1-based index of the ``databricks``-kind option within the
-        Claude (anthropic) add menu, e.g. ``4``.
-    """
-    from goalrail.onboarding.configure_models import add_menu_options_for_family
-    from goalrail.onboarding.provider_config import ANTHROPIC_FAMILY, DATABRICKS_KIND
-
-    opts = add_menu_options_for_family(ANTHROPIC_FAMILY)
-    return next(i for i, o in enumerate(opts) if o.kind == DATABRICKS_KIND) + 1
-
-
-def test_configure_harnesses_add_databricks_normalizes_url_and_persists(
-    isolated_config, monkeypatch
-) -> None:
-    """The Databricks add branch normalizes the workspace URL, logs in + runs
-    ucode against that same URL, and persists a default ``databricks`` provider.
-
-    Drives the real ``_configure_harness_add`` databricks branch through the CLI
-    (numbered fallback), stubbing only the two boundary helpers that shell out
-    (``login_databricks_workspace`` → returns a profile; ``configure_ucode_for_workspace``)
-    and ``ucode_workspace_exists`` (→ True). Asserts the user-entered
-    ``"example.cloud.databricks.com/"`` (no scheme, trailing slash) is normalized to
-    ``"https://example.cloud.databricks.com"`` for BOTH the login and the ucode call,
-    and that ``providers.databricks`` is written as the default. Added under the
-    Claude harness, so ucode is scoped to ``--agents claude`` (NOT codex/pi) and
-    the provider defaults only the Claude (anthropic) family. A regression in URL
-    handling, the per-harness scoping, or persistence surfaces here.
-    """
-    login_calls: list[str] = []
-    ucode_calls: list[tuple[str, list[str] | None]] = []
-    exists_calls: list[str] = []
-
-    def _fake_login(url: str, *, console: object | None = None) -> str:
-        login_calls.append(url)
-        return "my-ws"
-
-    def _fake_configure_ucode(url: str, *, agents: list[str] | None = None) -> None:
-        ucode_calls.append((url, agents))
-
-    def _fake_exists(url: str) -> bool:
-        exists_calls.append(url)
-        return True
-
-    # Patch at the source modules — the databricks branch imports these at call
-    # time, so the attribute lookup resolves to these stubs.
-    monkeypatch.setattr("goalrail.onboarding.setup.login_databricks_workspace", _fake_login)
-    monkeypatch.setattr(
-        "goalrail.onboarding.ucode_setup.configure_ucode_for_workspace", _fake_configure_ucode
-    )
-    monkeypatch.setattr("goalrail.onboarding.ucode_setup.ucode_workspace_exists", _fake_exists)
-
-    db = _databricks_add_menu_index()
-    # L1 1=Claude → L2 1=+Add → add menu <db>=Databricks → workspace URL (no
-    # scheme + trailing slash, to exercise normalization) → L2 q=back → L1 q=exit.
-    stdin = "\n".join(["1", "1", str(db), "example.cloud.databricks.com/", "q", "q"]) + "\n"
-    result = CliRunner().invoke(cli, ["setup", "--no-internal-beta"], input=stdin)
-    assert result.exit_code == 0, result.output
-
-    normalized = "https://example.cloud.databricks.com"
-    # Login + ucode each ran exactly once, against the normalized URL — if the
-    # branch dropped the scheme-prefixing or trailing-slash strip, these fail.
-    assert login_calls == [normalized]
-    assert exists_calls == [normalized]
-    # ucode is scoped to the drilled-in harness only: added under Claude →
-    # `--agents claude`, NOT the legacy claude,codex,pi. A regression to the
-    # hardcoded agent set (configuring/installing harnesses the user didn't
-    # pick) changes this and fails here.
-    assert ucode_calls == [(normalized, ["claude"])]
-
-    cfg = _config_yaml(isolated_config)
-    # Persisted as a kind=databricks provider keyed on the returned profile, and
-    # made the default for ONLY the Claude (anthropic) family it was added under
-    # — `default: "anthropic"`, not `True` (which would claim both families).
-    assert cfg["providers"]["databricks"] == {
-        "kind": "databricks",
-        "profile": "my-ws",
-        "default": "anthropic",
-    }
-    assert get_default_provider(cfg, "anthropic").name == "databricks"
-    # Codex was NOT configured in ucode, so it must NOT be defaulted to
-    # Databricks (that would route Codex through a workspace ucode never set up
-    # for it). It stays unset here — add Databricks under Codex to wire it.
-    assert get_default_provider(cfg, "openai") is None
-
-
-def test_configure_harnesses_add_databricks_fails_loud_when_ucode_records_no_state(
-    isolated_config, monkeypatch
-) -> None:
-    """If ``ucode configure`` records no state for the workspace, the add aborts
-    loudly and persists NO databricks provider.
-
-    Guards against a half-configured provider: routing would otherwise silently
-    fall back. With ``ucode_workspace_exists`` → False the branch must raise, so
-    the command exits non-zero and ``providers`` stays empty.
-    """
-    monkeypatch.setattr(
-        "goalrail.onboarding.setup.login_databricks_workspace",
-        lambda url, *, console=None: "my-ws",
-    )
-    monkeypatch.setattr(
-        "goalrail.onboarding.ucode_setup.configure_ucode_for_workspace",
-        lambda url, *, agents=None: None,
-    )
-    # ucode "succeeded" but left no state for this workspace.
-    monkeypatch.setattr(
-        "goalrail.onboarding.ucode_setup.ucode_workspace_exists", lambda url: False
-    )
-
-    db = _databricks_add_menu_index()
-    stdin = "\n".join(["1", "1", str(db), "https://example.cloud.databricks.com", "q", "q"]) + "\n"
-    result = CliRunner().invoke(cli, ["setup", "--no-internal-beta"], input=stdin)
-
-    # The branch raised ClickException → non-zero exit with an explanatory message.
-    assert result.exit_code != 0
-    assert "recorded no state" in result.output
-    # Nothing was persisted — no half-configured databricks provider.
-    cfg = _config_yaml(isolated_config)
-    assert "databricks" not in cfg.get("providers", {})
-
-
-def test_configure_harnesses_add_databricks_under_codex_scopes_to_codex(
-    isolated_config, monkeypatch
-) -> None:
-    """Adding Databricks under the Codex harness scopes ucode to ``--agents codex``
-    and defaults only the Codex (openai) family.
-
-    The mirror of the Claude-path test: the per-harness scoping must follow
-    whichever harness the user drilled into, so the Claude family is left
-    untouched here.
-    """
-    from goalrail.onboarding.configure_models import add_menu_options_for_family
-    from goalrail.onboarding.provider_config import DATABRICKS_KIND, OPENAI_FAMILY
-
-    ucode_calls: list[tuple[str, list[str] | None]] = []
-    monkeypatch.setattr(
-        "goalrail.onboarding.setup.login_databricks_workspace",
-        lambda url, *, console=None: "my-ws",
-    )
-    monkeypatch.setattr(
-        "goalrail.onboarding.ucode_setup.configure_ucode_for_workspace",
-        lambda url, *, agents=None: ucode_calls.append((url, agents)),
-    )
-    monkeypatch.setattr("goalrail.onboarding.ucode_setup.ucode_workspace_exists", lambda url: True)
-
-    # Databricks position within the Codex (openai) add menu, computed live.
-    codex_opts = add_menu_options_for_family(OPENAI_FAMILY)
-    db = next(i for i, o in enumerate(codex_opts) if o.kind == DATABRICKS_KIND) + 1
-    # L1 2=Codex → L2 1=+Add → add menu <db>=Databricks → URL → q → q.
-    stdin = "\n".join(["2", "1", str(db), "https://example.cloud.databricks.com", "q", "q"]) + "\n"
-    result = CliRunner().invoke(cli, ["setup", "--no-internal-beta"], input=stdin)
-    assert result.exit_code == 0, result.output
-
-    assert ucode_calls == [("https://example.cloud.databricks.com", ["codex"])]
-    cfg = _config_yaml(isolated_config)
-    assert get_default_provider(cfg, "openai").name == "databricks"
-    assert get_default_provider(cfg, "anthropic") is None
 
 
 def test_uninstalled_harness_shows_x_and_not_installed(isolated_config, monkeypatch) -> None:
@@ -1633,13 +1224,13 @@ def test_decline_install_returns_without_installing(isolated_config, monkeypatch
 # ── the Pi harness page ───────────────────────────────────────────────
 
 
-def test_pi_add_menu_offers_keys_gateway_databricks_but_no_subscription() -> None:
+def test_pi_add_menu_offers_keys_gateway_but_no_subscription() -> None:
     """The Pi-scoped add menu offers every credential pi can use — and only those.
 
     pi consumes both model families, so both vendors' API keys, gateways,
-    OpenRouter, "Other provider", and Databricks all appear; the claude /
-    codex subscriptions must NOT (a CLI login is unusable outside its own
-    CLI — offering it would configure a credential pi silently can't use).
+    OpenRouter, and "Other provider" appear; the claude / codex subscriptions
+    must NOT (a CLI login is unusable outside its own CLI — offering it would
+    configure a credential pi silently can't use).
     """
     from goalrail.onboarding.provider_config import PI_SURFACE
 
@@ -1648,11 +1239,10 @@ def test_pi_add_menu_offers_keys_gateway_databricks_but_no_subscription() -> Non
     # No subscription row — the one credential kind pi can't consume.
     assert "subscription" not in kinds
     # Both vendors' keys are offered (pi spans both families), plus the
-    # cross-vendor extras and Databricks.
+    # cross-vendor extras.
     assert any(o.label.endswith("Anthropic — API key") for o in options)
     assert any(o.label.endswith("OpenAI — API key") for o in options)
     assert "gateway" in kinds
-    assert "databricks" in kinds
 
 
 def test_configure_harnesses_pi_page_sets_explicit_pi_default(isolated_config) -> None:
@@ -1762,58 +1352,6 @@ def test_configure_harnesses_pi_page_excludes_subscription_rows(isolated_config)
     assert "Subscription" not in pi_frame
 
 
-def test_configure_harnesses_add_databricks_under_pi_scopes_to_pi(
-    isolated_config, monkeypatch
-) -> None:
-    """Adding Databricks under the Pi harness scopes ucode to ``--agents pi``
-    and defaults only the pi surface.
-
-    The pi mirror of the Claude/Codex-path tests: ucode must configure only
-    the pi tool, and the provider must claim only the explicit pi scope —
-    routing Claude/Codex through a workspace ucode never configured for
-    them would be the regression.
-    """
-    from goalrail.onboarding.configure_models import add_menu_options_for_family
-    from goalrail.onboarding.provider_config import (
-        DATABRICKS_KIND,
-        PI_SURFACE,
-        default_provider_for_harness,
-    )
-
-    ucode_calls: list[tuple[str, list[str] | None]] = []
-    monkeypatch.setattr(
-        "goalrail.onboarding.setup.login_databricks_workspace",
-        lambda url, *, console=None: "my-ws",
-    )
-    monkeypatch.setattr(
-        "goalrail.onboarding.ucode_setup.configure_ucode_for_workspace",
-        lambda url, *, agents=None: ucode_calls.append((url, agents)),
-    )
-    monkeypatch.setattr("goalrail.onboarding.ucode_setup.ucode_workspace_exists", lambda url: True)
-
-    # Databricks position within the Pi add menu, computed live.
-    pi_opts = add_menu_options_for_family(PI_SURFACE)
-    db = next(i for i, o in enumerate(pi_opts) if o.kind == DATABRICKS_KIND) + 1
-    # L1 3=Pi → L2 1=+Add → add menu <db>=Databricks → URL → q → q.
-    stdin = "\n".join(["3", "1", str(db), "https://example.cloud.databricks.com", "q", "q"]) + "\n"
-    result = CliRunner().invoke(cli, ["setup", "--no-internal-beta"], input=stdin)
-    assert result.exit_code == 0, result.output
-
-    # ucode ran once, for the pi agent only — not the legacy claude,codex,pi.
-    assert ucode_calls == [("https://example.cloud.databricks.com", ["pi"])]
-    cfg = _config_yaml(isolated_config)
-    # The provider claims only the explicit pi scope it was added under.
-    assert cfg["providers"]["databricks"] == {
-        "kind": "databricks",
-        "profile": "my-ws",
-        "default": "pi",
-    }
-    assert default_provider_for_harness(load_config(), "pi").name == "databricks"
-    # Claude/Codex stay unset — ucode never configured them for this workspace.
-    assert get_default_provider(cfg, "anthropic") is None
-    assert get_default_provider(cfg, "openai") is None
-
-
 def test_add_key_does_not_steal_pi_from_fallback_default(isolated_config) -> None:
     """A newly added key never claims the pi scope while a fallback serves pi.
 
@@ -1871,9 +1409,9 @@ def test_credential_label_cli_config_uses_display_name() -> None:
     from goalrail.onboarding.configure_models import credential_label
 
     label = credential_label(
-        "cli-config", "codex-databricks", display_name="Databricks AI Gateway"
+        "cli-config", "codex-corporategateway", display_name="Corporate Gateway"
     )
-    assert label == "Databricks AI Gateway"
+    assert label == "Corporate Gateway"
 
 
 def test_credential_label_cli_config_falls_back_to_entry_name() -> None:
@@ -1894,11 +1432,11 @@ def test_build_cli_config_provider_entry_shapes() -> None:
     """
     from goalrail.onboarding.configure_models import build_cli_config_provider_entry
 
-    assert build_cli_config_provider_entry("codex", "Databricks", "Databricks AI Gateway") == {
+    assert build_cli_config_provider_entry("codex", "CorporateGateway", "Corporate Gateway") == {
         "kind": "cli-config",
         "cli": "codex",
-        "model_provider": "Databricks",
-        "display_name": "Databricks AI Gateway",
+        "model_provider": "CorporateGateway",
+        "display_name": "Corporate Gateway",
     }
     # No display name → key omitted entirely (labels fall back to the
     # entry name), not written as None/empty.
@@ -1914,13 +1452,13 @@ def test_build_cli_config_provider_entry_shapes() -> None:
 # The exact state `isaac configure codex` leaves behind: a custom provider
 # with self-contained auth in config.toml, and NO auth.json.
 _CODEX_CONFIG_TOML = """
-model_provider = "Databricks"
+model_provider = "CorporateGateway"
 
-[model_providers.Databricks]
-name = "Databricks AI Gateway"
-base_url = "https://example.ai-gateway.cloud.databricks.com/codex/v1"
+[model_providers.CorporateGateway]
+name = "Corporate Gateway"
+base_url = "https://gateway.example/codex/v1"
 
-[model_providers.Databricks.auth]
+[model_providers.CorporateGateway.auth]
 command = "jq"
 """
 
@@ -1952,7 +1490,7 @@ def test_remove_cli_config_credential_dismisses_detection(isolated_config) -> No
     cfg = _config_yaml(isolated_config)
     # Adopted as a real entry — the feature's golden path. Absence means
     # detection itself broke, not the removal under test.
-    assert "codex-databricks" in cfg["providers"]
+    assert "codex-corporategateway" in cfg["providers"]
 
     # Open 2: L1 2=Codex → L2 1=the credential → L3 1=Remove (it is the
     # codex default, so no "Make default" row precedes Remove) → q → q.
@@ -1960,15 +1498,15 @@ def test_remove_cli_config_credential_dismisses_detection(isolated_config) -> No
     result = CliRunner().invoke(cli, ["setup", "--no-internal-beta"], input=stdin)
     assert result.exit_code == 0, result.output
     cfg = _config_yaml(isolated_config)
-    assert "codex-databricks" not in cfg["providers"]
+    assert "codex-corporategateway" not in cfg["providers"]
     # The dismissal is what makes Remove stick — without it open 3 re-adopts.
-    assert cfg["dismissed_detections"] == ["codex-databricks"]
+    assert cfg["dismissed_detections"] == ["codex-corporategateway"]
 
     # Open 3: a plain reopen must NOT re-adopt the dismissed detection.
     result = CliRunner().invoke(cli, ["setup", "--no-internal-beta"], input="q\n")
     assert result.exit_code == 0, result.output
     cfg = _config_yaml(isolated_config)
-    assert "codex-databricks" not in cfg.get("providers", {})
+    assert "codex-corporategateway" not in cfg.get("providers", {})
 
 
 def test_add_menu_readds_dismissed_cli_config_credential(isolated_config) -> None:
@@ -1984,7 +1522,7 @@ def test_add_menu_readds_dismissed_cli_config_credential(isolated_config) -> Non
     _write_codex_config_toml(isolated_config)
     config_path = os.path.join(isolated_config, "config.yaml")
     with open(config_path, "w") as f:
-        yaml.safe_dump({"dismissed_detections": ["codex-databricks"]}, f)
+        yaml.safe_dump({"dismissed_detections": ["codex-corporategateway"]}, f)
 
     # The detected-config row is appended after the base codex-scoped
     # options; select() input is its 1-based index.
@@ -1996,12 +1534,12 @@ def test_add_menu_readds_dismissed_cli_config_credential(isolated_config) -> Non
     assert result.exit_code == 0, result.output
 
     cfg = _config_yaml(isolated_config)
-    entry = cfg["providers"]["codex-databricks"]
+    entry = cfg["providers"]["codex-corporategateway"]
     # The persisted entry pins the config.toml provider by name and keeps
     # the friendly display name for labels.
     assert entry["kind"] == "cli-config"
-    assert entry["model_provider"] == "Databricks"
-    assert entry["display_name"] == "Databricks AI Gateway"
+    assert entry["model_provider"] == "CorporateGateway"
+    assert entry["display_name"] == "Corporate Gateway"
     # Re-claims the codex (openai) default — there is no other credential.
     assert entry["default"] is True or entry.get("default") == "true"
     # The dismissal is cleared, so the credential behaves like an ordinary
@@ -2546,15 +2084,15 @@ def test_configure_models_add_bedrock_writes_entry_and_secret(
     """
     # No exported token → the paste→keychain path (deterministic prompts).
     monkeypatch.delenv("AWS_BEARER_TOKEN_BEDROCK", raising=False)
-    # L1 1=Claude → L2 1=+Add → Claude menu 5='AWS Bedrock — API key'
-    # (1=Anthropic key, 2=Claude sub, 3=Gateway, 4=Databricks, 5=Bedrock) →
+    # L1 1=Claude → L2 1=+Add → Claude menu 4='AWS Bedrock — API key'
+    # (1=Anthropic key, 2=Claude sub, 3=Gateway, 4=Bedrock) →
     # name; base_url; pasted key; default model → L2 q=back → L1 q=exit.
     stdin = (
         "\n".join(
             [
                 "1",
                 "1",
-                "5",
+                "4",
                 "mybr",
                 "https://bedrock-runtime.us-east-1.amazonaws.com",
                 "absk-test",

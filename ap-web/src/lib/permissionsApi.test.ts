@@ -162,8 +162,8 @@ describe("revokePermission", () => {
   });
 
   it("url-encodes both the session id and the user id", async () => {
-    // user_ids are emails post-Databricks-Apps integration, which contain
-    // `@` — must be percent-encoded so the path doesn't break.
+    // user_ids may be emails, which contain `@` — must be percent-encoded
+    // so the path doesn't break.
     fetchMock.mockResolvedValueOnce(mockResponse(null, { status: 204 }));
     await revokePermission("conv_abc", "alice@example.com");
     expect(fetchMock.mock.calls[0][0]).toBe(

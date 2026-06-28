@@ -27,7 +27,7 @@ streamed text channel can silently corrupt:
 
 **Gating (mirrors the cursor per-harness test):** the antigravity harness is
 Gemini-native — it authenticates with a Gemini / Antigravity API key and has NO
-Databricks-gateway path — so this test SKIPS (rather than fails) when its
+gateway path — so this test SKIPS (rather than fails) when its
 prerequisites are absent, keeping the e2e shards green where no Gemini key is
 provisioned. It runs for real wherever the prerequisites are present:
 
@@ -77,7 +77,7 @@ from tests.e2e.conftest import (
 
 # Gemini id that runs on a plain AI-Studio key. ``gemini-3-pro`` 404s without
 # Pro access, so the suite pins a Flash model; left un-rewritten (the harness is
-# Gemini-native — a Databricks model map / profile stamp would break it).
+# Gemini-native — a gateway model map / profile stamp would break it).
 _MODEL = "gemini-3.5-flash"
 _HARNESS = "antigravity"
 
@@ -92,7 +92,7 @@ def _antigravity_skip_reason() -> str | None:
     """Return why the antigravity harness can't run for real, or ``None``.
 
     Mirrors the cursor per-harness gate's spirit: the harness is Gemini-native
-    (no Databricks-gateway fallback), so when its prerequisites are absent the
+    (no gateway fallback), so when its prerequisites are absent the
     suite SKIPS rather than fails — CI shards without a provisioned Gemini key
     stay green, and the test runs for real wherever a key is present.
 
@@ -147,11 +147,11 @@ if _SKIP_REASON is not None:
 def _write_antigravity_agent_yaml(tmp_path: Path, *, prompt: str) -> Path:
     """Write a minimal single-file ``harness: antigravity`` Goalrail bundle.
 
-    Deliberately carries NO ``executor.auth`` and NO Databricks ``profile``: the
+    Deliberately carries NO ``executor.auth`` and NO ``profile``: the
     harness resolves its Gemini key Gemini-natively (configured ``antigravity:``
     block, then ambient ``GEMINI_API_KEY`` / ``ANTIGRAVITY_API_KEY``) — a global
     ``auth:`` / profile would be the OpenAI-gateway key the SDK can't use. The
-    bundle is uploaded with ``rewrite_model_for_databricks=False`` so the Gemini
+    bundle is uploaded with ``rewrite_models_for_gateway=False`` so the Gemini
     model id and ``antigravity`` harness pass through unmangled.
 
     :param tmp_path: Per-test temp dir to materialize the bundle directory in.
@@ -310,7 +310,7 @@ def test_antigravity_long_output_not_truncated_or_duplicated(
                 "Never abbreviate, summarize, or skip a section."
             ),
         ),
-        rewrite_model_for_databricks=False,
+        rewrite_models_for_gateway=False,
     )
     session_id = _run_one_shot(
         http_client,
@@ -376,7 +376,7 @@ def test_antigravity_unicode_fidelity_round_trips(
                 "emoji, CJK, and accents. Never transliterate, escape, or normalize."
             ),
         ),
-        rewrite_model_for_databricks=False,
+        rewrite_models_for_gateway=False,
     )
     session_id = _run_one_shot(
         http_client,
@@ -437,7 +437,7 @@ def test_antigravity_reasoning_heavy_task_final_answer(
                 "'FINAL ANSWER: <number>'."
             ),
         ),
-        rewrite_model_for_databricks=False,
+        rewrite_models_for_gateway=False,
     )
     # 3 crates * 4 boxes * 6 widgets = 72; +5 spares = 77. A unique integer the
     # model is very unlikely to emit except as the correct result.

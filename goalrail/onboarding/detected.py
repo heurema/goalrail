@@ -64,8 +64,8 @@ def dismissed_detection_names(config: dict[str, object]) -> frozenset[str]:
     """Return the detection names the user has dismissed in *config*.
 
     :param config: The parsed config mapping, e.g.
-        ``{"dismissed_detections": ["codex-databricks"], "providers": {...}}``.
-    :returns: The dismissed names, e.g. ``frozenset({"codex-databricks"})``;
+        ``{"dismissed_detections": ["codex-my-gateway"], "providers": {...}}``.
+    :returns: The dismissed names, e.g. ``frozenset({"codex-my-gateway"})``;
         empty when the key is absent or not a list (a malformed value is
         treated as "nothing dismissed" — the next dismissal write self-heals
         it into a proper list).
@@ -165,9 +165,9 @@ def _synthesize_entry(det: DetectedProvider) -> dict[str, object] | None:
             # ``OPENAI_BASE_URL`` (the same convention the OpenAI SDK reads,
             # matching the interactive wizard / non-interactive onboarding /
             # ``provider_selection._read_credentials_from_env``). Without
-            # this, an env key pointed at an OpenAI-compatible gateway (e.g.
-            # the Databricks AI gateway) is synthesized against
-            # ``api.openai.com`` and every request 401s — the credential is a
+            # this, an env key pointed at an OpenAI-compatible gateway is
+            # synthesized against ``api.openai.com`` and every request 401s
+            # — the credential is a
             # gateway token, not an OpenAI key. Scoped to the openai family's
             # canonical vendor (not a third-party endpoint, handled above).
             if det.family == OPENAI_FAMILY and env_var == "OPENAI_API_KEY":

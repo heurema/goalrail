@@ -39,50 +39,22 @@ Env vars read at startup:
 
 - ``HARNESS_OPENAI_AGENTS_MODEL``: model identifier the
   inner executor pins for every turn, e.g.
-  ``"databricks-gpt-5-4-mini"``. Constructor-level override —
+  ``"gpt-5.4-mini"``. Constructor-level override —
   wins over the per-turn ``request.model`` (which under the
   harness contract carries the agent NAME, not an LLM
   identifier). ``None`` falls back to ``cfg.model`` then the
   executor's built-in default.
-- ``HARNESS_OPENAI_AGENTS_DATABRICKS_PROFILE``: Databricks-specific
-  profile from ``~/.databrickscfg`` to use, e.g. ``"<your-profile>"``.
-  Single canonical spelling — same as the AP-side spawn-env
-  builder
-  :func:`goalrail.runtime.workflow._build_openai_agents_sdk_spawn_env`
-  and the parametrized test fixture
-  :data:`tests.e2e._harness_probes.HarnessProbe.env_prefix`.
-  Unlike the claude-sdk / codex / pi wraps there's no
-  ``GATEWAY=true`` truthy gate — those wraps construct their
-  inner executor with ``gateway=...`` boolean kwargs that
-  flip credential resolution; ``OpenAIAgentsSDKExecutor``
-  takes the profile name directly and resolves credentials
-  itself, so a separate gate would be dead surface.
-- ``HARNESS_OPENAI_AGENTS_GATEWAY_HOST``: gateway workspace host
-  origin, e.g. ``"https://example.databricks.com"``. When set, the
-  inner executor skips profile host lookup and refreshes auth
-  through the gateway auth command.
 - ``HARNESS_OPENAI_AGENTS_GATEWAY_BASE_URL``: OpenAI-compatible gateway
-  base URL, e.g.
-  ``"https://example.databricks.com/ai-gateway/codex/v1"``.
+  base URL.
 - ``HARNESS_OPENAI_AGENTS_API_KEY``: direct OpenAI-compatible API
   key, written when the agent spec declares
   ``executor.auth: {type: api_key, api_key: …}``. Takes precedence
   over the ambient ``OPENAI_API_KEY`` env var so the spec is
-  self-contained. Mutually exclusive with
-  ``HARNESS_OPENAI_AGENTS_DATABRICKS_PROFILE``.
+  self-contained.
 - ``HARNESS_OPENAI_AGENTS_USE_RESPONSES``: ``"1"`` / ``"true"``
   to use the OpenAI ``/responses`` endpoint (default); any other
   truthy-parsing-rejected value falls back to
-  ``/chat/completions``. Databricks-hosted NON-GPT models
-  (any ``databricks-*`` id without the ``gpt`` token, e.g.
-  ``databricks-claude-*``, ``databricks-kimi-*``,
-  ``databricks-meta-llama-*``) default to ``/chat/completions``
-  because the Databricks gateway only serves GPT over the Responses
-  wire — every other model it hosts speaks chat/completions, so
-  ``/responses`` 404s. Databricks GPT models keep the Responses
-  default. An explicit env-var value still wins as the
-  highest-priority switch, so bad specs fail loudly at the gateway
-  instead of being silently rewritten.
+  ``/chat/completions``. An explicit env-var value wins.
 """
 
 from __future__ import annotations
@@ -102,8 +74,6 @@ _logger = logging.getLogger(__name__)
 # the module docstring for semantics. Centralizing as constants
 # so misconfigurations surface as a single grep target.
 _ENV_MODEL = "HARNESS_OPENAI_AGENTS_MODEL"
-_ENV_DATABRICKS_PROFILE = "HARNESS_OPENAI_AGENTS_DATABRICKS_PROFILE"
-_ENV_GATEWAY_HOST = "HARNESS_OPENAI_AGENTS_GATEWAY_HOST"
 _ENV_USE_RESPONSES = "HARNESS_OPENAI_AGENTS_USE_RESPONSES"
 _ENV_GATEWAY_BASE_URL = "HARNESS_OPENAI_AGENTS_GATEWAY_BASE_URL"
 _ENV_GATEWAY_AUTH_COMMAND = "HARNESS_OPENAI_AGENTS_GATEWAY_AUTH_COMMAND"
@@ -116,41 +86,6 @@ _ENV_API_KEY = "HARNESS_OPENAI_AGENTS_API_KEY"
 # match the claude-sdk / codex / pi wraps' parsers for
 # consistency — operators learn one set of conventions, not five.
 _TRUTHY_STRINGS = ("1", "true", "yes")
-
-
-def _is_databricks_non_gpt_model(model: str | None) -> bool:
-    """
-    Return whether *model* is a Databricks-hosted NON-GPT model.
-
-    Only the Databricks gateway's GPT serving path speaks the OpenAI
-    Responses wire; every other model it hosts (Kimi, Claude,
-    Llama, …) is served over chat/completions, and pointing the
-    Agents SDK at ``/responses`` for them 404s or mishandles the
-    surface. So the harness defaults those to ``use_responses=False``
-    instead of requiring every YAML to carry ``use_responses: false``.
-    GPT models keep the Responses-API default. Databricks Kimi —
-    the model this carve-out was originally written for — is a strict
-    subset of this rule.
-
-    :param model: Model identifier from
-        ``HARNESS_OPENAI_AGENTS_MODEL``, e.g.
-        ``"databricks-claude-sonnet-4-6"`` or
-        ``"databricks/databricks-kimi-k2-6"``. ``None`` means no
-        model was configured at harness construction.
-    :returns: ``True`` when *model* is a ``databricks-`` prefixed id
-        (case-insensitive, after stripping an optional leading
-        ``"databricks/"`` provider prefix) that does NOT contain the
-        ``"gpt"`` vendor token; ``False`` otherwise (including for
-        non-Databricks models, whose endpoint default is unchanged).
-    """
-    if model is None:
-        return False
-    normalized = model.lower()
-    if normalized.startswith("databricks/"):
-        normalized = normalized.removeprefix("databricks/")
-    if not normalized.startswith("databricks-"):
-        return False
-    return "gpt" not in normalized
 
 
 def _parse_truthy(env_var: str, default: bool) -> bool:
@@ -178,10 +113,9 @@ def _build_openai_agents_sdk_executor() -> Executor:
     config.
 
     Called lazily by the :class:`ExecutorAdapter` on the first
-    turn. Heavyweight init (eager Databricks credential
-    resolution if a profile is set) happens at this point —
-    operators see the failure surface as a startup error on the
-    first request, not at FastAPI app boot.
+    turn. Client initialization happens at this point — operators
+    see the failure surface as a startup error on the first
+    request, not at FastAPI app boot.
 
     :returns: A configured :class:`OpenAIAgentsSDKExecutor`
         instance.
@@ -189,34 +123,19 @@ def _build_openai_agents_sdk_executor() -> Executor:
         installed — the inner executor's ``_ensure_agents_sdk``
         surfaces this as a clear ImportError on first
         :meth:`run_turn` call.
-    :raises OSError: If ``HARNESS_OPENAI_AGENTS_DATABRICKS_PROFILE``
-        is set but credentials are missing AND the env-var
-        fallback also fails — the inner executor's
-        :func:`_get_openai_async_client` fails loud with a
-        message naming the profile.
+    :raises OSError: If gateway auth is configured without a gateway base URL.
     """
-    # Single canonical spelling for the profile env var:
-    # ``DATABRICKS_PROFILE`` (Databricks-specific). The AP-side
-    # spawn-env builder always emits this name; the parametrized
-    # harness wrap e2e fixture sets the same name. There is no
-    # ``GATEWAY=true`` gate here — if the cfg file is unreachable
-    # :func:`_get_openai_async_client` falls through to the
-    # env-var path on its own.
-    profile = os.environ.get(_ENV_DATABRICKS_PROFILE) or None
     api_key = os.environ.get(_ENV_API_KEY) or None
     model = os.environ.get(_ENV_MODEL) or None
-    default_use_responses = not _is_databricks_non_gpt_model(model)
     use_responses = _parse_truthy(
         _ENV_USE_RESPONSES,
-        default=default_use_responses,
+        default=True,
     )
     return OpenAIAgentsSDKExecutor(
-        profile=profile,
         api_key=api_key,
         use_responses=use_responses,
         model=model,
         base_url_override=os.environ.get(_ENV_GATEWAY_BASE_URL) or None,
-        gateway_host=os.environ.get(_ENV_GATEWAY_HOST) or None,
         gateway_auth_command=os.environ.get(_ENV_GATEWAY_AUTH_COMMAND) or None,
     )
 

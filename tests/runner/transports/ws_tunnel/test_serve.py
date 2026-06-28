@@ -313,7 +313,7 @@ async def test_serve_tunnel_fails_loud_on_http_auth_rejection(
     with pytest.raises(RuntimeError, match="HTTP 401"):
         await serve_tunnel(
             _noop_app,
-            server_url="https://example.databricksapps.com",
+            server_url="https://goalrail.example",
             runner_id="runner_auth_rejected",
             runner_version="0.1.0",
             auth_token="tok-expired",
@@ -323,7 +323,7 @@ async def test_serve_tunnel_fails_loud_on_http_auth_rejection(
 def test_websocket_auth_redirect_url_detects_https_redirect() -> None:
     """An ``InvalidURI`` carrying an https:// target is classified as auth.
 
-    Mirrors the real failure mode in Databricks Apps deployments:
+    Mirrors the real failure mode in proxy-fronted deployments:
     an unauthenticated WS handshake is 302'd to the OAuth
     ``/oidc/oauth2/v2.0/authorize?…`` URL, and the websockets
     library surfaces that via :class:`InvalidURI`. We must catch
@@ -332,8 +332,7 @@ def test_websocket_auth_redirect_url_detects_https_redirect() -> None:
     :returns: None.
     """
     login_url = (
-        "https://example.databricks.com/oidc/oauth2/v2.0/authorize"
-        "?client_id=abc&response_type=code"
+        "https://goalrail.example/oidc/oauth2/v2.0/authorize?client_id=abc&response_type=code"
     )
     exc = InvalidURI(login_url, "scheme isn't ws or wss")
     assert _websocket_auth_redirect_url(exc) == login_url
@@ -385,8 +384,7 @@ async def test_serve_tunnel_fails_loud_on_auth_redirect(
     :returns: None.
     """
     login_url = (
-        "https://example.databricks.com/oidc/oauth2/v2.0/authorize"
-        "?client_id=abc&response_type=code"
+        "https://goalrail.example/oidc/oauth2/v2.0/authorize?client_id=abc&response_type=code"
     )
 
     async def _serve_once(
@@ -428,7 +426,7 @@ async def test_serve_tunnel_fails_loud_on_auth_redirect(
     with pytest.raises(RuntimeError) as exc_info:
         await serve_tunnel(
             _noop_app,
-            server_url="https://example.databricksapps.com",
+            server_url="https://goalrail.example",
             runner_id="runner_redirected",
             runner_version="0.1.0",
         )
@@ -540,14 +538,14 @@ async def test_serve_tunnel_once_sends_bearer_header(
 
     await _serve_tunnel_once(
         _noop_app,
-        tunnel_url="wss://example.databricksapps.com/v1/runners/runner_auth/tunnel",
+        tunnel_url="wss://goalrail.example/v1/runners/runner_auth/tunnel",
         runner_id="runner_auth",
         runner_version="0.1.0",
         auth_token="tok-auth",
         tunnel_token="bind-token",
     )
 
-    assert captured["url"] == "wss://example.databricksapps.com/v1/runners/runner_auth/tunnel"
+    assert captured["url"] == "wss://goalrail.example/v1/runners/runner_auth/tunnel"
     # The runner also sends the first-party Origin sentinel so the server's
     # CSWSH origin guard admits the tunnel (a non-browser client), in
     # addition to the bearer and tunnel-binding token.
@@ -1062,7 +1060,7 @@ async def test_serve_tunnel_reconnect_uses_fresh_token_not_stale(
     call_count = 0
 
     def _factory() -> str:
-        """Simulate the Databricks SDK minting a fresh token.
+        """Simulate an auth client minting a fresh token.
 
         :returns: Token string with incrementing sequence number.
         """

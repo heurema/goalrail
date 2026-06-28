@@ -10,10 +10,8 @@
 # directly, like CI -- no fork-e2e/** mirror needed.
 #
 # Single openai-agents leg: all tests now run against the mock LLM server.
-# claude-sdk and codex reject "mock-model" as an unknown model (they validate
-# against the Databricks model catalog even when mock_llm_base_url is set), so
-# only openai-agents works without real credentials. The model name is unused
-# in mock mode (model_name fixture returns "mock-model" regardless).
+# The model name is unused in mock mode (model_name fixture returns
+# "mock-model" regardless).
 #
 # Env in:  EVENT_NAME (github.event_name), IS_DRAFT.
 # Out:     matrix={"include":[{"name":..,"harness":..,"model":..,"workers":..}, ...]}
@@ -34,7 +32,7 @@ fi
 
 read -r -d '' matrix <<'JSON' || true
 {"include":[
-{"name":"openai-agents","harness":"openai-agents","model":"databricks-gpt-5-4-mini","workers":4}
+{"name":"openai-agents","harness":"openai-agents","model":"gpt-5.4-mini","workers":4}
 ]}
 JSON
 # Collapse to one line so the GITHUB_OUTPUT key=value contract holds.

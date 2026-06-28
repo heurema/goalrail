@@ -14,8 +14,8 @@ stamped with that stream's own ``conversation_id``. The single-
 conversation tests pass the same id for both (a top-level session is
 its own root); the sub-agent tests exercise the cross-stream fan-out.
 
-The leave-grace timer is the registry's core flap-protection (the
-Databricks Apps ingress drops every stream ~5 minutes, and the grace
+The leave-grace timer is the registry's core flap-protection (some
+proxy ingress layers drop long-lived streams, and the grace
 window is what keeps avatars from flickering on each reconnect);
 tests shrink ``_LEAVE_GRACE_S`` via monkeypatch the same way
 ``test_session_updates_ws.py`` shrinks its rescan cadence.

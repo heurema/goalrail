@@ -29,9 +29,9 @@ description: >-
 # partners, lays out both views, and (under `debate`) runs the critique
 # loop and synthesizes. No model is pinned, so the claude-sdk harness runs on
 # whatever Claude provider you configured (`goalrail setup`) — an Anthropic
-# API key, a Claude subscription, an OpenAI-compatible gateway, or a Databricks
-# workspace — resolving that provider's default Claude model (the bundled
-# catalog default is claude-opus-4-8).
+# API key, a Claude subscription, or an OpenAI-compatible gateway — resolving
+# that provider's default Claude model (the bundled catalog default is
+# claude-opus-4-8).
 executor:
   type: goalrail
   config:

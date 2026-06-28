@@ -15,7 +15,7 @@ afterEach(cleanup);
 /** A fully-populated valid v3 verdict for component-state cases. */
 const APPLIED_VERDICT: CostRoutingVerdict = {
   tier: "cheap",
-  model: "databricks-claude-haiku-4-5",
+  model: "anthropic/claude-haiku-4-5",
   applied: true,
   rationale: "Routine lookup; a cheap model suffices.",
   turnAnchor: "2026-06-10T12:00:00+00:00",
@@ -29,7 +29,7 @@ function planLabels(payload: Record<string, unknown>): Record<string, string> {
 const VALID_V3_PLAN = {
   version: 3,
   tier: "cheap",
-  model: "databricks-claude-haiku-4-5",
+  model: "anthropic/claude-haiku-4-5",
   applied: true,
   rationale: "Routine lookup; a cheap model suffices.",
   turn_anchor: "2026-06-10T12:00:00+00:00",
@@ -39,7 +39,7 @@ describe("parseCostRoutingVerdict", () => {
   it("parses a valid v3 plan into a verdict", () => {
     expect(parseCostRoutingVerdict(planLabels(VALID_V3_PLAN))).toEqual({
       tier: "cheap",
-      model: "databricks-claude-haiku-4-5",
+      model: "anthropic/claude-haiku-4-5",
       applied: true,
       rationale: "Routine lookup; a cheap model suffices.",
       turnAnchor: "2026-06-10T12:00:00+00:00",
@@ -96,7 +96,7 @@ describe("parseCostRoutingVerdict", () => {
     const { rationale: _r, turn_anchor: _t, ...minimal } = VALID_V3_PLAN;
     expect(parseCostRoutingVerdict(planLabels(minimal))).toEqual({
       tier: "cheap",
-      model: "databricks-claude-haiku-4-5",
+      model: "anthropic/claude-haiku-4-5",
       applied: true,
       rationale: null,
       turnAnchor: null,
@@ -128,13 +128,13 @@ describe("isCostRoutingSession", () => {
 
 describe("shortModelName", () => {
   it("collapses Claude ids to their family token", () => {
-    expect(shortModelName("databricks-claude-haiku-4-5")).toBe("haiku");
-    expect(shortModelName("databricks-claude-sonnet-4-6")).toBe("sonnet");
+    expect(shortModelName("anthropic/claude-haiku-4-5")).toBe("haiku");
+    expect(shortModelName("anthropic/claude-sonnet-4-6")).toBe("sonnet");
     expect(shortModelName("claude-opus-4-7")).toBe("opus");
   });
 
-  it("strips the databricks- prefix from non-Claude ids", () => {
-    expect(shortModelName("databricks-gpt-5-4-mini")).toBe("gpt-5-4-mini");
+  it("uses the model name from provider-prefixed non-Claude ids", () => {
+    expect(shortModelName("openai/gpt-5-4-mini")).toBe("gpt-5-4-mini");
   });
 
   it("passes unrecognized ids through unchanged (fallback to the id)", () => {
@@ -335,7 +335,7 @@ describe("IntelligentModelControl — verdict ping & motion", () => {
     rerender(
       controlTree({
         value: "on",
-        verdict: { ...APPLIED_VERDICT, model: "databricks-claude-sonnet-4-6", tier: "medium" },
+        verdict: { ...APPLIED_VERDICT, model: "anthropic/claude-sonnet-4-6", tier: "medium" },
       }),
     );
     expect(screen.getAllByTestId("imc-verdict-ping")).toHaveLength(1);

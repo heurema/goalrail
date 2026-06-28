@@ -130,7 +130,7 @@ def claude_native_ui_agent(
         return upload_agent(
             http_client,
             Path(tmpdir),
-            rewrite_model_for_databricks=False,
+            rewrite_models_for_gateway=False,
         )
 
 
@@ -157,9 +157,9 @@ def _claude_code_session(
 
     :param session_id: Goalrail session id, e.g. ``"conv_abc123"``.
     :param model: Claude model id to pin via ``--model``, e.g.
-        ``"databricks-claude-sonnet-4-6"``. ``None`` lets the CLI choose.
+        ``"anthropic/claude-sonnet-4-6"``. ``None`` lets the CLI choose.
     :param launch_env: Extra environment for the launched ``claude``
-        process — Databricks Anthropic gateway auth + model-tier pins, e.g.
+        process — gateway auth + model-tier pins, e.g.
         ``{"ANTHROPIC_BASE_URL": "https://host/serving-endpoints/anthropic"}``.
         Empty when no ``--profile`` is set, so the developer's ambient
         ``claude`` login is used instead.
@@ -185,7 +185,7 @@ def _claude_code_session(
         "--allowedTools",
         "mcp__goalrail__list_comments,mcp__goalrail__update_comment",
     )
-    # Pin the model so the Databricks Anthropic gateway receives a served model
+    # Pin the model so the gateway receives a served model
     # id rather than a canonical Anthropic name it would reject.
     if model:
         base_args = (*base_args, "--model", model)

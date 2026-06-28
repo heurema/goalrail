@@ -30,7 +30,7 @@ _ANCHOR = "2026-06-10T00:00:00+00:00"
 def _verdict(
     *,
     tier: str = "expensive",
-    model: str = "databricks-claude-opus-4-8",
+    model: str = "anthropic/claude-opus-4-8",
     applied: bool = True,
 ) -> AdvisorVerdict:
     """Build a verdict with test defaults.
@@ -94,7 +94,7 @@ def test_reserved_cost_control_keys_empty_when_none() -> None:
 @pytest.mark.parametrize("applied", [True, False])
 def test_verdict_label_round_trip(applied: bool) -> None:
     """A verdict serializes and parses back identically, applied flag intact."""
-    verdict = _verdict(tier="medium", model="databricks-claude-sonnet-4-6", applied=applied)
+    verdict = _verdict(tier="medium", model="anthropic/claude-sonnet-4-6", applied=applied)
     raw = verdict_to_label_value(verdict)
     parsed = parse_verdict({COST_CONTROL_PLAN_LABEL: raw})
     # Full-field equality proves every field (incl. the applied bool that
@@ -106,13 +106,13 @@ def test_verdict_label_round_trip(applied: bool) -> None:
 
 def test_label_value_is_versioned_compact_json() -> None:
     """The serialized label carries version 3 and the verdict fields."""
-    raw = verdict_to_label_value(_verdict(tier="cheap", model="databricks-claude-haiku-4-5"))
+    raw = verdict_to_label_value(_verdict(tier="cheap", model="anthropic/claude-haiku-4-5"))
     payload = json.loads(raw)
     # version==3 lets readers version-gate; the wrong version would make
     # parse_verdict ignore a real verdict as if it were legacy.
     assert payload["version"] == PLAN_VERSION == 3
     assert payload["tier"] == "cheap"
-    assert payload["model"] == "databricks-claude-haiku-4-5"
+    assert payload["model"] == "anthropic/claude-haiku-4-5"
     assert payload["applied"] is True
 
 
@@ -205,7 +205,7 @@ def test_parse_verdict_non_bool_applied_raises() -> None:
         {
             "version": 3,
             "tier": "cheap",
-            "model": "databricks-claude-haiku-4-5",
+            "model": "anthropic/claude-haiku-4-5",
             "applied": "true",
             "rationale": "r",
             "turn_anchor": _ANCHOR,
@@ -220,8 +220,8 @@ def test_parse_verdict_non_bool_applied_raises() -> None:
 
 def test_describe_verdict_is_model_and_tier() -> None:
     """The one-line summary names the model and its tier."""
-    text = describe_verdict(_verdict(tier="expensive", model="databricks-claude-opus-4-8"))
-    assert text == "databricks-claude-opus-4-8 (expensive)"
+    text = describe_verdict(_verdict(tier="expensive", model="anthropic/claude-opus-4-8"))
+    assert text == "anthropic/claude-opus-4-8 (expensive)"
 
 
 def test_label_value_caps_long_rationale_at_column_limit() -> None:
@@ -230,7 +230,7 @@ def test_label_value_caps_long_rationale_at_column_limit() -> None:
     haiku-shows/opus-doesn't bug)."""
     verdict = AdvisorVerdict(
         tier="expensive",
-        model="databricks-claude-opus-4-8",
+        model="anthropic/claude-opus-4-8",
         applied=True,
         rationale="x" * 600,
         turn_anchor="2026-06-11T05:30:45.670436+00:00",

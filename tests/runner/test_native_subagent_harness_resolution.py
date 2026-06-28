@@ -283,7 +283,7 @@ async def test_reconnect_catch_up_scan_keeps_child_native_harness() -> None:
 
     This drives the REAL ``app.state.catch_up_scan`` (the runner's
     ``on_reconnect`` callback) — the exact path that fired in production after
-    a Databricks Apps ingress WebSocket recycle. With the sub-agent session
+    an ingress WebSocket recycle. With the sub-agent session
     known to the runner (it has history) but its spec cache holding the PARENT
     spec, ``_is_native_harness`` returns False on the buggy code, so the scan
     does NOT skip it, runs a catch-up turn, and resolves the parent

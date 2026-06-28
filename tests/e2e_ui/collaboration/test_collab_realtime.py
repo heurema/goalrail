@@ -53,7 +53,7 @@ def test_two_browser_contexts_sync_message_realtime(
       at the empty-FIFO fallback).
     - The collaborator never subscribed to the live stream on session
       bind (``chatStore.switchTo`` regression).
-    - The LLM never responded (Databricks credentials / model
+    - The LLM never responded (provider credentials / model
       availability), which only affects the assistant-bubble checks.
 
     :param browser: Playwright session-scoped browser; two independent

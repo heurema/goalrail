@@ -169,7 +169,7 @@ def repl_env(mock_llm_server_url: str, tmp_path: Path) -> dict[str, str]:
         "ANTHROPIC_BASE_URL": mock_llm_server_url,
     }
     # Strip real credentials that may have been inherited.
-    for var in ("DATABRICKS_TOKEN", "CODEX", "CLAUDE_CODE"):
+    for var in ("CODEX", "CLAUDE_CODE"):
         env.pop(var, None)
     return ensure_repl_test_theme_env(env)
 

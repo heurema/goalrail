@@ -23,13 +23,13 @@ codex; missing CLIs skip with a clear reason):
 
 ```bash
 pytest tests/integration/ --integration --profile <name> --llm-api-key $KEY \
-    --harness claude-sdk --model databricks-claude-sonnet-4-6 -v
+    --harness claude-sdk --model anthropic/claude-sonnet-4-6 -v
 
 pytest tests/integration/ --integration --profile <name> --llm-api-key $KEY \
-    --harness openai-agents --model databricks-gpt-5-4-mini -v
+    --harness openai-agents --model openai/gpt-5-4-mini -v
 
 pytest tests/integration/ --integration --profile <name> --llm-api-key $KEY \
-    --harness codex --model databricks-gpt-5-5 -v
+    --harness codex --model openai/gpt-5-5 -v
 ```
 
 ## Journeys

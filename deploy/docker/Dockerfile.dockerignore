@@ -57,9 +57,7 @@ TODO.md
 AGENTS.md
 openapi.json
 
-# Databricks-Apps-specific deploy (Lakebase, UC Volumes, bundle config).
-# The OSS Docker entrypoint at deploy/docker/entrypoint.py IS copied.
-# The AWS Terraform/boto3 helpers at deploy/aws/ are deploy-time tooling,
-# not runtime — exclude them too.
-deploy/databricks/
+# The OSS Docker entrypoint at deploy/docker/entrypoint.py IS copied. The AWS
+# Terraform/boto3 helpers at deploy/aws/ are deploy-time tooling, not runtime —
+# exclude them too.
 deploy/aws/

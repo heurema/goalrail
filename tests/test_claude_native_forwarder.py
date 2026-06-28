@@ -1638,7 +1638,7 @@ async def test_forwarder_uses_auth_to_refresh_token_per_request(tmp_path: Path) 
 
     Regression test for the production bug where the forwarder
     captured the bearer at startup and never refreshed it. After the
-    ~1h Databricks OAuth token TTL, the stale token caused the
+    ~1h OAuth token TTL, the stale token caused the
     forwarder to spin in a permanent retry loop while the runner
     kept processing turns — results never reached the UI. The fix
     threads an ``httpx.Auth`` through the forwarder so the
@@ -3154,17 +3154,17 @@ def test_model_alias_for_collapses_concrete_id_to_tier_alias() -> None:
     """
     ``_model_alias_for`` maps a concrete transcript model id to the
     picker's tier alias so a TUI ``/model`` switch lands on a picker
-    row. Covers Anthropic + Databricks-gateway id shapes and the
+    row. Covers bare Anthropic + provider-qualified id shapes and the
     no-match / empty cases (caller skips the post on ``None``).
     """
     assert forwarder._model_alias_for("claude-opus-4-8") == "opus"
     assert forwarder._model_alias_for("anthropic/claude-opus-4-7") == "opus"
-    assert forwarder._model_alias_for("databricks-claude-sonnet-4-6") == "sonnet"
+    assert forwarder._model_alias_for("anthropic/claude-sonnet-4-6") == "sonnet"
     assert forwarder._model_alias_for("claude-haiku-4-5") == "haiku"
     # Fable (the tier above Opus) collapses to its own alias — a miss
     # here means a TUI switch to claude-fable-5 never reaches the picker.
     assert forwarder._model_alias_for("claude-fable-5") == "fable"
-    assert forwarder._model_alias_for("databricks-claude-fable-5") == "fable"
+    assert forwarder._model_alias_for("anthropic/claude-fable-5") == "fable"
     # Unknown family or empty → None (don't surface an unrenderable id).
     assert forwarder._model_alias_for("gpt-5-4-mini") is None
     assert forwarder._model_alias_for("") is None
@@ -5803,7 +5803,7 @@ def test_parse_json_response_returns_value_on_valid_json() -> None:
 
 def test_parse_json_response_raises_diagnosable_error_on_html_body() -> None:
     """
-    An HTML body (e.g. an expired Databricks Apps OAuth login page served
+    An HTML body (e.g. an expired OAuth login page served
     with a 200) raises a ``RuntimeError`` naming the content type and a
     body snippet, not an opaque ``json.JSONDecodeError``. The original
     parser error is preserved as ``__cause__`` for debugging.

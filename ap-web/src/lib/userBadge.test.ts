@@ -5,7 +5,7 @@ import { userColor, userColorTint, userInitials } from "./userBadge";
 describe("userInitials", () => {
   it("takes the first letters of the first two local-part segments", () => {
     expect(userInitials("alice.smith@example.com")).toBe("AS");
-    expect(userInitials("corey-zumar@databricks.com")).toBe("CZ");
+    expect(userInitials("corey-zumar@example.com")).toBe("CZ");
     expect(userInitials("a_b@example.com")).toBe("AB");
   });
 

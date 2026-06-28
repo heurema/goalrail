@@ -141,8 +141,8 @@ COPY --from=web-builder /web/goalrail/server/static/web-ui ./goalrail/server/sta
 RUN test -f ./goalrail/server/static/web-ui/index.html \
     || (echo "ERROR: SPA bundle missing after web-builder stage — check the ap-web build." && exit 1)
 
-# psycopg[binary] is not a baseline dep — pulled in by the
-# [databricks] extra in pyproject — so add it explicitly here.
+# psycopg[binary] is not a baseline dep, so add it explicitly for the server
+# image's Postgres support.
 RUN uv pip install --no-cache-dir --index-url ${PYPI_INDEX_URL} 'psycopg[binary]>=3.1,<4'
 
 # Optional managed-sandbox provider extras for the SERVER (the launcher imports

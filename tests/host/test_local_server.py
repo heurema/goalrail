@@ -231,10 +231,8 @@ def test_ensure_local_goalrail_server_spawns_when_none_healthy(
     # Point the persistent data dir at tmp so the test does not write to the
     # developer's real ~/.goalrail.
     monkeypatch.setattr(Path, "home", classmethod(lambda _cls: tmp_path))
-    # The spawned server inherits the parent env unmodified — there is no
-    # profile flag anymore, so an ambient DATABRICKS_CONFIG_PROFILE must
-    # pass through to the server env as-is (asserted below).
-    monkeypatch.setenv("DATABRICKS_CONFIG_PROFILE", "ambient")
+    # The spawned server inherits the parent env unmodified.
+    monkeypatch.setenv("CUSTOM_PROVIDER_PROFILE", "ambient")
 
     captured: dict[str, object] = {}
 
@@ -277,8 +275,8 @@ def test_ensure_local_goalrail_server_spawns_when_none_healthy(
     env = captured["env"]
     assert isinstance(env, dict)
     # Ambient passthrough, no injection: the spawned server sees the
-    # shell's own DATABRICKS_CONFIG_PROFILE, untouched.
-    assert env["DATABRICKS_CONFIG_PROFILE"] == "ambient"
+    # shell's own custom profile selector, untouched.
+    assert env["CUSTOM_PROVIDER_PROFILE"] == "ambient"
 
 
 def test_stop_local_goalrail_server_waits_for_process_exit(

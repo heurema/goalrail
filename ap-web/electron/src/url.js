@@ -98,85 +98,10 @@
     return url.protocol === "http:" && !LOCAL_HOSTS.has(url.hostname);
   }
 
-  /**
-   * Path under a Databricks workspace where the Goalrail web UI is mounted. A
-   * bare workspace URL serves the workspace's own web app at the root, so a
-   * user who pastes just the workspace host (e.g.
-   * ``https://<ws>.azuredatabricks.net``) lands on a 404 unless this suffix is
-   * appended.
-   *
-   * NOTE: the Python CLI records the UI mount as ``/goalrail`` in
-   * ``goalrail/conversation_browser.py`` (WORKSPACE_UI_PATH), whereas the
-   * desktop deliberately keeps ``/ml/goalrail`` for now — that is the path the
-   * live workspace serves the embedded SPA on. The two are intentionally
-   * divergent pending reconciliation; do not "fix" this to ``/goalrail``
-   * without verifying what the workspace actually serves to the desktop shell.
-   */
-  const WORKSPACE_UI_PATH = "/ml/goalrail";
-
-  /**
-   * Probe timeout for Databricks workspace detection. Deliberately short: a
-   * slow or unreachable host must not stall the connect flow — on timeout we
-   * fall back to loading the URL exactly as entered.
-   */
-  const WORKSPACE_PROBE_TIMEOUT_MS = 8000;
-
-  /**
-   * Expand a bare Databricks workspace URL to its Goalrail web-UI mount.
-   *
-   * Mirrors the Goalrail CLI's behavioral detection
-   * (``goalrail/cli.py:_workspace_api_server_url``): rather than match
-   * hostnames, probe the URL and adopt the mount only when the host answers
-   * like a Databricks workspace — a response carrying the ``server: databricks``
-   * header. URLs that already carry a path, or aren't https, are returned
-   * untouched WITHOUT a probe, so a user who pastes the full ``…/ml/goalrail``
-   * URL (or connects to any non-workspace server) is never second-guessed.
-   *
-   * The CLI appends the API mount because it's an API client; the desktop shell
-   * loads the web UI, so it appends the SPA mount instead.
-   *
-   * @param {string} normalized A normalized http(s) URL from normalizeUrl().
-   * @returns {Promise<string>} The workspace UI URL when expansion applies,
-   *   else the input unchanged.
-   */
-  async function expandDatabricksWorkspaceUrl(normalized) {
-    let url;
-    try {
-      url = new URL(normalized);
-    } catch {
-      return normalized;
-    }
-    // Only bare https roots are candidates: a non-root path means the user
-    // already pointed at a specific mount, and Databricks workspaces are
-    // https-only.
-    if (url.protocol !== "https:" || (url.pathname !== "/" && url.pathname !== "")) {
-      return normalized;
-    }
-    let probe;
-    try {
-      probe = await fetch(`${url.origin}/`, {
-        method: "HEAD",
-        redirect: "manual",
-        signal: AbortSignal.timeout(WORKSPACE_PROBE_TIMEOUT_MS),
-      });
-    } catch {
-      // Unreachable / DNS / TLS / timeout: connect to the URL as given and let
-      // the did-fail-load fallback surface any real failure.
-      return normalized;
-    }
-    if ((probe.headers.get("server") ?? "").toLowerCase() !== "databricks") {
-      return normalized;
-    }
-    return `${url.origin}${WORKSPACE_UI_PATH}`;
-  }
-
   return {
     LOCAL_HOSTS,
     defaultSchemeFor,
     normalizeUrl,
     isPlainHttpRemote,
-    WORKSPACE_UI_PATH,
-    WORKSPACE_PROBE_TIMEOUT_MS,
-    expandDatabricksWorkspaceUrl,
   };
 });

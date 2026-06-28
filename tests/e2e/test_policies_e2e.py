@@ -85,30 +85,30 @@ _LABEL_GATE_EXTRA_CONFIG: dict = {
 @pytest.fixture(scope="session")
 def policy_gate_agent(
     http_client: httpx.Client,
-    databricks_workspace_host: str | None,
-    databricks_profile_or_none: str | None,
+    gateway_base_url: str | None,
+    gateway_profile_or_none: str | None,
 ) -> str:
     """Upload the e2e-policy-gate fixture and return its name."""
     return upload_agent(
         http_client,
         _E2E_POLICY_GATE_DIR,
-        rewrite_model_for_databricks=databricks_workspace_host is not None,
-        databricks_profile=databricks_profile_or_none,
+        rewrite_models_for_gateway=gateway_base_url is not None,
+        gateway_profile=gateway_profile_or_none,
     )
 
 
 @pytest.fixture(scope="session")
 def label_gate_agent(
     http_client: httpx.Client,
-    databricks_workspace_host: str | None,
-    databricks_profile_or_none: str | None,
+    gateway_base_url: str | None,
+    gateway_profile_or_none: str | None,
 ) -> str:
     """Upload the e2e-label-gate fixture and return its name."""
     return upload_agent(
         http_client,
         _E2E_LABEL_GATE_DIR,
-        rewrite_model_for_databricks=databricks_workspace_host is not None,
-        databricks_profile=databricks_profile_or_none,
+        rewrite_models_for_gateway=gateway_base_url is not None,
+        gateway_profile=gateway_profile_or_none,
     )
 
 
@@ -121,15 +121,15 @@ def ask_demo_agent(http_client: httpx.Client) -> str:
 @pytest.fixture(scope="session")
 def prompt_policy_agent(
     http_client: httpx.Client,
-    databricks_workspace_host: str | None,
-    databricks_profile_or_none: str | None,
+    gateway_base_url: str | None,
+    gateway_profile_or_none: str | None,
 ) -> str:
     """Upload the e2e-prompt-policy fixture and return its name."""
     return upload_agent(
         http_client,
         _E2E_PROMPT_POLICY_DIR,
-        rewrite_model_for_databricks=databricks_workspace_host is not None,
-        databricks_profile=databricks_profile_or_none,
+        rewrite_models_for_gateway=gateway_base_url is not None,
+        gateway_profile=gateway_profile_or_none,
     )
 
 

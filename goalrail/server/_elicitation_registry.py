@@ -46,8 +46,8 @@ class _ParkedHarnessElicitation:
         native terminal, so the parked hook long-poll returns promptly
         instead of blocking until its timeout. This positive,
         application-level signal is needed because
-        ``request.is_disconnected()`` does not fire promptly behind the
-        Databricks Apps proxy's idle-connection heartbeats.
+        ``request.is_disconnected()`` does not fire promptly behind some
+        proxy idle-connection heartbeats.
     """
 
     session_id: str

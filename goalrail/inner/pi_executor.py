@@ -14,18 +14,16 @@ features work exactly as they do with the Claude SDK and Codex harnesses.
 When ``os_env`` is set, the Pi subprocess is wrapped in the same
 sandbox used for other harnesses.
 
-Databricks support: a temporary ``models.json`` is generated with three
-providers (OpenAI Responses for GPT, Anthropic Messages for Claude, and
-OpenAI Completions for others) and ``PI_CODING_AGENT_DIR`` is set so Pi
-picks it up.
+Gateway support: a temporary ``models.json`` is generated from explicit
+gateway base URLs plus a bearer token and ``PI_CODING_AGENT_DIR`` is set
+so Pi picks it up.
 
 Requirements:
     The ``pi`` CLI must be installed and on PATH.
 
-Environment (Databricks):
-    DATABRICKS_CONFIG_PROFILE — optional Databricks profile selector
-    ~/.databrickscfg          — host + token profile for workspace access
-    (or ~/.databrickscfg with a profile containing host + token)
+Environment (gateway):
+    HARNESS_PI_GATEWAY_BASE_URL / HARNESS_PI_GATEWAY_BASE_URLS
+    HARNESS_PI_GATEWAY_AUTH_COMMAND
 """
 
 from __future__ import annotations
@@ -46,16 +44,13 @@ from asyncio import Queue, Task
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any, TypeAlias
-from urllib.parse import urlparse as _urlparse
 
 from goalrail.inner.native_attachments import parse_data_uri
 from goalrail.llms._usage_observer import notify_from_dict as _notify_usage_from_dict
-from goalrail.onboarding.databricks_config import DATABRICKS_CLAUDE_DEFAULT_MODEL
 from goalrail.runner.identity import GOALRAIL_SESSION_ENV_VAR
 from goalrail.spec.types import RetryPolicy
 
 from ._subprocess_lifecycle import close_subprocess_transport
-from .databricks_executor import _read_databrickscfg
 from .datamodel import OSEnvSandboxSpec, OSEnvSpec
 from .executor import (
     Executor,
@@ -95,7 +90,7 @@ def _fetch_shell_command_token(command: str) -> str | None:
     )
     token = result.stdout.strip()
     if result.returncode != 0 or not token:
-        logger.debug("Pi Databricks auth command failed: %s", result.stderr.strip())
+        logger.debug("Pi gateway auth command failed: %s", result.stderr.strip())
         return None
     return token
 
@@ -328,13 +323,14 @@ class _ToolServer:
 
 
 def _sanitize_schema(schema: ToolSpec) -> ToolSpec:
-    """Strip JSON Schema features unsupported by the OpenAI Responses/Completions APIs.
+    """Strip JSON Schema features unsupported by common LLM APIs.
 
     Removes ``anyOf``, ``oneOf``, ``allOf``, ``examples``, ``default``,
     ``additionalProperties``, and ``$ref``.  Union keywords are collapsed
     to the first ``object`` branch when one exists (it carries the
     structured properties the model needs), else the first typed branch.
-    This ensures the schema is accepted by Databricks serving endpoints.
+    This keeps the schema inside the subset accepted by common serving
+    endpoints.
     """
     if not isinstance(schema, dict):
         return schema
@@ -544,91 +540,18 @@ def _find_pi_cli() -> str | None:
 
 
 # ---------------------------------------------------------------------------
-# Databricks models.json generation
+# Gateway models.json generation
 # ---------------------------------------------------------------------------
 
-# ---------------------------------------------------------------------------
-# Databricks model definitions for Pi's models.json
-# ---------------------------------------------------------------------------
-# Databricks exposes API styles at different URL paths. ucode state can
-# override these provider URLs; the host-derived defaults remain for legacy
-# profile-only usage.
-
-# Each static entry declares ``input: ["text", "image"]`` for the same reason
-# the dynamic-registration path does (see _build_models_json): Pi's
-# transformMessages strips image blocks unless the model entry advertises
-# image input. These are all vision-capable models, and the run model is often
-# a static id — in which case _build_models_json's append is skipped, so the
-# capability has to be declared here too or attached images are silently
-# dropped (#515/#516).
-_DATABRICKS_RESPONSES_MODELS = [
-    {
-        "id": "databricks-gpt-5-4-mini",
-        "name": "GPT-5.4 Mini",
-        "contextWindow": 1047576,
-        "maxTokens": 32768,
-        "input": ["text", "image"],
-    },
-    {
-        "id": "databricks-gpt-5-4",
-        "name": "GPT-5.4",
-        "contextWindow": 1047576,
-        "maxTokens": 32768,
-        "input": ["text", "image"],
-    },
-    {
-        "id": "databricks-gpt-5-5",
-        "name": "GPT-5.5",
-        # OSS profile endpoint metadata: 400K total context, 128K max output.
-        "contextWindow": 400000,
-        "maxTokens": 128000,
-        "input": ["text", "image"],
-    },
-    {
-        "id": "databricks-gpt-5-5-pro",
-        "name": "GPT-5.5 Pro",
-        # OSS profile endpoint metadata: 400K total context, 128K max output.
-        "contextWindow": 400000,
-        "maxTokens": 128000,
-        "input": ["text", "image"],
-    },
-]
-
-_DATABRICKS_ANTHROPIC_MODELS = [
-    {
-        "id": "databricks-claude-opus-4-8",
-        "name": "Claude Opus 4.8",
-        # Gateway-verified caps: >1000000 input rejects, 128001+ output rejects.
-        "contextWindow": 1000000,
-        "maxTokens": 128000,
-        "input": ["text", "image"],
-    },
-    {
-        "id": "databricks-claude-sonnet-4-6",
-        "name": "Claude Sonnet 4.6",
-        "contextWindow": 1000000,
-        "maxTokens": 128000,
-        "input": ["text", "image"],
-    },
-    {
-        "id": "databricks-claude-sonnet-4-5",
-        "name": "Claude Sonnet 4.5",
-        # Gateway rejects this model past ~200k input.
-        "contextWindow": 200000,
-        "maxTokens": 16384,
-        "input": ["text", "image"],
-    },
-]
-
-# Empty: the only listed endpoint (meta-llama-3.3-70b) no longer exists on
-# the gateway. The provider stays so non-Claude/GPT ids keep a routing home.
-_DATABRICKS_COMPLETIONS_MODELS: list[dict[str, str | int]] = []
+_PI_GATEWAY_OPENAI_PROVIDER = "goalrail-openai"
+_PI_GATEWAY_ANTHROPIC_PROVIDER = "goalrail-anthropic"
+_PI_GATEWAY_COMPLETIONS_PROVIDER = "goalrail-completions"
 
 # Prefix-matched env var names allowed into the Pi subprocess. Only
 # known-safe categories pass: Pi's own config knobs, proxy settings,
 # TLS trust overrides, Node.js runtime knobs (Pi is a Node CLI), and
-# locale. Credential families (``DATABRICKS_*``, ``AWS_*``, LLM
-# provider API keys, ...) deliberately do NOT match.
+# locale. Credential families (``AWS_*``, LLM provider API keys, ...)
+# deliberately do NOT match.
 _PI_ENV_ALLOW_PREFIXES: tuple[str, ...] = (
     "PI_",
     "HTTP_",
@@ -704,60 +627,40 @@ def _redact_argv_for_log(args: Sequence[str]) -> list[str]:
 
 
 def _build_models_json(
-    host: str,
     token: str,
+    base_url: str | None,
     base_urls: dict[str, str] | None = None,
     model: str | None = None,
 ) -> dict[str, Any]:  # type: ignore[explicit-any]
     # Pi's models.json mixes str/int/bool/list/dict across provider configs;
-    # see _DATABRICKS_*_MODELS and the compat/authHeader shapes below. The
-    # schema is owned by the Pi CLI and not worth a TypedDict tree here.
+    # the schema is owned by the Pi CLI and not worth a TypedDict tree here.
     """Build a Pi ``models.json`` with three gateway providers.
 
     Each provider targets a different API gateway path and wire format so
-    the correct protocol is used for each model family. The static model
-    lists cover the known Databricks-gateway ids; *model* additionally
-    registers the resolved run model so a gateway model outside those
-    lists (an OpenRouter/LiteLLM id like ``moonshotai/kimi-k2.6``, or a
-    Databricks id newer than the static list) resolves instead of Pi
-    failing with "Model not found" — Pi only accepts ``provider/<model>``
-    selectors whose id is registered under that provider.
+    the correct protocol is used for each model family. *model* is
+    registered under the provider that :func:`_pi_provider_for_model` selects.
 
-    :param host: Databricks workspace URL used for legacy profile-only
-        defaults.
     :param token: Bearer token to write into Pi's provider entries.
+    :param base_url: Fallback base URL for every provider family.
     :param base_urls: Optional provider base URLs keyed by model family,
-        e.g. ``{"claude": "...", "openai": "..."}`` — from ucode state or
-        a generic (OpenRouter/LiteLLM) provider entry.
+        e.g. ``{"claude": "...", "openai": "..."}``.
     :param model: The resolved model id this run will select, e.g.
         ``"moonshotai/kimi-k2.6"``; registered (bare ``{"id": ...}``, the
-        same shape ucode writes) under the provider
-        :func:`_pi_provider_for_model` routes it to when absent from the
-        static list. ``None`` skips registration (Pi picks its default).
+        same shape workflow producers write) under the routed provider.
     :returns: Pi ``models.json`` contents.
     """
-    h = host.rstrip("/")
-    serving_endpoints_url = f"{h}/serving-endpoints"
-    raw_openai_base_url = (base_urls or {}).get("openai")
-    # ucode's ``openai`` gateway is the Codex Responses gateway
-    # (``.../ai-gateway/codex/v1``), which 404s pi's openai-completions
-    # ``/chat/completions`` POST. Re-route only that case to serving-endpoints;
-    # generic providers (no ``/ai-gateway/codex``) pass through. Gemini rides
-    # this path via databricks-completions since pi can't speak generateContent.
-    if raw_openai_base_url and "/ai-gateway/codex" in raw_openai_base_url:
-        openai_base_url = serving_endpoints_url
-    else:
-        openai_base_url = raw_openai_base_url or serving_endpoints_url
-    claude_base_url = (base_urls or {}).get("claude") or f"{h}/serving-endpoints/anthropic"
+    if model is None:
+        raise ValueError("PiExecutor(gateway=True) requires a model.")
+    urls = base_urls or {}
+    fallback_url = base_url or urls.get("openai") or urls.get("claude") or urls.get("completions")
+    if fallback_url is None:
+        raise ValueError("PiExecutor(gateway=True) requires a gateway base URL.")
+    openai_base_url = urls.get("openai") or fallback_url
+    claude_base_url = urls.get("claude") or fallback_url
+    completions_base_url = urls.get("completions") or openai_base_url
     config: dict[str, Any] = {  # type: ignore[explicit-any]  # Pi-owned schema, see note above
         "providers": {
-            # GPT models → OpenAI Chat Completions API.
-            # We use completions (not responses) because the Databricks
-            # Responses API rejects tool-result chaining on subsequent turns.
-            # The ``compat`` settings ensure Pi uses ``system`` role (not
-            # ``developer``) and avoids other OpenAI-specific features that
-            # Databricks doesn't support.
-            "databricks": {
+            _PI_GATEWAY_OPENAI_PROVIDER: {
                 "baseUrl": openai_base_url,
                 "apiKey": token,
                 "api": "openai-completions",
@@ -767,21 +670,17 @@ def _build_models_json(
                     "supportsStrictMode": False,
                     "supportsReasoningEffort": False,
                 },
-                "models": _DATABRICKS_RESPONSES_MODELS,
+                "models": [],
             },
-            # Claude models → Anthropic Messages API.
-            # ``authHeader`` sends ``Authorization: Bearer <token>`` instead
-            # of the default Anthropic ``x-api-key`` header.
-            "databricks-anthropic": {
+            _PI_GATEWAY_ANTHROPIC_PROVIDER: {
                 "baseUrl": claude_base_url,
                 "apiKey": token,
                 "api": "anthropic-messages",
                 "authHeader": True,
-                "models": _DATABRICKS_ANTHROPIC_MODELS,
+                "models": [],
             },
-            # Everything else (Llama, etc.) → same endpoint, same API
-            "databricks-completions": {
-                "baseUrl": openai_base_url,
+            _PI_GATEWAY_COMPLETIONS_PROVIDER: {
+                "baseUrl": completions_base_url,
                 "apiKey": token,
                 "api": "openai-completions",
                 "compat": {
@@ -790,40 +689,27 @@ def _build_models_json(
                     "supportsStrictMode": False,
                     "supportsReasoningEffort": False,
                 },
-                "models": _DATABRICKS_COMPLETIONS_MODELS,
+                "models": [],
             },
         },
     }
-    if model is not None:
-        provider = config["providers"][_pi_provider_for_model(model)]
-        if not any(entry.get("id") == model for entry in provider["models"]):
-            # Rebind (don't append): the static lists are module-level
-            # constants shared across builds, so in-place mutation would
-            # leak this run's model id into every later models.json.
-            # Declare image input: Pi's transformMessages drops every image
-            # block ("model does not support images") unless the model entry
-            # advertises it, so a dynamically-registered vision model would
-            # silently lose its images (#515). We assert capability for ALL
-            # dynamically-routed ids (no per-model vision metadata here): for a
-            # genuinely text-only model this turns a silent image drop into a
-            # provider-side 400 on image turns — a deliberate trade (loud error
-            # over silent loss), since most current gateway models are
-            # multimodal and text-only turns are unaffected.
-            provider["models"] = [
-                *provider["models"],
-                {"id": model, "input": ["text", "image"]},
-            ]
+    provider = config["providers"][_pi_provider_for_model(model)]
+    # Declare image input: Pi's transformMessages drops every image block
+    # ("model does not support images") unless the model entry advertises it.
+    # Without per-provider model metadata, opt for loud provider-side errors on
+    # text-only image turns rather than silent image loss.
+    provider["models"] = [{"id": model, "input": ["text", "image"]}]
     return config
 
 
 def _pi_provider_for_model(model: str) -> str:
-    """Return the Pi provider name to use for a given Databricks model."""
+    """Return the Pi provider name to use for a given gateway model."""
     lower = model.lower()
     if "claude" in lower:
-        return "databricks-anthropic"
+        return _PI_GATEWAY_ANTHROPIC_PROVIDER
     if "gpt" in lower:
-        return "databricks"
-    return "databricks-completions"
+        return _PI_GATEWAY_OPENAI_PROVIDER
+    return _PI_GATEWAY_COMPLETIONS_PROVIDER
 
 
 async def _create_subprocess_exec(*args: Any, **kwargs: Any) -> asyncio.subprocess.Process:  # type: ignore[explicit-any]
@@ -911,13 +797,11 @@ class _PiRpcSession:
             sandbox launcher script wrapping it.
         :param env: The COMPLETE subprocess environment. Deliberately
             not merged with ``os.environ`` — the caller builds it from
-            the :func:`_clean_pi_env` allowlist so host/server secrets
-            (e.g. ``DATABRICKS_TOKEN``) never leak into the (possibly
-            sandboxed) Pi process.
+            the :func:`_clean_pi_env` allowlist so host/server secrets never
+            leak into the (possibly sandboxed) Pi process.
         :param cwd: Working directory for the subprocess, or ``None``
             to inherit the parent's.
-        :param model: Pi model selector, e.g.
-            ``"databricks-anthropic/databricks-claude-sonnet-4-6"``.
+        :param model: Pi model selector, e.g. ``"goalrail-anthropic/claude"``.
             ``None`` lets Pi pick its default.
         :param system_prompt: Text appended to Pi's default system
             prompt via ``--append-system-prompt``. ``None`` skips it.
@@ -926,15 +810,7 @@ class _PiRpcSession:
         """
         args = [pi_path, "--mode", "rpc", "--no-session"]
         if model:
-            pi_coding_agent_dir = env.get("PI_CODING_AGENT_DIR")
-            args.extend(
-                [
-                    "--model",
-                    f"databricks/{model}"
-                    if pi_coding_agent_dir is not None and "databricks" in pi_coding_agent_dir
-                    else model,
-                ]
-            )
+            args.extend(["--model", model])
         if system_prompt:
             # Use --append-system-prompt instead of --system-prompt so Pi
             # keeps its default prompt (which includes tool descriptions from
@@ -1082,7 +958,7 @@ class PiSubprocessConfig:
 
     :param env: The complete environment for the Pi process — the
         :func:`_clean_pi_env` allowlist base, plus
-        ``PI_CODING_AGENT_DIR`` when Databricks model routing is in use.
+        ``PI_CODING_AGENT_DIR`` when gateway model routing is in use.
     :param tmp_dir: Temp directory that owns any ``models.json`` /
         ``goalrail_tools.js`` files generated for this subprocess.  The
         caller is responsible for cleaning it up on shutdown.
@@ -1461,7 +1337,7 @@ def _aggregate_pi_turn_usage(
         reported no usage for the turn.
     :param fallback_model: The executor's configured model id, used only
         when no captured message carried a ``model``,
-        e.g. ``"databricks-claude-sonnet-4-6"``.
+        e.g. ``"claude-sonnet-4-6"``.
     :returns: A turn-level usage dict for ``TurnComplete.usage`` carrying
         summed ``input_tokens`` / ``output_tokens`` / ``total_tokens`` /
         ``cache_read_input_tokens`` / ``cache_creation_input_tokens``, a
@@ -1516,8 +1392,6 @@ class PiExecutor(Executor):
         model: str | None = None,
         pi_path: str | None = None,
         gateway: bool = False,
-        databricks_profile: str | None = None,
-        gateway_host: str | None = None,
         base_url_override: str | None = None,
         base_urls_override: dict[str, str] | None = None,
         gateway_auth_command: str | None = None,
@@ -1532,33 +1406,18 @@ class PiExecutor(Executor):
         :param os_env: Optional OS environment / sandbox spec.  When set, the
             Pi subprocess is wrapped in the same sandbox other
             harnesses use.
-        :param model: Override the model name, e.g. ``"databricks-claude-sonnet-4-6"``.
+        :param model: Override the model name, e.g. ``"claude-sonnet-4-6"``.
         :param pi_path: Absolute path to a ``pi`` CLI binary.  When ``None``
             the executor searches ``PATH``.
         :param gateway: When ``True``, write a ``models.json`` pointing Pi
-            at a vendor-neutral gateway. The Databricks AI gateway is one
-            producer of this transport; generic providers are another.
-        :param databricks_profile: Databricks-specific config profile from
-            ``~/.databrickscfg``, e.g. ``"<your-profile>"``.  Only used on the
-            Databricks producer path. ``None`` falls back to
-            ``DATABRICKS_CONFIG_PROFILE`` then the first valid profile.
-        :param gateway_host: Gateway workspace host origin, e.g.
-            ``"https://example.databricks.com"``.  Set from
-            ``HARNESS_PI_GATEWAY_HOST`` (written by the Goalrail workflow layer).
-            When set, skips profile host lookup.
-        :param base_url_override: Override the workspace host used when
-            building Pi's ``models.json``.  Expected to be the Anthropic
-            gateway URL from ucode state.json (``base_urls.claude``), e.g.
-            ``"https://example.databricks.com/ai-gateway/anthropic"``.
-            The host portion is extracted and used as the base for all
-            Pi provider URLs.  ``None`` falls back to deriving the host from
-            the Databricks profile credentials.
-        :param base_urls_override: ucode-provided Pi gateway URLs keyed by
+            at a vendor-neutral gateway.
+        :param base_url_override: Fallback gateway base URL used for every
+            Pi provider family when ``base_urls_override`` does not supply a
+            family-specific URL.
+        :param base_urls_override: Pi gateway URLs keyed by
             model family, e.g. ``{"claude": "...", "openai": "..."}``.
         :param gateway_auth_command: Shell command that prints a bearer token,
-            e.g.
-            ``"databricks auth token --host https://example.databricks.com ..."``
-            or ``"printf %s sk-..."``. Set from
+            e.g. ``"printf %s sk-..."``. Set from
             ``HARNESS_PI_GATEWAY_AUTH_COMMAND``.
         :param retry_policy: The spec's ``llm.retry`` budget. Threads
             ``policy.pi.settings()`` into Pi's ``.pi/settings.json``
@@ -1591,8 +1450,6 @@ class PiExecutor(Executor):
         self._os_env_spec = os_env
         self._model_override = model
         self._gateway = gateway
-        self._databricks_profile = databricks_profile
-        self._gateway_host_override = gateway_host.rstrip("/") if gateway_host else None
         self._base_url_override = base_url_override
         self._base_urls_override = base_urls_override
         self._gateway_auth_command = gateway_auth_command
@@ -1613,8 +1470,8 @@ class PiExecutor(Executor):
         # turn via ``--tools <comma-list>`` in :meth:`_build_env_and_dir`.
         # The combined effect is: pi's native read/bash/edit/write stay
         # off (they don't route through Goalrail policies / history and
-        # can 400 against the Databricks Responses API), and the bridge
-        # extension's tools are explicitly allowlisted.
+        # can bypass Goalrail), and the bridge extension's tools are
+        # explicitly allowlisted.
         self._extra_args: list[str] = ["--no-tools"]
         self._bundle_dir = bundle_dir
         self._agent_name = agent_name
@@ -1628,48 +1485,14 @@ class PiExecutor(Executor):
         self._tool_executor: ToolExecutor | None = None
 
         if gateway:
-            creds = None
-            if self._gateway_host_override is None:
-                creds = _read_databrickscfg(databricks_profile)
-                if creds is None:
-                    raise OSError(
-                        "PiExecutor(gateway=True) requires gateway credentials via "
-                        "the gateway base URL / auth command or a valid "
-                        "~/.databrickscfg profile."
-                    )
-            if self._gateway_host_override is not None:
-                self._databricks_host = self._gateway_host_override
-                if gateway_auth_command is None:
-                    raise OSError(
-                        "PiExecutor(gateway=True) with a gateway workspace host "
-                        "requires a gateway auth command."
-                    )
-                token = _fetch_shell_command_token(gateway_auth_command)
-                if token is None:
-                    raise OSError(
-                        "PiExecutor(gateway=True) could not fetch a gateway token "
-                        "for the workspace host."
-                    )
-                self._databricks_token = token
-            elif base_url_override:
-                # Derive the workspace host from the Anthropic gateway URL
-                # ucode wrote to state.json.
-                _parsed = _urlparse(base_url_override)
-                self._databricks_host = f"{_parsed.scheme}://{_parsed.netloc}"
-                assert creds is not None
-                self._databricks_token = creds.token
-            else:
-                assert creds is not None
-                self._databricks_host = creds.host
-                self._databricks_token = creds.token
-
-        # True when the gateway transport was derived from a ~/.databrickscfg
-        # profile (no gateway host or base URL supplied directly). Gates the
-        # Databricks default model in :meth:`_resolve_model`; on the ucode /
-        # generic-provider paths the producer resolves a concrete model.
-        self._gateway_uses_databricks_profile = bool(
-            gateway and self._gateway_host_override is None and base_url_override is None
-        )
+            if gateway_auth_command is None:
+                raise OSError("PiExecutor(gateway=True) requires a gateway auth command.")
+            if base_url_override is None and not base_urls_override:
+                raise OSError("PiExecutor(gateway=True) requires a gateway base URL.")
+            token = _fetch_shell_command_token(gateway_auth_command)
+            if token is None:
+                raise OSError("PiExecutor(gateway=True) could not fetch a gateway token.")
+            self._gateway_token = token
 
         # Apply sandbox.
         # ``PI_CODING_AGENT_DIR`` is added per-spawn by
@@ -1776,22 +1599,16 @@ class PiExecutor(Executor):
         Determine the model name to pass to Pi.
 
         ``cfg.model`` (per-request /model override) wins over the spec
-        default (``HARNESS_PI_MODEL`` → ``self._model_override``). On the
-        Databricks-profile gateway path a missing model falls back to
-        :data:`DATABRICKS_CLAUDE_DEFAULT_MODEL` — Pi's own default is an
-        Anthropic-direct id the gateway rejects. Elsewhere ``None`` falls
-        through to let Pi pick its own default.
+        default (``HARNESS_PI_MODEL`` → ``self._model_override``). ``None``
+        falls through to let Pi pick its own default on non-gateway runs.
 
         :param config: Optional :class:`ExecutorConfig` whose ``model``
             takes precedence when set.
-        :returns: The resolved model string, or ``None`` when both
-            sources are unset off the Databricks-profile gateway path.
+        :returns: The resolved model string, or ``None`` when both sources
+            are unset.
         """
         cfg = config or ExecutorConfig()
-        model = cfg.model or self._model_override
-        if model is None and self._gateway_uses_databricks_profile:
-            return DATABRICKS_CLAUDE_DEFAULT_MODEL
-        return model
+        return cfg.model or self._model_override
 
     async def _ensure_tool_server(self, tools: list[ToolSpec]) -> int | None:
         """Start the TCP tool server if there are Goalrail tools to bridge."""
@@ -1865,8 +1682,8 @@ class PiExecutor(Executor):
 
         if self._gateway:
             models_json = _build_models_json(
-                self._databricks_host,
-                self._databricks_token,
+                self._gateway_token,
+                self._base_url_override,
                 self._base_urls_override,
                 model=model,
             )
@@ -1980,8 +1797,8 @@ class PiExecutor(Executor):
         rpc = _PiRpcSession()
         rpc._tmp_dir = tmp_dir
 
-        # For Databricks models, prefix with the provider name so Pi resolves
-        # the model from our custom provider in models.json.
+        # On gateway runs, prefix with the provider name so Pi resolves the
+        # model from our custom provider in models.json.
         pi_model: str | None
         if self._gateway and model:
             provider = _pi_provider_for_model(model)
@@ -2011,15 +1828,10 @@ class PiExecutor(Executor):
         config: ExecutorConfig | None = None,
     ) -> AsyncIterator[ExecutorEvent]:
         if self._gateway:
-            if self._gateway_host_override is None:
-                creds = _read_databrickscfg(self._databricks_profile)
-                if creds is not None:
-                    self._databricks_token = creds.token
-            else:
-                assert self._gateway_auth_command is not None
-                token = _fetch_shell_command_token(self._gateway_auth_command)
-                if token:
-                    self._databricks_token = token
+            assert self._gateway_auth_command is not None
+            token = _fetch_shell_command_token(self._gateway_auth_command)
+            if token:
+                self._gateway_token = token
         session_key = self._session_key(messages)
         model = self._resolve_model(config)
 

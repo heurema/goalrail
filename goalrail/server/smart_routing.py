@@ -25,14 +25,14 @@ _logger = logging.getLogger(__name__)
 
 TIER_TEMPLATES: dict[str, dict[str, list[str]]] = {
     "claude": {
-        "cheap": ["databricks-claude-haiku-4-5"],
-        "medium": ["databricks-claude-sonnet-4-6"],
-        "expensive": ["databricks-claude-opus-4-8"],
+        "cheap": ["anthropic/claude-haiku-4-5"],
+        "medium": ["anthropic/claude-sonnet-4-6"],
+        "expensive": ["anthropic/claude-opus-4-8"],
     },
     "gpt": {
-        "cheap": ["databricks-gpt-5-4-mini"],
-        "medium": ["databricks-gpt-5-4"],
-        "expensive": ["databricks-gpt-5-5"],
+        "cheap": ["openai/gpt-5-4-mini"],
+        "medium": ["openai/gpt-5-4"],
+        "expensive": ["openai/gpt-5-5"],
     },
 }
 
@@ -67,7 +67,7 @@ def infer_tiers(harness: str | None) -> dict[str, list[str]] | None:
 class RoutingResult:
     """The routing client's recommendation.
 
-    :param model: Model id to use, e.g. ``"databricks-claude-opus-4-8"``.
+    :param model: Model id to use, e.g. ``"anthropic/claude-opus-4-8"``.
     :param tier: Difficulty tier, e.g. ``"expensive"``.
     :param rationale: One-sentence explanation from the judge.
     """
@@ -99,7 +99,7 @@ class RoutingClient(Protocol):
 
         :param message: The user's first message text.
         :param available_tiers: Tier name → model ids, e.g.
-            ``{"cheap": ["databricks-claude-haiku-4-5"], ...}``.
+            ``{"cheap": ["anthropic/claude-haiku-4-5"], ...}``.
         :returns: A :class:`RoutingResult`, or ``None`` to skip
             routing (fail-open — the turn runs on the spec default).
         """

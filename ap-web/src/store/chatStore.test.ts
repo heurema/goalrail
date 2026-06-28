@@ -668,12 +668,12 @@ describe("chatStore — switchTo", () => {
       {
         pending_id: "pending_mine",
         content: [{ type: "input_image", file_id: "file_xyz", filename: "a.png" }],
-        created_by: "alice@databricks.com",
+        created_by: "alice@example.com",
       },
       {
         pending_id: "pending_bob",
         content: [{ type: "input_text", text: "from bob" }],
-        created_by: "bob@databricks.com",
+        created_by: "bob@example.com",
       },
     ]);
     await useChatStore.getState().switchTo("conv_native");
@@ -686,12 +686,12 @@ describe("chatStore — switchTo", () => {
       {
         tempId: "pending_mine",
         content: [{ type: "input_image", file_id: "file_xyz", filename: "a.png" }],
-        author: "alice@databricks.com",
+        author: "alice@example.com",
       },
       {
         tempId: "pending_bob",
         content: [{ type: "input_text", text: "from bob" }],
-        author: "bob@databricks.com",
+        author: "bob@example.com",
       },
     ]);
   });
@@ -4835,7 +4835,7 @@ describe("chatStore — bindStream sticky-pref handoff", () => {
       model_options: [
         {
           id: "gpt-5.4",
-          model: "databricks-gpt-5-4",
+          model: "openai/gpt-5-4",
           displayName: "GPT-5.4",
           defaultReasoningEffort: "high",
           supportedReasoningEfforts: [

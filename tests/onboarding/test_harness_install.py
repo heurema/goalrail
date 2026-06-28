@@ -20,7 +20,7 @@ from goalrail.onboarding.provider_config import ANTHROPIC_FAMILY, GEMINI_FAMILY,
     ],
 )
 def test_install_spec_and_command(key: str, binary: str, package: str) -> None:
-    """Each known harness maps to the ucode-matching binary + npm package.
+    """Each known harness maps to its upstream binary + npm package.
 
     A drift in binary/package (e.g. a wrong npm name) would install the wrong
     thing or check the wrong PATH entry — caught here.

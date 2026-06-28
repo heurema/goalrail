@@ -204,7 +204,7 @@ export function slashCommandEchoItemId(slashItemId: string): string {
 export interface RoutingDecisionBlock {
   type: "routing_decision";
   ctx: BlockContext;
-  /** Model id the router chose, e.g. `databricks-claude-opus-4-8`. */
+  /** Model id the router chose, e.g. `anthropic/claude-opus-4-8`. */
   model: string;
   /** Difficulty tier the router assigned. */
   tier: "cheap" | "medium" | "expensive";

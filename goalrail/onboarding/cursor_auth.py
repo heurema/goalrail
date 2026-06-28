@@ -3,10 +3,9 @@
 Cursor is deliberately outside the anthropic/openai provider-family + gateway
 machinery (see :func:`goalrail.runtime.workflow._build_cursor_spawn_env`): the
 Cursor SDK (``cursor-sdk``) talks only to Cursor's own backend via a
-``CURSOR_API_KEY`` — which it requires — never the Databricks AI gateway. It
-therefore has no ``providers:`` family entry, but a user should still be able to
-register a ``CURSOR_API_KEY`` once through ``goalrail setup`` rather than
-exporting it in every shell.
+``CURSOR_API_KEY`` — which it requires. It therefore has no ``providers:``
+family entry, but a user should still be able to register a ``CURSOR_API_KEY``
+once through ``goalrail setup`` rather than exporting it in every shell.
 
 This module is that home. The key is stored exactly like the api-key
 providers' secrets — in the goalrail secret store (OS keychain, else a
@@ -53,7 +52,6 @@ def cursor_sdk_installed() -> bool:
     The executor imports it lazily on the first turn
     (:mod:`goalrail.inner.cursor_executor`), so a key can be set with no SDK;
     setup uses this to detect that and offer to install it. Mirrors
-    :func:`goalrail.onboarding.databricks_config.databricks_sdk_installed` /
     :func:`goalrail.onboarding.antigravity_auth.antigravity_sdk_installed`:
     :func:`importlib.util.find_spec` avoids importing the heavy SDK, and the
     guard catches the ``ModuleNotFoundError`` it raises when a parent package is
@@ -64,8 +62,8 @@ def cursor_sdk_installed() -> bool:
     try:
         return importlib.util.find_spec("cursor_sdk") is not None
     except ModuleNotFoundError:
-        # Guard like the antigravity/databricks checks: find_spec can raise
-        # (not return None) when a parent package is absent.
+        # Guard like the antigravity check: find_spec can raise (not return
+        # None) when a parent package is absent.
         return False
 
 

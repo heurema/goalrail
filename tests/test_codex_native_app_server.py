@@ -140,75 +140,15 @@ def _disable_codex_startup_rpc(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(CodexNativeAppServer, "_trust_policy_hooks", _fake_trust_policy_hooks)
 
 
-def test_build_codex_native_server_profile_error_names_profile(
+def test_build_codex_native_server_ignores_legacy_profile(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """
-    Missing Databricks profile errors identify the runner-visible profile.
-
-    The native Codex terminal can fail before the TUI launches if the
-    runner process cannot resolve the Databricks profile it was given.
-    The message must include that profile name so operators can tell a
-    stale/missing runner env apart from a generic Codex startup failure.
-    """
+    """The legacy ``profile`` argument is accepted but no longer configures auth."""
     monkeypatch.setattr(
         "goalrail.codex_native_app_server._find_codex_cli",
         lambda: sys.executable,
     )
-    monkeypatch.setattr(
-        "goalrail.codex_native_app_server._read_databrickscfg",
-        lambda _profile: None,
-    )
-    monkeypatch.setenv("DATABRICKS_CONFIG_FILE", str(tmp_path / "missing-databrickscfg"))
-
-    with pytest.raises(OSError, match="profile 'oss'"):
-        build_codex_native_server(
-            socket_path=tmp_path / "codex.sock",
-            codex_home=tmp_path / "codex-home",
-            cwd=tmp_path,
-            model=None,
-            profile="oss",
-            bridge_dir=tmp_path / "bridge",
-            ap_server_url=None,
-            ap_auth_headers={},
-        )
-
-
-def test_build_codex_native_server_uses_profile_host_without_static_token(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """
-    Native Codex accepts Databricks CLI OAuth profiles without static tokens.
-
-    A default Goalrail install may not include ``databricks-sdk`` in the
-    runner process. In that case ``_read_databrickscfg`` cannot mint a bearer
-    at startup, but the profile's host is still enough: Codex gets an
-    ``auth.command`` that runs ``databricks auth token --profile`` at request
-    time.
-    """
-    monkeypatch.setattr(
-        "goalrail.codex_native_app_server._find_codex_cli",
-        lambda: sys.executable,
-    )
-    monkeypatch.setattr(
-        "goalrail.codex_native_app_server._read_databrickscfg",
-        lambda _profile: None,
-    )
-    cfg_path = tmp_path / "databrickscfg"
-    cfg_path.write_text(
-        "\n".join(
-            [
-                "[oss]",
-                "host = https://example.cloud.databricks.com",
-                "auth_type = databricks-cli",
-                "",
-            ]
-        ),
-        encoding="utf-8",
-    )
-    monkeypatch.setenv("DATABRICKS_CONFIG_FILE", str(cfg_path))
 
     app_server = build_codex_native_server(
         socket_path=tmp_path / "codex.sock",
@@ -221,9 +161,7 @@ def test_build_codex_native_server_uses_profile_host_without_static_token(
         ap_auth_headers={},
     )
 
-    overrides = "\n".join(app_server.config_overrides)
-    assert "https://example.cloud.databricks.com/ai-gateway/codex/v1" in overrides
-    assert 'databricks auth token --profile \\"oss\\"' in overrides
+    assert app_server.config_overrides == []
 
 
 def _test_app_server(
@@ -734,16 +672,16 @@ class TestPinCodexConfigModel:
         config = tmp_path / "config.toml"
         config.write_text(
             'model = "gpt-5.5"\n'
-            'model_provider = "Databricks"\n'
+            'model_provider = "LegacyProvider"\n'
             'model_reasoning_effort = "xhigh"\n'
             "[profiles.default]\n"
             'model = "table-scoped-stays"\n',
             encoding="utf-8",
         )
-        _pin_codex_config_model(tmp_path, "databricks-gpt-5-4-mini")
+        _pin_codex_config_model(tmp_path, "openai/gpt-5-4-mini")
         text = config.read_text(encoding="utf-8")
-        assert 'model = "databricks-gpt-5-4-mini"' in text.splitlines()[0]
-        assert 'model_provider = "Databricks"' in text
+        assert 'model = "openai/gpt-5-4-mini"' in text.splitlines()[0]
+        assert 'model_provider = "LegacyProvider"' in text
         assert 'model_reasoning_effort = "xhigh"' in text
         assert 'model = "table-scoped-stays"' in text
         assert "gpt-5.5" not in text
@@ -769,9 +707,9 @@ class TestPinCodexConfigModel:
         home = tmp_path / "codex-home"
         home.mkdir()
         (home / "config.toml").symlink_to(shared)
-        _pin_codex_config_model(home, "databricks-gpt-5-4-mini")
+        _pin_codex_config_model(home, "openai/gpt-5-4-mini")
         assert not (home / "config.toml").is_symlink()
-        assert 'model = "databricks-gpt-5-4-mini"' in (home / "config.toml").read_text(
+        assert 'model = "openai/gpt-5-4-mini"' in (home / "config.toml").read_text(
             encoding="utf-8"
         )
         assert shared.read_text(encoding="utf-8") == 'model = "gpt-5.5"\n'
@@ -791,5 +729,5 @@ class TestPinCodexConfigModel:
         (home / "config.toml").write_text('model = "gpt-5.5"\n', encoding="utf-8")
         bridge_dir = tmp_path
         # read_codex_config_model resolves codex-home under the bridge dir.
-        _pin_codex_config_model(home, "databricks-gpt-5-4-mini")
-        assert read_codex_config_model(bridge_dir) == "databricks-gpt-5-4-mini"
+        _pin_codex_config_model(home, "openai/gpt-5-4-mini")
+        assert read_codex_config_model(bridge_dir) == "openai/gpt-5-4-mini"

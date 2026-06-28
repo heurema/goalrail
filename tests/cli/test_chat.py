@@ -8,7 +8,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import click
-import httpx
 import pytest
 from goalrail_client import GoalrailError as ClientGoalrailError
 from goalrail_client import QueryResult
@@ -41,7 +40,6 @@ from goalrail.chat import (
     run_chat,
 )
 from goalrail.cli import _build_resume_parts
-from goalrail.inner.databricks_executor import DatabricksCredentials
 from goalrail.spec import load as load_spec
 from goalrail.spec import validate as validate_spec
 
@@ -559,7 +557,7 @@ def test_wait_for_remote_runner_uses_status_endpoint_and_auth(
     monkeypatch.setattr("goalrail.chat.httpx.get", _fake_get)
 
     _wait_for_remote_runner(
-        "https://example.databricksapps.com",
+        "https://goalrail.example",
         "runner_remote_test",
         headers,
         proc,
@@ -568,11 +566,11 @@ def test_wait_for_remote_runner_uses_status_endpoint_and_auth(
 
     assert requested == [
         (
-            "https://example.databricksapps.com/v1/runners/runner_remote_test/status",
+            "https://goalrail.example/v1/runners/runner_remote_test/status",
             headers,
         ),
         (
-            "https://example.databricksapps.com/v1/runners/runner_remote_test/status",
+            "https://goalrail.example/v1/runners/runner_remote_test/status",
             headers,
         ),
     ]
@@ -617,7 +615,7 @@ def test_wait_for_remote_runner_fails_loud_on_auth_rejection(
 
     with pytest.raises(click.ClickException, match="status check was rejected \\(401\\)"):
         _wait_for_remote_runner(
-            "https://example.databricksapps.com",
+            "https://goalrail.example",
             "runner_remote_test",
             {"Authorization": "Bearer tok-test"},
             proc,
@@ -645,8 +643,7 @@ def test_wait_for_remote_runner_timeout_surfaces_log_path(
     # below that this line does not bleed into the user-facing
     # error message (path-only policy).
     log_path.write_text(
-        "INFO: connecting tunnel to https://example.databricksapps.com\n"
-        "ERROR: tunnel rejected (HTTP 401)\n"
+        "INFO: connecting tunnel to https://goalrail.example\nERROR: tunnel rejected (HTTP 401)\n"
     )
 
     class _Resp:
@@ -684,7 +681,7 @@ def test_wait_for_remote_runner_timeout_surfaces_log_path(
 
     with pytest.raises(click.ClickException) as exc_info:
         _wait_for_remote_runner(
-            "https://example.databricksapps.com",
+            "https://goalrail.example",
             "runner_remote_test",
             {"Authorization": "Bearer tok-test"},
             proc,
@@ -741,7 +738,7 @@ def test_wait_for_remote_runner_early_exit_surfaces_log_path(
 
     with pytest.raises(click.ClickException) as exc_info:
         _wait_for_remote_runner(
-            "https://example.databricksapps.com",
+            "https://goalrail.example",
             "runner_remote_test",
             {"Authorization": "Bearer tok-test"},
             proc,
@@ -797,7 +794,7 @@ def test_chat_remote_prompt_uses_one_shot_not_repl(
     monkeypatch.setattr(chat_module, "_run_repl", _fake_repl)
 
     chat_module._chat_with_server(
-        "https://example.databricksapps.com/",
+        "https://goalrail.example/",
         None,
         initial_message="say hi",
         agent_name="hello",
@@ -805,7 +802,7 @@ def test_chat_remote_prompt_uses_one_shot_not_repl(
     )
 
     assert calls["one_shot"] == (
-        "https://example.databricksapps.com",
+        "https://goalrail.example",
         "hello",
         None,
         "say hi",
@@ -890,7 +887,7 @@ def test_run_chat_with_server_url_routes_through_daemon(
 
     def _fake_ensure_backend(server: str | None) -> str:
         calls["ensure_backend"] = server
-        return "https://example.databricksapps.com"
+        return "https://goalrail.example"
 
     def _fake_via_daemon(
         agent_path: str, base_url: str, tool_handler: object, **kwargs: object
@@ -903,14 +900,14 @@ def test_run_chat_with_server_url_routes_through_daemon(
     run_chat(
         target=str(agent_yaml),
         client_tools=None,
-        server_url="https://example.databricksapps.com",
+        server_url="https://goalrail.example",
         prompt="say hi",
     )
 
-    assert calls["ensure_backend"] == "https://example.databricksapps.com"
+    assert calls["ensure_backend"] == "https://goalrail.example"
     via = calls["via_daemon"]
     assert isinstance(via, dict)
-    assert via["base_url"] == "https://example.databricksapps.com"
+    assert via["base_url"] == "https://goalrail.example"
     assert via["agent_path"] == str(agent_yaml)
     assert via["initial_message"] == "say hi"
     assert via["fork_session_id"] is None
@@ -979,7 +976,7 @@ def test_chat_via_daemon_uses_directory_bundle_for_root_config_yaml(
 
     _chat_via_daemon(
         str(config_yaml),
-        "https://example.databricksapps.com",
+        "https://goalrail.example",
         None,
         overrides=ChatOverrides(),
     )
@@ -1220,7 +1217,7 @@ def test_chat_via_daemon_hands_daemon_runner_to_chat_with_server(
 
     _chat_via_daemon(
         str(agent_yaml),
-        "https://example.databricksapps.com",
+        "https://goalrail.example",
         None,
         overrides=ChatOverrides(),
         initial_message="say hi",
@@ -1320,7 +1317,7 @@ def test_prepare_chat_session_via_daemon_creates_fresh_and_launches(
 
     prepared = asyncio.run(
         _prepare_chat_session_via_daemon(
-            base_url="https://example.databricksapps.com",
+            base_url="https://goalrail.example",
             headers={},
             auth=None,
             host_id="host_x",
@@ -1352,7 +1349,7 @@ def test_prepare_chat_session_via_daemon_resume_skips_create(
 
     prepared = asyncio.run(
         _prepare_chat_session_via_daemon(
-            base_url="https://example.databricksapps.com",
+            base_url="https://goalrail.example",
             headers={},
             auth=None,
             host_id="host_x",
@@ -1391,7 +1388,7 @@ def test_prepare_chat_session_via_daemon_binds_runner_to_clear_stopped_marker(
 
     asyncio.run(
         _prepare_chat_session_via_daemon(
-            base_url="https://example.databricksapps.com",
+            base_url="https://goalrail.example",
             headers={},
             auth=None,
             host_id="host_x",
@@ -1417,7 +1414,7 @@ def test_prepare_chat_session_via_daemon_fork_wins_over_resume(
 
     prepared = asyncio.run(
         _prepare_chat_session_via_daemon(
-            base_url="https://example.databricksapps.com",
+            base_url="https://goalrail.example",
             headers={},
             auth=None,
             host_id="host_x",
@@ -1482,8 +1479,8 @@ def test_default_cli_model_honors_goalrail_model_env_var(
     returns ``_DEFAULT_AD_HOC_MODEL`` here, the env var was
     silently dropped — exactly the regression this gap closed.
     """
-    monkeypatch.setenv("GOALRAIL_MODEL", "databricks-claude-sonnet-4-6")
-    assert _default_cli_model() == "databricks-claude-sonnet-4-6"
+    monkeypatch.setenv("GOALRAIL_MODEL", "anthropic/claude-sonnet-4-6")
+    assert _default_cli_model() == "anthropic/claude-sonnet-4-6"
 
 
 def test_apply_overrides_uses_env_var_when_yaml_has_no_model_or_harness(
@@ -1497,12 +1494,12 @@ def test_apply_overrides_uses_env_var_when_yaml_has_no_model_or_harness(
 
     What this proves: the env var traverses
     ``_apply_overrides_to_raw`` to the executor block. If this
-    fails with the assertion showing ``databricks-gpt-5-4``
+    fails with the assertion showing ``openai/gpt-5-4``
     (the hardcoded default), the helper isn't being called —
     line 756 of ``goalrail/chat.py`` reverted to the literal
     ``_DEFAULT_AD_HOC_MODEL`` and the env var is dropped again.
     """
-    monkeypatch.setenv("GOALRAIL_MODEL", "databricks-claude-sonnet-4-6")
+    monkeypatch.setenv("GOALRAIL_MODEL", "anthropic/claude-sonnet-4-6")
     raw: dict[str, object] = {"name": "ad_hoc", "prompt": "hi"}
 
     _apply_overrides_to_raw(raw, ChatOverrides())
@@ -1513,10 +1510,10 @@ def test_apply_overrides_uses_env_var_when_yaml_has_no_model_or_harness(
         f"got {executor!r}. If this is missing, the YAML mutation logic "
         f"regressed before the env-var fallback path was reached."
     )
-    assert executor.get("model") == "databricks-claude-sonnet-4-6", (
-        f"Expected env-var override 'databricks-claude-sonnet-4-6' to "
+    assert executor.get("model") == "anthropic/claude-sonnet-4-6", (
+        f"Expected env-var override 'anthropic/claude-sonnet-4-6' to "
         f"land in executor.model; got {executor.get('model')!r}. If "
-        f"this is 'databricks-gpt-5-4' (the hardcoded default), line "
+        f"this is 'openai/gpt-5-4' (the hardcoded default), line "
         f"756 of goalrail/chat.py is back to the literal "
         f"_DEFAULT_AD_HOC_MODEL and GOALRAIL_MODEL is silently dropped "
         f"on the goalrail/cli.py → run_chat path."
@@ -1688,13 +1685,13 @@ def test_apply_overrides_harness_and_model_together_for_spec_version_bundle() ->
         "executor": {"type": "goalrail", "config": {"harness": "claude-sdk"}},
     }
 
-    _apply_overrides_to_raw(raw, ChatOverrides(harness="pi", model="databricks-claude-sonnet-4-6"))
+    _apply_overrides_to_raw(raw, ChatOverrides(harness="pi", model="anthropic/claude-sonnet-4-6"))
 
     executor = raw["executor"]
     assert isinstance(executor, dict)
     assert executor["config"]["harness"] == "pi"
     # The bundle parser reads model from the FLAT executor.model key.
-    assert executor["model"] == "databricks-claude-sonnet-4-6"
+    assert executor["model"] == "anthropic/claude-sonnet-4-6"
 
 
 def test_apply_overrides_rejects_harness_for_non_goalrail_executor_type() -> None:
@@ -1723,7 +1720,7 @@ def test_apply_overrides_skips_default_when_yaml_declares_harness(
     A YAML that declares ``executor.harness`` but no model
     must NOT have the env var injected — the harness picks its
     own default model and pairing it with the gpt-5-4 default
-    breaks Databricks FM API calls.
+    breaks provider API calls.
 
     What this proves: the ``"harness" not in executor_block``
     guard is intact. If this fails (executor.model becomes
@@ -1767,13 +1764,13 @@ def test_materialize_override_bundle_bakes_env_var_into_yaml(
     ``mkdtemp`` → ``yaml.safe_load`` → ``_apply_overrides_to_raw``
     → ``yaml.safe_dump`` round-trip and lands as a real,
     on-disk override the goalrail server reads. If the
-    written YAML has ``model: databricks-gpt-5-4``, the env-var
+    written YAML has ``model: openai/gpt-5-4``, the env-var
     fallback regressed somewhere in the materialization
     pipeline.
     """
     import yaml as _yaml
 
-    monkeypatch.setenv("GOALRAIL_MODEL", "databricks-claude-sonnet-4-6")
+    monkeypatch.setenv("GOALRAIL_MODEL", "anthropic/claude-sonnet-4-6")
 
     src = tmp_path / "ad_hoc.yaml"
     src.write_text("name: ad_hoc\nprompt: hi\n")
@@ -1792,11 +1789,11 @@ def test_materialize_override_bundle_bakes_env_var_into_yaml(
         )
 
         rewritten = _yaml.safe_load(materialized.read_text())
-        assert rewritten["executor"]["model"] == "databricks-claude-sonnet-4-6", (
+        assert rewritten["executor"]["model"] == "anthropic/claude-sonnet-4-6", (
             f"Materialized YAML's executor.model is "
             f"{rewritten['executor'].get('model')!r}; expected the env-var "
-            f"override 'databricks-claude-sonnet-4-6'. If this is "
-            f"'databricks-gpt-5-4', the env-var read isn't surviving the "
+            f"override 'anthropic/claude-sonnet-4-6'. If this is "
+            f"'openai/gpt-5-4', the env-var read isn't surviving the "
             f"materialization round-trip."
         )
     finally:
@@ -1813,7 +1810,7 @@ def test_nested_config_harness_skips_ad_hoc_model_fallback(
     NOT trigger the ``_DEFAULT_AD_HOC_MODEL`` fallback — this is the polly
     shape (``examples/polly/config.yaml`` run as a file).
 
-    Regression guard for the ``databricks-gpt-5-4`` injection: before
+    Regression guard for the ``openai/gpt-5-4`` injection: before
     ``_spec_declares_harness_or_model`` looked under ``config``, an unpinned
     polly loaded as a single file got force-fed the GPT ad-hoc default,
     which the claude-sdk harness can't speak. With the nested-harness check,
@@ -1839,7 +1836,7 @@ def test_nested_config_harness_skips_ad_hoc_model_fallback(
             "unchanged for a nested executor.config.harness spec, but it "
             "rewrote the bundle — the ad-hoc-model fallback fired because "
             "_spec_declares_harness_or_model didn't recognize the nested "
-            "harness. An unpinned polly would get databricks-gpt-5-4."
+            "harness. An unpinned polly would get openai/gpt-5-4."
         )
     finally:
         if materialized != src:
@@ -1858,19 +1855,19 @@ def test_apply_overrides_skips_default_for_nested_harness(
     executor_block`` check. Debbie declares its harness as
     ``executor.config.harness`` (claude-sdk), so the top-level
     ``executor`` block has no ``harness`` key and the GPT default
-    (``databricks-gpt-5-4``) was force-fed onto the claude-sdk
+    (``openai/gpt-5-4``) was force-fed onto the claude-sdk
     brain — which then sent ``anthropic/v1/messages`` to a GPT gateway
     endpoint and got a 400.
 
     What this proves: the fallback consults
     ``_spec_declares_harness_or_model`` (which recognizes the nested
     harness), so no ``executor.model`` is injected. If this fails
-    (``executor.model`` becomes ``databricks-gpt-5-4``), the shallow guard
+    (``executor.model`` becomes ``openai/gpt-5-4``), the shallow guard
     regressed and the claude-sdk brain is mispaired with a GPT model.
     """
     # Even with the env-var default in play, the nested harness must
     # suppress the fallback entirely.
-    monkeypatch.setenv("GOALRAIL_MODEL", "databricks-gpt-5-4")
+    monkeypatch.setenv("GOALRAIL_MODEL", "openai/gpt-5-4")
     raw: dict[str, object] = {
         "spec_version": 1,
         "name": "debby",
@@ -1887,7 +1884,7 @@ def test_apply_overrides_skips_default_for_nested_harness(
         f"executor.config.harness spec, but got {executor.get('model')!r}. "
         f"The ad-hoc fallback fired despite a declared (nested) harness — "
         f"this is the Debby regression where the claude-sdk brain got "
-        f"force-fed databricks-gpt-5-4."
+        f"force-fed openai/gpt-5-4."
     )
 
 
@@ -1904,15 +1901,14 @@ def test_materialize_directory_bundle_with_override_keeps_nested_harness_unpinne
     ``_apply_overrides_to_raw`` → ``yaml.safe_dump`` pipeline.
     ``--system-prompt`` forces materialization (any override does), and
     before the fix the rewritten ``config.yaml`` got
-    ``executor.model: databricks-gpt-5-4`` baked in — which the claude-sdk
+    ``executor.model: openai/gpt-5-4`` baked in — which the claude-sdk
     harness then routed to the Anthropic gateway, producing the 400 the
     user saw.
 
-    What this proves: the rewritten bundle preserves the nested harness
-    and injects no model, so downstream provider/ucode resolution picks
-    the correct ``databricks-claude-*`` model. If ``executor.model``
-    appears (especially ``databricks-gpt-5-4``), the directory override
-    path regressed.
+    What this proves: the rewritten bundle preserves the nested harness and
+    injects no model, so downstream provider resolution can pick the configured
+    Claude model. If ``executor.model`` appears (especially ``openai/gpt-5-4``),
+    the directory override path regressed.
     """
     import yaml as _yaml
 
@@ -1921,7 +1917,7 @@ def test_materialize_directory_bundle_with_override_keeps_nested_harness_unpinne
     # The env-var default would be the injected value if the fallback
     # wrongly fired — set it to the exact bad model to make a regression
     # unmistakable.
-    monkeypatch.setenv("GOALRAIL_MODEL", "databricks-gpt-5-4")
+    monkeypatch.setenv("GOALRAIL_MODEL", "openai/gpt-5-4")
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
 
     agent_dir = tmp_path / "debby"
@@ -1949,11 +1945,11 @@ def test_materialize_directory_bundle_with_override_keeps_nested_harness_unpinne
         # The nested harness survives the round-trip unchanged.
         assert executor["config"]["harness"] == "claude-sdk", executor
         # The crux: no model is pinned, so the claude-sdk harness resolves a
-        # Claude model via ucode/provider instead of the GPT ad-hoc default.
+        # Claude model via the configured provider instead of the GPT ad-hoc default.
         assert "model" not in executor, (
             f"Materialized debby config pinned executor.model="
             f"{executor.get('model')!r}; expected none. A GPT model here "
-            f"(databricks-gpt-5-4) is the regression that sent "
+            f"(openai/gpt-5-4) is the regression that sent "
             f"anthropic/v1/messages to a GPT gateway endpoint."
         )
     finally:
@@ -2081,7 +2077,7 @@ def test_materialize_override_bundle_bakes_openai_env_auth_for_daemon_runner(
 
     materialized = _materialize_override_bundle(
         src,
-        ChatOverrides(harness="openai-agents", model="databricks-gpt-5-4-mini"),
+        ChatOverrides(harness="openai-agents", model="openai/gpt-5-4-mini"),
     )
 
     try:
@@ -2127,7 +2123,7 @@ def test_materialize_override_bundle_adds_openai_env_auth_for_directory_without_
         "instructions: hi\n"
         "executor:\n"
         "  harness: openai-agents\n"
-        "  model: databricks-gpt-5-4-mini\n"
+        "  model: openai/gpt-5-4-mini\n"
     )
 
     materialized = _materialize_override_bundle(agent_dir, ChatOverrides())
@@ -2163,7 +2159,7 @@ def test_cleanup_materialized_override_bundle_removes_temp_credentials(
 
     materialized = _materialize_override_bundle(
         src,
-        ChatOverrides(harness="openai-agents", model="databricks-gpt-5-4-mini"),
+        ChatOverrides(harness="openai-agents", model="openai/gpt-5-4-mini"),
     )
     tempdir = materialized.parent
     try:
@@ -2255,49 +2251,25 @@ def test_apply_overrides_keeps_explicit_openai_auth(
 
 
 def test_remote_headers_prefers_explicit_remote_token_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Explicit remote bearer env var wins over ambient Databricks credentials."""
+    """Explicit remote bearer env var wins over stored login records."""
     monkeypatch.setenv("GOALRAIL_REMOTE_AUTH_TOKEN", "env-token")
-    monkeypatch.setattr(
-        chat_module,
-        "_read_databrickscfg",
-        lambda _profile: DatabricksCredentials(host="https://x", token="ambient-token"),
-    )
+    monkeypatch.setattr("goalrail.cli_auth.load_token", lambda _url: "stored-token")
 
     assert _remote_headers(server_url="https://srv.example.com") == {
         "Authorization": "Bearer env-token"
     }
 
 
-def test_remote_headers_falls_back_to_ambient_databricks_creds(
+def test_remote_headers_falls_back_to_stored_oidc_token(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """No env token + no stored login record → ambient Databricks credentials.
-
-    Bottom of the resolution chain: with ``GOALRAIL_REMOTE_AUTH_TOKEN``
-    unset, no stored OIDC token, and no stored Databricks Apps pointer
-    record for the server, ``_remote_headers`` must fall back to
-    ``_read_databrickscfg(None)`` (the SDK's ambient resolution — no
-    profile is threaded anymore) and put its token in the bearer header.
-    """
+    """No env token -> stored OIDC token is used for remote auth."""
     monkeypatch.delenv("GOALRAIL_REMOTE_AUTH_TOKEN", raising=False)
-    monkeypatch.setattr("goalrail.cli_auth.load_token", lambda _url: None)
-    monkeypatch.setattr(chat_module, "_stored_databricks_record_token", lambda _url: None)
-    read_calls: list[object] = []
-
-    def _fake_read(profile: object) -> DatabricksCredentials:
-        """Record the profile argument and return ambient creds."""
-        read_calls.append(profile)
-        return DatabricksCredentials(host="https://workspace", token="ambient-token")
-
-    monkeypatch.setattr(chat_module, "_read_databrickscfg", _fake_read)
+    monkeypatch.setattr("goalrail.cli_auth.load_token", lambda _url: "stored-token")
 
     headers = _remote_headers(server_url="https://srv.example.com")
 
-    # The ambient token reached the Authorization header.
-    assert headers == {"Authorization": "Bearer ambient-token"}
-    # Ambient resolution: exactly one lookup, with no profile threaded
-    # (None) — a non-None value here means profile plumbing came back.
-    assert read_calls == [None]
+    assert headers == {"Authorization": "Bearer stored-token"}
 
 
 def test_server_headers_do_not_encode_runner_affinity() -> None:
@@ -2313,7 +2285,7 @@ def test_run_chat_remote_dispatches_without_profile_plumbing(
     """A remote URL target dispatches to ``_chat_with_server`` with no profile.
 
     The ``--profile`` flag is gone: remote auth resolves from env token /
-    stored login / ambient Databricks credentials inside the server-client
+    stored login / ambient credentials inside the server-client
     helpers. ``run_chat`` must hand the remote path only its remaining
     kwargs — a stray ``profile`` kwarg here means the plumbing came back.
     """
@@ -2332,13 +2304,13 @@ def test_run_chat_remote_dispatches_without_profile_plumbing(
     monkeypatch.setattr(chat_module, "_chat_with_server", _fake_chat_with_server)
 
     run_chat(
-        target="https://example.databricksapps.com",
+        target="https://goalrail.example",
         client_tools=None,
         prompt="hello",
         resume_conversation_id="conv_123",
     )
 
-    assert captured["server_url"] == "https://example.databricksapps.com"
+    assert captured["server_url"] == "https://goalrail.example"
     assert captured["tool_handler"] is None
     kwargs = captured["kwargs"]
     assert isinstance(kwargs, dict)
@@ -2443,9 +2415,9 @@ def test_run_chat_remote_still_rejects_model_harness_and_system_prompt() -> None
     """Remote mode rejects local-only overrides like --model."""
     with pytest.raises(click.ClickException) as excinfo:
         run_chat(
-            target="https://example.databricksapps.com",
+            target="https://goalrail.example",
             client_tools=None,
-            model="databricks-gpt-5-4",
+            model="openai/gpt-5-4",
         )
 
     assert "--harness / --model / --system-prompt only apply to local" in excinfo.value.message
@@ -2737,88 +2709,6 @@ class _FakeClientCtx:
         pass
 
 
-def _first_auth_header(auth: httpx.Auth, url: str) -> str | None:
-    """
-    Drive a single-yield ``httpx.Auth.auth_flow`` and return the
-    ``Authorization`` header it set (without sending a response).
-
-    :param auth: The auth instance under test.
-    :param url: Request URL, e.g. ``"https://ex.databricks.com/v1/x"``.
-    :returns: The Authorization header value, or ``None`` if unset.
-    """
-    flow = auth.auth_flow(httpx.Request("GET", url))
-    request = next(flow)
-    flow.close()
-    return request.headers.get("Authorization")
-
-
-def test_databricks_token_auth_resolves_sdk_once(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """
-    ``_DatabricksTokenAuth`` resolves Databricks SDK auth ONCE and reuses it
-    across requests, instead of rebuilding ``Config`` + shelling out to the
-    Databricks CLI per request.
-
-    Regression guard for the per-request auth tax on the long-lived
-    transcript-forwarder client (the web-UI reply-persist path): if the auth
-    regresses to per-request resolution, ``resolve_calls`` jumps from 1 to
-    the number of requests and this fails.
-
-    :param monkeypatch: Pytest monkeypatch fixture.
-    :returns: None.
-    """
-    import goalrail.inner.databricks_executor as dbx
-
-    class _CountingConfig:
-        """Config double whose authenticate() counts calls."""
-
-        def __init__(self) -> None:
-            self.authenticate_calls = 0
-
-        def authenticate(self) -> dict[str, str]:
-            self.authenticate_calls += 1
-            return {"Authorization": "Bearer tok-xyz"}
-
-    cfg = _CountingConfig()
-    resolve_calls = {"n": 0}
-
-    def _fake_resolve(
-        profile: str | None = None, *, host: str | None = None
-    ) -> tuple[object, str]:
-        """Stand in for _resolve_databricks_auth; counts resolutions."""
-        resolve_calls["n"] += 1
-        # No stored pointer record (load_databricks_workspace_host → None)
-        # means ambient SDK resolution: neither a profile nor a host is
-        # threaded into the resolver anymore.
-        assert profile is None and host is None, (profile, host)
-        return dbx._DatabricksBearerAuth(cfg, profile_name=None), "https://ex.databricks.com"
-
-    monkeypatch.setattr(dbx, "_resolve_databricks_auth", _fake_resolve)
-    monkeypatch.delenv(chat_module._REMOTE_AUTH_TOKEN_ENV, raising=False)  # skip static path
-    monkeypatch.setattr("goalrail.cli_auth.load_token", lambda _url: None)  # skip OIDC path
-    # No Databricks Apps pointer record stored for this server → the auth
-    # falls through to ambient SDK resolution rather than host-keyed lookup.
-    monkeypatch.setattr("goalrail.cli_auth.load_databricks_workspace_host", lambda _url: None)
-
-    auth = chat_module._DatabricksTokenAuth(server_url="https://ex.databricks.com")
-
-    headers = [_first_auth_header(auth, "https://ex.databricks.com/v1/x") for _ in range(4)]
-
-    # Every request gets the bearer from the reused SDK auth.
-    assert headers == ["Bearer tok-xyz"] * 4
-    # THE FIX: SDK auth resolved exactly once across 4 requests. A value > 1
-    # means per-request resolution (the per-request Databricks CLI auth tax)
-    # has regressed on the forwarder client.
-    assert resolve_calls["n"] == 1, (
-        f"_resolve_databricks_auth called {resolve_calls['n']}x; expected 1 "
-        f"(resolve-once-and-cache)."
-    )
-    # authenticate() runs per request (4) — cheap in-memory SDK cache hits,
-    # NOT CLI shell-outs. That's the behavior the fix preserves.
-    assert cfg.authenticate_calls == 4
-
-
 # ── _spec_used_families (startup-header creds line) ──────
 
 
@@ -3076,7 +2966,7 @@ def test_run_attach_uses_session_snapshot_runner_online(
 
     with pytest.raises(click.ClickException, match="no online runner"):
         chat_module.run_attach(
-            base_url="https://app.example.databricksapps.com",
+            base_url="https://app.goalrail.example",
             conversation_id="conv_x",
         )
 
@@ -3126,7 +3016,7 @@ def test_run_attach_does_not_probe_owner_scoped_runner_status(
     monkeypatch.setattr(chat_module, "_chat_with_server", _capture)
 
     chat_module.run_attach(
-        base_url="https://app.example.databricksapps.com",
+        base_url="https://app.goalrail.example",
         conversation_id="conv_shared",
     )
 
@@ -3626,18 +3516,18 @@ def test_env_auth_injection_skipped_when_global_auth_configured(
 ) -> None:
     """An ambient OPENAI_API_KEY must not be baked over configured auth.
 
-    With a global ``auth:`` block (written by ``goalrail setup``), the
-    user's configured Databricks routing is the explicit choice; baking
-    the shell's env key into the materialized spec as ``executor.auth``
-    would silently hijack it — the exact failure mode that produced
-    empty openai-agents replies in the e2e REPL suite.
+    With a global ``auth:`` block, the user's configured routing is the
+    explicit choice; baking the shell's env key into the materialized spec as
+    ``executor.auth`` would silently hijack it.
     """
     from goalrail.chat import _inject_openai_env_auth_if_needed
 
     config_home = tmp_path / "config"
     config_home.mkdir()
     (config_home / "config.yaml").write_text(
-        "auth:\n  type: databricks\n  profile: my-ws\n", encoding="utf-8"
+        "auth:\n  type: api_key\n  api_key: sk-configured\n"
+        "  base_url: https://configured.example/v1\n",
+        encoding="utf-8",
     )
     monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(config_home))
     monkeypatch.setenv("OPENAI_API_KEY", "sk-ambient-shell-key")

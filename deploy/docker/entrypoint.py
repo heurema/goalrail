@@ -1,9 +1,7 @@
 """OSS Docker entrypoint for the Goalrail server.
 
-Mirrors ``deploy/databricks/src/app.py`` (the Databricks Apps entrypoint) but
-configured for a plain Postgres database and a local-filesystem
-artifact store. Intended to run inside the image built by
-``deploy/docker/Dockerfile``.
+Configures a plain Postgres database and a local-filesystem artifact store.
+Intended to run inside the image built by ``deploy/docker/Dockerfile``.
 
 Execution mode: external runners only. The server accepts runner
 WebSocket connections at ``/v1/runner/tunnel`` and never spawns

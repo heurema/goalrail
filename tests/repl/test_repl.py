@@ -1010,7 +1010,7 @@ def test_reconstruct_terminals_separate_session_keys_kept_distinct() -> None:
     Two launches sharing a ``terminal`` name but different
     ``session`` keys produce TWO distinct live entries.
 
-    The supervisor pattern in ``databricks_coding_agent.yaml``
+    The supervisor pattern in ``coding_agent.yaml``
     spins up many ``sandboxed_zsh`` sessions in parallel — the
     sidebar must list all of them, keyed by session. If the
     reconstructor accidentally deduped on ``terminal`` alone,
@@ -1310,13 +1310,13 @@ def test_render_startup_banner_fits_under_80_columns() -> None:
     an example agent name grows long enough on its own, the box
     overflows the terminal and prompt_toolkit re-flows the row,
     producing the starfish mascot drifting to a second line.
-    ``databricks coding agent`` (the humanized form of the
+    ``enterprise gateway agent`` (the humanized form of the
     longest shipped example agent name) is the canonical
     regression input from the 2026-05-26 user report.
     """
     import re
 
-    for label in ("databricks coding agent", "hello world", "agent"):
+    for label in ("enterprise gateway agent", "hello world", "agent"):
         ansi = _render_startup_banner_ansi(label)
         plain = re.sub(r"\x1b\[[0-9;]*m", "", ansi)
         widths = [len(line) for line in plain.split("\n")]
@@ -1338,7 +1338,7 @@ def test_render_startup_banner_shows_remote_server_url() -> None:
     banner. A user running ``goalrail run`` against a freshly
     spawned local server doesn't get the noise.
     """
-    remote = "https://example.databricks.com"
+    remote = "https://goalrail.example"
     assert remote in _render_startup_banner_ansi("agent", server_url=remote)
 
     for local in ("http://127.0.0.1:18439", "http://localhost:8000", "http://[::1]:8080"):
@@ -1583,7 +1583,7 @@ def test_build_startup_header_creds_line_includes_pi_surface(tmp_path, monkeypat
     sub-agents → surfaces ``["anthropic", "openai", "pi"]``) shows what
     EACH harness would actually use — the family surfaces show their
     subscriptions, while the Pi segment shows the explicit pi-scoped
-    Databricks default, NOT the anthropic subscription (which pi can't
+    gateway default, NOT the anthropic subscription (which pi can't
     consume). A regression that resolves pi via the plain per-family
     lookup renders "pi → not configured" (no "pi" family exists) or leaks
     the subscription into the Pi segment.
@@ -1603,9 +1603,11 @@ def test_build_startup_header_creds_line_includes_pi_surface(tmp_path, monkeypat
         "    kind: subscription\n"
         "    cli: codex\n"
         "    default: openai\n"
-        "  databricks:\n"
-        "    kind: databricks\n"
-        "    profile: my-ws\n"
+        "  enterprise-gateway:\n"
+        "    kind: gateway\n"
+        "    openai:\n"
+        "      base_url: https://gateway.example.com/v1\n"
+        "      api_key_ref: env:ENTERPRISE_GATEWAY_API_KEY\n"
         "    default: pi\n"
     )
     header = _build_startup_header(
@@ -1616,13 +1618,13 @@ def test_build_startup_header_creds_line_includes_pi_surface(tmp_path, monkeypat
     # render glyphless in the header; other kinds keep their glyph (🧱).
     assert "Claude → Subscription" in header.creds_line
     assert "Codex → Subscription" in header.creds_line
-    assert "Pi → 🧱 Databricks (my-ws)" in header.creds_line
+    assert "Pi → 🌐 Enterprise-Gateway" in header.creds_line
     # The ticket glyph never reaches the header creds line.
     assert "🎟" not in header.creds_line
     # The box's launch-harness row follows the same pi resolution: the
-    # explicit pi-scoped Databricks default, not the subscription.
+    # explicit pi-scoped gateway default, not the subscription.
     assert header.credential is not None
-    assert "Databricks" in header.credential
+    assert "Enterprise-Gateway" in header.credential
 
 
 # ── Ctrl+O overlay: paginated conversation_items fetch ──────
@@ -2634,9 +2636,9 @@ def test_resume_hint_appends_resume_flag_to_invocation_parts() -> None:
     resume_parts = [
         "goalrail",
         "run",
-        "examples/databricks_coding_agent.yaml",
+        "examples/coding_agent.yaml",
         "--server",
-        "https://goalrail-app.databricksapps.com",
+        "https://goalrail.example.com",
         "--profile",
         "oss",
         "--harness",
@@ -2644,8 +2646,8 @@ def test_resume_hint_appends_resume_flag_to_invocation_parts() -> None:
     ]
     hint = shlex.join([*resume_parts, "--resume", "conv_abc"])
     assert hint == (
-        "goalrail run examples/databricks_coding_agent.yaml "
-        "--server https://goalrail-app.databricksapps.com "
+        "goalrail run examples/coding_agent.yaml "
+        "--server https://goalrail.example.com "
         "--profile oss "
         "--harness claude-sdk "
         "--resume conv_abc"

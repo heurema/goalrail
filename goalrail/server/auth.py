@@ -59,8 +59,8 @@ _LOCAL_SINGLE_USER_ENV = "GOALRAIL_LOCAL_SINGLE_USER"
 # Name of the trusted identity header read in header-auth mode.
 # Overridable so deploys behind a proxy that uses a different header
 # name (e.g. Cloudflare Access' ``Cf-Access-Authenticated-User-Email``)
-# work without an extra proxy transform. Defaults to the oauth2-proxy /
-# Databricks Apps convention. See :func:`resolve_auth_header`.
+# work without an extra proxy transform. Defaults to the common
+# oauth2-proxy convention. See :func:`resolve_auth_header`.
 _AUTH_HEADER_ENV = "GOALRAIL_AUTH_HEADER"
 _DEFAULT_AUTH_HEADER = "X-Forwarded-Email"
 
@@ -489,7 +489,7 @@ def create_auth_provider() -> AuthProvider:
     leaves it off. An explicit ``GOALRAIL_AUTH_PROVIDER`` always wins
     over this switch — it only governs the env-unset default. Deploys
     behind an SSO proxy that injects ``X-Forwarded-Email`` set
-    ``GOALRAIL_AUTH_PROVIDER=header`` (Databricks Apps, oauth2-proxy);
+    ``GOALRAIL_AUTH_PROVIDER=header`` (for example oauth2-proxy);
     proxies that authenticate with a different header name also set
     ``GOALRAIL_AUTH_HEADER`` (e.g.
     ``Cf-Access-Authenticated-User-Email`` for Cloudflare Access — see

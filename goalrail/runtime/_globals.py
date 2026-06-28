@@ -137,7 +137,7 @@ class DispatchCapability:
         a sub-agent, ``None`` for top-level parents. Threaded
         through so children can route SSE / signal correctly.
     :param agent_name: The parent's agent name, e.g.
-        ``"databricks_coding_agent"``. Used for telemetry and
+        ``"coding_agent"``. Used for telemetry and
         log lines on the child side.
     """
 

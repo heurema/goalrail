@@ -257,9 +257,9 @@ class _StartupHeader:
         orchestrator"``; ``None`` when the spec declares none.
     :param model_label: The resolved model id for the launch harness,
         e.g. ``"claude-sonnet-4-6"``; ``None`` when no model is pinned
-        (a subscription / Databricks profile picks it at run time).
+        (a subscription or provider default picks it at run time).
     :param credential: The launch harness's credential as glyph + label,
-        e.g. ``"🧱 Databricks (my-ws)"`` — a subscription renders
+        e.g. ``"🔑 Anthropic API Key"`` — a subscription renders
         glyphless as ``"Subscription"`` (see :func:`_header_glyph`);
         ``None`` when none resolves (e.g. a remote-URL target with no
         local harness).
@@ -502,7 +502,7 @@ def _is_remote_server_url(url: str | None) -> bool:
     is meaningful context.
 
     :param url: Base URL string, e.g. ``"http://127.0.0.1:6767"``
-        or ``"https://example.databricks.com"``. ``None`` returns
+        or ``"https://goalrail.example"``. ``None`` returns
         ``False``.
     :returns: ``True`` when *url* parses to a non-loopback host.
     """
@@ -4638,15 +4638,14 @@ def _build_model_readout_lines(
 
     Renders one ``Active:`` line — ``<model> · <glyph friendly-provider>
     · <source>`` via :func:`describe_active_credential` — using the kind
-    glyph in place of the kind word so a databricks provider named
-    ``databricks`` doesn't render as the redundant ``databricks ·
-    databricks``. When other providers are also configured, an ``Also
-    configured:`` line lists them (friendly names + glyphs) with honest
-    guidance: ``/model`` only changes the model within the active
-    provider — switching the active provider mid-session is not wired, so
-    it goes through ``goalrail setup --no-internal-beta`` + a restart. Falls
-    back to the legacy ``(agent default)`` line when nothing is configured
-    for the harness's surface.
+    glyph in place of the kind word. When other providers are also
+    configured, an ``Also configured:`` line lists them (friendly names
+    + glyphs) with honest guidance: ``/model`` only changes the model
+    within the active provider — switching the active provider
+    mid-session is not wired, so it goes through ``goalrail setup
+    --no-internal-beta`` + a restart. Falls back to the legacy ``(agent
+    default)`` line when nothing is configured for the harness's
+    surface.
 
     No ambient-shadow warning is emitted: a configured default
     (``default: true``) takes precedence over ambient env keys, so an
@@ -4663,7 +4662,7 @@ def _build_model_readout_lines(
         ``"openai/gpt-5.5"``, or ``None``.
     :returns: Plain (un-markup) display lines, e.g.
         ``["Active:  claude-sonnet-4-6  ·  🔑 Anthropic API Key  ·  $ANTHROPIC_API_KEY",
-        "Also configured:  🧱 Databricks", "  /model <name> changes the model. …"]``.
+        "Also configured:  Subscription", "  /model <name> changes the model. …"]``.
     """
     from goalrail.onboarding.configure_models import (
         credential_label,
@@ -4697,14 +4696,10 @@ def _build_model_readout_lines(
         return lines
 
     # One clean "Active" line: <model> · <glyph friendly-provider> · <source>.
-    # The kind glyph stands in for the kind word, so a databricks provider
-    # named "databricks" no longer renders as the redundant "databricks ·
-    # databricks". A provider whose model is chosen elsewhere (databricks
-    # profile, subscription CLI) gets an explicit phrase instead of a model.
+    # The kind glyph stands in for the kind word. A provider whose model is
+    # chosen elsewhere gets an explicit phrase instead of a model.
     if cred.model:
         model_label = cred.model
-    elif cred.kind == "databricks":
-        model_label = "(Databricks profile picks the model — pin one with /model <name>)"
     elif cred.kind == "subscription":
         model_label = "(CLI login picks the model — pin one with /model <name>)"
     else:
@@ -4712,7 +4707,7 @@ def _build_model_readout_lines(
     glyph = kind_glyph(cred.kind)
     # credential_label is the single source of truth shared with `configure
     # harnesses` — a subscription reads "Subscription" (not the brand name
-    # "Claude"), a key names the vendor + "API Key", Databricks names itself.
+    # "Claude"), and a key names the vendor + "API Key".
     provider_label = f"{glyph} {credential_label(cred.kind, cred.provider_name)}".strip()
     lines.append(f"Active:  {model_label}  ·  {provider_label}  ·  {cred.source}")
 
@@ -4937,7 +4932,7 @@ async def _cmd_model(
         # Bare active-provider name → resolve its configured default model.
         resolved = _resolve_provider_default_model(config, matched)
         if resolved is None:
-            # databricks / subscription pick their own model — nothing to set.
+            # Some provider kinds pick their own model — nothing to set.
             host.output(
                 Text.from_markup(
                     f"  [{fmt.muted}]{provider_display_name(matched)} picks the model itself; "

@@ -8,44 +8,16 @@ import urllib.parse
 import webbrowser
 from collections.abc import Callable
 
-# Databricks workspace-hosted goalrail: the API proxy and the web UI are
-# mounted on different workspace paths. ``conversation_url`` maps the
-# server (API) base onto the UI mount so browser links land on the SPA
-# instead of the JSON API.
-WORKSPACE_API_PATH = "/api/2.0/goalrail"
-WORKSPACE_UI_PATH = "/goalrail"
-
 
 def conversation_url(base_url: str, conversation_id: str) -> str:
     """
     Build the browser URL for a Goalrail conversation.
-
-    For Databricks workspace-hosted servers
-    (``https://<ws>/api/2.0/goalrail``) the web UI lives on the
-    workspace SPA mount, so the link becomes
-    ``https://<ws>/goalrail/c/<id>`` — with the ``?o=<org>``
-    workspace selector appended when ``goalrail login`` recorded the
-    org id.
 
     :param base_url: Goalrail server base URL, e.g. ``"http://127.0.0.1:6767"``.
     :param conversation_id: Conversation id, e.g. ``"conv_abc123"``.
     :returns: Browser URL, e.g. ``"http://127.0.0.1:6767/c/conv_abc123"``.
     """
     encoded_id = urllib.parse.quote(conversation_id, safe="")
-    parsed = urllib.parse.urlsplit(base_url.rstrip("/"))
-    if parsed.path == WORKSPACE_API_PATH:
-        from goalrail.cli_auth import load_databricks_org_id
-
-        org_id = load_databricks_org_id(base_url)
-        return urllib.parse.urlunsplit(
-            (
-                parsed.scheme,
-                parsed.netloc,
-                f"{WORKSPACE_UI_PATH}/c/{encoded_id}",
-                urllib.parse.urlencode({"o": org_id}) if org_id else "",
-                "",
-            )
-        )
     return f"{base_url.rstrip('/')}/c/{encoded_id}"
 
 

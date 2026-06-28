@@ -57,7 +57,7 @@ def add(a: int, b: int) -> int:
 
 ## Reference
 
-See the [project homepage](https://example.databricks.com/docs) for details.
+See the [project homepage](https://goalrail.example/docs) for details.
 
 > A blockquote with a caution about scope.
 """
@@ -136,7 +136,7 @@ def test_markdown_renders_rich_constructs_and_source_toggle(
     expect(editor.locator("th").filter(has_text="Latency")).to_be_visible()
     expect(editor.locator("td").filter(has_text="Preferred")).to_be_visible()
     link = editor.locator("a").filter(has_text="project homepage")
-    expect(link).to_have_attribute("href", "https://example.databricks.com/docs")
+    expect(link).to_have_attribute("href", "https://goalrail.example/docs")
     expect(editor.locator("blockquote")).to_contain_text("caution about scope")
     # Parsed, not dumped verbatim: the heading text is "Goals", never "## Goals".
     expect(editor.locator("h2").filter(has_text="Goals")).not_to_contain_text("##")

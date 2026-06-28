@@ -257,7 +257,7 @@ def test_idle_notification_fires_when_backgrounded(
 
     # Wait for the real turn to finish and the backgrounded transition to
     # fire the notification. 90s budget covers cold-start LLM latency under
-    # Databricks routing without masking a true hang.
+    # gateway routing without masking a true hang.
     page.wait_for_function("window.__notifs.length > 0", timeout=90_000)
     _wait_for_observed_session_status(page, session_id, "idle", timeout=90_000)
     # One more observation window catches duplicate-notification

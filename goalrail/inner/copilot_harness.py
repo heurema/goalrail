@@ -10,16 +10,15 @@ Wraps a :class:`goalrail.inner.copilot_executor.CopilotExecutor`, which drives
 a persistent GitHub Copilot SDK (``github-copilot-sdk``) session. Mirrors the
 cursor / antigravity wraps' env-var config flow.
 
-Like cursor and antigravity, copilot has NO gateway / Databricks-profile env
-vars: the Copilot SDK talks only to GitHub's Copilot backend (authenticated by a
-GitHub token) and has no custom API base-URL override, so there is nothing for
-the workflow layer to route through the Databricks AI gateway.
+Like cursor and antigravity, copilot has NO gateway env vars: the Copilot SDK
+talks only to GitHub's Copilot backend (authenticated by a GitHub token) and
+has no custom API base-URL override, so there is nothing for the workflow layer
+to route through a provider gateway.
 
 Env vars read at startup:
 
 - ``HARNESS_COPILOT_MODEL``: Copilot model id, e.g. ``"claude-haiku-4.5"`` or
-  ``"gpt-5-mini"``. ``None`` lets Copilot auto-select. A ``databricks-*`` id
-  (from a spec authored for another harness) is dropped by the executor.
+  ``"gpt-5-mini"``. ``None`` lets Copilot auto-select.
 - ``HARNESS_COPILOT_CWD``: working directory the session operates in.
   ``None`` falls back to ``os_env.cwd`` then the process cwd.
 - ``HARNESS_COPILOT_GITHUB_TOKEN``: GitHub token carrying Copilot access, used

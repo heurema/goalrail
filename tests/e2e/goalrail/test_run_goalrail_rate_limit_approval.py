@@ -5,7 +5,7 @@ flow under ``goalrail run``.
 Reproduces the user-reported scenario verbatim:
 
 1. Spawn ``goalrail run examples/rate_limited_search_agent.yaml``
-   under a real PTY (Databricks routing via the credentials env).
+   under a real PTY (gateway routing via the credentials env).
 2. Send a prompt that asks for 4 web searches — the policy ALLOWs
    the first 3 and ASKs on the 4th.
 3. Wait for the ``approval required`` banner.
@@ -53,8 +53,8 @@ from tests.e2e.goalrail._pexpect_harness import (
 
 # The agent the user actually runs in their reproducer.
 _YAML_REL = "tests/resources/examples/rate_limited_search_agent.yaml"
-# Override the YAML's ``databricks-claude-sonnet-4`` model + auto-
-# picked claude-sdk harness with openai-agents + a Databricks
+# Override the YAML's ``gateway-claude-sonnet-4`` model + auto-
+# picked claude-sdk harness with openai-agents + a gateway
 # OpenAI-compatible model. The bug reproduces regardless of
 # harness — it lives in the AP-side approval event route — and
 # openai-agents has the most reliable ``-p`` / REPL paths under

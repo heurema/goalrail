@@ -131,10 +131,10 @@ def test_compute_llm_cost_derives_cache_rates_from_input_when_unpublished() -> N
     With no published cache rates, derive them from the input rate via the
     standard ratios: cache read at 0.10x input, cache write at 1.25x input.
 
-    ``databricks-*`` catalog entries omit cache pricing, so this fallback is
-    what every relay/native session on the gateway is billed by. Pricing cache
-    reads at the full input rate (the old fallback) over-charged cache-heavy
-    sessions ~10x — the bug this fixes.
+    Some provider catalog entries omit cache pricing, so this fallback is what
+    relay/native sessions are billed by. Pricing cache reads at the full input
+    rate (the old fallback) over-charged cache-heavy sessions ~10x — the bug
+    this fixes.
     """
     pricing = ModelPricing(
         input_per_token=2e-6,
@@ -241,34 +241,15 @@ def test_fetch_model_pricing_omits_cache_rates_when_absent(
     assert pricing.cache_write_per_token is None
 
 
-def test_fetch_model_pricing_databricks_alias_falls_back_to_base_model(
+def test_fetch_model_pricing_explicit_provider_uses_provider_catalog(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A ``databricks-<base>`` alias absent from the Databricks catalog is
-    priced from the base model's underlying-provider catalog.
-
-    Models served through the Databricks gateway are reported as
-    ``databricks-claude-opus-4-8``, which the Databricks catalog may not
-    list even though anthropic's ``claude-opus-4-8`` is priced. Without the
-    de-prefix fallback, every unpinned claude-sdk agent on the Databricks
-    gateway (which defaults to ``databricks-claude-opus-4-8``) would show
-    "unpriced" — the exact gap reported for the debbie/debby supervisors.
-    """
+    """A provider-prefixed model is priced from that provider's catalog."""
     monkeypatch.delenv("GOALRAIL_DISABLE_CATALOG_LOOKUP", raising=False)
 
     def _catalog(provider: str) -> dict[str, Any] | None:
-        """Databricks catalog lacks opus; the base (anthropic) catalog prices it."""
-        if provider == "databricks":
-            # Has some databricks models, but NOT the opus alias under test.
-            return {
-                "databricks-claude-sonnet-4-6": {
-                    "pricing": {
-                        "input_per_million_tokens": 3.0,
-                        "output_per_million_tokens": 15.0,
-                    }
-                }
-            }
-        # The underlying provider (anthropic) prices the de-prefixed base.
+        """Anthropic catalog prices the explicit model under its bare id."""
+        assert provider == "anthropic"
         return {
             "claude-opus-4-8": {
                 "pricing": {
@@ -280,13 +261,8 @@ def test_fetch_model_pricing_databricks_alias_falls_back_to_base_model(
 
     monkeypatch.setattr(context_window, "_fetch_mlflow_provider_catalog", _catalog)
 
-    pricing = fetch_model_pricing("databricks-claude-opus-4-8")
-    assert pricing is not None, (
-        "databricks-claude-opus-4-8 was not priced — the databricks→base "
-        "fallback did not reach anthropic's claude-opus-4-8."
-    )
-    # Priced from the base model's rates (15 / 75 per million), not the
-    # databricks sonnet entry (3 / 15).
+    pricing = fetch_model_pricing("anthropic/claude-opus-4-8")
+    assert pricing is not None
     assert pricing.input_per_token == pytest.approx(15e-6)
     assert pricing.output_per_token == pytest.approx(75e-6)
 

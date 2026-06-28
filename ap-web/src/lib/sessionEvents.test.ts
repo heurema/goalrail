@@ -592,7 +592,7 @@ describe("response.output_item.done (routing_decision)", () => {
         type: "routing_decision",
         status: "completed",
         response_id: "routing_1",
-        model: "databricks-claude-opus-4-8",
+        model: "anthropic/claude-opus-4-8",
         tier: "expensive",
         applied: true,
         rationale: "multi-file refactor needs deep reasoning",
@@ -601,7 +601,7 @@ describe("response.output_item.done (routing_decision)", () => {
     expect(out).toHaveLength(1);
     const ev = out[0] as RoutingDecision;
     expect(ev.type).toBe("routing_decision");
-    expect(ev.model).toBe("databricks-claude-opus-4-8");
+    expect(ev.model).toBe("anthropic/claude-opus-4-8");
     expect(ev.tier).toBe("expensive");
     expect(ev.applied).toBe(true);
     expect(ev.rationale).toBe("multi-file refactor needs deep reasoning");
@@ -619,7 +619,7 @@ describe("response.output_item.done (routing_decision)", () => {
         type: "routing_decision",
         status: "completed",
         response_id: "routing_2",
-        model: "databricks-claude-haiku-4-5",
+        model: "anthropic/claude-haiku-4-5",
         tier: "cheap",
         applied: false,
         rationale: "trivial",
@@ -657,7 +657,7 @@ describe("response.output_item.done (routing_decision)", () => {
         type: "routing_decision",
         status: "completed",
         response_id: "routing_4",
-        model: "databricks-claude-opus-4-8",
+        model: "anthropic/claude-opus-4-8",
         tier: "gigantic",
         applied: true,
         rationale: "x",

@@ -78,8 +78,8 @@ _FATAL_SERVER_CLOSE_CODES = {4001, 4002, 4004, 4500}
 _REFRESHABLE_HTTP_STATUSES = {401}
 _FATAL_SERVER_HTTP_STATUSES = {403}
 # Routine server-initiated recycles, NOT errors: 1012 "service restart" and
-# 1001 "going away" (and a 502 upgrade rejection) are how the Databricks Apps
-# ingress cycles long-lived WebSockets out from under a healthy app. The
+# 1001 "going away" (and a 502 upgrade rejection) are how some proxies cycle
+# long-lived WebSockets out from under a healthy app. The
 # server *wants* a prompt reconnect, so we reset the backoff to its minimum
 # instead of escalating toward the cap — escalating would leave the runner
 # unregistered (and messages undeliverable) for seconds on every recycle,
@@ -91,9 +91,8 @@ RUNNER_TUNNEL_REJECTION_PREFIX = "runner tunnel rejected by server "
 
 # Schemes that, when surfaced through ``InvalidURI.uri``, indicate
 # the WebSocket upgrade request was redirected somewhere the
-# websockets library cannot follow. The common case on Databricks
-# Apps is an unauthenticated request being redirected to the OAuth
-# login page (``https://<workspace>/oidc/oauth2/v2.0/authorize?…``).
+# websockets library cannot follow. A common case is an unauthenticated
+# request being redirected to an OAuth login page.
 # We detect that case and exit fatally instead of looping forever
 # against an endpoint we can never upgrade.
 _AUTH_REDIRECT_SCHEMES = {"http", "https"}
@@ -266,8 +265,7 @@ async def serve_tunnel(
         WebSocket tunnel to *runner_id*.
     :param auth_token_factory: Optional sync callable that returns
         a fresh bearer token string (or ``None``). Called via
-        ``asyncio.to_thread`` before each reconnect. Typical
-        implementation: ``lambda: _read_databrickscfg(profile).token``.
+        ``asyncio.to_thread`` before each reconnect.
     :param on_reconnect: Optional async callback fired after a
         successful reconnect (not on the initial connect). Used
         by the runner to do a catch-up scan for missed messages
@@ -309,8 +307,8 @@ async def serve_tunnel(
             if redirect_url is not None:
                 # The websockets library auto-followed a redirect
                 # away from our ws:// endpoint to an http(s):// URL
-                # — typically a Databricks App login page when the
-                # caller is unauthenticated. Retrying cannot help:
+                # — typically a login page when the caller is
+                # unauthenticated. Retrying cannot help:
                 # every reconnect will land back on the same
                 # redirect, so we fail loud with the actual URL so
                 # the user sees what the server is asking for
@@ -462,10 +460,9 @@ def _websocket_auth_redirect_url(exc: BaseException) -> str | None:
     The ``websockets`` library raises
     :class:`websockets.exceptions.InvalidURI` when it follows a
     redirect to a URL whose scheme is not ``ws`` / ``wss``. The most
-    common cause in this project is an unauthenticated request to a
-    Databricks App: the platform redirects to an OAuth login page
-    (``https://<workspace>/oidc/oauth2/v2.0/authorize?…``) and the
-    library bails out. The originating URL is preserved on the
+    common cause in this project is an unauthenticated request that
+    redirects to an OAuth login page, and the library bails out. The
+    originating URL is preserved on the
     exception's ``uri`` attribute.
 
     Other ``InvalidURI`` cases (a literal ``ws://`` with a bad host,
@@ -476,7 +473,7 @@ def _websocket_auth_redirect_url(exc: BaseException) -> str | None:
 
     :param exc: Exception raised while opening the WebSocket.
     :returns: The HTTP(S) URL we were redirected to, e.g.
-        ``"https://example.databricks.com/oidc/oauth2/v2.0/authorize?…"``,
+        ``"https://auth.example.com/oidc/oauth2/v2.0/authorize?…"``,
         or ``None`` when *exc* is not an auth-style redirect.
     """
     if not isinstance(exc, InvalidURI):

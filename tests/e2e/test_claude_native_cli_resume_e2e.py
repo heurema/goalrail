@@ -32,9 +32,7 @@ Environment requirements (why this is opt-in, not pure-CI)
 
     GOALRAIL_E2E_CLAUDE_NATIVE=1 \
     .venv/bin/python -m pytest tests/e2e/test_claude_native_cli_resume_e2e.py \
-        --profile oss \
-        --llm-api-key "$(databricks auth token -p oss \
-            | python -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')" \
+        --llm-api-key "$OPENAI_API_KEY" \
         -v
 """
 
@@ -67,14 +65,12 @@ pytestmark = pytest.mark.skipif(
 def test_claude_native_cli_resume_restores_history(
     resume_test_server: str,
     tmp_path: Path,
-    request: pytest.FixtureRequest,
 ) -> None:
     """
     Cross-context ``goalrail claude --resume`` restores conversation history.
 
-    Drives the real ``goalrail claude --server …`` CLI (gateway routing
-    via the config-home auth block from the pytest ``--profile``) to teach
-    Claude a passphrase, **deletes Claude's local transcript** for that session,
+    Drives the real ``goalrail claude --server ...`` CLI to teach Claude a
+    passphrase, **deletes Claude's local transcript** for that session,
     then resumes — so the resume cannot reuse Claude's own on-disk transcript
     and must go through Goalrail' cold-resume *synthesis* (rebuild the
     transcript from server-side items and hand it to ``claude --resume``). A
@@ -92,14 +88,11 @@ def test_claude_native_cli_resume_restores_history(
 
     :param resume_test_server: Base URL of the allow-list-free test server.
     :param tmp_path: Per-test temp dir.
-    :param request: Pytest request — reads ``--profile`` for the LLM gateway.
     """
-    profile = request.config.getoption("--profile")
-    assert profile, "this test requires --profile (e.g. --profile oss) for the LLM gateway"
     assert_native_cli_resume_restores_history(
         harness="claude",
         server=resume_test_server,
-        profile=profile,
+        profile="",
         tmp_path=tmp_path,
         force_cold_resume=True,
     )

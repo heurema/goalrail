@@ -30,7 +30,7 @@ def _tool(
     cost: float | None,
     *,
     ask_approved: float = 0.0,
-    model: str | None = "databricks-claude-opus-4-8",
+    model: str | None = "anthropic/claude-opus-4-8",
     harness: str | None = None,
     owner: str | None = None,
 ) -> PolicyEvent:
@@ -102,7 +102,7 @@ def test_request_phase_over_budget_on_expensive_model_denies() -> None:
         "context": {
             "actor": {},
             "user_daily_cost": {"cost_usd": 6.0, "ask_approved_usd": 0.0},
-            "model": "databricks-claude-opus-4-8",
+            "model": "anthropic/claude-opus-4-8",
         },
         "session_state": {},
     }
@@ -130,7 +130,7 @@ def test_request_phase_soft_checkpoint_asks_and_records_daily_key() -> None:
         "context": {
             "actor": {},
             "user_daily_cost": {"cost_usd": 2.0, "ask_approved_usd": 0.0},
-            "model": "databricks-claude-opus-4-8",
+            "model": "anthropic/claude-opus-4-8",
         },
         "session_state": {},
     }
@@ -192,7 +192,7 @@ def test_over_daily_budget_on_expensive_model_denies() -> None:
     accurate.
     """
     policy = user_daily_cost_budget(max_cost_usd=5.0, ask_thresholds_usd=[2.0])
-    result = policy(_tool(6.0, model="databricks-claude-opus-4-8"))
+    result = policy(_tool(6.0, model="anthropic/claude-opus-4-8"))
     assert result["result"] == "DENY"
     assert "6.00" in result["reason"]
     assert "opus" in result["reason"]
@@ -226,7 +226,7 @@ def test_ask_message_falls_back_to_unnamed_without_owner() -> None:
 def test_deny_message_names_the_owner_when_present() -> None:
     """The over-limit DENY reason also names the owner ("<owner>'s spend …")."""
     policy = user_daily_cost_budget(max_cost_usd=5.0, ask_thresholds_usd=[2.0])
-    result = policy(_tool(6.0, model="databricks-claude-opus-4-8", owner="bob@example.com"))
+    result = policy(_tool(6.0, model="anthropic/claude-opus-4-8", owner="bob@example.com"))
     assert result["result"] == "DENY"
     assert "bob@example.com's spend $6.00 reached" in result["reason"]
 
@@ -240,7 +240,7 @@ def test_over_daily_budget_on_cheaper_model_allows() -> None:
     ``-nano`` variants are carved out.)
     """
     policy = user_daily_cost_budget(max_cost_usd=5.0)
-    assert policy(_tool(6.0, model="databricks-claude-sonnet-4-6")) == {"result": "ALLOW"}
+    assert policy(_tool(6.0, model="anthropic/claude-sonnet-4-6")) == {"result": "ALLOW"}
 
 
 @pytest.mark.parametrize(

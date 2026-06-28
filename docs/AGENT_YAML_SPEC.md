@@ -19,10 +19,10 @@ prompt: |
 
 executor:
   harness: claude-sdk
-  model: databricks-claude-sonnet-4-6
+  model: anthropic/claude-sonnet-4-6
   auth:
-    type: databricks
-    profile: oss
+    type: api_key
+    api_key: ${ANTHROPIC_API_KEY}
 ```
 
 `prompt` may also be replaced by `instructions: AGENTS.md`; relative paths are
@@ -50,25 +50,24 @@ resolved from the YAML file's directory.
 ```yaml
 executor:
   harness: claude-sdk        # claude-sdk, openai-agents, codex, cursor, kiro-native, pi, antigravity, qwen, kimi, copilot, hermes, ...
-  model: databricks-claude-opus-4-7
+  model: anthropic/claude-opus-4-7
   auth:
-    type: databricks
-    profile: oss             # Databricks profile for model routing
+    type: api_key
+    api_key: ${ANTHROPIC_API_KEY}
 ```
 
-Set the Databricks profile under `executor.auth`. The older top-level
+Set provider credentials under `executor.auth`. The older top-level
 `executor.profile` shorthand is legacy and should not be used in new specs.
 
 The `cursor` harness (Cursor's `cursor-agent`) is the exception: it talks
-only to Cursor's own backend and has no custom API base-URL, so the Databricks
-gateway / `auth.type: databricks` does not apply. Authenticate it with
+only to Cursor's own backend and has no custom API base-URL. Authenticate it with
 `CURSOR_API_KEY` (or a prior `cursor-agent login`), optionally pinned via
 `auth: {type: api_key, api_key: ${CURSOR_API_KEY}}`, and choose a Cursor model
-id (e.g. `auto`, `gpt-5`) rather than a `databricks-*` id.
+id (e.g. `auto`, `gpt-5`) rather than a gateway-routed id.
 
 The `kiro-native` harness is the native Kiro CLI terminal path used by
 `goalrail kiro`. It requires `kiro-cli` on `PATH` and Kiro's own login/auth; it
-does not use Databricks, OpenAI, or Anthropic provider credentials. Plain
+does not use gateway, OpenAI, or Anthropic provider credentials. Plain
 `harness: kiro` is not a generic Goalrail harness id.
 
 ### Antigravity (Gemini)
@@ -78,7 +77,7 @@ does not use Databricks, OpenAI, or Anthropic provider credentials. Plain
 (`pip install "goalrail[antigravity]"`). It defaults to **Gemini 3.5 Flash**
 and can also drive Claude / GPT-OSS. Authenticate with an Antigravity /
 Gemini API key, or Vertex AI (`project` / `location`) — the SDK is
-Gemini-native and has no OpenAI-compatible gateway / Databricks path.
+Gemini-native and has no OpenAI-compatible gateway path.
 
 ```yaml
 executor:
@@ -95,14 +94,13 @@ executor:
 [GitHub Copilot SDK](https://pypi.org/project/github-copilot-sdk/)
 (`pip install "goalrail[copilot]"`). The SDK bundles the Copilot CLI it drives
 as a backing server, so no separate CLI install is needed. Like cursor and
-antigravity it talks only to GitHub's Copilot backend — there is no Databricks
-gateway / `auth.type: databricks` path. Authenticate with a **GitHub token** that
+antigravity it talks only to GitHub's Copilot backend. Authenticate with a **GitHub token** that
 carries Copilot access: a fine-grained PAT with the "Copilot Requests"
 permission, or an OAuth token from the GitHub CLI (`gh auth token`) / Copilot
 CLI. Resolution: spec `auth.api_key` → a token registered via `goalrail setup`
 (the `copilot:` config block) → ambient `COPILOT_GITHUB_TOKEN` / `GH_TOKEN` /
 `GITHUB_TOKEN`. Choose a Copilot model id (e.g. `claude-haiku-4.5`, `gpt-5-mini`,
-or omit for auto-select) rather than a `databricks-*` id. Classic `ghp_` PATs are
+or omit for auto-select) rather than a gateway-routed id. Classic `ghp_` PATs are
 not accepted by Copilot.
 
 ```yaml
@@ -117,7 +115,6 @@ executor:
 To route through OpenRouter / a gateway, declare a key/gateway provider in
 `~/.goalrail/config.yaml` and reference it (`auth: {type: provider, name: …}`),
 or set `auth.base_url` to the OpenAI-compatible endpoint alongside the key.
-For Databricks, use `auth: {type: databricks, profile: …}`.
 
 ### Kimi Code
 
@@ -136,14 +133,11 @@ executor:
 By default Kimi authenticates against Moonshot AI's backend — Goalrail
 declares no `executor.auth` block. To route through a gateway, either set
 `HARNESS_KIMI_GATEWAY_BASE_URL` + `HARNESS_KIMI_GATEWAY_API_KEY` in the
-shell, declare a key/gateway provider in `~/.goalrail/config.yaml`, or use
-`executor.auth: {type: databricks, profile: …}` and let Goalrail resolve
-the workspace.
+shell or declare a key/gateway provider in `~/.goalrail/config.yaml`.
 
 CLI flags such as `--harness` and `--model` can override or supply missing
-executor values for a run. Databricks credentials come from the spec's
-`executor.auth` block or your `goalrail setup` provider config — there is
-no profile flag.
+executor values for a run. Credentials come from the spec's `executor.auth`
+block or your `goalrail setup` provider config.
 
 ## Qwen Code
 
@@ -270,7 +264,7 @@ tools:
       and maintainability.
     executor:
       harness: claude-sdk
-      model: databricks-claude-sonnet-4-6
+      model: anthropic/claude-sonnet-4-6
     os_env: inherit
     pass_history: true
     max_sessions: 2
@@ -285,7 +279,7 @@ tools:
   coder:
     type: agent
     executor:
-      harness: cursor      # Cursor model id (e.g. gpt-5, auto), not a databricks-* id
+      harness: cursor      # Cursor model id (e.g. gpt-5, auto), not a gateway-routed id
       model: gpt-5
 ```
 
@@ -313,7 +307,7 @@ policies:
     handler: my_package.policies.make_workspace_policy
     factory_params:
       allowed_hosts:
-        - example.cloud.databricks.com
+        - docs.example.com
 ```
 
 ## Terminals
@@ -346,10 +340,10 @@ prompt: |
 
 executor:
   harness: claude-sdk
-  model: databricks-claude-sonnet-4-6
+  model: anthropic/claude-sonnet-4-6
   auth:
-    type: databricks
-    profile: oss
+    type: api_key
+    api_key: ${ANTHROPIC_API_KEY}
 
 async: true
 cancellable: true
@@ -385,7 +379,7 @@ tools:
 ## Validation tips
 
 - Keep examples free of secrets, workspace URLs, customer data, and private
-  Databricks-only configuration unless the example is explicitly internal.
+  provider-only configuration unless the example is explicitly internal.
 - Prefer `instructions: AGENTS.md` for long prompts that are shared with other
   tooling.
 - Start from a bundled example such as `examples/polly/config.yaml` or

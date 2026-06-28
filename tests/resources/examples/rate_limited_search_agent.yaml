@@ -19,7 +19,7 @@ prompt: |
 ask_timeout: 30
 
 executor:
-  model: databricks-claude-sonnet-4-6
+  model: anthropic/claude-sonnet-4-6
 
 tools:
   # ``search_web`` rather than ``web_search`` so the local-tool

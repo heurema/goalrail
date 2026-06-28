@@ -23,7 +23,7 @@ Lifecycle (see ``designs/UI/PRESENCE.md``):
 * ``disconnect`` in the generator's ``finally`` — on the user's last
   connection closing, schedules the leave broadcast after
   :data:`_LEAVE_GRACE_S` instead of firing immediately. The grace
-  window absorbs the Databricks Apps ingress' ~5-minute stream cap
+  window absorbs common proxy stream caps
   (every viewer transparently reconnects on that cadence), page
   refreshes, and root↔sub-agent navigation within one tree, so
   co-viewers' avatars don't flicker.

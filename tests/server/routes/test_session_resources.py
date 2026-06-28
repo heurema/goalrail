@@ -2444,7 +2444,7 @@ async def test_relay_persists_routing_decision_before_assistant_output() -> None
                     "type": "response.output_item.done",
                     "item": {
                         "type": "routing_decision",
-                        "model": "databricks-claude-opus-4-8",
+                        "model": "anthropic/claude-opus-4-8",
                         "tier": "expensive",
                         "applied": True,
                         "rationale": "multi-file refactor needs deep reasoning",
@@ -2461,7 +2461,7 @@ async def test_relay_persists_routing_decision_before_assistant_output() -> None
                         "content": [{"type": "output_text", "text": "Done refactoring."}],
                         # Field name the relay's parse_item_data expects for an
                         # assistant message (serialized as ``model`` on the wire).
-                        "agent": "databricks-claude-opus-4-8",
+                        "agent": "anthropic/claude-opus-4-8",
                     },
                 }
             ),
@@ -2481,7 +2481,7 @@ async def test_relay_persists_routing_decision_before_assistant_output() -> None
     routing = store.appended_items[0]
     # Every render field round-tripped through RoutingDecisionData on
     # persist — a parse failure would have dropped the item entirely.
-    assert routing.data.model == "databricks-claude-opus-4-8"
+    assert routing.data.model == "anthropic/claude-opus-4-8"
     assert routing.data.tier == "expensive"
     assert routing.data.applied is True
     assert routing.data.rationale == "multi-file refactor needs deep reasoning"
@@ -2521,7 +2521,7 @@ async def test_relay_routing_decision_live_event_carries_persisted_id() -> None:
                         "type": "response.output_item.done",
                         "item": {
                             "type": "routing_decision",
-                            "model": "databricks-claude-haiku-4-5",
+                            "model": "anthropic/claude-haiku-4-5",
                             "tier": "cheap",
                             "applied": False,
                             "rationale": "trivial question",
@@ -2556,7 +2556,7 @@ async def test_relay_routing_decision_live_event_carries_persisted_id() -> None:
     assert routing_live[0]["item"]["id"] == persisted_id
     # Verdict fields survive the live re-publish too.
     assert routing_live[0]["item"]["applied"] is False
-    assert routing_live[0]["item"]["model"] == "databricks-claude-haiku-4-5"
+    assert routing_live[0]["item"]["model"] == "anthropic/claude-haiku-4-5"
 
 
 @pytest.mark.asyncio

@@ -34,7 +34,7 @@ async def test_bind_session_runner_patches_encoded_session_path() -> None:
         return httpx.Response(200, json={})
 
     async with httpx.AsyncClient(
-        base_url="https://example.databricks.com",
+        base_url="https://goalrail.example",
         transport=httpx.MockTransport(_handler),
     ) as client:
         await native_terminal.bind_session_runner(client, "conv/a b", "runner_abc")
@@ -68,7 +68,7 @@ async def test_bind_session_runner_raises_click_exception_on_http_error() -> Non
         )
 
     async with httpx.AsyncClient(
-        base_url="https://example.databricks.com",
+        base_url="https://goalrail.example",
         transport=httpx.MockTransport(_handler),
     ) as client:
         with pytest.raises(click.ClickException, match="runner already bound"):
@@ -84,12 +84,12 @@ def test_terminal_attach_url_encodes_path_components_and_switches_scheme() -> No
     terminal attach paths.
     """
     url = native_terminal.terminal_attach_url(
-        "https://example.databricks.com/base/",
+        "https://goalrail.example/base/",
         "conv/a b",
         "terminal/main",
     )
 
     assert (
-        url == "wss://example.databricks.com/base/v1/sessions/conv%2Fa%20b"
+        url == "wss://goalrail.example/base/v1/sessions/conv%2Fa%20b"
         "/resources/terminals/terminal%2Fmain/attach"
     )

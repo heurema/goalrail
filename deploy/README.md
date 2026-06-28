@@ -90,12 +90,6 @@ deploy/
 ├── openshell/         ← NVIDIA OpenShell sandbox-provider guide (self-hosted
 │   └── README.md         gRPC gateway, on-prem/air-gapped); NOT a server target.
 │
-├── databricks/        ← Databricks Apps (Lakebase + UC Volumes)
-│   ├── databricks.yml     bundle declarative config
-│   ├── deploy.py          build + `bundle deploy`/`run` orchestrator
-│   ├── src/app.py         app entrypoint (Lakebase + UC Volumes)
-│   └── README.md
-│
 └── docker/            ← common Docker image + compose stack
     ├── Dockerfile         multi-stage slim image (node web build → python builder → runtime)
     ├── docker-compose.yaml   goalrail + postgres for any Docker host
@@ -119,13 +113,10 @@ deploy/
 | Share a server running on your **laptop**: demo it to teammates, or let remote runners & cloud sandboxes connect back to it (nothing to deploy) | Cloudflare quick tunnel | `cloudflared tunnel --url http://localhost:6767` |
 | Access your server privately from **your phone, tablet, or other personal devices** without exposing it to the internet | Tailscale | [`tailscale/README.md`](tailscale/README.md): `tailscale serve https / http://localhost:8000` |
 | Cloud Run / Kubernetes / other | Docker image | [`docker/README.md`](docker/README.md), then point your platform at the image |
-| Deploy on a Databricks workspace (Lakebase + UC Volumes) | Databricks Apps | [`databricks/README.md`](databricks/README.md): uses Asset Bundles |
 
-All non-Databricks deploy paths share the same image (`docker/Dockerfile`): a
+All deploy paths share the same image (`docker/Dockerfile`): a
 slim Python container running the FastAPI / WebSocket coordinator, with Postgres
-or SQLite as the datastore. The Databricks Apps path uses a separate entrypoint
-(`databricks/src/app.py`) that swaps Postgres for Lakebase (managed PostgreSQL)
-and the artifact store for UC Volumes.
+or SQLite as the datastore.
 
 ## Database: Postgres or SQLite
 
@@ -199,10 +190,8 @@ goalrail login https://your-host
 ```
 
 `login` detects the server's auth mode automatically. Built-in accounts,
-OIDC, header-auth proxies, and Databricks-hosted servers (a Databricks App
-or a workspace API path) all work with the same command; for Databricks it
-runs `databricks auth login` against the right workspace for you (requires
-the `databricks` extra).
+OIDC, header-auth proxies, and header-auth frontends all work with the same
+command.
 
 Then register the machine as a host, so sessions created in the web UI can
 run on it:
@@ -430,7 +419,7 @@ generic OIDC), see
 `header` mode (`GOALRAIL_AUTH_PROVIDER=header`) takes the caller's identity
 from a trusted request header — `X-Forwarded-Email` by default. It exists for
 deployments that sit behind an SSO proxy (oauth2-proxy, Cloudflare Access, an
-ALB/OIDC listener, Databricks Apps) that authenticates the user and injects
+ALB/OIDC listener, hosted app) that authenticates the user and injects
 that header on every request.
 
 Proxies that authenticate with a different header name set

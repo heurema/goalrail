@@ -88,12 +88,12 @@ def test_synthesize_env_key_openai_honors_openai_base_url(
     """A detected ``OPENAI_API_KEY`` adopts a companion ``OPENAI_BASE_URL``.
 
     The OpenAI SDK reads ``OPENAI_BASE_URL`` to target an OpenAI-compatible
-    gateway (e.g. the Databricks AI gateway). Ambient detection must honor
+    gateway. Ambient detection must honor
     it; otherwise the env key is synthesized against ``api.openai.com`` and
     every request 401s — the credential is a gateway token, not an OpenAI
     key. This is the regression guard for that intermittent multi-turn 401.
     """
-    gateway = "https://example.cloud.databricks.com/ai-gateway/openai/v1"
+    gateway = "https://gateway.example.com/openai/v1"
     monkeypatch.setenv("OPENAI_BASE_URL", gateway)
     det = DetectedProvider(
         name="openai", kind="key", family=OPENAI_FAMILY, source="$OPENAI_API_KEY"
@@ -326,12 +326,12 @@ def test_effective_config_skips_duplicate_subscription_for_configured_cli() -> N
 def _codex_config_det() -> DetectedProvider:
     """An ambient codex config.toml custom-provider detection."""
     return DetectedProvider(
-        name="codex-databricks",
+        name="codex-enterprisegateway",
         kind="cli-config",
         family=OPENAI_FAMILY,
-        source="~/.codex/config.toml provider 'Databricks'",
-        model_provider="Databricks",
-        display_name="Databricks AI Gateway",
+        source="~/.codex/config.toml provider 'EnterpriseGateway'",
+        model_provider="EnterpriseGateway",
+        display_name="Enterprise AI Gateway",
     )
 
 
@@ -343,11 +343,11 @@ def test_synthesize_cli_config_entry() -> None:
     """
     entries = synthesize_detected_entries([_codex_config_det()])
     assert entries == {
-        "codex-databricks": {
+        "codex-enterprisegateway": {
             "kind": "cli-config",
             "cli": "codex",
-            "model_provider": "Databricks",
-            "display_name": "Databricks AI Gateway",
+            "model_provider": "EnterpriseGateway",
+            "display_name": "Enterprise AI Gateway",
         }
     }
 
@@ -365,10 +365,10 @@ def test_cli_config_detection_wins_codex_default_over_login() -> None:
     assert default is not None
     # The config.toml provider wins the openai default; the login is still
     # present as a non-default entry the user can switch to.
-    assert default.name == "codex-databricks"
+    assert default.name == "codex-enterprisegateway"
     providers = load_providers(merged)
     assert providers["codex"].kind == "subscription"
-    assert providers["codex-databricks"].model_provider == "Databricks"
+    assert providers["codex-enterprisegateway"].model_provider == "EnterpriseGateway"
 
 
 def test_explicit_entry_overrides_cli_config_detection() -> None:
@@ -379,7 +379,7 @@ def test_explicit_entry_overrides_cli_config_detection() -> None:
     """
     explicit = {
         "providers": {
-            "codex-databricks": {
+            "codex-enterprisegateway": {
                 "kind": "cli-config",
                 "cli": "codex",
                 "model_provider": "OtherProvider",
@@ -387,9 +387,9 @@ def test_explicit_entry_overrides_cli_config_detection() -> None:
         }
     }
     merged = effective_config_with_detected(explicit, [_codex_config_det()])
-    # The explicit pin (OtherProvider) survives; the detected Databricks
+    # The explicit pin (OtherProvider) survives; the detected provider
     # value must not overwrite it.
-    assert load_providers(merged)["codex-databricks"].model_provider == "OtherProvider"
+    assert load_providers(merged)["codex-enterprisegateway"].model_provider == "OtherProvider"
 
 
 def test_providers_to_adopt_skips_configured_cli_config() -> None:
@@ -400,10 +400,10 @@ def test_providers_to_adopt_skips_configured_cli_config() -> None:
     """
     explicit = {
         "providers": {
-            "codex-databricks": {
+            "codex-enterprisegateway": {
                 "kind": "cli-config",
                 "cli": "codex",
-                "model_provider": "Databricks",
+                "model_provider": "EnterpriseGateway",
             }
         }
     }
@@ -418,12 +418,12 @@ def test_dismissed_detection_skipped_by_both_merge_surfaces() -> None:
     skipping only the merge would re-adopt it on the next configure open.
     Both must honor the dismissal.
     """
-    cfg = {"dismissed_detections": ["codex-databricks"]}
+    cfg = {"dismissed_detections": ["codex-enterprisegateway"]}
     detected = [_codex_config_det(), _codex_login()]
 
     assert providers_to_adopt(cfg, detected) == {"codex": {"kind": "subscription", "cli": "codex"}}
     merged = effective_config_with_detected(cfg, detected)
-    assert "codex-databricks" not in merged["providers"]
+    assert "codex-enterprisegateway" not in merged["providers"]
     # With the config provider dismissed, the next detection in priority
     # order (the codex login) takes the openai default instead.
     default = default_provider_for_harness(merged, "codex")
@@ -441,6 +441,6 @@ def test_malformed_dismissed_detections_treated_as_empty() -> None:
 
     assert dismissed_detection_names({"dismissed_detections": "oops"}) == frozenset()
     # Non-string members are ignored; string members still count.
-    assert dismissed_detection_names({"dismissed_detections": [3, "codex-databricks"]}) == (
-        frozenset({"codex-databricks"})
+    assert dismissed_detection_names({"dismissed_detections": [3, "codex-enterprisegateway"]}) == (
+        frozenset({"codex-enterprisegateway"})
     )

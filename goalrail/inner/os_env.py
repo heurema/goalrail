@@ -101,7 +101,7 @@ EditEntry: TypeAlias = dict[str, str]
 # - ``TMPDIR`` / ``TMP`` / ``TEMP`` / ``TEMPDIR``: set explicitly by
 #   :func:`set_temp_env` to point at the per-helper scratch tmpdir.
 # - All credential families: ``AWS_*``, ``GITHUB_TOKEN``,
-#   ``OPENAI_API_KEY``, ``ANTHROPIC_API_KEY``, ``DATABRICKS_TOKEN``,
+#   ``OPENAI_API_KEY``, ``ANTHROPIC_API_KEY``,
 #   ``GOOGLE_APPLICATION_CREDENTIALS``, ``VAULT_TOKEN``, ``KUBECONFIG``,
 #   ``OP_SERVICE_ACCOUNT_TOKEN``, … User opts in per-spec via
 #   ``OSEnvSandboxSpec.env_passthrough``.
@@ -166,7 +166,7 @@ def build_helper_env(
     The parent process inherits the user's full shell environment, which
     typically carries credentials in well-known names (``AWS_*``,
     ``GITHUB_TOKEN``, ``OPENAI_API_KEY``, ``ANTHROPIC_API_KEY``,
-    ``DATABRICKS_TOKEN``, ``KUBECONFIG``, ``GOOGLE_APPLICATION_CREDENTIALS``,
+    ``KUBECONFIG``, ``GOOGLE_APPLICATION_CREDENTIALS``,
     ``VAULT_TOKEN``, ``SSH_AUTH_SOCK``, …). Passing all of that to a
     sandboxed helper undoes the filesystem masking that hides
     ``~/.aws/credentials`` and friends — the helper would just call

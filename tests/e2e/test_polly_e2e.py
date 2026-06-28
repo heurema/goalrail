@@ -101,7 +101,7 @@ def _mock_env(mock_llm_server_url: str) -> dict[str, str]:
     """
     Build a subprocess env with mock LLM credentials injected.
 
-    Strips real credential env vars (Databricks, Anthropic, Claude/Codex
+    Strips real credential env vars (gateway, Anthropic, Claude/Codex
     binaries) and injects ``OPENAI_BASE_URL`` and ``OPENAI_API_KEY`` so the
     ``openai-agents`` harness routes to the mock LLM server. An isolated
     ``GOALRAIL_CONFIG_HOME`` prevents the spawned process from touching
@@ -122,16 +122,9 @@ def _mock_env(mock_llm_server_url: str) -> dict[str, str]:
     (config_home / "config.yaml").write_text("", encoding="utf-8")
     env["GOALRAIL_CONFIG_HOME"] = str(config_home)
     # Strip credentials that would shadow or conflict with mock access.
-    # Covers Databricks, Anthropic/Claude, OpenAI, AWS, GCP, Azure, GitHub,
+    # Covers Anthropic/Claude, OpenAI, AWS, GCP, Azure, GitHub,
     # and any other credential vars that should not leak into mock subprocesses.
     _CREDENTIAL_VARS = (
-        # Databricks
-        "DATABRICKS_TOKEN",
-        "DATABRICKS_HOST",
-        "DATABRICKS_CLIENT_ID",
-        "DATABRICKS_CLIENT_SECRET",
-        "DATABRICKS_CONFIG_PROFILE",
-        "DATABRICKS_ACCOUNT_ID",
         # Anthropic / Claude SDK
         "ANTHROPIC_API_KEY",
         "ANTHROPIC_BASE_URL",

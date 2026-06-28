@@ -272,7 +272,7 @@ async def test_catalog_keeps_custom_agent_distinct_from_builtin_claude_and_codex
     name + harness, with its description surfaced as the picker label.
 
     This is the custom-agent value prop: bringing your own YAML agent
-    (here ``databricks-coding-agent`` on the ``openai-agents`` harness)
+    (here ``enterprise-coding-agent`` on the ``openai-agents`` harness)
     must not collapse into the built-ins. The Add Agent picker keys the
     glyph off harness and the label off name + description, so a custom
     entry that reported a built-in's harness or dropped its name would be
@@ -304,10 +304,10 @@ async def test_catalog_keeps_custom_agent_distinct_from_builtin_claude_and_codex
         agent_store,
         artifact_store,
         agent_id="ag_custom",
-        name="databricks-coding-agent",
+        name="enterprise-coding-agent",
         description="Custom coding agent",
         bundle=build_agent_bundle(
-            name="databricks-coding-agent",
+            name="enterprise-coding-agent",
             executor={"type": "goalrail", "config": {"harness": "openai-agents"}},
         ),
     )
@@ -326,7 +326,7 @@ async def test_catalog_keeps_custom_agent_distinct_from_builtin_claude_and_codex
     assert by_id["ag_custom"]["harness"] == "openai-agents"
     # The custom agent keeps its registered name and description (the
     # picker's label), distinct from both built-ins.
-    assert by_id["ag_custom"]["name"] == "databricks-coding-agent"
+    assert by_id["ag_custom"]["name"] == "enterprise-coding-agent"
     assert by_id["ag_custom"]["description"] == "Custom coding agent"
 
 

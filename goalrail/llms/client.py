@@ -216,7 +216,7 @@ class _ResponsesNamespace:
         # ``response_format={"type": "json_schema", "json_schema": ...}``.
         # Without this, the ``text`` kwarg is sent as-is in the Chat
         # Completions body and rejected with 400 by providers that don't
-        # recognise it (e.g. Databricks).
+        # recognise it.
         text_param = extra.pop("text", None)
         if isinstance(text_param, dict):
             fmt = text_param.get("format")

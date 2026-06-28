@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import path from "node:path";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
@@ -6,38 +5,10 @@ import type { ProxyOptions } from "vite";
 import { defineConfig } from "vitest/config";
 
 const GOALRAIL_URL = process.env.GOALRAIL_URL ?? "http://localhost:6767";
-
-let cachedToken: string | null | undefined;
-
-function resolveToken(host: string): string | null {
-  if (cachedToken !== undefined) return cachedToken;
-
-  if (process.env.GOALRAIL_AUTH_TOKEN) {
-    cachedToken = process.env.GOALRAIL_AUTH_TOKEN;
-    return cachedToken;
-  }
-
-  try {
-    const output = execFileSync(
-      "databricks",
-      ["auth", "token", "--host", host, "--output", "json"],
-      {
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "pipe"],
-      },
-    );
-    const tokenResponse = JSON.parse(output) as { access_token?: string };
-    cachedToken = tokenResponse.access_token ?? null;
-  } catch {
-    cachedToken = null;
-  }
-
-  return cachedToken;
-}
+const authToken = process.env.GOALRAIL_AUTH_TOKEN ?? null;
 
 function configureProxy(target: string, useAuth: boolean): NonNullable<ProxyOptions["configure"]> {
   const parsed = new URL(target);
-  const host = parsed.origin;
   // The URL pathname becomes a prefix prepended to every proxied request.
   // e.g. GOALRAIL_URL=https://host.com/api/2.0/goalrail means the browser's
   // /v1/sessions is rewritten to /api/2.0/goalrail/v1/sessions before forwarding.
@@ -47,16 +18,14 @@ function configureProxy(target: string, useAuth: boolean): NonNullable<ProxyOpti
     proxy.on("proxyReq", (proxyReq) => {
       if (basePath) proxyReq.path = `${basePath}${proxyReq.path}`;
       if (useAuth) {
-        const token = resolveToken(host);
-        if (token) proxyReq.setHeader("Authorization", `Bearer ${token}`);
+        if (authToken) proxyReq.setHeader("Authorization", `Bearer ${authToken}`);
       }
     });
 
     proxy.on("proxyReqWs", (proxyReq) => {
       if (basePath) proxyReq.path = `${basePath}${proxyReq.path}`;
       if (useAuth) {
-        const token = resolveToken(host);
-        if (token) proxyReq.setHeader("Authorization", `Bearer ${token}`);
+        if (authToken) proxyReq.setHeader("Authorization", `Bearer ${authToken}`);
       }
     });
 
@@ -100,23 +69,10 @@ function createProxyConfig(target: string, useAuth: boolean): Record<string, Pro
   };
 }
 
-const parsed = new URL(GOALRAIL_URL);
-const useAuth =
-  !!process.env.GOALRAIL_AUTH_TOKEN ||
-  parsed.hostname.endsWith(".databricks.com") ||
-  parsed.hostname.endsWith(".azuredatabricks.net");
+const useAuth = authToken != null;
 
 if (useAuth) {
-  const token = resolveToken(parsed.origin);
-  if (token) {
-    console.log(`[dev-proxy] target=${GOALRAIL_URL} (authenticated)`);
-  } else {
-    console.error(
-      `\n[dev-proxy] ERROR: No auth token for ${parsed.origin}.\n` +
-        `  Set GOALRAIL_AUTH_TOKEN or run:  databricks auth login --host ${parsed.origin}\n`,
-    );
-    process.exit(1);
-  }
+  console.log(`[dev-proxy] target=${GOALRAIL_URL} (authenticated)`);
 } else {
   console.log(`[dev-proxy] target=${GOALRAIL_URL}`);
 }

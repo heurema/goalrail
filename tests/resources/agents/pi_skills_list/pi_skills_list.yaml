@@ -17,4 +17,4 @@ skills:
   - pi-e2e-xyz-greet-c4a8d5
 executor:
   harness: pi
-  model: databricks-claude-sonnet-4-6
+  model: anthropic/claude-sonnet-4-6

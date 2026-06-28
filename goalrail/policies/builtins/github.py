@@ -489,9 +489,9 @@ def _mcp_base(canonical: str) -> str:
     """
     Strip a leading ``github_`` operation prefix from a canonical tool name.
 
-    The Databricks-hosted read-only wrapper prefixes each op with ``github_``
-    (e.g. ``github_list_pull_requests``); the official server does not. Stripping
-    it lets one set / verb table match both.
+    Some MCP gateways prefix each op with ``github_`` (e.g.
+    ``github_list_pull_requests``); the official server does not.
+    Stripping it lets one set / verb table match both.
 
     :param canonical: Tool name after server-prefix stripping, e.g.
         ``"github_list_pull_requests"`` or ``"create_pull_request"``.

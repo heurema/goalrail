@@ -181,7 +181,7 @@ accept over HTTPS. Three options:
 
 ## Header-proxy mode (for deploys behind an existing SSO proxy)
 
-If you already have oauth2-proxy, Databricks Apps, AWS ALB OIDC,
+If you already have oauth2-proxy, hosted app, AWS ALB OIDC,
 Cloudflare Access, Tailscale Funnel, or any other proxy that injects
 an identity header, set `GOALRAIL_AUTH_PROVIDER=header`. The
 server will reject requests without the header.

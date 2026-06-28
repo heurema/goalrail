@@ -159,8 +159,7 @@ def test_legacy_content_tool_result_json_text_parses_to_dict() -> None:
     :func:`goalrail.inner.mcp_tools._extract_call_result_payload`,
     which JSON-parses each text content block on the way back.
 
-    Why this matters: the Databricks ``google_policy``'s
-    ``tool_result`` branch is gated on
+    Why this matters: legacy Google policy ``tool_result`` branches are gated on
     ``isinstance(content, dict)`` — without JSON-parsing here,
     every MCP tool result reaches the policy as a string and
     the file-id tracking branch never runs, so any follow-up
@@ -272,8 +271,7 @@ def test_legacy_context_threads_configured_phases_when_provided() -> None:
     through to the callable on every evaluation.
 
     Why this matters: legacy spec callables that read
-    ``context["configured_phases"]`` (notably the Databricks
-    ``google_policy``) deny by default unless the caller
+    ``context["configured_phases"]`` deny by default unless the caller
     advertises which phases they hooked. Without this, every
     Google MCP write through the Goalrail denied with
     ``google_policy requires on=["tool_call", "tool_result"]``

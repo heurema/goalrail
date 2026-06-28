@@ -200,7 +200,7 @@ async def test_event_context_carries_injected_model(
     engine = _build_engine(
         conversation_store,
         [_model_capturing_policy(bucket)],
-        initial_model="databricks-claude-opus-4-8",
+        initial_model="anthropic/claude-opus-4-8",
     )
     await engine.evaluate(
         EvaluationContext(
@@ -209,7 +209,7 @@ async def test_event_context_carries_injected_model(
             tool_name="sys_os_shell",
         )
     )
-    assert bucket["model"] == "databricks-claude-opus-4-8"
+    assert bucket["model"] == "anthropic/claude-opus-4-8"
 
 
 @pytest.mark.asyncio

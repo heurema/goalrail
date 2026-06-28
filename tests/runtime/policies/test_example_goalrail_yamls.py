@@ -42,7 +42,9 @@ are covered by :mod:`tests.e2e.test_policies_e2e`
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -97,7 +99,8 @@ def _load_engine_from_yaml(
         label persistence.
     :returns: A PolicyEngine ready to evaluate.
     """
-    spec = load(yaml_path)
+    with patch.dict(os.environ, {"OPENAI_API_KEY": "test-openai-key"}):
+        spec = load(yaml_path)
     conv = store.create_conversation()
     return build_policy_engine(
         spec=spec,

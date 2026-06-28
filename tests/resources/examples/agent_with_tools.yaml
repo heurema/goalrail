@@ -1,7 +1,7 @@
 # Agent with tools — demonstrates tool calling with a real LLM.
 #
 # Usage:
-#   export DATABRICKS_CONFIG_PROFILE=<your-profile>
+#   export ANTHROPIC_API_KEY=<your-key>
 #
 #   python -m goalrail examples/agent_with_tools.yaml \
 #       --prompt "What is the current time in Tokyo?"
@@ -22,7 +22,7 @@ prompt: |
   asks you to start background work.
 
 executor:
-  model: databricks-claude-sonnet-4-6
+  model: anthropic/claude-sonnet-4-6
 
 tools:
   get_current_time:

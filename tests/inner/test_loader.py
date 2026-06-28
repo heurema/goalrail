@@ -14,7 +14,6 @@ from goalrail.inner.policies import FunctionPolicy, PromptPolicy
 from goalrail.inner.tools import (
     AgentTool,
     CancellableFunctionTool,
-    FunctionTool,
     HandoffTool,
     InheritedTool,
     MCPTool,
@@ -66,12 +65,11 @@ class TestLoadFromDict(unittest.TestCase):
         a = load_agent_def({"name": "t", "executor": {"model": "claude-sonnet-4"}})
         self.assertEqual(a.executor.model, "claude-sonnet-4")
 
-    def test_tools_function(self):
-        a = load_agent_def(
-            {"name": "t", "tools": {"f": {"type": "function", "catalog_path": "a.b.c"}}}
-        )
-        self.assertIsInstance(a.tools["f"], FunctionTool)
-        self.assertEqual(a.tools["f"].catalog_path, "a.b.c")
+    def test_tools_function_rejects_removed_catalog_path(self):
+        with self.assertRaisesRegex(ValueError, "no longer supported"):
+            load_agent_def(
+                {"name": "t", "tools": {"f": {"type": "function", "catalog_path": "a.b.c"}}}
+            )
 
     def test_tools_cancellable_function(self):
         a = load_agent_def(
@@ -113,7 +111,7 @@ class TestLoadFromDict(unittest.TestCase):
                         "type": "agent",
                         "prompt": "Help.",
                         "executor": {
-                            "model": "databricks-claude-sonnet-4",
+                            "model": "anthropic/claude-sonnet-4",
                             "harness": "claude-sdk",
                             "profile": "test-profile",
                         },
@@ -125,7 +123,7 @@ class TestLoadFromDict(unittest.TestCase):
         self.assertEqual(
             a.tools["h"].executor,
             ExecutorSpec(
-                model="databricks-claude-sonnet-4",
+                model="anthropic/claude-sonnet-4",
                 harness="claude-sdk",
                 profile="test-profile",
             ),
@@ -442,7 +440,7 @@ name: data_analyst
 prompt: Answer questions using data.
 async: false
 executor:
-  model: databricks-claude-sonnet-4
+  model: anthropic/claude-sonnet-4
 tools:
   sql_query:
     type: mcp
@@ -470,7 +468,7 @@ runtime: true
             try:
                 a = load_agent_def(f.name)
                 self.assertEqual(a.name, "data_analyst")
-                self.assertEqual(a.executor.model, "databricks-claude-sonnet-4")
+                self.assertEqual(a.executor.model, "anthropic/claude-sonnet-4")
                 self.assertIsInstance(a.tools["sql_query"], MCPTool)
                 self.assertIsInstance(a.tools["table_search"], AgentTool)
                 self.assertIsInstance(a.tools["table_search"].tools["sql_query"], InheritedTool)

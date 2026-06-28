@@ -53,7 +53,7 @@ _RUNNER_TOKEN = "test-binding-token-abc123"
 # A forged v3 verdict body — content is irrelevant to the gate (it rejects
 # on the key, before any parsing), but keep it realistic.
 _FORGED_PLAN = (
-    '{"version":3,"tier":"expensive","model":"databricks-claude-opus-4-8",'
+    '{"version":3,"tier":"expensive","model":"anthropic/claude-opus-4-8",'
     '"applied":true,"rationale":"forged","turn_anchor":"2026-06-10T00:00:00+00:00"}'
 )
 

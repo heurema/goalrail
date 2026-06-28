@@ -29,10 +29,6 @@ from goalrail.spec.types import RetryPolicy
 
 from . import _proc
 from ._subprocess_lifecycle import close_subprocess_transport
-from .databricks_executor import (
-    _read_databrickscfg,
-    _read_databrickscfg_host,
-)
 from .datamodel import OSEnvSandboxSpec, OSEnvSpec
 from .executor import (
     Executor,
@@ -55,8 +51,6 @@ logger = logging.getLogger(__name__)
 
 # Default auth-token refresh cadence (ms) for the vendor-neutral gateway
 # transport when ``HARNESS_CODEX_GATEWAY_AUTH_REFRESH_INTERVAL_MS`` is unset.
-# Not Databricks-specific: the same fallback applies to any gateway producer
-# (Databricks AI gateway or a generic key/gateway provider).
 _GATEWAY_AUTH_REFRESH_MS = 900_000
 
 # ---------------------------------------------------------------------------
@@ -98,12 +92,6 @@ _CODEX_VERSION_PROBE_TIMEOUT_SECONDS = 5.0
 _STDERR_CHUNK_LIMIT = 65536
 _STREAM_READ_CHUNK_SIZE = 65536
 _OPENAI_CODEX_DEFAULT_MODEL = "gpt-5.4-mini"
-# Databricks-specific default model for the Databricks-profile-derivation
-# gateway path (no gateway base URL supplied directly). The neutral
-# generic-provider gateway path never uses this — it requires the Goalrail producer
-# to resolve a concrete model. Used only when constructing the codex config
-# from ~/.databrickscfg credentials with no spec/override model.
-_DATABRICKS_CODEX_DEFAULT_MODEL = "databricks-gpt-5-5"
 
 # Files symlinked from the real CODEX_HOME into the per-session temp home.
 # Symlinks (not copies) so credential refreshes in the real home propagate
@@ -227,7 +215,7 @@ def _unwrap_provider_error_json(text: str) -> str:
 
     Codex relays provider HTTP errors as a stringified JSON blob
     (e.g. ``'{"error_code":"BAD_REQUEST","message":"..."}'`` from
-    Databricks gateway). Returning the raw string is technically
+    a provider gateway). Returning the raw string is technically
     accurate but visually noisy; extracting the human-readable
     ``message`` field gives the user the actionable line directly.
 
@@ -383,8 +371,6 @@ def _clean_codex_env() -> dict[str, str]:
         "TMP",
         "TEMP",
         "PYTHONUTF8",
-        "DATABRICKS_BEARER",  # explicit CI/integration bearer used by auth.command
-        "DATABRICKS_CODEX_TOKEN",  # env_key referenced by ~/.codex/config.toml's DB provider
         GOALRAIL_SESSION_ENV_VAR,  # "inside Goalrail" marker (CLAUDE_CODE/CODEX analog)
     }
     for key, value in os.environ.items():
@@ -657,82 +643,6 @@ def _populate_codex_home_config(target_dir: Path, source_dir: Path) -> None:
         shutil.copy2(source_file, dest_path)
 
 
-def _databricks_codex_base_url(host: str) -> str:
-    """Return the Unity AI Gateway Codex Responses base URL for *host*."""
-    return f"{host.rstrip('/')}/ai-gateway/codex/v1"
-
-
-def _databricks_codex_auth_command(host: str, profile: str | None = None) -> str:
-    """Return the legacy Databricks CLI auth helper command for Codex.
-
-    :param host: Databricks workspace host, e.g.
-        ``"https://example.databricks.com"``.
-    :param profile: Optional ``~/.databrickscfg`` profile name, e.g.
-        ``"oss"``. Preferred over ``--host`` when known: two profiles can
-        share one host, which makes ``databricks auth token --host`` fail
-        ("Use --profile to specify which profile") → empty token → 401.
-        ``--profile`` is always unambiguous.
-    :returns: Shell command that prints a bearer token.
-    """
-    # --profile is unambiguous; --host fails when two profiles share a host.
-    selector = (
-        f"--profile {json.dumps(profile)}" if profile else f"--host {json.dumps(host.rstrip('/'))}"
-    )
-    # `--force-refresh` proactively refreshes a still-valid cached token
-    # (guards against a mid-session 401 on long gateway connections) but
-    # only exists in Databricks CLI >= v0.296.0. Probe `--help` and pass it
-    # only when supported: older CLIs reject the unknown flag → empty token
-    # → silent 401. Plain `auth token` still auto-refreshes expired tokens.
-    return (
-        'if [ -n "${DATABRICKS_BEARER:-}" ]; then '
-        'printf "%s\\n" "$DATABRICKS_BEARER"; '
-        "else force=''; "
-        "if databricks auth token --help 2>&1 | grep -q force-refresh; "
-        "then force=--force-refresh; fi; "
-        "env -u DATABRICKS_CONFIG_PROFILE "
-        f"databricks auth token {selector} "
-        "$force --output json | jq -r '.access_token'; fi"
-    )
-
-
-def _databricks_codex_config_overrides(
-    *,
-    model: str,
-    base_url: str,
-    auth_command: str,
-    auth_refresh_interval_ms: int | None = None,
-) -> list[str]:
-    """Return TOML-fragment overrides for the Codex per-conversation config.
-
-    :param model: Model id to pin, e.g. ``"databricks-gpt-5-5"``.
-    :param base_url: Provider base URL from ucode state or the legacy profile
-        path, e.g. ``"https://example.databricks.com/ai-gateway/codex/v1"``.
-    :param auth_command: Shell command from ucode state or the legacy profile
-        path that prints
-        a bearer token, e.g. ``"databricks auth token --host ..."``.
-    :param auth_refresh_interval_ms: Refresh cadence in milliseconds,
-        e.g. ``900000``.
-    :returns: Codex TOML-fragment override strings.
-    """
-    provider_name = "goalrail_databricks"
-    auth_command_json = json.dumps(auth_command)
-    return [
-        f"model={json.dumps(model)}",
-        f'model_provider="{provider_name}"',
-        (
-            "model_providers.goalrail_databricks="
-            '{name="Goalrail Databricks",'
-            f"base_url={json.dumps(base_url)},"
-            'auth={command="sh",'
-            f'args=["-c",{auth_command_json}],'
-            "timeout_ms=5000,"
-            f"refresh_interval_ms={auth_refresh_interval_ms or _GATEWAY_AUTH_REFRESH_MS}"
-            "},"
-            'wire_api="responses"}'
-        ),
-    ]
-
-
 def _provider_codex_config_overrides(
     *,
     model: str | None,
@@ -742,8 +652,7 @@ def _provider_codex_config_overrides(
 ) -> list[str]:
     """Return Codex config overrides routing through a generic provider.
 
-    The OSS counterpart to :func:`_databricks_codex_config_overrides`: it
-    points Codex at a ``configure harnesses`` provider (key / gateway / local
+    Points Codex at a ``configure harnesses`` provider (key / gateway / local
     serving the ``openai`` surface) by registering an ``goalrail_provider``
     ``model_provider`` with the provider's base URL, a bearer-token auth
     command (``printf`` for a static key, or the provider's ``auth_command``),
@@ -770,8 +679,8 @@ def _provider_codex_config_overrides(
     # any provider block carrying wire_api="chat" makes codex hard-fail config
     # load ("wire_api = \"chat\" is no longer supported"), which broke OSS /
     # OpenRouter provider routing outright. "responses" is the only value codex
-    # still accepts (matching _databricks_codex_config_overrides above), so
-    # coerce here rather than emit a value codex rejects. Providers that genuinely
+    # still accepts, so coerce here rather than emit a value codex rejects.
+    # Providers that genuinely
     # only serve chat/completions (e.g. OpenRouter) will surface that mismatch at
     # request time against a config codex can at least load, instead of failing
     # to start at all.
@@ -1927,7 +1836,6 @@ class CodexExecutor(Executor):
         codex_path: str | None = None,
         app_session_factory: _AppSessionFactory | None = None,
         gateway: bool = False,
-        databricks_profile: str | None = None,
         model_provider_override: str | None = None,
         gateway_host: str | None = None,
         base_url_override: str | None = None,
@@ -1944,41 +1852,28 @@ class CodexExecutor(Executor):
 
         :param cwd: Working directory for the Codex subprocess.
         :param os_env: Optional OS environment / sandbox spec.
-        :param model: Override the model name, e.g. ``"databricks-gpt-5-4-mini"``.
+        :param model: Override the model name, e.g. ``"gpt-5.4-mini"``.
         :param codex_path: Absolute path to a ``codex`` CLI binary.  When
             ``None`` the executor searches ``PATH``.
         :param app_session_factory: Test hook for injecting a stub session.
         :param gateway: When ``True``, route through a vendor-neutral gateway
-            (base URL + bearer-token command + model). The Databricks AI
-            gateway (Codex Responses API at ``/ai-gateway/codex/v1``) is one
-            producer of this transport; generic providers are another.
-        :param databricks_profile: Databricks-specific config profile from
-            ``~/.databrickscfg``, e.g. ``"<your-profile>"``.  Only used on the
-            Databricks producer path (deriving base URL / auth command from
-            the profile when not supplied directly, and for token refresh).
-            ``None`` falls back to ``DATABRICKS_CONFIG_PROFILE`` then the
-            first valid profile.
+            (base URL + bearer-token command + model).
         :param model_provider_override: A codex ``model_provider`` id to pin
             via a ``-c`` override, e.g. ``"openai"`` (force the built-in
             provider so a custom default in the user's ``~/.codex/config.toml``
-            cannot shadow a subscription) or ``"Databricks"`` (a custom
+            cannot shadow a subscription) or ``"corp-gateway"`` (a custom
             ``[model_providers.X]`` table from that same file, which this
             executor bridges into the per-session ``CODEX_HOME``). Set from
             ``HARNESS_CODEX_MODEL_PROVIDER``. Mutually exclusive with
             *gateway* — the gateway path pins its own generated provider.
-        :param gateway_host: Gateway workspace host origin, e.g.
-            ``"https://example.databricks.com"``.  Set from
-            ``HARNESS_CODEX_GATEWAY_HOST`` (written by the Goalrail workflow
-            layer). When set, skips profile host lookup and requires the
-            gateway base URL and auth command values.
-        :param base_url_override: Override the Codex gateway base URL instead
-            of deriving it from the profile host.  Set from
+        :param gateway_host: Optional gateway host origin. Set from
+            ``HARNESS_CODEX_GATEWAY_HOST`` when a workflow producer has one.
+        :param base_url_override: Codex gateway base URL. Set from
             ``HARNESS_CODEX_GATEWAY_BASE_URL`` (written by the Goalrail workflow
-            layer). Required whenever ``gateway_host`` is set.
+            layer). Required when ``gateway=True``.
         :param gateway_auth_command: Shell command that prints a bearer token,
             e.g.
-            ``"databricks auth token --host https://example.databricks.com ..."``
-            or ``"printf %s sk-or-..."``. Set from
+            ``"printf %s sk-or-..."``. Set from
             ``HARNESS_CODEX_GATEWAY_AUTH_COMMAND``.
         :param gateway_auth_refresh_interval_ms: Refresh cadence as a string,
             e.g. ``"900000"``. Set from
@@ -2016,7 +1911,6 @@ class CodexExecutor(Executor):
         self._os_env_spec = os_env
         self._model_override = model
         self._gateway = gateway
-        self._databricks_profile = databricks_profile
         self._gateway_host = gateway_host.rstrip("/") if gateway_host else None
         self._base_url_override = base_url_override
         self._gateway_auth_command = gateway_auth_command
@@ -2052,82 +1946,26 @@ class CodexExecutor(Executor):
             self._codex_config_overrides.append(
                 f"model_provider={json.dumps(model_provider_override)}"
             )
-        # True when the gateway transport was derived from a ~/.databrickscfg
-        # profile (no gateway base URL supplied directly). Gates the
-        # Databricks-specific default model in :meth:`run_turn`; the neutral
-        # generic-provider gateway path leaves this False so it never selects
-        # a ``databricks-*`` model.
-        self._gateway_uses_databricks_profile = False
         if gateway:
-            host = self._gateway_host
-            # ``effective_model`` resolves to a concrete model for the codex
-            # config. On the Databricks-profile-derivation branch (no gateway
-            # host or base URL supplied directly) a ``databricks-*`` default is
-            # legitimate Databricks behavior; on the directly-supplied neutral
-            # gateway path the Goalrail producer must have resolved a model, and the
-            # path never falls back to a ``databricks-*`` model.
-            effective_model: str
-            if host is None:
-                # No gateway host supplied directly: derive the transport from
-                # a Databricks profile (the Databricks producer's fallback).
-                creds = _read_databrickscfg(databricks_profile)
-                host = (
-                    creds.host
-                    if creds is not None
-                    else _read_databrickscfg_host(databricks_profile)
+            if base_url_override is None:
+                raise OSError(
+                    "CodexExecutor(gateway=True) requires HARNESS_CODEX_GATEWAY_BASE_URL."
                 )
-                if not host:
-                    raise OSError(
-                        "CodexExecutor(gateway=True) requires gateway credentials via "
-                        "the gateway base URL / auth command or a valid "
-                        "~/.databrickscfg profile."
-                    )
-                host = host.rstrip("/")
-                base_url = (
-                    base_url_override
-                    if base_url_override is not None
-                    else _databricks_codex_base_url(host)
+            if gateway_auth_command is None:
+                raise OSError(
+                    "CodexExecutor(gateway=True) requires HARNESS_CODEX_GATEWAY_AUTH_COMMAND."
                 )
-                auth_command = (
-                    gateway_auth_command
-                    if gateway_auth_command is not None
-                    else _databricks_codex_auth_command(host, databricks_profile)
+            if model is None:
+                raise OSError(
+                    "CodexExecutor(gateway=True) requires a model: the workflow producer "
+                    "must resolve one before spawning."
                 )
-                # Databricks-profile path: a Databricks default is legitimate.
-                self._gateway_uses_databricks_profile = True
-                effective_model = model or _DATABRICKS_CODEX_DEFAULT_MODEL
-            else:
-                if base_url_override is None:
-                    raise OSError(
-                        "CodexExecutor(gateway=True) with a gateway workspace host "
-                        "requires HARNESS_CODEX_GATEWAY_BASE_URL."
-                    )
-                if gateway_auth_command is None:
-                    raise OSError(
-                        "CodexExecutor(gateway=True) with a gateway workspace host "
-                        "requires HARNESS_CODEX_GATEWAY_AUTH_COMMAND."
-                    )
-                base_url = base_url_override
-                auth_command = gateway_auth_command
-                if model is None:
-                    # Directly-supplied neutral gateway: the Goalrail producer always
-                    # resolves a concrete model (spec > provider default >
-                    # catalog default) before spawning. Fail loud rather than
-                    # silently selecting a ``databricks-*`` default.
-                    raise OSError(
-                        "CodexExecutor(gateway=True) with a gateway base URL requires a "
-                        "model: the Goalrail producer must resolve one before spawning."
-                    )
-                effective_model = model
-            # ``DATABRICKS_HOST`` is read by the Databricks ``databricks auth
-            # token`` fallback auth command; harmless for a generic gateway
-            # whose auth command is a static ``printf %s <key>``.
-            self._env["DATABRICKS_HOST"] = host
             self._codex_config_overrides.extend(
-                _databricks_codex_config_overrides(
-                    model=effective_model,
-                    base_url=base_url,
-                    auth_command=auth_command,
+                _provider_codex_config_overrides(
+                    model=model,
+                    base_url=base_url_override,
+                    auth_command=gateway_auth_command,
+                    wire_api="responses",
                     auth_refresh_interval_ms=self._gateway_auth_refresh_interval_ms,
                 )
             )
@@ -2242,20 +2080,9 @@ class CodexExecutor(Executor):
         cfg = config or ExecutorConfig()
         session_key = _session_key(messages)
         state = self._session_states.setdefault(session_key, _CodexSessionState())
-        # cfg.model (per-request /model override) wins over the spec
-        # default (HARNESS_CODEX_MODEL → self._model_override). The final
-        # fallback is the Databricks default only on the Databricks-profile
-        # gateway path; the neutral gateway path (and the built-in path) never
-        # select a ``databricks-*`` model.
-        model = (
-            cfg.model
-            or self._model_override
-            or (
-                _DATABRICKS_CODEX_DEFAULT_MODEL
-                if self._gateway_uses_databricks_profile
-                else _OPENAI_CODEX_DEFAULT_MODEL
-            )
-        )
+        # cfg.model (per-request /model override) wins over the spec default
+        # (HARNESS_CODEX_MODEL → self._model_override).
+        model = cfg.model or self._model_override or _OPENAI_CODEX_DEFAULT_MODEL
         effective_cwd = (
             self._cwd or (self._os_env_spec.cwd if self._os_env_spec else None) or os.getcwd()
         )

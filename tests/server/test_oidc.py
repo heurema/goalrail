@@ -164,8 +164,8 @@ def _mock_request(
 def test_header_source_returns_email_from_header() -> None:
     """Header source extracts user ID from X-Forwarded-Email.
 
-    This is the primary code path for Databricks Apps deployments
-    where the proxy injects the header.
+    This is the primary code path for deployments where the proxy
+    injects the header.
     """
     provider = UnifiedAuthProvider(source="header")
     request = _mock_request(headers={"X-Forwarded-Email": "alice@example.com"})
@@ -667,8 +667,8 @@ def test_factory_returns_header_provider_explicit_zero_config(
 ) -> None:
     """Explicit GOALRAIL_AUTH_PROVIDER=header returns a header provider.
 
-    This is the zero-config path for Databricks Apps and any deploy
-    behind a proxy that injects ``X-Forwarded-Email``. Header is the
+    This is the zero-config path for deploys behind a proxy that injects
+    ``X-Forwarded-Email``. Header is the
     env-unset default, but proxy-fronted deploys set the value
     explicitly so an ambient ``GOALRAIL_AUTH_ENABLED=1`` can't
     flip them into accounts (or oidc) mode.

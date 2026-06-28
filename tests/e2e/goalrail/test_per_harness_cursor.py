@@ -16,8 +16,8 @@ over a local bridge (``agent.send`` → streamed ``run.messages()``) →
   forwarding them to the cursor SDK (F103).
 
 Unlike the other per-harness e2e tests, the Cursor SDK talks only to Cursor's
-own backend — there is no Databricks-gateway path, so this test does NOT use
-``patched_databrickscfg`` / ``goalrail_credentials_env``. Because a Cursor API
+own backend — there is no gateway path, so this test does NOT use
+``patched_provider_config`` / ``goalrail_credentials_env``. Because a Cursor API
 key is not provisioned on CI, the test **skips** (rather than fails) when
 ``CURSOR_API_KEY`` is absent so the e2e shards stay green; it runs for real
 wherever a key is present.

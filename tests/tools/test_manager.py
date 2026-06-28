@@ -12,7 +12,7 @@ from goalrail.errors import GoalrailError
 from goalrail.spec.types import (
     AgentSpec,
     BuiltinToolConfig,
-    LLMConfig,
+    ExecutorSpec,
     LocalToolInfo,
     MCPServerConfig,
     SharePolicy,
@@ -1073,23 +1073,16 @@ def test_local_tools_skipped_without_workdir() -> None:
     )
 
 
-# ── web_search builtin: Databricks model does not emit web_search_preview ───
+# ── web_search builtin: OpenAI passthrough schema ─────────────────────
 
 
-def test_web_search_does_not_emit_web_search_preview_for_databricks_model() -> None:
+def test_web_search_emits_preview_schema_for_openai_model() -> None:
     """
-    When the agent's model is a ``databricks-*`` model, the ``web_search``
-    builtin must NOT emit ``{"type": "web_search_preview"}`` in its schema.
-    Databricks rejects that tool type at the API level with HTTP 400, killing
-    the request before the agent runs.
-
-    A failure here means the ``databricks-*`` guard in
-    ``ToolManager._create_web_search`` was removed or the prefix changed.
-    The wrong schema would be ``{"type": "web_search_preview"}``.
+    OpenAI models use the provider-native ``web_search_preview`` passthrough.
     """
     spec = AgentSpec(
         spec_version=1,
-        llm=LLMConfig(model="databricks-gpt-5-4"),
+        executor=ExecutorSpec(model="openai/gpt-5-4"),
         tools=ToolsConfig(builtins=[BuiltinToolConfig(name="web_search")]),
     )
     mgr = ToolManager(spec)
@@ -1097,8 +1090,4 @@ def test_web_search_does_not_emit_web_search_preview_for_databricks_model() -> N
 
     assert tool is not None, "web_search should be registered when declared in tools.builtins"
     schema = tool.get_schema()
-    assert schema.get("type") != "web_search_preview", (
-        f'web_search emitted {{"type": "web_search_preview"}} for '
-        f"databricks-gpt-5-4 — Databricks does not support this tool type "
-        f"and rejects the request with HTTP 400. Got schema: {schema!r}"
-    )
+    assert schema.get("type") == "web_search_preview", schema

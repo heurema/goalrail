@@ -64,14 +64,12 @@ def _build_repl_env(mock_llm_server_url: str, tmp_home: Path) -> dict[str, str]:
         "auto_open_conversation: false\ntui:\n  theme: dark\n",
     )
 
-    real_databrickscfg = Path.home() / ".databrickscfg"
     env = {
         **os.environ,
         "OPENAI_API_KEY": "mock-key",
         "OPENAI_BASE_URL": f"{mock_llm_server_url}/v1",
         "HOME": str(tmp_home),
         "GOALRAIL_CONFIG_HOME": str(config_home),
-        "DATABRICKS_CONFIG_FILE": str(real_databrickscfg),
         "GOALRAIL_SKIP_ONBOARD": "1",
         "GOALRAIL_NO_UPDATE_CHECK": "1",
         "PYTHONPATH": merged_pp,
@@ -80,7 +78,7 @@ def _build_repl_env(mock_llm_server_url: str, tmp_home: Path) -> dict[str, str]:
         "COLUMNS": "120",
         "PROMPT_TOOLKIT_NO_CPR": "1",
     }
-    for k in ("ANTHROPIC_API_KEY", "CLAUDE_CODE", "CLAUDECODE", "CODEX", "DATABRICKS_TOKEN"):
+    for k in ("ANTHROPIC_API_KEY", "CLAUDE_CODE", "CLAUDECODE", "CODEX"):
         env.pop(k, None)
     return ensure_repl_test_theme_env(env)
 

@@ -198,11 +198,6 @@ def test_load_local_callable_tools_filters_to_goalrail_server_callables() -> Non
         [
             _info("callable_tool", "pkg.mod.callable_tool"),
             _info("native_python", "tools/python/native_python.py", language="python"),
-            _info(
-                "uc_function",
-                None,
-                runtime=ToolRuntime.UC_FUNCTION,
-            ),
             _info("unimportable", "does.not.exist"),
         ]
     )

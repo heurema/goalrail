@@ -651,12 +651,10 @@ async def test_launch_strips_env_unset_keys_from_inherited_environment(
     A terminal that lists a key in ``env_unset`` must not pass that key
     through to the spawned tmux process, even when it is present in the
     parent process's environment. This is the mechanism the runner uses
-    to keep ambient Databricks-SDK profile selection
-    (``DATABRICKS_CONFIG_PROFILE``) out of the Claude terminal: MCP
-    servers spawned by Claude inherit the tmux env, and the Databricks
-    SDK's auth resolver will pick up an ambient profile in preference
-    to an explicit token, sending requests with a bearer for the wrong
-    workspace.
+    to keep ambient provider profile selection
+    (``CUSTOM_PROVIDER_PROFILE``) out of the child terminal: MCP
+    servers spawned by the terminal inherit the tmux env, and provider
+    SDKs may prefer an ambient profile over an explicit token.
 
     A direct unit on ``env_unset`` is the right layer for this
     invariant: a workflow integration test would only fail when the
@@ -698,7 +696,7 @@ async def test_launch_strips_env_unset_keys_from_inherited_environment(
 
     # Force the unwanted var into the parent env so the test would
     # also catch a regression where ``env_unset`` is silently dropped.
-    monkeypatch.setenv("DATABRICKS_CONFIG_PROFILE", "ambient-host-profile")
+    monkeypatch.setenv("CUSTOM_PROVIDER_PROFILE", "ambient-host-profile")
     # A benign ambient var that is NOT in env_unset — proves the strip
     # is surgical rather than a wholesale wipe. (We can't use
     # ``GOALRAIL_TMUX_SOCK`` for this any more: the sandbox hardening
@@ -715,7 +713,7 @@ async def test_launch_strips_env_unset_keys_from_inherited_environment(
         session_key="s1",
         socket_path=tmp_path / "tmux.sock",
         private_dir=tmp_path,
-        env_unset=["DATABRICKS_CONFIG_PROFILE"],
+        env_unset=["CUSTOM_PROVIDER_PROFILE"],
     )
 
     await instance.launch(cwd=tmp_path)
@@ -735,13 +733,11 @@ async def test_launch_strips_env_unset_keys_from_inherited_environment(
     # absent from the spawned env even though it was set on the
     # parent. A failure here means the leak path the runner relies on
     # for Claude MCP isolation is open again.
-    assert "DATABRICKS_CONFIG_PROFILE" not in spawned_env, (
-        "env_unset failed to strip DATABRICKS_CONFIG_PROFILE from "
+    assert "CUSTOM_PROVIDER_PROFILE" not in spawned_env, (
+        "env_unset failed to strip CUSTOM_PROVIDER_PROFILE from "
         "the tmux child environment. The runner's Claude terminal "
         "relies on this strip to keep ambient profile selection out "
-        "of MCP-server auth resolution; if this regresses, Claude's "
-        "Databricks-backed MCPs (slack, github, etc.) will start "
-        "auth-failing again whenever the parent shell sets the var."
+        "of MCP-server auth resolution."
     )
 
     # Sanity check that ordinary env still flows through — the strip
@@ -761,7 +757,7 @@ async def test_launch_strips_env_unset_keys_from_inherited_environment(
 
 
 @pytest.mark.asyncio
-async def test_launch_default_env_unset_leaks_databricks_profile(
+async def test_launch_default_env_unset_inherits_custom_provider_profile(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -771,7 +767,7 @@ async def test_launch_default_env_unset_leaks_databricks_profile(
     The companion to ``test_launch_strips_env_unset_keys_from_inherited_environment``:
     proves that the strip is opt-in via the field, not a hidden global
     behavior. If this test ever fails, an unrelated change has started
-    stripping ``DATABRICKS_CONFIG_PROFILE`` from every terminal — that
+    stripping ``CUSTOM_PROVIDER_PROFILE`` from every terminal — that
     is a wider behavior change than the original fix intended and
     deserves a deliberate decision, not a silent regression.
 
@@ -808,7 +804,7 @@ async def test_launch_default_env_unset_leaks_databricks_profile(
         ),
     )
 
-    monkeypatch.setenv("DATABRICKS_CONFIG_PROFILE", "ambient-host-profile")
+    monkeypatch.setenv("CUSTOM_PROVIDER_PROFILE", "ambient-host-profile")
 
     instance = TerminalInstance(
         name="bash",
@@ -825,8 +821,8 @@ async def test_launch_default_env_unset_leaks_databricks_profile(
     spawned_env = captured_envs[0]
     # The same value the parent set must reach the child, proving
     # the strip is gated on ``env_unset`` rather than always on.
-    assert spawned_env.get("DATABRICKS_CONFIG_PROFILE") == "ambient-host-profile", (
-        "Expected default launch to inherit DATABRICKS_CONFIG_PROFILE "
+    assert spawned_env.get("CUSTOM_PROVIDER_PROFILE") == "ambient-host-profile", (
+        "Expected default launch to inherit CUSTOM_PROVIDER_PROFILE "
         "from the parent env. If this fails, some other code path "
         "is unconditionally stripping the var — the runner's "
         "explicit env_unset is no longer the single source of truth "

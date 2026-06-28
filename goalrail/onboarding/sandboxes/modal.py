@@ -509,9 +509,9 @@ class ModalSandboxLauncher(SandboxLauncher):
         (``echo $$`` then ``exec`` keeps the pid across the swap) and
         the interrupt path issues ``kill`` via a second exec.
 
-        ``TERM`` is forced to ``xterm-256color`` for the same reason as
-        the lakebox launcher: native harnesses spawn tmux, which refuses
-        to start under a dumb/unset TERM.
+        ``TERM`` is forced to ``xterm-256color`` because native
+        harnesses spawn tmux, which refuses to start under a dumb/unset
+        TERM.
 
         :param sandbox_id: Target sandbox.
         :param command: Shell command to execute remotely, e.g.

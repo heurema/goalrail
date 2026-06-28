@@ -215,8 +215,8 @@ export function ForkSessionForm({
 
   // The source's bound agent, stripped of any " (fork <id>)" suffix the
   // fork route appends when cloning an agent. A fork-of-a-fork's source
-  // agent is named e.g. "databricks_coding_agent (fork ag_5c78e6a)", which
-  // wouldn't match the built-in "databricks_coding_agent" by name — strip
+  // agent is named e.g. "coding_agent (fork ag_5c78e6a)", which
+  // wouldn't match the built-in "coding_agent" by name — strip
   // the suffix so the dedup below still hides it.
   const sourceAgentName = sourceAgent?.name ?? null;
   const sourceAgentBaseName = sourceAgentName?.replace(/ \(fork [^)]+\)$/, "") ?? null;

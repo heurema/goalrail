@@ -312,7 +312,7 @@ def test_materialize_bundle_then_load_roundtrip_yaml(tmp_path: Path) -> None:
                 "name": "hello-from-yaml",
                 "prompt": "hi",
                 "executor": {
-                    "model": "databricks-claude-sonnet-4",
+                    "model": "anthropic/claude-sonnet-4",
                     "harness": "claude-sdk",
                 },
             },
@@ -336,7 +336,7 @@ def test_load_goalrail_yaml_preserves_use_responses_bool(tmp_path: Path) -> None
     config value with ``bool(use_responses)`` — but ``bool("false") is True``, so a
     string ``"false"`` inverts the flag and the executor is launched with
     ``HARNESS_OPENAI_AGENTS_USE_RESPONSES=true``, causing silent API failures for
-    models that require ``use_responses=False`` (e.g. Kimi K2 via Databricks).
+    models that require ``use_responses=False`` (e.g. Kimi K2).
 
     Root cause guarded: ``_goalrail_compat.load_goalrail_yaml`` previously used
     ``yaml.safe_load`` to read the raw YAML, but importing ``load_agent_def`` mutates
@@ -351,7 +351,7 @@ def test_load_goalrail_yaml_preserves_use_responses_bool(tmp_path: Path) -> None
 
         executor:
           harness: openai-agents
-          model: databricks-kimi-k2-6
+          model: moonshot/kimi-k2-6
           use_responses: false
     """)
     (tmp_path / "kimi-test.yaml").write_text(yaml_text)
@@ -374,7 +374,7 @@ def test_load_goalrail_yaml_threads_executor_extra_max_tokens_to_llm_extra(
 
         executor:
           harness: openai-agents
-          model: databricks-kimi-k2-6
+          model: moonshot/kimi-k2-6
           use_responses: false
           extra:
             max_tokens: 65536
@@ -402,7 +402,7 @@ def test_load_goalrail_yaml_unknown_harness_hints_at_version_skew(
 
         executor:
           harness: totally-made-up-harness
-          model: databricks-claude-sonnet-4
+          model: anthropic/claude-sonnet-4
     """)
     (tmp_path / "skew-test.yaml").write_text(yaml_text)
 

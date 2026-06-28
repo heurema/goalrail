@@ -47,7 +47,7 @@ def _load_tool(name: str, tool_data: object) -> FunctionTool:
     agent_def = load_agent_def(
         {
             "name": "test_agent",
-            "executor": {"model": "databricks-claude-sonnet-4"},
+            "executor": {"model": "anthropic/claude-sonnet-4"},
             "tools": {name: tool_data},
         },
     )

@@ -12,8 +12,8 @@ Supports both server-managed hosts (``host_type="managed"`` sessions)
 and the CLI bootstrap flow. The one unsupported primitive is
 ``forward_local_port``: E2B only exposes sandbox ports OUTWARD via a
 public URL (``sandbox.get_host(port)``) — there is no local→sandbox
-path — so the in-sandbox Databricks App OAuth flow doesn't apply and
-managed hosts authenticate with a server-minted launch token instead.
+path — so the in-sandbox browser login flow doesn't apply and managed
+hosts authenticate with a server-minted launch token instead.
 
 Notes that shape this launcher:
 

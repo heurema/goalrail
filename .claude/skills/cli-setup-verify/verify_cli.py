@@ -90,9 +90,9 @@ LEAKED_CRED_VARS = (
     "CURSOR_API_KEY",
     "GH_TOKEN",
     "GITHUB_TOKEN",
-    "DATABRICKS_TOKEN",
-    "DATABRICKS_HOST",
-    "DATABRICKS_CONFIG_PROFILE",
+    "GOALRAIL_AUTH_TOKEN",
+    "GOALRAIL_SERVER_URL",
+    "GOALRAIL_CONFIG_PROFILE",
 )
 
 
@@ -139,7 +139,7 @@ def build_sandbox(
     :param keep_env_creds: Keep ambient model keys (e.g. ``ANTHROPIC_API_KEY``)
         in the child env. Default False → a genuinely cold, credential-free run.
     :param inherit_home: Opt OUT of home isolation — use the real ``HOME`` (and
-        thus its ambient ``~/.claude`` / ``~/.databrickscfg`` auth). Needed to
+        thus its ambient ``~/.claude`` / ``~/provider config`` auth). Needed to
         reach a real credentialed REPL, but **relaxes the safety guarantee**:
         non-help commands will then write ``cli-*.log`` into the real
         ``~/.goalrail/logs`` (the broadened fingerprint catches this).

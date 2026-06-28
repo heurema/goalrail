@@ -2,11 +2,8 @@
 Tests for ``_build_cursor_spawn_env`` in ``goalrail/runtime/workflow.py``.
 
 The spawn-env builder maps ``spec`` fields to the ``HARNESS_CURSOR_*`` env
-vars the cursor harness wrap reads at first-turn time. Unlike the
-gateway-backed builders, cursor has NO Databricks-gateway path: only an
-explicit ``api_key`` auth maps to ``HARNESS_CURSOR_API_KEY``, and a
-``DatabricksAuth`` profile is deliberately ignored (cursor-agent talks only
-to Cursor's own backend). Mirrors ``test_openai_agents_sdk_spawn_env.py``.
+vars the cursor harness wrap reads at first-turn time. Cursor only accepts an
+explicit ``api_key`` auth, a stored cursor key, or ambient cursor credentials.
 
 This is a unit test — no subprocess spawn. End-to-end verification of the
 spawn-env → wrap → executor path lives in the harness e2e tests.
@@ -23,7 +20,6 @@ from goalrail.runtime.workflow import _build_cursor_spawn_env
 from goalrail.spec.types import (
     AgentSpec,
     ApiKeyAuth,
-    DatabricksAuth,
     ExecutorSpec,
     LLMConfig,
 )
@@ -33,7 +29,7 @@ from goalrail.spec.types import (
 def _isolate_global_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Point GOALRAIL_CONFIG_HOME at an empty temp dir so the developer's real
     ``~/.goalrail/config.yaml`` can't leak in, and clear any ambient
-    ``CURSOR_API_KEY`` so the no-auth / DatabricksAuth cases are deterministic
+    ``CURSOR_API_KEY`` so the no-auth cases are deterministic
     (the builder falls back to an ambient key — see the ambient-fallback test)."""
     monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(tmp_path))
     monkeypatch.delenv("CURSOR_API_KEY", raising=False)
@@ -43,7 +39,7 @@ def _make_spec(
     *,
     model: str | None = "gpt-5",
     name: str = "test-cursor",
-    auth: ApiKeyAuth | DatabricksAuth | None = None,
+    auth: ApiKeyAuth | None = None,
 ) -> AgentSpec:
     """Build a minimal cursor :class:`AgentSpec` for the spawn-env tests."""
     config: dict[str, object] = {"harness": "cursor"}
@@ -74,17 +70,6 @@ def test_api_key_auth_sets_api_key_env_var() -> None:
     """``executor.auth: {type: api_key, ...}`` sets ``HARNESS_CURSOR_API_KEY``."""
     env = _build_cursor_spawn_env(_make_spec(auth=ApiKeyAuth(api_key="cur_test_123")))
     assert env["HARNESS_CURSOR_API_KEY"] == "cur_test_123"
-
-
-def test_databricks_auth_does_not_set_api_key() -> None:
-    """A ``DatabricksAuth`` profile has no cursor equivalent and is ignored.
-
-    Failure means a Databricks profile is mis-forwarded as a Cursor API key —
-    cursor-agent has no gateway path, so the only correct behaviour is to leave
-    auth to an inherited ``CURSOR_API_KEY`` / ``cursor-agent login``.
-    """
-    env = _build_cursor_spawn_env(_make_spec(auth=DatabricksAuth(profile="oss")))
-    assert "HARNESS_CURSOR_API_KEY" not in env
 
 
 def test_no_auth_omits_api_key_env_var() -> None:
@@ -203,21 +188,6 @@ def test_spec_api_key_auth_wins_over_stored_key(
     _write_cursor_config(tmp_path, "env:CURSOR_KEY_SRC")
     env = _build_cursor_spawn_env(_make_spec(auth=ApiKeyAuth(api_key="crsr_explicit_999")))
     assert env["HARNESS_CURSOR_API_KEY"] == "crsr_explicit_999"
-
-
-def test_databricks_auth_does_not_adopt_stored_cursor_key(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """An explicit ``DatabricksAuth`` never adopts the stored cursor key.
-
-    The stored-key fallback applies ONLY to a spec with no auth at all; a
-    databricks-routed spec has explicitly chosen a non-cursor credential, so
-    pulling the cursor key would mis-authenticate the run.
-    """
-    monkeypatch.setenv("CURSOR_KEY_SRC", "crsr_stored_123")
-    _write_cursor_config(tmp_path, "env:CURSOR_KEY_SRC")
-    env = _build_cursor_spawn_env(_make_spec(auth=DatabricksAuth(profile="oss")))
-    assert "HARNESS_CURSOR_API_KEY" not in env
 
 
 def test_empty_stored_env_key_is_omitted(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

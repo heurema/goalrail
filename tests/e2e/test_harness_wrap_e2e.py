@@ -14,9 +14,9 @@ deterministic prompt, and verify the full round-trip works:
   :mod:`goalrail.inner.codex_harness`).
 - Reads its ``HARNESS_<HARNESS>_*`` env vars (per-spawn, per
   harness contract step 5a).
-- Constructs a real inner Executor configured for the Databricks
-  gateway against the user's profile.
-- Routes the turn through the wrapped SDK + Databricks gateway.
+- Constructs a real inner Executor configured for an OpenAI-compatible
+  gateway.
+- Routes the turn through the wrapped SDK + gateway.
 - Streams ``response.output_text.delta`` events back.
 - Closes with ``response.completed``.
 
@@ -31,12 +31,12 @@ stream directly as the HTTP response (no separate subscribe
 hop, unlike the AP-level :mod:`goalrail.runtime.session_stream`
 pub-sub).
 
-Gated on ``--profile`` (the existing tests/conftest.py option).
-Without it, the tests skip. Run with::
+Gated on ``GOALRAIL_E2E_OPENAI_BASE_URL`` plus ``--llm-api-key``.
+Without them, the tests skip. Run with::
 
     .venv/bin/python -m pytest \\
         tests/e2e/test_harness_wrap_e2e.py \\
-        --profile test-profile -v
+        --llm-api-key "$OPENAI_API_KEY" -v
 
 Each harness's params are parametrized so the test ID surfaces
 the harness in the test name (``[claude-sdk]`` / ``[codex]``)
@@ -66,18 +66,19 @@ from tests.e2e._harness_probes import (
 
 
 @pytest.fixture
-def databricks_profile(request: pytest.FixtureRequest) -> str:
+def harness_gateway(
+    gateway_base_url: str | None,
+    llm_api_key: str,
+) -> tuple[str, str]:
     """
-    Return the ``--profile`` CLI arg, or skip if not provided.
+    Return the gateway base URL and API key for direct harness-wrap smoke tests.
 
-    Each harness wrap needs a real Databricks profile to route
-    its inner executor through the gateway. Without one, there's
-    no LLM backend, so the test is meaningless.
+    Each harness wrap needs a real backend. Without a gateway URL the direct
+    scaffold smoke is skipped; AP-level e2e tests cover direct provider env.
     """
-    profile: str = request.config.getoption("--profile")
-    if not profile:
-        pytest.skip("harness wrap e2e requires --profile <name> (e.g. --profile test-profile)")
-    return profile
+    if gateway_base_url is None:
+        pytest.skip("harness wrap e2e requires GOALRAIL_E2E_OPENAI_BASE_URL")
+    return gateway_base_url, llm_api_key
 
 
 @pytest.fixture
@@ -152,7 +153,7 @@ async def _consume_sse(
 @pytest.mark.parametrize("probe", HARNESS_PROBES, ids=HARNESS_IDS)
 async def test_harness_wrap_real_llm_smoke(
     probe: HarnessProbe,
-    databricks_profile: str,
+    harness_gateway: tuple[str, str],
     short_tmp_parent: Path,
 ) -> None:
     """End-to-end: real LLM via each harness wrap returns text.
@@ -160,11 +161,12 @@ async def test_harness_wrap_real_llm_smoke(
     Verifies the full path for the parametrized harness:
     - HarnessProcessManager spawns the runner subprocess with
       per-spawn env (``HARNESS_<HARNESS>_GATEWAY=true``,
-      ``HARNESS_<HARNESS>_DATABRICKS_PROFILE=<profile>``,
+      ``HARNESS_<HARNESS>_GATEWAY_BASE_URL=<url>``,
+      ``HARNESS_<HARNESS>_GATEWAY_AUTH_COMMAND=<cmd>``,
       ``HARNESS_<HARNESS>_MODEL=<model>``).
     - The runner imports the wrap module and calls ``create_app``.
     - ``create_app`` constructs a real inner Executor configured
-      for the Databricks gateway.
+      for the gateway.
     - ``POST /v1/sessions/{conv}/events`` with a ``message`` event
       streams ``response.output_text.delta`` events back.
     - The stream closes with ``response.completed``.
@@ -178,6 +180,7 @@ async def test_harness_wrap_real_llm_smoke(
     assertion message.
     """
     skip_if_harness_cli_missing(probe.harness)
+    gateway_base_url, llm_api_key = harness_gateway
     conv_id = "conv_e2e"
     pm = HarnessProcessManager(tmp_parent=short_tmp_parent)
     await pm.start()
@@ -186,12 +189,16 @@ async def test_harness_wrap_real_llm_smoke(
             conv_id,
             probe.harness,
             env={
-                # Enable-flag for the gateway transport. claude-sdk / codex /
-                # pi read it; openai-agents and the supervisor have no flag and
-                # ignore it (they route via the Databricks profile alone).
+                # Enable-flag for the gateway transport. Harnesses that don't
+                # need the flag ignore it.
                 f"{probe.env_prefix}GATEWAY": "true",
-                f"{probe.env_prefix}DATABRICKS_PROFILE": databricks_profile,
+                f"{probe.env_prefix}GATEWAY_BASE_URL": gateway_base_url,
+                f"{probe.env_prefix}GATEWAY_AUTH_COMMAND": (
+                    "python -c 'import os; print(os.environ[\"GOALRAIL_E2E_LLM_API_KEY\"])'"
+                ),
+                f"{probe.env_prefix}API_KEY": llm_api_key,
                 f"{probe.env_prefix}MODEL": probe.model,
+                "GOALRAIL_E2E_LLM_API_KEY": llm_api_key,
             },
         )
 
@@ -261,7 +268,7 @@ async def test_harness_wrap_real_llm_smoke(
             f"All event types: {event_types}"
         )
         # The marker proves the full path: client → harness
-        # subprocess → inner Executor → Databricks gateway →
+        # subprocess → inner Executor → gateway →
         # model → SDK events → adapter → scaffold SSE → us. If
         # the marker is missing, surface the full text so a
         # flake is debuggable.

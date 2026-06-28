@@ -24,12 +24,12 @@ from goalrail.model_override import (
 @pytest.mark.parametrize(
     "value",
     [
-        "databricks-claude-sonnet-4-6",
+        "anthropic/claude-sonnet-4-6",
         "claude-opus-4-8[1m]",
         "gpt-5.4-mini",
         "openai/gpt-4o",
         "us.anthropic.claude-sonnet-4-6",
-        "databricks/databricks-gpt-5-4",
+        "gateway/openai/gpt-5-4",
         "vendor:tag",
         "o3",
     ],
@@ -132,31 +132,31 @@ class TestModelFamilyMismatch:
     @pytest.mark.parametrize(
         ("harness", "model"),
         [
-            ("claude-native", "databricks-claude-sonnet-4-6"),
+            ("claude-native", "anthropic/claude-sonnet-4-6"),
             ("claude-sdk", "claude-opus-4-8"),
-            ("codex-native", "databricks-gpt-5-4"),
+            ("codex-native", "openai/gpt-5-4"),
             ("codex", "gpt-5.1-codex"),
             ("openai-agents", "gpt-5.4-mini"),
             # openai-agents is multi-model like pi (a live SDK probe completed a
             # Claude tool-calling turn over the chat wire), so it accepts the
-            # Claude / Kimi / Llama families the gateway also serves it.
-            ("openai-agents", "databricks-claude-sonnet-4-6"),
-            ("openai-agents", "databricks-kimi-k2-6"),
-            ("openai-agents", "databricks-meta-llama-3.3-70b-instruct"),
+            # Claude / Kimi / Llama families a gateway may serve it.
+            ("openai-agents", "anthropic/claude-sonnet-4-6"),
+            ("openai-agents", "kimi-k2-6"),
+            ("openai-agents", "meta-llama-3.3-70b-instruct"),
             # The "-sdk" / executor-type spellings canonicalize_harness
             # passes through must be multi-model too — an earlier change had
             # added them to the GPT-only set; a later change removes every
             # openai-agents spelling so none of them family-reject a non-GPT id.
-            ("openai-agents-sdk", "databricks-claude-sonnet-4-6"),
+            ("openai-agents-sdk", "anthropic/claude-sonnet-4-6"),
             ("openai-agents-sdk", "gpt-5.4-mini"),
-            ("agents_sdk", "databricks-meta-llama-3.3-70b-instruct"),
-            ("agents_sdk", "databricks-claude-opus-4-8"),
-            ("pi", "databricks-claude-opus-4-8"),
-            ("pi", "databricks-gpt-5-4-mini"),
-            ("pi", "databricks-meta-llama-3.3-70b-instruct"),
+            ("agents_sdk", "meta-llama-3.3-70b-instruct"),
+            ("agents_sdk", "anthropic/claude-opus-4-8"),
+            ("pi", "anthropic/claude-opus-4-8"),
+            ("pi", "openai/gpt-5-4-mini"),
+            ("pi", "meta-llama-3.3-70b-instruct"),
             # antigravity is Gemini-native: expected Gemini shapes pass, and
             # so do bare/ambiguous ids the SDK legitimately accepts (only the
-            # Claude/GPT/databricks-gateway families are rejected below).
+            # Claude/GPT families are rejected below).
             ("antigravity", "gemini-3.5-flash"),
             ("antigravity", "gemini-2.5-flash"),
             ("agy", "gemini-3.5-flash"),
@@ -173,22 +173,21 @@ class TestModelFamilyMismatch:
     @pytest.mark.parametrize(
         ("harness", "model", "expected_rule"),
         [
-            ("claude-native", "databricks-gpt-5-4", "only runs Claude models"),
+            ("claude-native", "openai/gpt-5-4", "only runs Claude models"),
             ("native-claude", "gpt-5.4", "only runs Claude models"),
-            ("claude-sdk", "databricks-meta-llama-3.3-70b-instruct", "only runs Claude models"),
-            ("codex-native", "databricks-claude-sonnet-4-6", "only runs GPT models"),
+            ("claude-sdk", "meta-llama-3.3-70b-instruct", "only runs Claude models"),
+            ("codex-native", "anthropic/claude-sonnet-4-6", "only runs GPT models"),
             ("native-codex", "claude-opus-4-8", "only runs GPT models"),
-            ("codex", "databricks-meta-llama-3.3-70b-instruct", "only runs GPT models"),
+            ("codex", "meta-llama-3.3-70b-instruct", "only runs GPT models"),
             # antigravity is Gemini-native: syntactically valid non-Gemini ids
             # must fail loud at the dispatch gate rather than be persisted as
             # model_override and land in HARNESS_ANTIGRAVITY_MODEL only to fail
-            # later in the Gemini-native SDK path. The databricks-claude case
-            # also covers the no-gateway-path prefix rejection.
+            # later in the Gemini-native SDK path.
             ("antigravity", "gpt-5.4-mini", "Gemini-native"),
-            ("antigravity", "databricks-claude-sonnet-4-6", "Gemini-native"),
+            ("antigravity", "anthropic/claude-sonnet-4-6", "Gemini-native"),
             ("antigravity", "claude-opus-4-8", "Gemini-native"),
             ("agy", "gpt-5.4-mini", "Gemini-native"),
-            ("google-antigravity", "databricks-gpt-5-4", "Gemini-native"),
+            ("google-antigravity", "openai/gpt-5-4", "Gemini-native"),
         ],
     )
     def test_wrong_or_unknown_family_is_rejected(
@@ -210,8 +209,8 @@ class TestModelFamilyMismatch:
 
     def test_rejection_names_both_multi_model_fallbacks(self) -> None:
         """Both single-vendor rejections name pi and openai-agents as multi-model fallbacks."""
-        claude_msg = model_family_mismatch("claude-native", "databricks-gpt-5-4")
-        codex_msg = model_family_mismatch("codex-native", "databricks-claude-sonnet-4-6")
+        claude_msg = model_family_mismatch("claude-native", "openai/gpt-5-4")
+        codex_msg = model_family_mismatch("codex-native", "anthropic/claude-sonnet-4-6")
         for msg in (claude_msg, codex_msg):
             assert msg is not None
             assert "pi" in msg
@@ -219,76 +218,24 @@ class TestModelFamilyMismatch:
 
 
 @pytest.mark.parametrize(
-    ("model", "expected"),
+    "model",
     [
-        # Bare canonical vendor ids gain the gateway prefix mechanically.
-        ("claude-opus-4-8", "databricks-claude-opus-4-8"),
-        ("claude-sonnet-4-6", "databricks-claude-sonnet-4-6"),
-        ("gpt-5-4", "databricks-gpt-5-4"),
-        ("gpt-5.4-mini", "databricks-gpt-5.4-mini"),
-        # Already gateway-local: no double prefix.
-        ("databricks-claude-opus-4-8", "databricks-claude-opus-4-8"),
-        # Non-mechanical shapes pass through to the fail-loud path:
-        # vendor-prefixed, slash-routed, alias-bracketed, other-family.
-        ("us.anthropic.claude-sonnet-4-6", "us.anthropic.claude-sonnet-4-6"),
-        ("openai/gpt-4o", "openai/gpt-4o"),
-        ("claude-opus-4-8[1m]", "claude-opus-4-8[1m]"),
-        ("kimi-k2.6", "kimi-k2.6"),
+        "claude-opus-4-8",
+        "gpt-5-4",
+        "anthropic/claude-opus-4-8",
+        "openai/gpt-4o",
+        "us.anthropic.claude-sonnet-4-6",
+        "claude-opus-4-8[1m]",
+        "kimi-k2.6",
+        "meta-llama-3.3-70b-instruct",
     ],
 )
-def test_normalize_localizes_canonical_ids_for_gateway_children(model: str, expected: str) -> None:
-    """
-    A Databricks-gateway child localizes bare canonical claude/gpt ids.
-
-    A missed prefix means the child spawns on an id the gateway cannot
-    route; a wrongly-added prefix on a non-mechanical shape would
-    fabricate an endpoint name that does not exist.
-    """
-    assert normalize_model_for_provider(model, "databricks") == expected
-
-
-@pytest.mark.parametrize("provider_kind", ["key", "subscription"])
-@pytest.mark.parametrize(
-    ("model", "expected"),
-    [
-        # Gateway-local ids lose the prefix for vendor-direct children.
-        ("databricks-claude-opus-4-8", "claude-opus-4-8"),
-        ("databricks-gpt-5-4", "gpt-5-4"),
-        # The stripped remainder must itself be a mechanical claude/gpt
-        # id — other families have no canonical vendor counterpart.
-        ("databricks-meta-llama-3.3-70b-instruct", "databricks-meta-llama-3.3-70b-instruct"),
-        # Already canonical: unchanged.
-        ("claude-sonnet-4-6", "claude-sonnet-4-6"),
-    ],
-)
-def test_normalize_strips_gateway_prefix_for_vendor_direct_children(
-    provider_kind: str, model: str, expected: str
-) -> None:
-    """
-    Vendor-direct children (API key / CLI login) drop the gateway prefix.
-
-    A kept prefix means the vendor API rejects the id; stripping a
-    non-claude/gpt remainder would fabricate a vendor id that does not
-    exist.
-
-    :param provider_kind: The vendor-direct provider kind under test.
-    :param model: The requested model id.
-    :param expected: The id that must be persisted.
-    """
-    assert normalize_model_for_provider(model, provider_kind) == expected
-
-
-@pytest.mark.parametrize("provider_kind", ["gateway", "local", "none", None])
-@pytest.mark.parametrize("model", ["claude-opus-4-8", "databricks-gpt-5-4", "openai/gpt-4o"])
-def test_normalize_passes_through_for_unmapped_provider_kinds(
+@pytest.mark.parametrize("provider_kind", ["key", "subscription", "gateway", "local", None])
+def test_normalize_model_for_provider_preserves_model_ids(
     provider_kind: str | None, model: str
 ) -> None:
     """
-    Non-vendor-direct gateways and undeterminable providers never transform.
-
-    OpenRouter/LiteLLM-style endpoints use their own id namespaces
-    (``anthropic/claude-...``), so no transform is mechanical there; an
-    undeterminable provider must keep the fail-loud path intact.
+    Provider-specific aliases are no longer supported.
 
     :param provider_kind: The provider kind under test.
     :param model: The requested model id.
@@ -297,36 +244,24 @@ def test_normalize_passes_through_for_unmapped_provider_kinds(
 
 
 @pytest.mark.parametrize(
-    ("model", "expected"),
+    "model",
     [
-        # Mechanical gateway counterparts strip to the canonical id.
-        ("databricks-claude-haiku-4-5", "claude-haiku-4-5"),
-        ("databricks-gpt-5-4-mini", "gpt-5-4-mini"),
-        # Already canonical: unchanged.
-        ("claude-haiku-4-5", "claude-haiku-4-5"),
-        # Non-claude/gpt remainders have no mechanical counterpart —
-        # stripping would fabricate a vendor id that does not exist.
-        ("databricks-meta-llama-3.3-70b-instruct", "databricks-meta-llama-3.3-70b-instruct"),
-        # Bracket/slash/dotted shapes are not mechanical either.
-        ("databricks-claude-opus-4-8[1m]", "databricks-claude-opus-4-8[1m]"),
-        ("openai/gpt-4o", "openai/gpt-4o"),
-        ("us.anthropic.claude-sonnet-4-6", "us.anthropic.claude-sonnet-4-6"),
+        "anthropic/claude-haiku-4-5",
+        "openai/gpt-5-4-mini",
+        "claude-haiku-4-5",
+        "meta-llama-3.3-70b-instruct",
+        "anthropic/claude-opus-4-8[1m]",
+        "openai/gpt-4o",
+        "us.anthropic.claude-sonnet-4-6",
     ],
 )
-def test_canonical_model_spelling(model: str, expected: str) -> None:
+def test_canonical_model_spelling_preserves_model_ids(model: str) -> None:
     """
-    The canonicalizer strips exactly the mechanical ``databricks-``
-    prefix and nothing else.
-
-    This is the single spelling-equivalence rule shared by dispatch
-    normalization and cost-tier ranking; an over-eager strip here would
-    conflate distinct ids, a missed strip would re-open the cost_plan
-    false-deny on mixed-fleet tier catalogs.
+    The canonicalizer is now an identity function.
 
     :param model: The id to canonicalize.
-    :param expected: The canonical spelling.
     """
-    assert canonical_model_spelling(model) == expected
+    assert canonical_model_spelling(model) == model
 
 
 @pytest.mark.parametrize(
@@ -339,19 +274,15 @@ def test_canonical_model_spelling(model: str, expected: str) -> None:
         ("codex-native", "gpt-5-4"),
     ],
 )
-def test_family_tokens_survive_normalization_in_both_directions(harness: str, model: str) -> None:
+def test_family_tokens_survive_identity_normalization(harness: str, model: str) -> None:
     """
     Guard-then-normalize ordering cannot change the family verdict.
 
     The dispatch gate documents family-guard-first (so errors quote the
-    caller's exact id); this pins the property that makes the order
-    safe: a compatible id stays compatible after localization, and the
-    localized id round-trips back to a compatible id when stripped.
+    caller's exact id); this pins the identity-normalization property that
+    keeps the order safe.
     """
-    localized = normalize_model_for_provider(model, "databricks")
-    assert localized == f"databricks-{model}"
-    # Compatible before AND after localization.
+    normalized = normalize_model_for_provider(model, "gateway")
+    assert normalized == model
     assert model_family_mismatch(harness, model) is None
-    assert model_family_mismatch(harness, localized) is None
-    # The strip direction round-trips to the original canonical id.
-    assert normalize_model_for_provider(localized, "key") == model
+    assert model_family_mismatch(harness, normalized) is None

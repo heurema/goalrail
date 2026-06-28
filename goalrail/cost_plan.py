@@ -110,7 +110,7 @@ class AdvisorVerdict:
         :data:`TIER_ORDER`, e.g. ``"expensive"``.
     :param model: The concrete brain model the judge chose from
         ``tier``'s configured list, e.g.
-        ``"databricks-claude-opus-4-8"``.
+        ``"anthropic/claude-opus-4-8"``.
     :param applied: ``True`` when the brain ran on :attr:`model` this
         turn (optimize mode, no user pin); ``False`` when the verdict was
         recorded but not applied (advise mode, or a user model pin won).
@@ -146,7 +146,7 @@ def verdict_to_label_value(verdict: AdvisorVerdict) -> str:
 
     :param verdict: The verdict to serialize.
     :returns: Compact JSON, e.g. ``'{"applied":true,"model":
-        "databricks-claude-opus-4-8","rationale":"...","tier":
+        "anthropic/claude-opus-4-8","rationale":"...","tier":
         "expensive","turn_anchor":"...","version":3}'``, at most
         :data:`_LABEL_VALUE_MAX_LEN` characters.
     """
@@ -238,6 +238,6 @@ def describe_verdict(verdict: AdvisorVerdict) -> str:
 
     :param verdict: The verdict to describe.
     :returns: Summary text, e.g.
-        ``"databricks-claude-opus-4-8 (expensive)"``.
+        ``"anthropic/claude-opus-4-8 (expensive)"``.
     """
     return f"{verdict.model} ({verdict.tier})"

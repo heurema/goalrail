@@ -13,7 +13,7 @@ but never ran ``goalrail setup`` to install it" case.
 
 In-process SDK harnesses (``claude-sdk``, ``openai-agents``) run without
 any CLI and resolve their model credentials at runtime from sources the
-daemon cannot enumerate — environment API keys, a Databricks profile /
+daemon cannot enumerate — environment API keys, provider config /
 gateway, or the spec's ``executor.auth`` with ``${ENV}`` expansion. The
 daemon has no way to know whether those will resolve, so it never gates
 them (a genuine auth failure surfaces at the first turn via the

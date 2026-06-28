@@ -183,7 +183,7 @@ def test_build_resolves_model_override_then_spec(
 spec_version: 1
 name: model-resolve
 llm:
-  model: databricks-claude-opus-4-8
+  model: anthropic/claude-opus-4-8
 guardrails:
   policies:
     a:
@@ -200,7 +200,7 @@ guardrails:
         conversation_id=conv.id,
         conversation_store=conversation_store,
     )
-    assert engine.model == "databricks-claude-opus-4-8"
+    assert engine.model == "anthropic/claude-opus-4-8"
     # A mid-session /model change sets model_override, which now wins.
     conversation_store.update_conversation(conv.id, model_override="claude-sonnet-4-6")
     engine_after = build_policy_engine(

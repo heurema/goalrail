@@ -534,11 +534,10 @@ const workspaceInvalidationTimers = new Map<string, ReturnType<typeof setTimeout
 const FLASH_DURATION_MS = 800;
 const WORKSPACE_INVALIDATION_DEBOUNCE_MS = 750;
 
-// Reconnect backoff for the session SSE stream. Databricks Apps' ingress
-// hard-caps a single HTTP/2 stream at ~5 min, so the client must re-subscribe
-// when it's dropped. Backoff applies only between consecutive failed opens
-// (see nextReconnectDelay); a drop after a healthy connection reconnects
-// instantly.
+// Reconnect backoff for the session SSE stream. Some proxies hard-cap
+// long-lived streams, so the client must re-subscribe when a stream is
+// dropped. Backoff applies only between consecutive failed opens (see
+// nextReconnectDelay); a drop after a healthy connection reconnects instantly.
 const STREAM_RECONNECT_BASE_MS = 250;
 const STREAM_RECONNECT_MAX_MS = 5_000;
 
@@ -2428,9 +2427,8 @@ if (typeof document !== "undefined") {
  * reconnecting transparently across drops.
  *
  * One connection at a time: open `/stream`, pump it via
- * `pumpStreamEvents`, and on a `"dropped"` end (the Databricks Apps ingress
- * recycling the long-lived HTTP/2 stream at its ~5-min cap, or any
- * connection break) re-subscribe after a jittered backoff. Stops only on
+ * `pumpStreamEvents`, and on a `"dropped"` end (a proxy recycling the
+ * long-lived stream, or any connection break) re-subscribe after a jittered backoff. Stops only on
  * intentional teardown (`"aborted"` — switchTo / unmount), a conversation
  * switch (`"switched"`), a deliberate server close (`"server_closed"` —
  * the `[DONE]` sentinel), or a permanent open failure (401/403/404).
@@ -2636,7 +2634,7 @@ export type StreamEndReason = "aborted" | "switched" | "server_closed" | "droppe
  *     changed mid-pump), ``"server_closed"`` (the server's ``[DONE]``
  *     sentinel — a deliberate close, don't reconnect), or ``"dropped"``
  *     (the byte stream ended or threw without ``[DONE]`` — a transport
- *     drop such as the Databricks Apps ~5-min stream cap, reconnect).
+ *     drop, reconnect).
  *     This function deliberately does NOT mark the session failed or
  *     clear `abortController`; the loop owns lifecycle so a transient
  *     drop doesn't flash a failure or trigger a redundant rebind.

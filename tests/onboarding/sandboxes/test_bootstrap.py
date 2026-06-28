@@ -2,17 +2,13 @@
 
 from __future__ import annotations
 
-import shlex
 import subprocess
-import threading
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
 import click
-import httpx
 import pytest
 
 from goalrail.onboarding.sandboxes import bootstrap as bootstrap_mod
@@ -24,14 +20,12 @@ from goalrail.onboarding.sandboxes.base import (
 )
 from goalrail.onboarding.sandboxes.bootstrap import (
     DEFAULT_SANDBOX_NAME,
-    DerivedWorkspace,
     _extract_oauth_url,
     _loopback_port_from_authorize_url,
     _read_login_url,
     bootstrap_sandbox_host,
     build_wheels,
     connect_sandbox_host,
-    derive_workspace,
     login_app_oauth_in_sandbox,
     ship_wheels,
 )
@@ -212,8 +206,8 @@ class _NoForwardLauncher(_FakeLauncher):
 # ── OAuth URL/port parsing helpers ──────────────────────────
 
 _AUTHORIZE_URL = (
-    "https://example.databricks.com/oidc/v1/authorize?"
-    "client_id=databricks-cli&code_challenge=Wl9sLW4&code_challenge_method=S256&"
+    "https://auth.example.com/oidc/v1/authorize?"
+    "client_id=goalrail-cli&code_challenge=Wl9sLW4&code_challenge_method=S256&"
     "redirect_uri=http%3A%2F%2Flocalhost%3A8022&response_type=code&"
     "scope=offline_access+all-apis&state=ITgOCJ"
 )
@@ -230,7 +224,7 @@ def test_extract_oauth_url_ignores_non_authorize_lines() -> None:
     assert _extract_oauth_url("Please continue in your browser:\r\n") is None
     # A different https URL without the authorize path must not match —
     # otherwise we'd forward against a port that isn't the callback.
-    assert _extract_oauth_url("https://example.databricks.com/login\r\n") is None
+    assert _extract_oauth_url("https://auth.example.com/login\r\n") is None
 
 
 def test_loopback_port_parsed_from_authorize_url() -> None:
@@ -242,7 +236,7 @@ def test_loopback_port_raises_when_redirect_uri_absent() -> None:
     """A URL missing redirect_uri must fail loud, not guess a port."""
     with pytest.raises(click.ClickException) as exc:
         _loopback_port_from_authorize_url(
-            "https://example.databricks.com/oidc/v1/authorize?client_id=databricks-cli"
+            "https://auth.example.com/oidc/v1/authorize?client_id=goalrail-cli"
         )
     assert "callback port" in str(exc.value)
 
@@ -262,8 +256,8 @@ def test_read_login_url_returns_none_when_no_url_printed() -> None:
     """
     A stream that ends without an authorize URL yields ``None`` — not
     an exception: ``goalrail login`` legitimately completes without a
-    browser step when a cached workspace grant verifies, and the
-    caller decides success vs. failure from the exit code.
+    browser step when a cached grant verifies, and the caller decides
+    success vs. failure from the exit code.
     """
     assert _read_login_url(["some output\r\n", "another line\r\n"]) is None
 
@@ -278,11 +272,9 @@ def test_login_skips_entirely_when_skip_flag() -> None:
         launcher,
         "sb-1",
         server_url="https://app.example.com",
-        workspace=DerivedWorkspace(host="https://ws.example.com", workspace_id="123456"),
         skip=True,
     )
-    # Any launcher interaction here means --no-auth didn't skip auth
-    # (a non-None workspace must not sneak the cfg-seed step past skip).
+    # Any launcher interaction here means --no-auth didn't skip auth.
     assert launcher.log == []
 
 
@@ -290,7 +282,7 @@ def test_login_requires_server_url_unless_skipped() -> None:
     """A missing server URL must fail loud, not invent a default."""
     launcher = _FakeLauncher()
     with pytest.raises(click.ClickException) as exc:
-        login_app_oauth_in_sandbox(launcher, "sb-1", server_url=None, workspace=None)
+        login_app_oauth_in_sandbox(launcher, "sb-1", server_url=None)
     # The remediation must name both the missing flag and the
     # --no-auth escape hatch.
     assert "--server" in str(exc.value)
@@ -325,18 +317,14 @@ def test_login_runs_in_sandbox_and_forwards_callback_port(
 
     monkeypatch.setattr(bootstrap_mod.webbrowser, "open", _fake_open)
 
-    # The CLI derives the workspace once per command and threads it
-    # down — the login itself performs no derivation (and no HTTP).
     login_app_oauth_in_sandbox(
         launcher,
         "sb-1",
         server_url="https://app.example.com",
-        workspace=DerivedWorkspace(host="https://ws.example.com", workspace_id="123456"),
     )
 
     # The login runs INSIDE the sandbox with a forced PTY — and it is
-    # `goalrail login <server>` (which infers the fronting workspace
-    # itself), NOT a raw `databricks auth login` with profile flags.
+    # `goalrail login <server>`, not a provider-specific auth command.
     assert launcher.stream_calls == [
         _StreamCall(
             command="goalrail login https://app.example.com",
@@ -353,37 +341,17 @@ def test_login_runs_in_sandbox_and_forwards_callback_port(
     assert opened_urls == [_AUTHORIZE_URL]
     # The login process was cleaned up after the flow.
     assert launcher.stream_processes[0].closed is True
-    # Exactly one remote pre-step: reset ~/.databrickscfg to a single
-    # credential-less [DEFAULT] entry shaped like what `databricks
-    # auth login` itself writes (host + auth_type + workspace_id).
-    # The baked PAT must go (it shadows the minted OAuth grant in
-    # host-keyed resolution and the Apps edge 302s it); a host entry
-    # must exist (`databricks auth login` stalls on an interactive
-    # profile-name prompt without one); auth_type = databricks-cli
-    # pins resolution to the CLI token cache so the minted grant is
-    # actually found ("no token resolves" otherwise).
-    expected_cfg_body = (
-        "[DEFAULT]\nhost = https://ws.example.com\n"
-        "auth_type = databricks-cli\nworkspace_id = 123456\n"
-    )
-    assert launcher.run_commands == [
-        f"rm -f ~/.databrickscfg && printf '%s' {shlex.quote(expected_cfg_body)} "
-        "> ~/.databrickscfg"
-    ]
-    # The seed lands before the login spawn (the login reads the cfg).
-    assert launcher.log.index(f"run:{launcher.run_commands[0]}") < launcher.log.index(
-        "stream:goalrail login https://app.example.com"
-    )
+    # No provider-specific credential pre-step runs before login.
+    assert launcher.run_commands == []
 
 
 def test_login_completes_without_browser_when_no_url_printed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
-    ``goalrail login`` reuses a cached workspace grant when one
-    verifies against the server — it then exits 0 without printing an
-    authorize URL. The flow must treat that as success: no port
-    forward, no browser, no error.
+    ``goalrail login`` can reuse a cached grant and exit 0 without
+    printing an authorize URL. The flow must treat that as success: no
+    port forward, no browser, no error.
     """
     launcher = _FakeLauncher(
         login_lines=["Logged in as user@example.com.\r\n"],
@@ -399,7 +367,6 @@ def test_login_completes_without_browser_when_no_url_printed(
         launcher,
         "sb-1",
         server_url="https://app.example.com",
-        workspace=DerivedWorkspace(host="https://ws.example.com", workspace_id="123456"),
     )
     # No callback forward was stood up — there is no redirect to bridge.
     assert launcher.forwarded_ports == []
@@ -407,164 +374,17 @@ def test_login_completes_without_browser_when_no_url_printed(
     assert launcher.stream_processes[0].closed is True
 
 
-def test_login_skips_cfg_seed_for_non_databricks_server() -> None:
-    """
-    Accounts / OIDC / header-auth servers are not Databricks-fronted
-    (the CLI's derivation returned ``None``, so it threads
-    ``workspace=None`` down): the sandbox's ~/.databrickscfg must be
-    left alone — wiping the baked credential would cost in-sandbox
-    workspace API access for zero auth benefit.
-    """
+def test_login_runs_without_provider_specific_pre_step() -> None:
+    """The sandbox login should not mutate provider-specific credential files."""
     launcher = _FakeLauncher(
         login_lines=["Logged in.\r\n"],
         login_returncode=0,
     )
-    login_app_oauth_in_sandbox(
-        launcher, "sb-1", server_url="https://oss.example.com", workspace=None
-    )
-    # No remote pre-step ran: the cfg was not touched.
+    login_app_oauth_in_sandbox(launcher, "sb-1", server_url="https://oss.example.com")
+    # No remote pre-step ran: provider credential files were not touched.
     assert launcher.run_commands == []
     # The in-sandbox login itself still ran.
     assert len(launcher.stream_calls) == 1
-
-
-def test_login_seed_omits_workspace_id_line_when_unknown() -> None:
-    """
-    When the workspace didn't reveal its org id (``workspace_id`` is
-    ``None``), the cfg seed must omit the ``workspace_id`` line while
-    keeping host + auth_type — writing ``workspace_id = None`` would
-    poison the profile, and dropping the whole seed would re-expose
-    the baked-PAT shadowing the seed exists to fix.
-    """
-    launcher = _FakeLauncher(
-        login_lines=["Logged in.\r\n"],
-        login_returncode=0,
-    )
-    login_app_oauth_in_sandbox(
-        launcher,
-        "sb-1",
-        server_url="https://app.example.com",
-        workspace=DerivedWorkspace(host="https://ws.example.com", workspace_id=None),
-    )
-    # Exactly one remote pre-step ran (the cfg seed) — zero would mean
-    # the missing org id wrongly disabled the seed entirely.
-    assert len(launcher.run_commands) == 1
-    seed_command = launcher.run_commands[0]
-    assert "host = https://ws.example.com" in seed_command
-    assert "auth_type = databricks-cli" in seed_command
-    # No workspace_id line in any form (the key name itself is absent).
-    assert "workspace_id" not in seed_command
-
-
-def test_derive_workspace_extracts_workspace_from_apps_redirect(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """
-    A Databricks Apps edge answers the unauthenticated probe with a
-    302 to the workspace OIDC authorize endpoint — the derived
-    coordinates must carry that workspace host (scheme + netloc only)
-    plus the org id read from the workspace itself.
-    """
-    response = httpx.Response(
-        302,
-        headers={"location": "https://ws.example.com/oidc/oauth2/v2.0/authorize?client_id=x"},
-    )
-    monkeypatch.setattr(bootstrap_mod, "_probe_server", lambda url: response)
-    org_probes: list[str] = []
-
-    def _fake_org_id(workspace_host: str) -> str:
-        """Record which host was probed and return a canned org id."""
-        org_probes.append(workspace_host)
-        return "654321"
-
-    monkeypatch.setattr(bootstrap_mod, "_workspace_org_id", _fake_org_id)
-    assert derive_workspace("https://myapp.example.com") == DerivedWorkspace(
-        host="https://ws.example.com", workspace_id="654321"
-    )
-    # The org-id probe must target the DERIVED workspace host, not the
-    # app server — the Apps edge doesn't stamp the workspace org id.
-    assert org_probes == ["https://ws.example.com"]
-
-
-def test_derive_workspace_none_when_server_unreachable(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """
-    An unreachable server yields ``None`` (no cfg seed) — the
-    in-sandbox login then surfaces the real connectivity error instead
-    of this pre-step guessing at one. The org-id probe must not run
-    either: there is no workspace host to probe.
-    """
-    monkeypatch.setattr(bootstrap_mod, "_probe_server", lambda url: None)
-
-    def _explode(workspace_host: str) -> str:
-        """Fail the test if the org-id probe runs without a host."""
-        raise AssertionError(f"org-id probe ran for unreachable server: {workspace_host}")
-
-    monkeypatch.setattr(bootstrap_mod, "_workspace_org_id", _explode)
-    assert derive_workspace("https://down.example.com") is None
-
-
-@contextmanager
-def _login_page_server(org_id_header: str | None) -> Iterator[str]:
-    """
-    Serve ``GET /login.html`` on an ephemeral loopback port, optionally
-    stamping the ``x-databricks-org-id`` response header — a real-socket
-    workspace stand-in so :func:`_workspace_org_id` (whose httpx.get
-    has no module-local indirection to patch) is tested over a real
-    HTTP round trip.
-
-    :param org_id_header: Header value to stamp, or ``None`` to omit
-        the header (the GA-workspace-misconfigured shape).
-    :yields: The server's base URL, e.g. ``"http://127.0.0.1:54321"``.
-    """
-
-    class _Handler(BaseHTTPRequestHandler):
-        """Minimal handler answering 200 with the optional org header."""
-
-        def do_GET(self) -> None:  # http.server API requires this name
-            """Answer 200, stamping x-databricks-org-id when configured."""
-            self.send_response(200)
-            if org_id_header is not None:
-                self.send_header("x-databricks-org-id", org_id_header)
-            self.send_header("content-length", "0")
-            self.end_headers()
-
-        def log_message(self, format: str, *args: Any) -> None:
-            """Silence per-request stderr logging."""
-
-    server = ThreadingHTTPServer(("127.0.0.1", 0), _Handler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    try:
-        yield f"http://127.0.0.1:{server.server_address[1]}"
-    finally:
-        server.shutdown()
-        thread.join()
-        server.server_close()
-
-
-@pytest.mark.parametrize(
-    ("org_id_header", "expected"),
-    [
-        # Header present → its value is the workspace id.
-        ("654321", "654321"),
-        # Header absent → None (cfg seed then omits workspace_id).
-        (None, None),
-    ],
-)
-def test_workspace_org_id_reads_header_from_login_page(
-    org_id_header: str | None, expected: str | None
-) -> None:
-    """
-    ``_workspace_org_id`` must return exactly the
-    ``x-databricks-org-id`` header from an unauthenticated GET of the
-    workspace's ``/login.html`` — and ``None`` when the workspace
-    doesn't stamp it. Exercised against a real loopback HTTP server
-    (no httpx patching), so a wrong path or header name fails here.
-    """
-    with _login_page_server(org_id_header) as workspace_host:
-        assert bootstrap_mod._workspace_org_id(workspace_host) == expected
 
 
 def test_login_raises_when_no_url_and_nonzero_exit(
@@ -582,9 +402,7 @@ def test_login_raises_when_no_url_and_nonzero_exit(
         login_returncode=1,
     )
     with pytest.raises(click.ClickException) as exc:
-        login_app_oauth_in_sandbox(
-            launcher, "sb-1", server_url="https://app.example.com", workspace=None
-        )
+        login_app_oauth_in_sandbox(launcher, "sb-1", server_url="https://app.example.com")
     assert "sb-1" in str(exc.value)
     assert "`goalrail login` inside sandbox 'sb-1' exited with code 1" in str(exc.value)
     assert launcher.stream_processes[0].closed is True
@@ -599,13 +417,8 @@ def test_login_raises_when_in_sandbox_login_fails(monkeypatch: pytest.MonkeyPatc
         login_returncode=1,
     )
     monkeypatch.setattr(bootstrap_mod.webbrowser, "open", lambda url: True)
-    # workspace=None: this test's subject is the nonzero-exit error
-    # path, not the cfg seed (None = no seed step, the non-Databricks
-    # shape).
     with pytest.raises(click.ClickException) as exc:
-        login_app_oauth_in_sandbox(
-            launcher, "sb-1", server_url="https://app.example.com", workspace=None
-        )
+        login_app_oauth_in_sandbox(launcher, "sb-1", server_url="https://app.example.com")
     assert "sb-1" in str(exc.value)
     # The failed login process must still be reaped on the error path.
     assert launcher.stream_processes[0].closed is True
@@ -624,11 +437,10 @@ def test_login_fails_fast_for_unforwardable_provider() -> None:
             launcher,
             "sb-1",
             server_url="https://app.example.com",
-            workspace=DerivedWorkspace(host="https://ws.example.com", workspace_id="123456"),
         )
     # The message must name the provider and explain the limitation.
     assert "no-forward" in str(exc.value)
-    assert "App auth" in str(exc.value)
+    assert "interactive auth" in str(exc.value)
     # Fail-fast: NOTHING ran against the sandbox (no login spawn).
     assert launcher.log == []
 
@@ -831,14 +643,11 @@ def _bootstrap_kwargs(tmp_path: Path) -> dict[str, Any]:
     Build the keyword arguments shared by the orchestrator tests.
 
     :param tmp_path: pytest tmp directory used for the wheel tarball path.
-    :returns: A ready-to-spread kwargs dict for ``bootstrap_sandbox_host``,
-        including the CLI-derived ``workspace`` the orchestrator must
-        thread down to the login step untouched.
+    :returns: A ready-to-spread kwargs dict for ``bootstrap_sandbox_host``.
     """
     return {
         "sandbox_name": DEFAULT_SANDBOX_NAME,
         "server_url": "https://app.example.com",
-        "workspace": DerivedWorkspace(host="https://ws.example.com", workspace_id="123456"),
         "repo_root": tmp_path,
         "skip_auth": False,
     }
@@ -864,10 +673,8 @@ def test_bootstrap_runs_steps_in_order_and_returns_provisioned_id(
         launcher.log.append(f"ship:{sid}")
 
     def _record_login(launcher_arg: Any, sid: str, **kwargs: Any) -> None:
-        """Record the login step, including the threaded workspace pin."""
-        launcher.log.append(
-            f"login:{sid}:{kwargs['server_url']}:{kwargs['workspace'].host}:{kwargs['skip']}"
-        )
+        """Record the login step."""
+        launcher.log.append(f"login:{sid}:{kwargs['server_url']}:{kwargs['skip']}")
 
     monkeypatch.setattr(bootstrap_mod, "build_wheels", _record_build)
     monkeypatch.setattr(bootstrap_mod, "ship_wheels", _record_ship)
@@ -879,17 +686,16 @@ def test_bootstrap_runs_steps_in_order_and_returns_provisioned_id(
     assert sid == "sb-new"
     # Auth happens INSIDE the sandbox, after the wheels are shipped.
     # build's pypi_proxy must come from the launcher (None for the
-    # fake) — a hardcoded proxy here would leak the lakebox-only index
-    # into every provider. The login entry carries the CLI-derived
-    # workspace host — a missing/None segment there means the
-    # orchestrator dropped the workspace pin on its way to the login.
+    # fake), so provider-specific package index wiring stays behind
+    # the launcher. The login entry proves server_url and skip_auth are
+    # threaded to the final step.
     assert launcher.log == [
         "prepare",
         f"provision:{DEFAULT_SANDBOX_NAME}",
         "keep_alive:sb-new",
         "build:None",
         "ship:sb-new",
-        "login:sb-new:https://app.example.com:https://ws.example.com:False",
+        "login:sb-new:https://app.example.com:False",
     ], f"Step order is contract. Got: {launcher.log}"
 
 
@@ -902,7 +708,7 @@ def test_bootstrap_fails_fast_without_forward_capability(tmp_path: Path) -> None
     launcher = _NoForwardLauncher()
     with pytest.raises(SandboxCapabilityError) as exc:
         bootstrap_sandbox_host(launcher, sandbox_id=None, **_bootstrap_kwargs(tmp_path))
-    assert "App auth" in str(exc.value)
+    assert "interactive auth" in str(exc.value)
     # Nothing ran: no prepare, no provision, no build/ship.
     assert launcher.log == []
 

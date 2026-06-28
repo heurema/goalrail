@@ -36,14 +36,10 @@ from goalrail.inner.codex_executor import (
     _clean_codex_env,
     _codex_cli_version,
     _codex_home_config_source_from_env,
-    _databricks_codex_auth_command,
-    _databricks_codex_base_url,
-    _databricks_codex_config_overrides,
     _find_codex_cli,
     _populate_codex_home_config,
     _provider_codex_config_overrides,
 )
-from goalrail.inner.databricks_executor import _read_databrickscfg, _read_databrickscfg_host
 
 _logger = logging.getLogger(__name__)
 
@@ -53,7 +49,6 @@ CodexParams = dict[str, Any]
 _CONNECT_RETRY_DELAY_SECONDS = 0.05
 _CONNECT_TIMEOUT_SECONDS = 10.0
 _STDERR_CHUNK_LIMIT = 65536
-_DATABRICKS_CODEX_DEFAULT_MODEL = "databricks-gpt-5-5"
 _UDS_WEBSOCKET_HANDSHAKE_URI = "ws://localhost/rpc"
 _MAX_WEBSOCKET_MESSAGE_SIZE_BYTES = 128 << 20
 # hooks.json filename written into the private CODEX_HOME registering the
@@ -189,8 +184,8 @@ def _pin_codex_config_model(codex_home: Path, model: str) -> None:
     session's launch model. The forwarder mirrors that file into
     ``model_override`` and the cost gate's hook reads it, so without this
     seed a per-dispatch model override is silently misreported (live-caught:
-    a child launched on ``databricks-gpt-5-4-mini`` was mirrored back as the
-    shared file's stale ``gpt-5.5``). An in-TUI ``/model`` later overwrites
+    a child launched on ``gpt-5.4-mini`` was mirrored back as the shared
+    file's stale ``gpt-5.5``). An in-TUI ``/model`` later overwrites
     the same line, so user switches still win.
 
     :param codex_home: Private per-session ``CODEX_HOME`` directory.
@@ -1079,8 +1074,7 @@ def build_codex_native_server(
     :param codex_home: Private per-session ``CODEX_HOME`` path.
     :param cwd: Working directory for Codex, e.g. the user's repo.
     :param model: Optional Codex model id, e.g. ``"gpt-5.4-mini"``.
-    :param profile: Optional Databricks CLI profile, e.g.
-        ``"<your-profile>"``.
+    :param profile: Deprecated compatibility field; ignored.
     :param bridge_dir: Native Codex bridge directory; the policy hook is
         pointed at it and reads the session id + Goalrail coordinates from it.
     :param ap_server_url: Goalrail server base URL the policy hook POSTs tool
@@ -1092,37 +1086,17 @@ def build_codex_native_server(
         runs. ``None`` uses :data:`sys.executable`.
     :param codex_path: Optional executable override. ``None`` searches
         ``PATH``.
-    :param extra_config_overrides: Additional ``-c`` config overrides
-        appended after Databricks routing overrides, e.g. MCP server
-        registration for the Goalrail tool relay.
+    :param extra_config_overrides: Additional ``-c`` config overrides, e.g.
+        MCP server registration for the Goalrail tool relay.
     :returns: Configured app-server process wrapper.
     :raises ImportError: If no Codex CLI is available.
-    :raises OSError: If Databricks routing was requested but no
-        credentials can be resolved.
     """
+    _ = profile
     resolved_codex = codex_path or _find_codex_cli()
     if not resolved_codex:
         raise ImportError("Native Codex requires the 'codex' CLI on PATH.")
     env = _clean_codex_env()
     config_overrides: list[str] = []
-    if profile is not None:
-        creds = _read_databrickscfg(profile)
-        host = creds.host if creds is not None else _read_databrickscfg_host(profile)
-        if not host:
-            raise OSError(
-                f"Native Codex with Databricks profile {profile!r} (from your "
-                "provider config) requires a matching ~/.databrickscfg section "
-                "with a host visible to the runner process."
-            )
-        host = host.rstrip("/")
-        config_overrides.extend(
-            _databricks_codex_config_overrides(
-                model=model or _DATABRICKS_CODEX_DEFAULT_MODEL,
-                base_url=_databricks_codex_base_url(host),
-                auth_command=_databricks_codex_auth_command(host, profile),
-            )
-        )
-        env["DATABRICKS_HOST"] = host
     if extra_config_overrides:
         config_overrides.extend(extra_config_overrides)
     return CodexNativeAppServer(
@@ -1149,11 +1123,9 @@ class NativeCodexLaunch:
 
     :param config_overrides: Codex ``-c`` overrides that route through a
         generic provider (``model_provider`` + base_url + auth + wire);
-        empty for the Databricks-profile and CLI-login paths.
+        empty for CLI-login paths.
     :param model: Model id to pin, or ``None`` to keep Codex's default.
-    :param profile: Databricks profile for the ucode path, or ``None`` (a
-        generic provider routes via *config_overrides*; CLI login uses
-        neither).
+    :param profile: Deprecated compatibility field; currently always ``None``.
     """
 
     config_overrides: list[str]
@@ -1175,23 +1147,18 @@ def codex_session_meta_model_provider(launch: NativeCodexLaunch) -> str:
     - a ``model_provider`` ``-c`` override (cli-config / key / gateway /
       local providers) pins it explicitly — the override value is a TOML
       basic string, which is also valid JSON;
-    - a Databricks profile launch carries no override here; the provider
-      table is generated at app-server start under the fixed
-      ``goalrail_databricks`` id (see ``_databricks_codex_config_overrides``);
     - otherwise the launch defers to Codex's own login, the built-in
       ``openai`` provider.
 
     :param launch: Resolved native-Codex launch, e.g. one returned by
         :func:`resolve_native_codex_launch`.
     :returns: Provider id for ``session_meta.model_provider``, e.g.
-        ``"goalrail_databricks"``.
+        ``"openai"``.
     """
     prefix = "model_provider="
     for override in launch.config_overrides:
         if override.startswith(prefix):
             return json.loads(override.removeprefix(prefix))
-    if launch.profile is not None:
-        return "goalrail_databricks"
     return "openai"
 
 
@@ -1200,9 +1167,6 @@ def _codex_provider_launch(entry: ProviderEntry, model: str | None) -> NativeCod
 
     Mirrors the in-process codex harness routing for the ``openai`` surface:
 
-    - a ``databricks`` entry routes via its ucode profile (the Databricks
-      branch of :func:`build_native_codex_app` turns the profile into config
-      overrides), so the launch carries ``profile`` and empty overrides;
     - a ``cli-config`` entry routes via a single ``model_provider`` ``-c``
       override pinning the custom provider its ``~/.codex/config.toml``
       defines (the provider table + credential live in that file, which the
@@ -1219,7 +1183,7 @@ def _codex_provider_launch(entry: ProviderEntry, model: str | None) -> NativeCod
     than crash at terminal launch or strand the user at Codex's login screen.
 
     :param entry: The provider entry to route through, e.g. a ``key`` entry for
-        ``openai`` or a ``databricks`` entry.
+        ``openai``.
     :param model: An explicit/session model override that wins over the
         provider's default model, e.g. ``"gpt-5.5"``; ``None`` keeps the
         provider's default.
@@ -1229,15 +1193,12 @@ def _codex_provider_launch(entry: ProviderEntry, model: str | None) -> NativeCod
     from goalrail.errors import GoalrailError
     from goalrail.onboarding.provider_config import (
         CLI_CONFIG_KIND,
-        DATABRICKS_KIND,
         GATEWAY_KIND,
         KEY_KIND,
         LOCAL_KIND,
         OPENAI_FAMILY,
     )
 
-    if entry.kind == DATABRICKS_KIND:
-        return NativeCodexLaunch(config_overrides=[], model=model, profile=entry.profile)
     if entry.kind == CLI_CONFIG_KIND:
         # Pin the config.toml-defined provider by name; its table (and
         # credential) ride along via the bridged config.toml. json.dumps
@@ -1283,8 +1244,8 @@ def _first_routable_codex_provider(
     Used when the resolved default is a ``subscription`` entry but Codex has no
     usable stored login: rather than strand the user at Codex's login screen,
     route through the first *other* provider serving the ``openai`` surface that
-    can produce a launch (a real key/gateway/local credential or a Databricks
-    profile). Explicit providers are tried before ambient detections — the
+    can produce a launch (a real key/gateway/local credential). Explicit
+    providers are tried before ambient detections — the
     user's config is authoritative — and ambient detections (e.g. a real
     ``OPENAI_API_KEY`` in the environment) are honored only as a fallback.
 
@@ -1354,8 +1315,8 @@ def _resolve_subscription_launch(
     from goalrail.onboarding.ambient import codex_auth_has_credential
 
     # Pin codex's built-in ``openai`` provider: the bridged config.toml may
-    # set a custom default ``model_provider`` (e.g. isaac's Databricks AI
-    # Gateway), which would silently hijack a Subscription selection. A
+    # set a custom default ``model_provider`` (e.g. a corporate gateway), which
+    # would silently hijack a Subscription selection. A
     # no-op when the user's config sets no custom default.
     subscription_overrides = ['model_provider="openai"']
     # Resolve against the same CODEX_HOME the native server bridges from
@@ -1392,19 +1353,17 @@ def resolve_native_codex_launch(*, model: str | None) -> NativeCodexLaunch:
     1. an explicit per-family default provider →
        - ``key`` / ``gateway`` / ``local`` → provider ``-c`` overrides
          (base_url + token + wire), ``profile=None``;
-       - ``databricks`` → the ucode profile path (its profile);
        - ``subscription`` → the Codex CLI's own stored login (no overrides)
          **when Codex is actually logged in**; otherwise (empty / logged-out
          ``auth.json``) fall through to the first other configured provider
          that can route, so a real credential is not shadowed by a dead
          subscription default;
-    2. else a global Databricks ``auth:`` block → ucode;
+    2. else a global ``auth:`` block;
     3. else an ambient-detected provider (first run without configure);
     4. else the codex CLI's own login.
 
     Credentials are controlled exclusively by ``goalrail setup``
-    provider config (or the legacy global ``auth:`` block) — there is
-    no CLI/env profile override.
+    provider config (or the global ``auth:`` block).
 
     :param model: An explicit/session model override that wins over the
         provider's default model, or ``None``.
@@ -1420,7 +1379,6 @@ def resolve_native_codex_launch(*, model: str | None) -> NativeCodexLaunch:
         load_config,
     )
     from goalrail.runtime.workflow import _load_global_auth
-    from goalrail.spec.types import DatabricksAuth
 
     explicit = load_config()
     # When the launch ends up on codex's own login with NO provider routing,
@@ -1436,8 +1394,6 @@ def resolve_native_codex_launch(*, model: str | None) -> NativeCodexLaunch:
         # No explicit provider default: global auth wins over ambient
         # (parity with _resolve_provider_for_build).
         global_auth = _load_global_auth()
-        if isinstance(global_auth, DatabricksAuth):
-            return NativeCodexLaunch(config_overrides=[], model=model, profile=global_auth.profile)
         if global_auth is not None:
             return NativeCodexLaunch(config_overrides=[], model=model, profile=None)
         entry = default_provider_for_harness(effective_config_with_detected(explicit), "codex")
@@ -1445,8 +1401,7 @@ def resolve_native_codex_launch(*, model: str | None) -> NativeCodexLaunch:
     if entry is None:
         _logger.info(
             "native-codex routing: Codex CLI login (no provider configured for the Codex "
-            "harness, no Databricks profile). Run `goalrail setup --no-internal-beta` to route "
-            "through a provider."
+            "harness). Run `goalrail setup --no-internal-beta` to route through a provider."
         )
         return NativeCodexLaunch(config_overrides=no_provider_overrides, model=model, profile=None)
     if entry.kind == SUBSCRIPTION_KIND:
@@ -1454,10 +1409,7 @@ def resolve_native_codex_launch(*, model: str | None) -> NativeCodexLaunch:
 
     launch = _codex_provider_launch(entry, model)
     if launch is not None:
-        if launch.profile is not None:
-            _logger.info("native-codex routing: Databricks ucode profile %r", launch.profile)
-        else:
-            _logger.info("native-codex routing: provider %r (model=%s)", entry.name, launch.model)
+        _logger.info("native-codex routing: provider %r (model=%s)", entry.name, launch.model)
         return launch
     # Default provider can't route on its own (no openai surface / no usable
     # credential / unresolvable secret) → Codex's own login.
@@ -1541,7 +1493,7 @@ def codex_terminal_env(app_server: CodexNativeAppServer) -> dict[str, str]:
     return {
         key: value
         for key, value in {**app_server.env, "CODEX_HOME": str(app_server.codex_home)}.items()
-        if key in {"CODEX_HOME", "DATABRICKS_HOST", "DATABRICKS_CODEX_TOKEN"}
+        if key in {"CODEX_HOME"}
         or key.startswith(("OPENAI_", "HTTP_", "HTTPS_", "NO_PROXY", "ALL_PROXY"))
     }
 
@@ -1589,8 +1541,7 @@ def build_codex_remote_args(
         ``"unix:///home/user/.goalrail/codex-native/x/app-server.sock"``
         or ``"ws://127.0.0.1:9876"``.
     :param config_overrides: Codex ``-c`` config override values to apply
-        to the TUI, e.g.
-        ``('model="databricks-gpt-5-5"', 'model_provider="goalrail_databricks"')``.
+        to the TUI, e.g. ``('model="gpt-5.4"', 'model_provider="openai"')``.
         Each is emitted as a ``-c <value>`` global flag. Empty for a
         plain Codex-login launch that needs no provider routing.
     :returns: Codex argv tail after the executable.

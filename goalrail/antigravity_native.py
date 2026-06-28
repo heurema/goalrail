@@ -449,7 +449,7 @@ def _run_with_remote_server(
     bridge.
 
     :param base_url: Remote Goalrail server base URL, e.g.
-        ``"https://example.databricks.com"``.
+        ``"https://goalrail.example.com"``.
     :param spec_path: Generated Antigravity wrapper agent spec.
     :param session_id: Optional existing Goalrail session id.
     :param resume_picker: When ``True`` and ``session_id is None``, run the

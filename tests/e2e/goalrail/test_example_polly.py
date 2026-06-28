@@ -40,11 +40,11 @@ def test_orchestrator_executor(polly_spec: AgentSpec) -> None:
     The orchestrator runs on claude-sdk with a 1M window and **no pinned
     model or profile**, so it inherits whatever Claude provider the user
     configured via ``goalrail setup --no-internal-beta`` (Anthropic key,
-    subscription, gateway, or Databricks) and resolves that provider's
+    subscription, gateway, or gateway) and resolves that provider's
     default Claude model.
 
-    Un-pinning is load-bearing for OSS (a Databricks-specific model id would
-    404 on a plain Anthropic key). The old ``databricks-gpt-5-4`` fallback
+    Un-pinning is load-bearing for OSS (a gateway-specific model id would
+    404 on a plain Anthropic key). The old ``openai/gpt-5-4`` fallback
     crash that a pin papered over is fixed at the root in
     ``chat.py`` ``_spec_declares_harness_or_model``, which recognizes the
     nested ``executor.config.harness`` and so never injects the ad-hoc
@@ -59,7 +59,7 @@ def test_orchestrator_executor(polly_spec: AgentSpec) -> None:
     ex = polly_spec.executor
     assert ex.config.get("harness") == "claude-sdk"
     # No model pin — the configured provider's default Claude model is used.
-    # Re-introducing a pin (Databricks or otherwise) fails here.
+    # Re-introducing a pin (or otherwise) fails here.
     assert ex.model is None
     # Profile is intentionally NOT pinned either.
     assert ex.profile is None

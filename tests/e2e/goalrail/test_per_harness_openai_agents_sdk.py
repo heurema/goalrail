@@ -97,8 +97,7 @@ def test_per_harness_openai_agents_sdk_one_shot(
     Uses the mock LLM server so the test runs without real API
     credentials. The openai-agents executor honors
     ``OPENAI_BASE_URL`` / ``OPENAI_API_KEY`` env vars directly
-    (populated by ``mock_credentials_env``) — no
-    ``~/.databrickscfg`` touch is required for this harness.
+    (populated by ``mock_credentials_env``).
 
     :param goalrail_python: Interpreter with goalrail +
         ``openai-agents`` installed.

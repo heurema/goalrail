@@ -53,7 +53,6 @@ from goalrail.cli import (
     _resolve_bundle_env_vars,
     _resolve_default_agent_target,
     _resolve_first_run_plan,
-    _run_configure_databricks,
     _save_global_config,
     _start_cli_runner_process,
     _warn_missing_harness_dependencies,
@@ -315,8 +314,8 @@ def test_claude_command_resume_binds_session_and_passes_unknown_args(
     assert captured["claude_args"] == ("--resume", "claude-session", "-p", "say hi")
     # No picker requested when ``--resume`` carries a value.
     assert captured["resume_picker"] is False
-    # Default: Databricks auth is active (``--use-native-config`` not set) —
-    # a True here means the configured provider would be silently skipped.
+    # Default: native Claude config is bypassed so Goalrail can apply its
+    # configured provider unless the user opts into native config explicitly.
     assert captured["use_claude_config"] is False
 
 
@@ -463,15 +462,15 @@ def test_claude_command_profile_startup_threads_profiler(
     assert startup_profiler.enabled is True
 
 
-def test_claude_command_use_native_config_bypasses_databricks_auth(
+def test_claude_command_use_native_config_bypasses_goalrail_provider(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
     ``--use-native-config`` sets ``use_claude_config=True`` in ``run_claude_native``.
 
-    Regression target: if the flag is dropped at the Click parsing
-    seam, ``use_claude_config`` stays ``False`` and Databricks/ucode
-    auth is injected even when the user explicitly opted out.
+    Regression target: if the flag is dropped at the Click parsing seam,
+    ``use_claude_config`` stays ``False`` and Goalrail provider settings are
+    applied even when the user explicitly opted out.
     """
     captured: dict[str, object] = {}
     monkeypatch.setattr("goalrail.cli._load_effective_config", dict)
@@ -1059,7 +1058,7 @@ def test_start_cli_runner_process_uses_token_bound_runner_id(
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     runner = _start_cli_runner_process(
-        server_url="https://example.databricksapps.com",
+        server_url="https://goalrail.example",
         workspace_cwd=workspace,
     )
 
@@ -1703,16 +1702,14 @@ def test_expand_config_expands_executor_auth_api_key(
     assert raw["executor"]["auth"]["type"] == "api_key"
 
 
-def test_expand_config_leaves_databricks_auth_untouched(
+def test_expand_config_leaves_provider_auth_untouched(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
     ``executor.auth`` with a non-``api_key`` type is not expanded.
 
-    A ``type: databricks`` auth block carries a profile name, not a
-    secret value — expanding it would be wrong (and there is no
-    ``api_key`` to resolve). ``changed`` stays ``False`` so the file
-    is bundled as-is.
+    A ``type: provider`` auth block carries a provider name, not a secret
+    value. ``changed`` stays ``False`` so the file is bundled as-is.
     """
     from goalrail.spec import expand_env_vars
 
@@ -1720,14 +1717,14 @@ def test_expand_config_leaves_databricks_auth_untouched(
         "spec_version": 1,
         "executor": {
             "type": "goalrail",
-            "auth": {"type": "databricks", "profile": "my-profile"},
+            "auth": {"type": "provider", "name": "openrouter"},
         },
     }
     changed = _expand_config_env_vars(raw, expand_env_vars)
 
     # No secret-bearing field present → nothing expanded.
     assert changed is False
-    assert raw["executor"]["auth"] == {"type": "databricks", "profile": "my-profile"}
+    assert raw["executor"]["auth"] == {"type": "provider", "name": "openrouter"}
 
 
 def test_expand_config_no_env_vars_returns_false() -> None:
@@ -2298,7 +2295,7 @@ def test_preregister_agent_accepts_goalrail_yaml_file(tmp_path: Path) -> None:
                 "name": "hello-world",
                 "prompt": "hi",
                 "executor": {
-                    "model": "databricks-claude-sonnet-4",
+                    "model": "anthropic/claude-sonnet-4-20250514",
                     "harness": "claude-sdk",
                 },
             },
@@ -2341,7 +2338,7 @@ def test_preregister_agent_stored_tarball_rehydrates(tmp_path: Path) -> None:
                 "name": "supervisor-probe",
                 "prompt": "probe",
                 "executor": {
-                    "model": "databricks-claude-sonnet-4",
+                    "model": "anthropic/claude-sonnet-4-20250514",
                     "harness": "claude-sdk",
                 },
             },
@@ -2369,7 +2366,7 @@ def test_materialize_harness_launcher_file_writes_goalrail_yaml() -> None:
     """No-AGENT run materialization writes a standalone Goalrail YAML file."""
     generated = _materialize_harness_launcher_file(
         harness="claude",
-        model="databricks-claude-sonnet-4-6",
+        model="anthropic/claude-sonnet-4-6",
         system_prompt="Custom instructions.",
     )
 
@@ -2381,15 +2378,14 @@ def test_materialize_harness_launcher_file_writes_goalrail_yaml() -> None:
         "prompt": "Custom instructions.",
         "executor": {
             "harness": "claude-sdk",
-            "model": "databricks-claude-sonnet-4-6",
+            "model": "anthropic/claude-sonnet-4-6",
         },
         "os_env": {"type": "caller_process", "sandbox": {"type": "none"}},
     }
-    # The launcher must NEVER bake a Databricks profile into the ad-hoc
-    # spec (the --profile flag was removed): a baked profile would make
-    # _resolve_provider_for_build skip a configured provider and route the
-    # turn through the Databricks gateway. A "profile" key here means the
-    # removed baking behavior came back.
+    # The launcher must not bake a legacy profile into the ad-hoc spec. A
+    # baked profile would make _resolve_provider_for_build skip a configured
+    # provider. A "profile" key here means the removed baking behavior came
+    # back.
     assert "profile" not in raw["executor"], raw["executor"]
 
 
@@ -2444,7 +2440,6 @@ def test_run_without_agent_drops_into_configure_when_unconfigured(
     # first-run plan resolves to "nothing configured".
     monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(tmp_path))
     monkeypatch.setattr("goalrail.cli._load_effective_config", dict)
-    monkeypatch.setattr("goalrail.cli._promote_global_auth_to_provider", Mock())
     monkeypatch.setattr("goalrail.cli._adopt_detected_providers", Mock(return_value=[]))
     monkeypatch.setattr(
         "goalrail.onboarding.provider_config.default_provider_for_harness",
@@ -2502,7 +2497,7 @@ def test_run_without_agent_claude_alias_dispatches_generated_yaml_headlessly(
             "--harness",
             "claude",
             "--model",
-            "databricks-claude-sonnet-4-6",
+            "anthropic/claude-sonnet-4-6",
             "--system-prompt",
             "Custom instructions.",
             "--tools",
@@ -2524,7 +2519,7 @@ def test_run_without_agent_claude_alias_dispatches_generated_yaml_headlessly(
         "prompt": "Custom instructions.",
         "executor": {
             "harness": "claude-sdk",
-            "model": "databricks-claude-sonnet-4-6",
+            "model": "anthropic/claude-sonnet-4-6",
         },
         "os_env": {"type": "caller_process", "sandbox": {"type": "none"}},
     }
@@ -2545,7 +2540,7 @@ def _write_default_agent(tmp_path: Path, harness: str) -> str:
     :returns: Absolute path to the written YAML.
     """
     agent = tmp_path / "default_agent.yaml"
-    agent.write_text(f"name: a\nexecutor:\n  harness: {harness}\n  model: databricks-gpt-5-5\n")
+    agent.write_text(f"name: a\nexecutor:\n  harness: {harness}\n  model: openai/gpt-5-5\n")
     return str(agent)
 
 
@@ -3316,7 +3311,7 @@ def test_save_global_config_unset_removes_key(
         (["../sibling.yaml"], True),
         # HTTP URLs must be passed through --server, not as shorthand targets.
         (["http://localhost:8000"], False),
-        (["https://example.databricksapps.com"], False),
+        (["https://goalrail.example"], False),
         # Known subcommands — must NOT be redirected
         (["run", "myagent.yaml"], False),
         (["attach", "myagent.yaml"], False),
@@ -3415,7 +3410,7 @@ def test_config_set_global_writes_file(
             "set",
             "--global",
             "default_agent=examples/hello_world.yaml",
-            "model=databricks-claude-sonnet-4-6",
+            "model=anthropic/claude-sonnet-4-6",
         ],
     )
 
@@ -3425,7 +3420,7 @@ def test_config_set_global_writes_file(
     assert Path(cfg["default_agent"]).is_absolute()
     assert cfg["default_agent"].endswith("examples/hello_world.yaml")
     # The second key from the same invocation must land too (multi-key set).
-    assert cfg["model"] == "databricks-claude-sonnet-4-6"
+    assert cfg["model"] == "anthropic/claude-sonnet-4-6"
 
 
 def test_config_set_global_writes_auto_open_conversation_bool(
@@ -4146,21 +4141,15 @@ def test_unknown_command_reports_no_such_command(
 def test_setup_command_replaces_wizard(monkeypatch: pytest.MonkeyPatch) -> None:
     """``goalrail setup`` is the visible standard setup flow command."""
     configure_flow = Mock()
-    configure_databricks = Mock()
-    run_onboarding = Mock(return_value=True)
     monkeypatch.setattr(
         "goalrail.cli._run_configure_harnesses_interactive",
         configure_flow,
     )
-    monkeypatch.setattr("goalrail.cli._run_configure_databricks", configure_databricks)
-    monkeypatch.setattr("goalrail.onboarding.setup.run_onboarding", run_onboarding)
 
     result = CliRunner().invoke(cli, ["setup"])
 
     assert result.exit_code == 0, result.output
     configure_flow.assert_called_once_with()
-    configure_databricks.assert_not_called()
-    run_onboarding.assert_not_called()
 
     help_result = CliRunner().invoke(cli, ["--help"])
     assert help_result.exit_code == 0
@@ -4179,52 +4168,21 @@ def test_setup_command_replaces_wizard(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_setup_no_internal_beta_runs_configure_flow(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """``--no-internal-beta`` runs the model/credential picker, not the Databricks bootstrap.
+    """``--no-internal-beta`` runs the model/credential picker.
 
     The generic onboarding wizard was removed; ``setup --no-internal-beta``
     now runs the same interactive flow as ``configure harnesses``.
     """
-    configure_databricks = Mock()
-    run_onboarding = Mock()
     configure_flow = Mock()
-    monkeypatch.setattr("goalrail.cli._run_configure_databricks", configure_databricks)
     monkeypatch.setattr(
         "goalrail.cli._run_configure_harnesses_interactive",
         configure_flow,
     )
-    monkeypatch.setattr("goalrail.onboarding.setup.run_onboarding", run_onboarding)
 
     result = CliRunner().invoke(cli, ["setup", "--no-internal-beta"])
 
     assert result.exit_code == 0, result.output
     configure_flow.assert_called_once_with()
-    configure_databricks.assert_not_called()
-    run_onboarding.assert_not_called()
-
-
-def test_configure_databricks_completion_uses_goalrail(
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    """The internal-beta Databricks setup completion text should use Goalrail."""
-    monkeypatch.setattr("goalrail.cli.find_ucode_command", lambda: ["ucode"])
-    monkeypatch.setattr(
-        "goalrail.cli.model_gateway_workspace_urls",
-        lambda: ["https://workspace.example.com"],
-    )
-    monkeypatch.setattr(
-        "goalrail.cli.build_ucode_configure_command",
-        lambda command, *, workspace_urls: [*command, "configure"],
-    )
-    monkeypatch.setattr(
-        "goalrail.cli.subprocess.run",
-        lambda *a, **k: subprocess.CompletedProcess(a[0], 0),
-    )
-
-    _run_configure_databricks()
-
-    output = capsys.readouterr().out
-    assert "Goalrail will use state.json for harness setup." in output
 
 
 # ─── setup dependency preflight (Node / tmux) ─────────────────────────
@@ -4480,7 +4438,6 @@ def test_resolve_first_run_plan_does_not_persist_derived_default(
     Claude→polly yet no global ``harness`` / ``default_agent`` was written.
     """
     monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(tmp_path))
-    monkeypatch.setattr("goalrail.cli._promote_global_auth_to_provider", Mock())
     monkeypatch.setattr("goalrail.cli._adopt_detected_providers", Mock(return_value=[]))
     monkeypatch.setattr(
         "goalrail.onboarding.provider_config.default_provider_for_harness",
@@ -4511,7 +4468,6 @@ def test_resolve_first_run_plan_re_derives_when_creds_change(
     pick would pin the user to codex and fail the second half.
     """
     monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(tmp_path))
-    monkeypatch.setattr("goalrail.cli._promote_global_auth_to_provider", Mock())
     monkeypatch.setattr("goalrail.cli._adopt_detected_providers", Mock(return_value=[]))
 
     # 1) Only Codex configured → codex REPL, no example agent.
@@ -4542,7 +4498,6 @@ def test_resolve_first_run_plan_drops_into_configure_when_empty(
     return of None signals the caller to exit cleanly rather than error.
     """
     monkeypatch.setenv("GOALRAIL_CONFIG_HOME", str(tmp_path))
-    monkeypatch.setattr("goalrail.cli._promote_global_auth_to_provider", Mock())
     monkeypatch.setattr("goalrail.cli._adopt_detected_providers", Mock(return_value=[]))
     monkeypatch.setattr(
         "goalrail.onboarding.provider_config.default_provider_for_harness",
@@ -4620,11 +4575,10 @@ def test_adopt_ambient_credentials_announces_only_what_was_adopted(
     """The shared adopt step self-heals, adopts, and announces the adopted creds.
 
     Exercises the real announce path through the wrapper: with one credential
-    newly adopted the callout names it; the databricks backfill stays silent.
-    A regression that stopped calling the callout (or announced credentials
-    that were not actually adopted) fails here.
+    newly adopted the callout names it. A regression that stopped calling the
+    callout (or announced credentials that were not actually adopted) fails
+    here.
     """
-    monkeypatch.setattr("goalrail.cli._promote_global_auth_to_provider", Mock())
     monkeypatch.setattr("goalrail.cli._adopt_detected_providers", Mock(return_value=["anthropic"]))
     monkeypatch.setattr(
         "goalrail.onboarding.ambient.detect_providers",
@@ -5177,6 +5131,6 @@ def test_opencode_auth_help_uses_goalrail_product_name(
     _print_opencode_auth_help()
 
     printed = " ".join(str(c.args[0]) for c in console.print.call_args_list if c.args)
-    assert "Goalrail synthesizes opencode's per-session provider config" in printed
-    assert "Goalrail stores no OpenCode credential" in printed
+    assert "OpenCode resolves a model from the provider its agent uses" in printed
+    assert "opencode auth login" in printed
     assert "`goalrail opencode` launches on" in printed

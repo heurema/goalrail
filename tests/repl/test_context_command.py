@@ -51,7 +51,7 @@ class _Session:
     :param current_response_id: Most-recent response id (legacy mode),
         e.g. ``"resp_abc123"`` or ``None``.
     :param llm_model: Spec-pinned LLM model id, e.g.
-        ``"databricks-claude-sonnet-4-6"``, or ``None`` for
+        ``"anthropic/claude-sonnet-4-6"``, or ``None`` for
         native-harness agents whose spec pins no model.
     """
 
@@ -611,7 +611,7 @@ class _ItemsClient:
         # idle event crashed with NameError instead of updating the ring.
         (None, "claude-native-ui"),
         # Spec-pinned model: used directly, agent name ignored.
-        ("databricks-claude-sonnet-4-6", "databricks-claude-sonnet-4-6"),
+        ("anthropic/claude-sonnet-4-6", "anthropic/claude-sonnet-4-6"),
     ],
 )
 async def test_idle_ring_estimate_model_fallback(

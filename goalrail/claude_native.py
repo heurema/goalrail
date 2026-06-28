@@ -115,8 +115,7 @@ _DEFAULT_CLAUDE_COMMAND = "claude"
 _CLAUDE_TERMINAL_SCROLLBACK_LINES = 100_000
 _TERMINAL_NAME = "claude"
 _TERMINAL_SESSION_KEY = "main"
-_UCODE_CLAUDE_AGENT_NAME = "claude"
-_UCODE_CLAUDE_BASE_URL_ENV = "ANTHROPIC_BASE_URL"
+_CLAUDE_BASE_URL_ENV = "ANTHROPIC_BASE_URL"
 _ANTHROPIC_API_KEY_ENV = "ANTHROPIC_API_KEY"
 _ANTHROPIC_BEDROCK_BASE_URL_ENV = "ANTHROPIC_BEDROCK_BASE_URL"
 _AWS_BEARER_TOKEN_BEDROCK_ENV = "AWS_BEARER_TOKEN_BEDROCK"
@@ -136,19 +135,18 @@ _CLAUDE_CODE_ENABLE_TOOL_SEARCH_ENV = "ENABLE_TOOL_SEARCH"
 _CLAUDE_CODE_DISABLE_AGENT_VIEW_ENV = "CLAUDE_CODE_DISABLE_AGENT_VIEW"
 # Claude Code env vars that pin each model-tier alias to a provider-specific
 # model ID.  When set, the /model picker shows these IDs as options rather
-# than normalising to canonical Anthropic names (which the Databricks gateway
-# rejects).  See https://code.claude.com/docs/en/model-config#override-model-ids-per-version
+# than normalising to canonical Anthropic names.
+# See https://code.claude.com/docs/en/model-config#override-model-ids-per-version
 _ANTHROPIC_DEFAULT_FABLE_MODEL_ENV = "ANTHROPIC_DEFAULT_FABLE_MODEL"
 _ANTHROPIC_DEFAULT_OPUS_MODEL_ENV = "ANTHROPIC_DEFAULT_OPUS_MODEL"
 _ANTHROPIC_DEFAULT_SONNET_MODEL_ENV = "ANTHROPIC_DEFAULT_SONNET_MODEL"
 _ANTHROPIC_DEFAULT_HAIKU_MODEL_ENV = "ANTHROPIC_DEFAULT_HAIKU_MODEL"
-_UCODE_CLAUDE_TIER_TO_ENV: dict[str, str] = {
+_CLAUDE_TIER_TO_ENV: dict[str, str] = {
     "fable": _ANTHROPIC_DEFAULT_FABLE_MODEL_ENV,
     "opus": _ANTHROPIC_DEFAULT_OPUS_MODEL_ENV,
     "sonnet": _ANTHROPIC_DEFAULT_SONNET_MODEL_ENV,
     "haiku": _ANTHROPIC_DEFAULT_HAIKU_MODEL_ENV,
 }
-_DEFAULT_UCODE_AUTH_REFRESH_INTERVAL_MS = 900_000
 _SESSION_LABELS = {
     "goalrail.ui": "terminal",
     _WRAPPER_LABEL_KEY: _WRAPPER_LABEL_VALUE,
@@ -263,21 +261,19 @@ class PreparedClaudeTerminal:
 
 
 @dataclass(frozen=True)
-class ClaudeNativeUcodeConfig:
+class ClaudeNativeProviderConfig:
     """
-    Ucode-derived Claude Code launch configuration.
+    Provider-derived Claude Code launch configuration.
 
     :param env: Allowlisted environment variables for the ``claude``
         terminal process, e.g. ``{"ANTHROPIC_BASE_URL":
-        "https://example.databricks.com/ai-gateway/anthropic"}``.
-    :param api_key_helper: Claude Code ``apiKeyHelper`` command from
-        ucode state, e.g. ``"databricks auth token --host
-        https://example.databricks.com ..."``. ``None`` writes no
-        ``apiKeyHelper`` (the Bedrock path delivers its credential via
-        ``AWS_BEARER_TOKEN_BEDROCK`` instead; Claude Code ignores
-        ``apiKeyHelper`` once ``CLAUDE_CODE_USE_BEDROCK=1``).
-    :param model: Optional model id from ucode state, e.g.
-        ``"databricks-claude-opus-4-7"``.
+        "https://gateway.example.com/anthropic"}``.
+    :param api_key_helper: Claude Code ``apiKeyHelper`` command for provider
+        credentials. ``None`` writes no ``apiKeyHelper`` (the Bedrock path
+        delivers its credential via ``AWS_BEARER_TOKEN_BEDROCK`` instead;
+        Claude Code ignores ``apiKeyHelper`` once
+        ``CLAUDE_CODE_USE_BEDROCK=1``).
+    :param model: Optional provider model id.
     """
 
     env: dict[str, str]
@@ -286,7 +282,7 @@ class ClaudeNativeUcodeConfig:
 
 
 def build_native_claude_terminal_env(
-    claude_config: ClaudeNativeUcodeConfig | None,
+    claude_config: ClaudeNativeProviderConfig | None,
 ) -> dict[str, str]:
     """
     Build env overrides for a native Claude Code terminal process.
@@ -295,7 +291,7 @@ def build_native_claude_terminal_env(
     loads them on demand, and disables Claude Code's agent view so the
     terminal stays pinned to the session the Goalrail UI is showing.
 
-    :param claude_config: Optional provider/ucode launch config, e.g.
+    :param claude_config: Optional provider launch config, e.g.
         one carrying ``{"ANTHROPIC_BASE_URL": "https://example.com"}``.
         ``None`` means use Claude Code's own native auth.
     :returns: Environment overrides for the terminal process, e.g.
@@ -367,7 +363,7 @@ def run_claude_native(
         e.g. ``"claude"``. Kept off the public CLI surface so v0
         always exposes Claude Code, while tests can supply a fake
         executable.
-    :param use_claude_config: When ``True``, skip Databricks/ucode auth
+    :param use_claude_config: When ``True``, skip Goalrail-managed auth
         and let Claude use its own existing ``~/.claude/`` configuration.
     :param auto_open_conversation: When ``True``, open the
         browser conversation URL after the session is prepared.
@@ -391,10 +387,9 @@ def run_claude_native(
     sanitized_args = _strip_resume_from_claude_args(claude_args)
     startup_profiler.mark("claude args normalized")
     # Resolve the launch config across all offerings: a configured provider
-    # (configure harnesses), the Databricks ucode profile, or Claude's own
-    # login — so `goalrail claude` honors the provider selection just like
-    # the in-process claude-sdk harness. ``use_claude_config`` forces the
-    # CLI's own ~/.claude config (skips all of it).
+    # (configure harnesses) or Claude's own login — so `goalrail claude`
+    # honors the provider selection just like the in-process claude-sdk
+    # harness. ``use_claude_config`` forces the CLI's own ~/.claude config.
     startup_profiler.mark("resolving claude config")
     claude_config = None if use_claude_config else resolve_native_claude_config(spec=None)
     startup_profiler.mark(
@@ -418,7 +413,7 @@ def run_claude_native(
             )
         else:
             # The daemon-spawned runner launches ``claude`` itself and
-            # derives the ucode config from the provider config, so the
+            # derives the provider config from the provider config, so the
             # remote path takes neither ``command`` nor ``claude_config``.
             _run_with_remote_server(
                 server.rstrip("/"),
@@ -1378,91 +1373,11 @@ def _strip_resume_from_claude_args(args: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(out)
 
 
-def _ucode_config_for_profile(profile: str | None) -> ClaudeNativeUcodeConfig | None:
-    """
-    Resolve native Claude Code launch config from ucode state.
-
-    The profile remains the explicit workspace selector. If no
-    profile is selected, or the profile has no matching ucode state,
-    the native wrapper leaves Claude Code's normal provider
-    configuration alone.
-
-    :param profile: Databricks CLI profile name, e.g.
-        ``"<your-profile>"``.
-    :returns: Ucode-derived launch config, or ``None`` when no matching
-        ucode state exists.
-    :raises click.ClickException: If the selected workspace has a
-        malformed Claude ucode agent entry.
-    """
-    if not profile:
-        return None
-
-    from goalrail.onboarding.databricks_config import (
-        DATABRICKS_CLAUDE_DEFAULT_MODEL,
-        get_workspace_url_for_profile,
-    )
-    from goalrail.onboarding.ucode_state import read_ucode_state
-
-    workspace_url = get_workspace_url_for_profile(profile)
-    if workspace_url is None:
-        return None
-    workspace_state = read_ucode_state(workspace_url)
-    if workspace_state is None:
-        return None
-    agent_state = workspace_state.agent(_UCODE_CLAUDE_AGENT_NAME)
-    if agent_state is None:
-        raise click.ClickException(
-            f"ucode state for profile {profile!r} does not include a Claude agent entry. "
-            "Run `goalrail setup --internal-beta` to refresh ucode configuration."
-        )
-
-    base_url = agent_state.env.get(_UCODE_CLAUDE_BASE_URL_ENV) or agent_state.base_url
-    if base_url is None:
-        base_url = agent_state.base_urls.get(_UCODE_CLAUDE_AGENT_NAME)
-    if not base_url:
-        raise click.ClickException(
-            f"ucode state for profile {profile!r} is missing Claude base URL "
-            f"({_UCODE_CLAUDE_BASE_URL_ENV} / base_url). "
-            "Run `goalrail setup --internal-beta` to refresh ucode configuration."
-        )
-    if not agent_state.auth_command:
-        raise click.ClickException(
-            f"ucode state for profile {profile!r} is missing Claude auth_command. "
-            "Run `goalrail setup --internal-beta` to refresh ucode configuration."
-        )
-
-    refresh_interval_ms = (
-        agent_state.auth_refresh_interval_ms or _DEFAULT_UCODE_AUTH_REFRESH_INTERVAL_MS
-    )
-    env: dict[str, str] = {
-        _UCODE_CLAUDE_BASE_URL_ENV: base_url,
-        _CLAUDE_CODE_API_KEY_HELPER_TTL_ENV: str(refresh_interval_ms),
-        _CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS_ENV: "1",
-    }
-    # Pin each Claude Code model-tier alias to the corresponding Databricks
-    # gateway model ID so that the /model picker natively shows gateway model
-    # names.  Without this Claude Code normalises the picked model to a
-    # canonical Anthropic name (e.g. "claude-opus-4-7[1m]") that the
-    # Databricks gateway rejects.
-    for tier, env_var in _UCODE_CLAUDE_TIER_TO_ENV.items():
-        model_id = workspace_state.claude_models.get(tier)
-        if model_id:
-            env[env_var] = model_id
-    # When ucode caches no model, default it so Claude Code doesn't fall back
-    # to its host-config model (an Anthropic-direct id the gateway rejects).
-    return ClaudeNativeUcodeConfig(
-        env=env,
-        api_key_helper=agent_state.auth_command,
-        model=agent_state.model or DATABRICKS_CLAUDE_DEFAULT_MODEL,
-    )
-
-
-def _provider_config_for_native_claude(entry: ProviderEntry) -> ClaudeNativeUcodeConfig | None:
+def _provider_config_for_native_claude(entry: ProviderEntry) -> ClaudeNativeProviderConfig | None:
     """Build native Claude Code launch config from a generic provider.
 
-    The OSS counterpart to :func:`_ucode_config_for_profile`: it takes a
-    resolved ``key`` / ``gateway`` / ``local`` provider serving the
-    ``anthropic`` surface and injects the same knobs the native CLI needs —
+    Takes a resolved ``key`` / ``gateway`` / ``local`` provider serving the
+    ``anthropic`` surface and injects the knobs the native CLI needs —
     ``ANTHROPIC_BASE_URL`` plus a token ``apiKeyHelper`` and the default
     model — so a Claude Code terminal launched by ``goalrail`` routes
     through the configured provider exactly like the in-process claude-sdk
@@ -1505,15 +1420,12 @@ def _provider_config_for_native_claude(entry: ProviderEntry) -> ClaudeNativeUcod
         family.base_url,
         family.default_model,
     )
-    return ClaudeNativeUcodeConfig(
+    return ClaudeNativeProviderConfig(
         env={
-            _UCODE_CLAUDE_BASE_URL_ENV: family.base_url,
+            _CLAUDE_BASE_URL_ENV: family.base_url,
             # Disable Claude Code's experimental anthropic-beta flags. Gateways
-            # (Databricks serving-endpoints and the like) reject beta flags they
-            # don't implement with a 400 "invalid beta flag", which kills every
-            # turn. The ucode/databricks path already sets this; mirror it here
-            # so the generic key/gateway/local provider path is equally
-            # gateway-safe.
+            # Many gateways reject beta flags they don't implement with a 400
+            # "invalid beta flag", which kills every turn.
             _CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS_ENV: "1",
         },
         api_key_helper=api_key_helper,
@@ -1521,7 +1433,7 @@ def _provider_config_for_native_claude(entry: ProviderEntry) -> ClaudeNativeUcod
     )
 
 
-def _bedrock_config_for_native_claude(entry: ProviderEntry) -> ClaudeNativeUcodeConfig | None:
+def _bedrock_config_for_native_claude(entry: ProviderEntry) -> ClaudeNativeProviderConfig | None:
     """Build native Claude Code launch config for Bedrock-style gateways.
 
     AWS Bedrock and Bedrock-compatible gateways (like corporate AI gateways)
@@ -1608,7 +1520,7 @@ def _bedrock_config_for_native_claude(entry: ProviderEntry) -> ClaudeNativeUcode
         family.base_url,
         family.default_model,
     )
-    return ClaudeNativeUcodeConfig(
+    return ClaudeNativeProviderConfig(
         env={
             _ANTHROPIC_BEDROCK_BASE_URL_ENV: family.base_url,
             _AWS_BEARER_TOKEN_BEDROCK_ENV: token,
@@ -1622,23 +1534,21 @@ def _bedrock_config_for_native_claude(entry: ProviderEntry) -> ClaudeNativeUcode
 
 def _native_claude_config_from_entry(
     entry: ProviderEntry,
-) -> ClaudeNativeUcodeConfig | None:
+) -> ClaudeNativeProviderConfig | None:
     """Map a resolved provider entry to a native Claude launch config.
 
     - ``key`` / ``gateway`` / ``local`` → provider gateway config
       (:func:`_provider_config_for_native_claude`).
     - ``bedrock`` → Bedrock-style gateway config
       (:func:`_bedrock_config_for_native_claude`).
-    - ``databricks`` → the existing ucode path keyed on the provider profile.
     - ``subscription`` → ``None`` (use the ``claude`` CLI's own login, e.g. a
-      Claude Enterprise seat) — intentional, not a fallback to ucode.
+      Claude Enterprise seat) — intentional, not a gateway fallback.
 
     :param entry: The resolved provider entry.
     :returns: The launch config, or ``None`` to use Claude's own login.
     """
     from goalrail.onboarding.provider_config import (
         BEDROCK_KIND,
-        DATABRICKS_KIND,
         GATEWAY_KIND,
         KEY_KIND,
         LOCAL_KIND,
@@ -1648,9 +1558,6 @@ def _native_claude_config_from_entry(
         return _provider_config_for_native_claude(entry)
     if entry.kind == BEDROCK_KIND:
         return _bedrock_config_for_native_claude(entry)
-    if entry.kind == DATABRICKS_KIND:
-        _logger.info("native-claude routing: Databricks ucode profile %r", entry.profile)
-        return _ucode_config_for_profile(entry.profile)
     _logger.info("native-claude routing: Claude CLI login (subscription provider %r)", entry.name)
     return None
 
@@ -1658,7 +1565,7 @@ def _native_claude_config_from_entry(
 def resolve_native_claude_config(
     *,
     spec: AgentSpec | None,
-) -> ClaudeNativeUcodeConfig | None:
+) -> ClaudeNativeProviderConfig | None:
     """Resolve the native Claude Code launch config across all offerings.
 
     The single entry point both native-claude launch paths use (the CLI
@@ -1668,11 +1575,9 @@ def resolve_native_claude_config(
     :func:`goalrail.runtime.workflow._resolve_provider_for_build`:
 
     1. when a *spec* is given, its resolved provider (spec ``executor.auth``
-       → explicit per-family default → global ``auth:`` → ``databricks-*``
-       model → ambient detection), falling back to the spec's own
-       ``executor.profile`` (ucode) when it routed to legacy databricks;
+       → explicit per-family default → global ``auth:`` → ambient detection);
     2. when spec-less (``goalrail claude``): an explicit per-family default
-       → global ``auth:`` (→ ucode) → ambient detection;
+       → global ``auth:`` → ambient detection;
     3. otherwise ``None`` (Claude's own login).
 
     Credentials are controlled exclusively by the spec or by
@@ -1689,27 +1594,22 @@ def resolve_native_claude_config(
         load_config,
     )
     from goalrail.runtime.workflow import _load_global_auth, _resolve_provider_for_build
-    from goalrail.spec.types import DatabricksAuth
 
     # 1. Spec-driven: reuse the harness routing precedence verbatim. A
-    #    non-None entry decides the config (including a deliberate None for a
-    #    subscription); a None entry means the spec routed to databricks /
-    #    global auth → fall back to the spec's own ucode profile.
+    #    non-None entry decides the config, including a deliberate None for a
+    #    subscription.
     if spec is not None:
         entry = _resolve_provider_for_build(spec, harness_type="claude-sdk")
         if entry is not None:
             return _native_claude_config_from_entry(entry)
-        return _ucode_config_for_profile(spec.executor.profile)
+        return None
 
     # 2. Spec-less (goalrail claude): explicit default wins first.
     explicit = load_config()
     entry = default_provider_for_harness(explicit, "claude-sdk")
     if entry is not None:
         return _native_claude_config_from_entry(entry)
-    # A global databricks auth block → ucode.
     global_auth = _load_global_auth()
-    if isinstance(global_auth, DatabricksAuth):
-        return _ucode_config_for_profile(global_auth.profile)
     if global_auth is not None:
         # A global api_key auth: let Claude's own login handle it (parity
         # with the subscription path); the in-process harness would inject
@@ -1721,8 +1621,7 @@ def resolve_native_claude_config(
         return _native_claude_config_from_entry(entry)
     _logger.info(
         "native-claude routing: Claude CLI login (no provider configured for the Claude "
-        "harness, no Databricks profile). Run `goalrail setup --no-internal-beta` to route "
-        "through a provider."
+        "harness). Run `goalrail setup --no-internal-beta` to route through a provider."
     )
     return None
 
@@ -1795,7 +1694,7 @@ def _run_with_local_server(
     resume_picker: bool,
     claude_args: tuple[str, ...],
     command: str,
-    claude_config: ClaudeNativeUcodeConfig | None = None,
+    claude_config: ClaudeNativeProviderConfig | None = None,
     auto_open_conversation: bool = False,
     startup_profiler: StartupProfiler | None = None,
 ) -> None:
@@ -1807,7 +1706,7 @@ def _run_with_local_server(
     :param resume_picker: When ``True`` and ``session_id is None``, run the picker.
     :param claude_args: Claude CLI args.
     :param command: Executable to run in the terminal resource.
-    :param claude_config: Optional ucode-derived Claude Code config.
+    :param claude_config: Optional provider-derived Claude Code config.
     :param auto_open_conversation: When ``True``, open the
         browser conversation URL after the session is prepared.
     :param startup_profiler: Optional startup profiler for timing
@@ -2084,7 +1983,7 @@ async def _attach_with_transcript_forwarder(
     :param auth: Optional httpx Auth that mints a fresh bearer token
         per request, e.g. ``_server_auth(profile)``. Forwarded to the
         transcript forwarder's HTTP client so Goalrail posts continue to
-        authenticate after Databricks OAuth token expiry (~1h).
+        authenticate after token expiry.
     :param run_transcript_forwarder: Whether this attach process owns
         Claude transcript forwarding. ``False`` for daemon/runner-owned
         launches, where the runner already started the forwarder for
@@ -2507,7 +2406,7 @@ async def _close_claude_terminal(
 # the server to launch a runner on this host, wait for it to come
 # online, then wait for the runner to auto-create the Claude terminal
 # (``_auto_create_claude_terminal`` in ``runner/app.py``, which also
-# applies the ucode gateway auth from the runner's profile) before
+# applies the provider gateway auth from the runner's profile) before
 # attaching. See designs/NATIVE_RUNNER_SERVER_LAUNCH.md.
 
 
@@ -2600,7 +2499,7 @@ async def _prepare_claude_terminal_via_daemon(
     runner and POSTs the terminal itself), this persists the launch args
     on the session and lets the daemon-spawned runner bring the terminal
     up — applying those args, the persisted model, cold resume, and the
-    ucode gateway auth, all runner-side. The session is created *without*
+    provider gateway auth, all runner-side. The session is created *without*
     a bridge-id label so the bridge dir keys by session id, matching the
     runner's auto-create convention. See
     designs/NATIVE_RUNNER_SERVER_LAUNCH.md.
@@ -2787,20 +2686,20 @@ def _run_with_remote_server(
     the runner launch through it (HOST_BY_DEFAULT): the daemon — not
     this CLI — spawns the runner, which brings the Claude terminal up
     itself (applying the persisted launch args, model, cold resume, and
-    the ucode gateway auth from the provider config). The CLI
+    the provider gateway auth from the provider config). The CLI
     creates/resolves the session, persists the pass-through args, waits
     for the daemon-spawned runner + its auto-created terminal, and
     attaches (directly to the runner's tmux when it is local, else over
     the WebSocket PTY bridge). See designs/NATIVE_RUNNER_SERVER_LAUNCH.md.
 
     :param base_url: Remote Goalrail server base URL without a trailing
-        slash, e.g. ``"https://example.databricks.com"``.
+        slash, e.g. ``"https://goalrail.example.com"``.
     :param spec_path: Generated Claude wrapper agent spec.
     :param session_id: Optional existing session id.
     :param resume_picker: When ``True`` and ``session_id is None``, run the picker.
     :param claude_args: Claude CLI args, persisted on the session as
         ``terminal_launch_args`` for the runner to apply. (The runner
-        launches ``claude`` itself and derives the ucode config from the
+        launches ``claude`` itself and derives the provider config from the
         provider config, so this path takes neither a ``command`` nor a
         ``claude_config``.)
     :param auto_open_conversation: When ``True``, open the browser
@@ -2819,9 +2718,7 @@ def _run_with_remote_server(
     startup_profiler.mark("remote headers resolved")
     # ``headers`` carries the bearer for the WebSocket attach handshake
     # (refreshed in place by ``_recover``). For HTTP requests we additionally
-    # supply an ``httpx.Auth`` that mints a fresh token per request, so the
-    # long-lived transcript-forwarder client survives the ~1h Databricks
-    # OAuth token TTL.
+    # supply an ``httpx.Auth`` that can provide the current bearer per request.
     startup_profiler.mark("remote auth resolving")
     forwarder_auth = _server_auth(server_url=base_url)
     startup_profiler.mark("remote auth resolved")
@@ -2949,9 +2846,9 @@ def _run_with_remote_server(
 
             The daemon owns the runner lifecycle now, so — unlike the
             old CLI-spawned path — recovery does not restart a runner. It
-            only re-resolves the Databricks bearer and mutates the shared
-            *headers* dict in place so a reconnect after a server bounce
-            or token expiry handshakes with a fresh token. If the
+            only re-resolves the bearer and mutates the shared *headers* dict
+            in place so a reconnect after a server bounce or token expiry
+            handshakes with a fresh token. If the
             daemon-spawned runner died, the server relaunches it on the
             next message (host-bound auto-relaunch).
             """
@@ -3012,7 +2909,7 @@ async def _prepare_claude_terminal(
     session_bundle: bytes | None,
     claude_args: tuple[str, ...],
     command: str,
-    claude_config: ClaudeNativeUcodeConfig | None = None,
+    claude_config: ClaudeNativeProviderConfig | None = None,
     startup_profiler: StartupProfiler | None = None,
     startup_progress: RunnerStartupProgress | None = None,
 ) -> PreparedClaudeTerminal:
@@ -3027,7 +2924,7 @@ async def _prepare_claude_terminal(
         Required when *session_id* is ``None``.
     :param claude_args: Claude CLI args.
     :param command: Executable to run in the terminal resource.
-    :param claude_config: Optional ucode-derived Claude Code config.
+    :param claude_config: Optional provider-derived Claude Code config.
     :param startup_profiler: Optional startup profiler for timing
         marks. ``None`` disables output.
     :param startup_progress: Optional user-visible progress renderer,
@@ -3782,7 +3679,7 @@ async def _launch_claude_terminal(
     *,
     command: str,
     bridge_dir: Path,
-    claude_config: ClaudeNativeUcodeConfig | None = None,
+    claude_config: ClaudeNativeProviderConfig | None = None,
 ) -> str:
     """
     Launch the server-backed Claude terminal resource.
@@ -3797,7 +3694,7 @@ async def _launch_claude_terminal(
     :param command: Executable to run in the terminal resource.
     :param bridge_dir: Bridge directory shared with Claude's MCP
         MCP server and the web-chat harness.
-    :param claude_config: Optional ucode-derived Claude Code config.
+    :param claude_config: Optional provider-derived Claude Code config.
     :returns: Terminal resource id.
     :raises click.ClickException: If terminal launch fails.
     """
@@ -3937,7 +3834,7 @@ def _claude_terminal_request(
     bridge_dir: Path,
     ap_server_url: str | None = None,
     ap_auth_headers: dict[str, str] | None = None,
-    claude_config: ClaudeNativeUcodeConfig | None = None,
+    claude_config: ClaudeNativeProviderConfig | None = None,
 ) -> dict[str, Any]:
     """
     Build the terminal resource creation body for Claude Code.
@@ -3952,7 +3849,7 @@ def _claude_terminal_request(
         live Goalrail server.
     :param ap_auth_headers: Auth headers for the
         ``PermissionRequest`` command hook.
-    :param claude_config: Optional ucode-derived Claude Code config.
+    :param claude_config: Optional provider-derived Claude Code config.
     :returns: JSON body for ``POST /resources/terminals``.
     """
     claude_args = _merge_default_model_arg(
@@ -3991,8 +3888,8 @@ def _claude_terminal_request(
     spec["env"] = build_native_claude_terminal_env(claude_config)
     if claude_config is not None:
         # The runner's terminal layer inherits the parent process env.
-        # Remove provider/session variables that can override the
-        # ucode apiKeyHelper or make Claude think it is nested.
+        # Remove provider/session variables that can override the provider
+        # apiKeyHelper or make Claude think it is nested.
         unset_env_vars = [
             _ANTHROPIC_API_KEY_ENV,
             _CLAUDE_CODE_NESTED_SESSION_ENV,
@@ -4015,12 +3912,11 @@ def _merge_default_model_arg(
     model: str | None,
 ) -> tuple[str, ...]:
     """
-    Add a ucode model default unless the user already selected one.
+    Add a provider model default unless the user already selected one.
 
     :param claude_args: User-provided Claude Code args, e.g.
         ``("--model", "sonnet")``.
-    :param model: Ucode model id, e.g.
-        ``"databricks-claude-opus-4-7"``.
+    :param model: Provider model id, e.g. ``"claude-sonnet-4-6"``.
     :returns: Args with ``--model <model>`` appended when appropriate.
     """
     if not model:

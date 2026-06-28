@@ -146,14 +146,14 @@ runs:
         PYTEST_PROGRESS_LOG_DIR: ${{ github.workspace }}/artifacts/progress-${{ inputs.harness }}
         GOALRAIL_TOKEN_USAGE_JSON: ${{ github.workspace }}/artifacts/tokens-${{ inputs.harness }}.json
         GOALRAIL_TEST_MODEL_SPREAD: "1"
-        GOALRAIL_TEST_MODEL_POOL_GPT: "databricks-gpt-5-5,databricks-gpt-5-4-mini"
+        GOALRAIL_TEST_MODEL_POOL_GPT: "gpt-5.5,gpt-5.4-mini"
       run: |
         set -euo pipefail
         mkdir -p artifacts "$INTEGRATION_TMP_BASE"
         # --capture=no + --log-cli-level=INFO stream live so progress shows
         # even if the step hits its timeout before buffered output renders.
         # --timeout=180 caps a single hung test (see e2e.yml).
-        env -u OPENAI_API_KEY -u ANTHROPIC_API_KEY -u DATABRICKS_TOKEN \
+        env -u OPENAI_API_KEY -u ANTHROPIC_API_KEY \
           uv run pytest tests/integration/ \
             --model "$MODEL" \
             --harness "$HARNESS" \

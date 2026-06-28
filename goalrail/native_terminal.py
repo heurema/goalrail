@@ -29,7 +29,7 @@ def terminal_attach_url(base_url: str, session_id: str, terminal_id: str) -> str
     Build the terminal attach WebSocket URL.
 
     :param base_url: Goalrail server base URL, e.g.
-        ``"https://example.databricksapps.com"``.
+        ``"https://goalrail.example.com"``.
     :param session_id: Session/conversation id, e.g.
         ``"conv_abc123"``.
     :param terminal_id: Terminal resource id, e.g.

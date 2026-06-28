@@ -11,7 +11,7 @@ What breaks if this fails:
 - the reviewer collapses onto claude-sdk (the cross-model fact-check stops being
   independent),
 - a sub-agent silently pins a model (re-coupling it to one provider — a
-  Databricks-only id would 404 on a plain Anthropic / OpenAI key),
+  gateway-only id would 404 on a plain Anthropic / OpenAI key),
 - a doc skill (changelog / migration-guide / api-docs) is dropped or renamed,
 - the ``os_env`` block disappears (Scribe loses the file/shell tools it reads
   context and writes docs with).
@@ -60,7 +60,7 @@ def test_scribe_sub_agents_are_unpinned(scribe_spec: AgentSpec) -> None:
     Neither sub-agent pins a model: each inherits whatever Claude / OpenAI
     provider the user configured.
 
-    Un-pinning is load-bearing for OSS — a Databricks-specific model id would
+    Un-pinning is load-bearing for OSS — a gateway-specific model id would
     404 on a plain Anthropic / OpenAI key. Re-introducing a pin re-couples a
     sub-agent to one provider, so fail here if a model reappears.
     """

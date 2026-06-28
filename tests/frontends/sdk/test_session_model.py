@@ -67,14 +67,14 @@ def test_session_set_model_override_stores_value() -> None:
 def test_session_set_model_override_trims_whitespace() -> None:
     """Surrounding whitespace is trimmed before storage.
 
-    ``/model  databricks-claude-sonnet-4-6  `` should land on the
+    ``/model  anthropic/claude-sonnet-4-6  `` should land on the
     server as the bare model id. If this regresses, the trimmed-on-
     server side would surface the leading-space variant as an unknown
     model.
     """
     session = Session(_ClientStub(), "agent")  # type: ignore[arg-type]
-    session.set_model_override("  databricks-claude-sonnet-4-6  ")
-    assert session.model_override == "databricks-claude-sonnet-4-6"
+    session.set_model_override("  anthropic/claude-sonnet-4-6  ")
+    assert session.model_override == "anthropic/claude-sonnet-4-6"
 
 
 def test_session_set_model_override_python_none_clears() -> None:

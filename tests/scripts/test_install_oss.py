@@ -31,7 +31,7 @@ INSTALLER = Path(__file__).resolve().parents[2] / "scripts" / "install_oss.sh"
 SH = shutil.which("sh") or "/bin/sh"
 
 # Agent credentials must not leak into the script under test (CLAUDE.md).
-_STRIP_ENV = ("DATABRICKS_TOKEN", "ANTHROPIC_API_KEY", "CODEX", "CLAUDE_CODE")
+_STRIP_ENV = ("ANTHROPIC_API_KEY", "CODEX", "CLAUDE_CODE")
 
 
 @pytest.fixture(scope="session")

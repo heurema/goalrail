@@ -596,7 +596,7 @@ async def test_session_snapshot_includes_model_options_from_runner(
                         "models": [
                             {
                                 "id": "gpt-5.5",
-                                "model": "databricks-gpt-5-5",
+                                "model": "openai/gpt-5-5",
                                 "displayName": "GPT-5.5",
                                 "defaultReasoningEffort": "high",
                                 "supportedReasoningEfforts": [
@@ -869,7 +869,7 @@ async def test_session_snapshot_retries_empty_model_options(
                     "models": [
                         {
                             "id": "gpt-5.5",
-                            "model": "databricks-gpt-5-5",
+                            "model": "openai/gpt-5-5",
                             "displayName": "GPT-5.5",
                             "defaultReasoningEffort": "xhigh",
                             "supportedReasoningEfforts": [
@@ -980,7 +980,7 @@ async def test_session_snapshot_retries_503_model_options(
                         "models": [
                             {
                                 "id": "gpt-5.4",
-                                "model": "databricks-gpt-5-4",
+                                "model": "openai/gpt-5-4",
                                 "displayName": "GPT-5.4",
                                 "defaultReasoningEffort": "medium",
                                 "supportedReasoningEfforts": [

@@ -54,7 +54,6 @@ llms/
     gemini.py              # Gemini generateContent API
     bedrock.py             # AWS Bedrock Converse API
     vertex.py              # Vertex AI (Gemini format + GCP auth)
-    databricks.py          # Databricks (OpenAI-compat + OAuth)
 ```
 
 ### Request Flow
@@ -288,14 +287,6 @@ Inherits Gemini translation logic. Different auth and endpoint:
 - Endpoint: `https://{location}-aiplatform.googleapis.com/v1/projects/{project}/locations/{location}/publishers/google/models/{model}:generateContent`
 - Config from env: `VERTEX_PROJECT`, `VERTEX_LOCATION`
 
-### Databricks — `adapters/databricks.py`
-
-Extends OpenAI-compatible adapter with Databricks auth:
-- Auth: `DATABRICKS_HOST` + `DATABRICKS_TOKEN` from env. Bearer token.
-- Base URL: `{DATABRICKS_HOST}/serving-endpoints`
-
----
-
 ## Integration with workflow.py
 
 The swap is minimal:
@@ -338,4 +329,4 @@ Model strings without a provider prefix default to `"openai"` for backward compa
 2. **Phase 2 — OpenAI adapter + workflow swap**: adapters/openai.py, update workflow.py
 3. **Phase 3 — Anthropic adapter**: adapters/anthropic.py
 4. **Phase 4 — Gemini adapter**: adapters/gemini.py
-5. **Phase 5 — Remaining**: adapters/bedrock.py, adapters/vertex.py, adapters/databricks.py
+5. **Phase 5 — Remaining**: adapters/bedrock.py, adapters/vertex.py

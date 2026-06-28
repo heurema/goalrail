@@ -366,9 +366,6 @@ struct GoalrailWebView: UIViewRepresentable {
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
       parent.model.isLoading = false
       parent.model.currentURL = webView.url ?? parent.model.currentURL
-      if webView.url?.path.starts(with: WorkspaceURLExpander.workspaceUIPath) == true {
-        injectWorkspaceChromeCSS(webView)
-      }
       if webView.url?.goalrailOrigin == pinnedOrigin, let pinnedURL {
         parent.loadSucceeded(pinnedURL)
       }
@@ -525,26 +522,6 @@ struct GoalrailWebView: UIViewRepresentable {
         return URL(string: value)
       }
       return nil
-    }
-
-    private func injectWorkspaceChromeCSS(_ webView: WKWebView) {
-      let css = """
-        .goalrail-app {
-          position: fixed !important;
-          inset: 0 !important;
-          z-index: 2147483647 !important;
-        }
-        """
-      let script = """
-        (() => {
-          if (document.querySelector("style[data-goalrail-workspace-chrome]")) return;
-          const style = document.createElement("style");
-          style.dataset.goalrailWorkspaceChrome = "true";
-          style.textContent = \(WebViewModel.javascriptString(css));
-          document.documentElement.appendChild(style);
-        })();
-        """
-      webView.evaluateJavaScript(script)
     }
 
     private func topViewController() -> UIViewController? {

@@ -140,7 +140,7 @@ class EventContext(TypedDict, total=False):
         model. Cost-budget policies read it via
         ``event["context"]["model"]`` to gate on the active model
         (e.g. force a downgrade off an expensive model over budget),
-        e.g. ``"databricks-claude-opus-4-8"`` or the tier alias
+        e.g. ``"anthropic/claude-opus-4-8"`` or the tier alias
         ``"opus"``.
     :param harness: The harness running the session, e.g.
         ``"codex-native"``, stamped by a native tool hook. ``None`` /

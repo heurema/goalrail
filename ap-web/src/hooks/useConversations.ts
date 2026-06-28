@@ -274,8 +274,7 @@ export async function deleteConversation(id: string, deleteBranch = false): Prom
  *
  * Patches the new title into every cached list/snapshot query in
  * place instead of invalidating. `GET /v1/sessions` may serve titles
- * from a search index that catches up to the rename asynchronously
- * (the Databricks deployment lists via search-midtier over WHS), so
+ * from a search index that catches up to the rename asynchronously, so
  * an immediate refetch races the reindex and loses — the sidebar
  * would keep the old name until the next reconciliation. The PATCH
  * response is server-confirmed truth; overlaying it is always safe.
@@ -371,8 +370,7 @@ export function useArchiveConversation() {
  * On success the deleted row is removed from every cached
  * `["conversations", ...]` page in place — NOT via invalidation.
  * `GET /v1/sessions` may be served from a search index that catches
- * up to the delete asynchronously (the Databricks deployment lists
- * via search-midtier over WHS), so an immediate refetch races the
+ * up to the delete asynchronously, so an immediate refetch races the
  * reindex and can resurrect the just-deleted row (same race
  * `useRenameConversation` documents for titles). The per-session
  * caches are dropped too: a pinned session would otherwise re-enter

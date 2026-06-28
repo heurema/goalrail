@@ -51,7 +51,7 @@ def local_server(tmp_path: Path) -> tuple[str, int]:
     artifact_dir.mkdir()
     log_path = tmp_path / "server.log"
     proc, base_url = start_live_server(
-        creds=HarnessCredentials(harness="databricks", profile=None, llm_api_key=None),
+        creds=HarnessCredentials(harness="claude-sdk", profile=None, llm_api_key=None),
         db_path=db_path,
         artifact_dir=artifact_dir,
         log_path=log_path,

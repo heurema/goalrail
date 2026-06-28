@@ -143,7 +143,7 @@ export interface TerminalCommandItem extends BaseItem {
  */
 export interface RoutingDecisionItem extends BaseItem {
   type: "routing_decision";
-  /** Model id the router chose, e.g. `databricks-claude-opus-4-8`. */
+  /** Model id the router chose, e.g. `anthropic/claude-opus-4-8`. */
   model: string;
   /** Difficulty tier the router assigned. */
   tier: "cheap" | "medium" | "expensive";

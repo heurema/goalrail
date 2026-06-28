@@ -47,7 +47,6 @@ import re
 import select
 import signal
 import sys
-import tempfile
 import threading
 import time
 import uuid
@@ -74,7 +73,6 @@ _PTY_COLS = 220
 # code under test, would mis-route the runner or shadow the harness's own auth.
 # Stripped from every CLI subprocess env.
 _STALE_ENV_VARS = (
-    "DATABRICKS_TOKEN",
     "ANTHROPIC_API_KEY",
     "CODEX",
     "CLAUDE_CODE",
@@ -125,25 +123,14 @@ def cli_env(*, profile: str | None = None) -> dict[str, str]:
     the real ``HOME`` and is NOT recoverable by symlinking ``~/.claude`` into
     a relocated one (a temp ``HOME`` yields "Not logged in").
 
-    :param profile: Databricks profile for the LLM gateway. When set, an
-        isolated ``GOALRAIL_CONFIG_HOME`` is created containing an
-        ``auth: {type: databricks, profile: …}`` block — the supported
-        replacement for the removed ``--profile`` CLI flag — and
-        ``DATABRICKS_CONFIG_PROFILE`` is exported for ambient
-        ``~/.databrickscfg`` lookups.
+    :param profile: Deprecated compatibility parameter. Profile-based e2e
+        routing has been removed; the value is ignored.
     :returns: The environment dict for ``pty``/``subprocess`` execution.
     """
     env = dict(os.environ)
+    del profile
     for stale in _STALE_ENV_VARS:
         env.pop(stale, None)
-    if profile is not None:
-        config_home = Path(tempfile.mkdtemp(prefix="goalrail-native-config-"))
-        (config_home / "config.yaml").write_text(
-            f"auth:\n  type: databricks\n  profile: {profile}\n",
-            encoding="utf-8",
-        )
-        env["GOALRAIL_CONFIG_HOME"] = str(config_home)
-        env["DATABRICKS_CONFIG_PROFILE"] = profile
     env["PYTHONPATH"] = f"{_REPO_ROOT}{os.pathsep}{env.get('PYTHONPATH', '')}"
     env["TERM"] = "xterm-256color"
     env["LINES"] = str(_PTY_ROWS)
@@ -640,10 +627,8 @@ def assert_native_cli_resume_restores_history(
     :param harness: CLI subcommand and terminal harness name, ``"claude"`` or
         ``"codex"``.
     :param server: Base URL of the allow-list-free test server.
-    :param profile: Databricks CLI profile for the model gateway, e.g.
-        ``"oss"``. Supplied to the spawned CLI via the config-home
-        ``auth:`` block + ``DATABRICKS_CONFIG_PROFILE`` (the goalrail
-        CLI no longer accepts ``--profile``).
+    :param profile: Deprecated compatibility parameter passed through to
+        :func:`cli_env`; no profile-based routing is performed.
     :param tmp_path: Per-test temp dir (reserved for per-run artifacts).
     :param force_cold_resume: When ``True``, delete the harness's local
         transcript for the captured native session id between the fresh and

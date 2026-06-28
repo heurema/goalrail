@@ -26,8 +26,9 @@ the engine is rebuilt per evaluation); this requires the server-side enforcement
 path, which carries ``session_state``.
 
 MCP-agnostic: tools are recognized by their *canonical* name after stripping a
-server prefix. Defaults cover the standard ``mcp__google__*`` server and the
-Databricks-hosted ``google__*`` server; override per-policy via ``tool_prefixes``.
+server prefix. Defaults cover the standard ``mcp__google__*`` server and a
+short ``google__*`` prefix used by some MCP gateways; override per-policy via
+``tool_prefixes``.
 
 .. important::
 
@@ -91,7 +92,7 @@ CREATED_FILES_STATE_KEY = "gdrive_created_file_ids"
 CREATED_DRAFTS_STATE_KEY = "gmail_created_draft_ids"
 
 # Tool-name prefixes stripped to obtain the canonical tool name. Longest-first
-# so ``mcp__google__`` wins. Covers the standard + Databricks-hosted servers.
+# so ``mcp__google__`` wins. Covers standard and short-prefix MCP servers.
 _DEFAULT_TOOL_PREFIXES: tuple[str, ...] = ("mcp__google__", "google__")
 
 # Arg keys (in ``event["data"]["arguments"]``) carrying a target file ID.
@@ -567,7 +568,7 @@ def gdrive_policy(
     :param comment_files: File IDs / URLs the agent may comment on (in addition
         to files it created). ``None`` means none.
     :param tool_prefixes: Server prefixes to strip when canonicalizing tool
-        names. ``None`` uses the standard + Databricks defaults.
+        names. ``None`` uses the standard + short-prefix defaults.
     :param deny_reason: Reason text attached to DENY decisions.
     :returns: A one-argument policy callable.
     """

@@ -111,7 +111,7 @@ _SECRET_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"(?i)(\b\w*(?:token|api_key|secret|password)\s*[:=]\s*)\S+"),
     # Anthropic / OpenAI style keys
     re.compile(r"\bsk-[A-Za-z0-9_-]{10,}\b"),
-    # Databricks PATs
+    # Legacy PAT-shaped tokens from previously supported gateways.
     re.compile(r"\bdapi[A-Za-z0-9]{10,}\b"),
 ]
 _REDACTED = "[REDACTED]"

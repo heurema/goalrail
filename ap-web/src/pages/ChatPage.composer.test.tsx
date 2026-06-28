@@ -296,10 +296,10 @@ describe("Composer slash-command submit routing", () => {
     render(<Composer {...composerProps({ onSend })} />);
     const ta = textarea();
     // Space closes the menu so Enter submits; bare gateway id has no "/".
-    fireEvent.change(ta, { target: { value: "/model databricks-gpt-5-4" } });
+    fireEvent.change(ta, { target: { value: "/model openai/gpt-5-4" } });
     fireEvent.keyDown(ta, { key: "Enter" });
 
-    expect(setModel).toHaveBeenCalledWith("databricks-gpt-5-4");
+    expect(setModel).toHaveBeenCalledWith("openai/gpt-5-4");
     expect(onSend).not.toHaveBeenCalled();
   });
 
@@ -330,11 +330,11 @@ describe("Composer slash-command submit routing", () => {
       <Composer {...composerProps({ onSend, isTerminalFirst: true, isNativeWrapper: true })} />,
     );
     const ta = textarea();
-    fireEvent.change(ta, { target: { value: "/model databricks-gpt-5-4" } });
+    fireEvent.change(ta, { target: { value: "/model openai/gpt-5-4" } });
     fireEvent.keyDown(ta, { key: "Enter" });
 
     expect(setModel).not.toHaveBeenCalled();
-    expect(onSend).toHaveBeenCalledWith("/model databricks-gpt-5-4", undefined);
+    expect(onSend).toHaveBeenCalledWith("/model openai/gpt-5-4", undefined);
   });
 
   it("opens the model picker for bare /model when the picker is available", () => {

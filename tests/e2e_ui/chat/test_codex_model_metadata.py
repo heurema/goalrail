@@ -61,7 +61,7 @@ def _patch_session_as_codex_native(page: Page, session_id: str) -> list[dict]:
         payload["model_options"] = [
             {
                 "id": "gpt-5.5",
-                "model": "databricks-gpt-5-5",
+                "model": "openai/gpt-5-5",
                 "displayName": "Codex Pretty 5.5",
                 "defaultReasoningEffort": "xhigh",
                 "supportedReasoningEfforts": [

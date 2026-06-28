@@ -742,10 +742,10 @@ def prepare_bridge_dir(
         ``None`` normalizes old sessions by using *conversation_id*.
     :param workspace: Runner workspace/cwd used for local OS tools.
     :param launch_model: Gateway model name that Claude was launched
-        with, e.g. ``"databricks-claude-opus-4-7"``.  Persisted so the
+        with, e.g. ``"anthropic/claude-opus-4-8"``. Persisted so the
         forwarder can re-inject it when Claude Code's ``/model``
-        normalizes the name to one the gateway rejects.  ``None`` when
-        no ucode profile is active.
+        normalizes the name to one the gateway rejects. ``None`` when
+        no gateway provider is active.
     :returns: Bridge directory path.
     """
     resolved_bridge_id = bridge_id or conversation_id
@@ -926,8 +926,8 @@ def read_launch_model(bridge_dir: Path) -> str | None:
 
     :param bridge_dir: Bridge directory path.
     :returns: Gateway model name, e.g.
-        ``"databricks-claude-opus-4-7"``, or ``None`` when no ucode
-        profile was active at launch time.
+        ``"anthropic/claude-opus-4-8"``, or ``None`` when no gateway
+        provider was active at launch time.
     """
     config = _read_json_file(bridge_dir / _CONFIG_FILE)
     if not isinstance(config, dict):
@@ -1039,8 +1039,7 @@ def build_hook_settings(
         ``{"Authorization": "Bearer <token>"}``. Stored in the
         owner-only bridge directory instead of in hook argv.
     :param api_key_helper: Optional Claude Code ``apiKeyHelper``
-        command from ucode state, e.g. ``"databricks auth token
-        --host https://example.databricks.com ..."``.
+        command for dynamic gateway tokens.
     :returns: JSON-serializable Claude settings fragment.
     """
     python = python_executable or sys.executable
@@ -1298,8 +1297,7 @@ def augment_claude_args(
         ``PermissionRequest`` command hook. Passed through to
         :func:`build_hook_settings`.
     :param api_key_helper: Optional Claude Code ``apiKeyHelper``
-        command from ucode state, e.g. ``"databricks auth token
-        --host https://example.databricks.com ..."``.
+        command for dynamic gateway tokens.
     :param bundle_dir: Materialized agent-bundle root, when the
         session's agent ships a ``skills/`` directory. Triggers
         ``--plugin-dir <bundle>`` so Claude Code discovers bundled
@@ -1860,7 +1858,7 @@ def _transcript_model_pricing(model: str) -> ModelPricing | None:
     Look up per-token pricing for *model*, memoizing successful results.
 
     :param model: API model id from a transcript ``message.model``,
-        e.g. ``"claude-opus-4-8"`` or ``"databricks-claude-sonnet-4-6"``.
+        e.g. ``"claude-opus-4-8"`` or ``"anthropic/claude-sonnet-4-6"``.
     :returns: The model's :class:`ModelPricing`, or ``None`` when pricing
         is unavailable (network error / model absent from the catalog),
         so the caller skips that message's cost.

@@ -82,46 +82,6 @@ _MCP_RECONNECT_DEFAULTS = RetryPolicy(
 _CIRCUIT_BREAKER_THRESHOLD = 5
 
 
-def _resolve_databricks_token(profile: str) -> str:
-    """
-    Resolve an OAuth bearer token from a Databricks config profile.
-
-    Uses the Databricks SDK's ``WorkspaceClient`` to read
-    ``~/.databrickscfg`` and obtain a fresh token. The client is
-    NOT cached here — token resolution happens once per
-    ``connect()`` call and the token is short-lived (typically 1h).
-
-    :param profile: Databricks config profile name, e.g.
-        ``"<your-profile>"``.
-    :returns: A bearer token string.
-    :raises ImportError: If ``databricks-sdk`` is not installed.
-    :raises RuntimeError: If the profile cannot resolve a token
-        (bad profile, expired credentials, network error).
-    """
-    try:
-        from databricks.sdk import WorkspaceClient
-    except ImportError:
-        raise ImportError(
-            "databricks-sdk is required for MCP Databricks auth (pip install databricks-sdk)"
-        ) from None
-
-    try:
-        client = WorkspaceClient(profile=profile)
-        result = client.config.authenticate()
-        # SDK returns either a dict (newer versions) or a callable
-        # that produces headers (older versions).
-        headers: dict[str, str] = result if isinstance(result, dict) else result(None)  # type: ignore[assignment]
-        auth_header = headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            return auth_header[len("Bearer ") :]
-        # Some auth flows return the token directly.
-        return auth_header
-    except Exception as exc:
-        raise RuntimeError(
-            f"Failed to resolve Databricks token from profile {profile!r}: {exc}"
-        ) from exc
-
-
 # Seconds to wait after tripping before allowing a single
 # half-open probe. Long enough that a restarting server has
 # time to come back; short enough that recovery isn't delayed
@@ -856,8 +816,7 @@ class McpServerConnection:
         Open an HTTP MCP transport — Streamable HTTP or legacy SSE.
 
         Tries the Streamable HTTP transport first (the current MCP
-        spec default, used by Databricks MCP gateways and newer
-        servers). Falls back to legacy SSE if the Streamable HTTP
+        spec default, used by newer servers). Falls back to legacy SSE if the Streamable HTTP
         handshake fails, so older servers still work.
 
         :param stack: The lifecycle task's exit stack.
@@ -890,20 +849,12 @@ class McpServerConnection:
         """
         Build the HTTP headers for the MCP connection.
 
-        Merges explicit ``headers`` from the config with a
-        Databricks OAuth token when ``databricks_profile`` is set.
-        The token is resolved fresh on each call so reconnects
-        pick up rotated credentials.
+        Returns explicit ``headers`` from the config.
 
         :returns: Merged headers dict, or ``None`` if no headers
-            are needed (empty config headers and no profile).
+            are needed.
         """
-        merged = dict(self.config.headers) if self.config.headers else {}
-        if self.config.databricks_profile is not None:
-            token = _resolve_databricks_token(self.config.databricks_profile)
-            # Explicit Authorization header wins — don't overwrite.
-            merged.setdefault("Authorization", f"Bearer {token}")
-        return merged or None
+        return dict(self.config.headers) if self.config.headers else None
 
     async def _open_streamable_http_transport(
         self,
@@ -921,8 +872,7 @@ class McpServerConnection:
         :param stack: The lifecycle task's exit stack.
         :param timeout: Per-server timeout in seconds, or ``None``
             for SDK defaults.
-        :param headers: Resolved HTTP headers (may include a
-            Databricks bearer token), or ``None``.
+        :param headers: Resolved HTTP headers, or ``None``.
         :returns: A ``(read_stream, write_stream)`` tuple.
         """
         assert self.config.url is not None
@@ -951,8 +901,7 @@ class McpServerConnection:
         :param stack: The lifecycle task's exit stack.
         :param timeout: Per-server timeout in seconds, or ``None``
             for SDK defaults.
-        :param headers: Resolved HTTP headers (may include a
-            Databricks bearer token), or ``None``.
+        :param headers: Resolved HTTP headers, or ``None``.
         :returns: A ``(read_stream, write_stream)`` tuple.
         """
         assert self.config.url is not None

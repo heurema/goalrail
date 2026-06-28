@@ -1239,7 +1239,7 @@ describe("buildBubbles — routing_decision (intelligent model router) chip", ()
       {
         type: "routing_decision",
         ctx: ctx({ itemId: "rd_1", responseId: "routing_1" }),
-        model: "databricks-claude-opus-4-8",
+        model: "anthropic/claude-opus-4-8",
         tier: "expensive",
         applied: true,
         rationale: "multi-file refactor needs deep reasoning",
@@ -1259,7 +1259,7 @@ describe("buildBubbles — routing_decision (intelligent model router) chip", ()
     expect(bubbles.map((b) => b.kind)).toEqual(["routing_decision", "assistant"]);
     const chip = bubbles[0] as Extract<Bubble, { kind: "routing_decision" }>;
     expect(chip.itemId).toBe("rd_1");
-    expect(chip.model).toBe("databricks-claude-opus-4-8");
+    expect(chip.model).toBe("anthropic/claude-opus-4-8");
     expect(chip.tier).toBe("expensive");
     expect(chip.applied).toBe(true);
     expect(chip.rationale).toBe("multi-file refactor needs deep reasoning");
@@ -1270,7 +1270,7 @@ describe("buildBubbles — routing_decision (intelligent model router) chip", ()
       {
         type: "routing_decision",
         ctx: ctx({ itemId: "rd_shadow", responseId: "routing_2" }),
-        model: "databricks-claude-haiku-4-5",
+        model: "anthropic/claude-haiku-4-5",
         tier: "cheap",
         applied: false,
         rationale: "trivial question",
@@ -1280,7 +1280,7 @@ describe("buildBubbles — routing_decision (intelligent model router) chip", ()
     // applied=false drives the "would have picked" copy — a flip to true
     // would falsely claim the brain ran on the router's pick.
     expect(chip.applied).toBe(false);
-    expect(chip.model).toBe("databricks-claude-haiku-4-5");
+    expect(chip.model).toBe("anthropic/claude-haiku-4-5");
   });
 
   it("reload funnel: a routing_decision item maps through itemsToBlocks to the same bubble", () => {
@@ -1290,7 +1290,7 @@ describe("buildBubbles — routing_decision (intelligent model router) chip", ()
         type: "routing_decision",
         response_id: "routing_3",
         status: "completed",
-        model: "databricks-claude-sonnet-4-6",
+        model: "anthropic/claude-sonnet-4-6",
         tier: "medium",
         applied: true,
         rationale: "moderate knowledge work",
@@ -1304,7 +1304,7 @@ describe("buildBubbles — routing_decision (intelligent model router) chip", ()
     // from the persisted item so both funnels dedup by ctx.itemId.
     expect(chip.kind).toBe("routing_decision");
     expect(chip.itemId).toBe("rd_reload");
-    expect(chip.model).toBe("databricks-claude-sonnet-4-6");
+    expect(chip.model).toBe("anthropic/claude-sonnet-4-6");
     expect(chip.tier).toBe("medium");
   });
 
@@ -1312,7 +1312,7 @@ describe("buildBubbles — routing_decision (intelligent model router) chip", ()
     const events: StreamEvent[] = [
       {
         type: "routing_decision",
-        model: "databricks-claude-opus-4-8",
+        model: "anthropic/claude-opus-4-8",
         tier: "expensive",
         applied: true,
         rationale: "hard turn",
@@ -1329,7 +1329,7 @@ describe("buildBubbles — routing_decision (intelligent model router) chip", ()
     expect(chip.kind).toBe("routing_decision");
     expect(chip.itemId).toBe("rd_live");
     expect(chip.applied).toBe(true);
-    expect(chip.model).toBe("databricks-claude-opus-4-8");
+    expect(chip.model).toBe("anthropic/claude-opus-4-8");
   });
 });
 

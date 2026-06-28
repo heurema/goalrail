@@ -4,8 +4,8 @@ The cursor harness drives the Cursor Python SDK (``cursor-sdk``). The SDK is
 replaced with an injected fake module (so no real bridge subprocess, API key, or
 network is needed), letting us exercise the ``SDKMessage`` → ExecutorEvent
 mapping, the ``custom_tools`` tool bridge into ``_tool_executor``,
-persistent-agent reuse across turns, the ``databricks-*`` model fallback, and
-the failure/lifecycle paths. Live end-to-end coverage (a real cursor model
+persistent-agent reuse across turns, provider-qualified model fallback, and the
+failure/lifecycle paths. Live end-to-end coverage (a real cursor model
 invoking a bridged tool) lives in the gated e2e test.
 """
 
@@ -203,10 +203,10 @@ def _tool(
 # ---------------------------------------------------------------------------
 
 
-def test_resolve_model_drops_databricks_and_defaults_to_auto() -> None:
+def test_resolve_model_drops_provider_qualified_ids_and_defaults_to_auto() -> None:
     assert _resolve_model("gpt-5") == "gpt-5"
-    assert _resolve_model("databricks-claude-sonnet-4-6") == "auto"
-    assert _resolve_model("databricks/kimi") == "auto"
+    assert _resolve_model("anthropic/claude-sonnet-4-6") == "auto"
+    assert _resolve_model("openai/gpt-5-4") == "auto"
     assert _resolve_model(None) == "auto"
 
 
@@ -218,7 +218,7 @@ def test_resolve_model_warns_when_dropping_a_pinned_model(
     import logging
 
     with caplog.at_level(logging.WARNING, logger="goalrail.inner.cursor_executor"):
-        assert _resolve_model("databricks-claude-opus-4-8") == "auto"
+        assert _resolve_model("anthropic/claude-opus-4-8") == "auto"
     assert any(
         r.levelno == logging.WARNING and "not a Cursor model" in r.getMessage()
         for r in caplog.records
@@ -477,9 +477,11 @@ async def test_session_restart_on_system_prompt_change(monkeypatch: pytest.Monke
     assert state["closed"] >= 1
 
 
-async def test_databricks_model_resolved_to_auto(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_provider_qualified_model_resolved_to_auto(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     state = _install_fake_sdk(monkeypatch, [{"messages": [_assistant("ok")], "result": "ok"}])
-    executor = CursorExecutor(model="databricks-claude-sonnet-4-6", api_key="crsr_x")
+    executor = CursorExecutor(model="anthropic/claude-sonnet-4-6", api_key="crsr_x")
     try:
         _ = [e async for e in executor.run_turn([_user("hi")], [], "SYS")]
     finally:

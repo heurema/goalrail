@@ -7,8 +7,6 @@ existing Session-managed tool loop intact.
 Environment:
     OPENAI_API_KEY           – direct OpenAI / OpenAI-compatible API key
     OPENAI_BASE_URL          – optional override for OpenAI-compatible endpoints
-    DATABRICKS_CONFIG_PROFILE – optional Databricks profile selector
-    ~/.databrickscfg         – host + token profile used for Databricks FMAPI passthrough
 """
 
 from __future__ import annotations
@@ -58,8 +56,7 @@ OpenAIKwargs: TypeAlias = dict[str, Any]  # type: ignore[explicit-any]
 JsonValue: TypeAlias = None | bool | int | float | str | list["JsonValue"] | dict[str, "JsonValue"]
 
 # Placeholder for the OpenAI SDK's ``api_key`` kwarg on OpenAI-compatible
-# endpoints (e.g. Databricks model serving) that authenticate through a
-# separate mechanism and ignore the key.
+# endpoints that authenticate through a separate mechanism and ignore the key.
 _OPENAI_KEY_PLACEHOLDER = "unused"
 
 _SESSION_ONLY_EXECUTOR_EXTRA_KEYS = {
@@ -68,27 +65,7 @@ _SESSION_ONLY_EXECUTOR_EXTRA_KEYS = {
 }
 
 
-def _databricks_openai_base_url(host: str) -> str:
-    # The OpenAI SDK appends /responses to the base_url automatically.
-    # Databricks exposes native OpenAI-compatible Responses at
-    # /ai-gateway/openai/v1; /serving-endpoints/responses does not exist.
-    host = host.rstrip("/")
-    return host + "/ai-gateway/openai/v1"
-
-
-def _is_legacy_databricks_serving_base_url(client: OpenAI) -> bool:
-    # Imported lazily so the ``openai`` dependency stays optional for
-    # importers that never actually construct an OpenAI client. The
-    # runtime isinstance guard also lets tests pass duck-typed fakes.
-    from openai import OpenAI as _OpenAI
-
-    if not isinstance(client, _OpenAI):
-        return False
-    return "/serving-endpoints" in str(client.base_url)
-
-
 def _get_openai_client(
-    profile: str | None = None,
     retry_policy: RetryPolicy | None = None,
 ) -> OpenAI:
     """Construct an OpenAI client for the Responses API.
@@ -96,10 +73,7 @@ def _get_openai_client(
     Supports three configuration modes (in priority order):
       1. Direct OpenAI-compatible: OPENAI_BASE_URL + OPENAI_API_KEY
       2. Direct OpenAI default endpoint: OPENAI_API_KEY
-      3. Databricks config file: ~/.databrickscfg
 
-    :param profile: Optional ``~/.databrickscfg`` profile name for the
-        Databricks fallback path, e.g. ``"<your-profile>"``.
     :param retry_policy: Optional retry policy. When provided, its
         ``policy.openai.kwargs()`` (max_retries, timeout) are spread
         into the ``OpenAI(...)`` constructor for L0 retry budget.
@@ -118,10 +92,9 @@ def _get_openai_client(
     if os.environ.get("OPENAI_BASE_URL"):
         return OpenAI(
             base_url=os.environ["OPENAI_BASE_URL"],
-            # Some OpenAI-compatible endpoints (Databricks model serving)
-            # don't validate the API key client-side; the SDK still
-            # requires a non-empty value, so we supply this documented
-            # placeholder when OPENAI_API_KEY isn't set.
+            # Some OpenAI-compatible endpoints don't validate the API key
+            # client-side; the SDK still requires a non-empty value, so we
+            # supply this documented placeholder when OPENAI_API_KEY isn't set.
             api_key=os.environ.get("OPENAI_API_KEY", _OPENAI_KEY_PLACEHOLDER),
             **retry_kwargs,
         )
@@ -130,22 +103,10 @@ def _get_openai_client(
     if api_key:
         return OpenAI(api_key=api_key, **retry_kwargs)
 
-    from .databricks_executor import _read_databrickscfg
-
-    creds = _read_databrickscfg(profile)
-
-    if creds is not None:
-        return OpenAI(
-            base_url=_databricks_openai_base_url(creds.host),
-            api_key=creds.token,
-            **retry_kwargs,
-        )
-
     raise OSError(
         "OpenResponsesExecutor requires either "
         "(OPENAI_BASE_URL + OPENAI_API_KEY), "
-        "OPENAI_API_KEY, "
-        "or a valid ~/.databrickscfg profile with host and token."
+        "or OPENAI_API_KEY."
     )
 
 
@@ -399,17 +360,14 @@ def _normalize_response_output_items(items: list[ResponseOutputItem]) -> list[Re
 class OpenResponsesExecutor(Executor):
     """Execute turns with the OpenAI Responses API."""
 
-    def __init__(self, client: OpenAI | None = None, profile: str | None = None) -> None:
+    def __init__(self, client: OpenAI | None = None) -> None:
         """Create an OpenResponsesExecutor.
 
         :param client: A preconfigured ``openai.OpenAI`` client.  When ``None``
-            the executor calls :func:`_get_openai_client` with ``profile``.
-        :param profile: Optional ``~/.databrickscfg`` profile name, passed
-            through to :func:`_get_openai_client` when constructing a client.
+            the executor calls :func:`_get_openai_client`.
         """
-        self._profile = profile
-        self._client = client if client is not None else _get_openai_client(profile=profile)
-        self._stream_responses = not _is_legacy_databricks_serving_base_url(self._client)
+        self._client = client if client is not None else _get_openai_client()
+        self._stream_responses = True
         self._supports_previous_response_id = True
         self._session_states: dict[str, _ResponsesSessionState] = {}
 

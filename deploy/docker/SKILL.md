@@ -5,7 +5,7 @@ description: Run the Goalrail server as a Docker compose stack (server + Postgre
 
 # Run Goalrail as a Docker compose stack
 
-The `Dockerfile` here is the single image used by every non-Databricks
+The `Dockerfile` here is the single image used by every non-gateway
 deploy path. It bundles the FastAPI server + a pre-built ap-web SPA
 into a slim Python runtime. The compose file pairs it with Postgres
 and exposes the server on port 8000.
@@ -42,7 +42,7 @@ Server is on http://localhost:8000.
 | | |
 |---|---|
 | `Dockerfile` | Multi-stage build with two final targets. `web-builder` (node:20) runs `npm install && npm run build` on `ap-web/`. `builder` (python:3.12) installs goalrail into `/opt/venv`; `server-builder` overlays the SPA bundle from `web-builder` and adds psycopg. The default target (`runtime`) copies the venv + `/build/` from `server-builder` and runs `entrypoint.py`. `--target host` builds the host image instead (from `builder`: goalrail + git/tmux, no SPA/psycopg/entrypoint). |
-| `Dockerfile.dockerignore` | BuildKit-aware exclude. Trims `deploy/databricks/`, `deploy/aws/`, tests, dev tooling — keeps the build context small. |
+| `Dockerfile.dockerignore` | BuildKit-aware exclude. Trims deprecated deploy targets, tests, and dev tooling to keep the build context small. |
 | `entrypoint.py` | Server process entrypoint. Reads `DATABASE_URL`, runs Alembic migrations, builds the SQLAlchemy stores, calls `create_app()`, runs uvicorn. Single source of truth for what env vars the container respects. |
 | `docker-compose.yaml` | Two services: `postgres` (16-alpine, persistent volume) and `goalrail` (built from the Dockerfile, depends on postgres healthcheck). Build context is `../..` (repo root). |
 | `.env.example` | Documents every env var the compose file passes through: `POSTGRES_PASSWORD`, `GOALRAIL_PORT`, all the `GOALRAIL_AUTH_*` and `GOALRAIL_OIDC_*` vars. |

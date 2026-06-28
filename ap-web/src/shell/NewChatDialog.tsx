@@ -29,7 +29,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { authenticatedFetch } from "@/lib/identity";
 import { isImeCompositionKeyEvent } from "@/lib/ime";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -216,49 +215,13 @@ export function ConnectHostInstructions({
   serverUrl: string;
   label?: string;
 }) {
-  // Databricks/internal deployments add the "Databricks Lakebox" connect
-  // path; OSS deployments (where the lakebox launcher is excluded) show
-  // only the plain `goalrail host` command. Driven by /v1/info.
-  const info = useServerInfo();
-  // "loading" before the boot probe resolves → treat as OSS (no Databricks
-  // hints) until known, so the clean UI shows first and lakebox never flashes.
-  const databricksFeatures = info !== "loading" && info.databricks_features;
   return (
     <div className="flex flex-col gap-4 rounded-lg border border-dashed border-border p-4">
       {label && <p className="text-xs text-muted-foreground">{label}</p>}
-      {databricksFeatures ? (
-        <Tabs defaultValue="local">
-          <TabsList className="w-full">
-            <TabsTrigger value="local" className="text-xs">
-              Local machine
-            </TabsTrigger>
-            <TabsTrigger value="lakebox" className="text-xs">
-              Databricks Lakebox
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="local">
-            <CliCommandBlock
-              command={`goalrail host --server ${serverUrl}`}
-              testIdPrefix="connect-host"
-            />
-          </TabsContent>
-          <TabsContent value="lakebox" className="flex flex-col gap-1.5">
-            <CliCommandBlock
-              command="goalrail sandbox create --provider lakebox"
-              testIdPrefix="connect-lakebox-create"
-            />
-            <CliCommandBlock
-              command={`goalrail sandbox connect --provider lakebox --sandbox-id <id> --server ${serverUrl}`}
-              testIdPrefix="connect-lakebox-connect"
-            />
-          </TabsContent>
-        </Tabs>
-      ) : (
-        <CliCommandBlock
-          command={`goalrail host --server ${serverUrl}`}
-          testIdPrefix="connect-host"
-        />
-      )}
+      <CliCommandBlock
+        command={`goalrail host --server ${serverUrl}`}
+        testIdPrefix="connect-host"
+      />
     </div>
   );
 }
@@ -861,9 +824,6 @@ export function NewChatLandingScreen() {
   // attach a help tooltip with a clickable link.
   const docsLinks = getGoalrailHostConfig().docsLinks;
   const newSandboxTooltipContent = docsLinks?.newSandbox;
-  // Embed-only docs seam for Databricks git auth setup. Standalone leaves this
-  // undefined, so no tooltip is rendered.
-  const databricksGitCredentialsTooltipContent = docsLinks?.databricksGitCredentials;
   const showDisabledSandboxWithDocs = !managedSandboxesEnabled && !!newSandboxTooltipContent;
 
   // Seeded from the persisted last pick so a returning user starts on the
@@ -1838,22 +1798,6 @@ export function NewChatLandingScreen() {
                         >
                           Repository (optional)
                         </label>
-                        {databricksGitCredentialsTooltipContent && (
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <button
-                                type="button"
-                                className="inline-flex size-4 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:text-foreground"
-                                aria-label="How to set up Databricks git credentials"
-                              >
-                                <CircleHelpIcon className="size-3.5" />
-                              </button>
-                            </TooltipTrigger>
-                            <TooltipContent className="max-w-64">
-                              {databricksGitCredentialsTooltipContent}
-                            </TooltipContent>
-                          </Tooltip>
-                        )}
                       </div>
                       <input
                         id="landing-repo-url"

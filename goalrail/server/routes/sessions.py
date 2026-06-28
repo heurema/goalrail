@@ -852,7 +852,7 @@ _FENCE_EXEMPT_EVENT_TYPES: frozenset[str] = frozenset(
 # traffic. Replaces the client's former 4 s HTTP poll of GET /v1/sessions.
 _SESSION_UPDATES_RESCAN_INTERVAL_S: float = 4.0
 # When a rescan produces no changes, emit a lightweight heartbeat frame
-# at most this often so intermediaries (e.g. Databricks Apps ingress)
+# at most this often so intermediaries
 # don't reap the idle WebSocket and the client can detect a dead link.
 _SESSION_UPDATES_HEARTBEAT_INTERVAL_S: float = 30.0
 # Hard cap on the watch-set size a single connection may register, so a
@@ -1351,7 +1351,7 @@ async def _publish_and_wait_for_harness_elicitation(
     # result for this gated tool, or Codex app-server's exact
     # ``serverRequest/resolved`` notification. Raced below so the wait
     # ends promptly without relying on the web verdict or on disconnect
-    # detection (unreliable behind the Databricks Apps proxy).
+    # detection (unreliable behind some proxies).
     parked = _ParkedHarnessElicitation(
         session_id=session_id,
         tool_name=tool_name,
@@ -2530,7 +2530,7 @@ def _resolve_llm_model(conv: Conversation | None) -> str | None:
     no agent binding or the spec cannot be loaded.
 
     :param conv: The conversation entity, or ``None``.
-    :returns: Model string (e.g. ``"databricks-gpt-5-5"``), or
+    :returns: Model string (e.g. ``"openai/gpt-5-5"``), or
         ``None`` when unavailable.
     """
     if conv is None or conv.agent_id is None:
@@ -2744,7 +2744,7 @@ def _model_usage_bucket(usage: dict[str, Any], model: str) -> dict[str, float]:
 
     :param usage: The conversation's mutable ``session_usage`` dict.
     :param model: The raw harness model id, e.g. ``"claude-sonnet-4-6"`` or
-        ``"databricks-gpt-5-5"``.
+        ``"openai/gpt-5-5"``.
     :returns: The mutable per-model bucket, e.g. ``{"input_tokens": 1200}``.
     """
     by_model = usage.setdefault("by_model", {})
@@ -2981,7 +2981,7 @@ def _persist_native_cumulative_usage(
       ``tokenUsage.total.cachedInputTokens``). Split out of the input total
       so :func:`compute_llm_cost` prices it at the cache-read rate rather
       than the full input rate. Absent for harnesses that don't report it.
-    - ``model`` — LLM model id to price with (e.g. ``"databricks-gpt-5-5"``);
+    - ``model`` — LLM model id to price with (e.g. ``"openai/gpt-5-5"``);
       falls back to the agent spec's model when absent.
 
     The ``total_cost_usd`` key is written only on the priced branches
@@ -3085,8 +3085,7 @@ def _persist_native_cumulative_usage(
                 # ``current`` carries the cache-read split when the harness
                 # reports it (codex-native does), so compute_llm_cost prices
                 # cache reads at their own rate; it falls back to the input
-                # rate for cache tokens when the catalog omits a cache price
-                # (e.g. ``databricks-*`` entries today).
+                # rate for cache tokens when the catalog omits a cache price.
                 # Monotonic, like the explicit-cost branch: token totals are
                 # also client-SET, so a lowered token report can't drop the
                 # priced cost below the persisted figure.
@@ -3474,7 +3473,7 @@ async def _persist_model_change_note(
     :param session_id: Session/conversation identifier, e.g.
         ``"conv_abc123"``.
     :param model_override: The new model id, e.g.
-        ``"databricks-gpt-5-4"``, or ``None`` when the override was
+        ``"openai/gpt-5-4"``, or ``None`` when the override was
         cleared back to the agent default.
     :param conversation_store: Store used to append the note item.
     :returns: None.
@@ -18460,9 +18459,9 @@ def create_sessions_router(
                 # they're written (a buffered proxy can delay the 15s
                 # heartbeat past a client/idle timeout), and ``no-cache``
                 # keeps the long-lived response out of any shared cache.
-                # NOTE: this does NOT defeat the Databricks Apps ingress'
-                # hard ~5-min HTTP/2 stream-duration cap — that drop is
-                # handled by the client's transparent reconnect.
+                # NOTE: this does NOT defeat hard proxy stream-duration
+                # caps; those drops are handled by the client's
+                # transparent reconnect.
                 "Cache-Control": "no-cache",
                 "X-Accel-Buffering": "no",
             },

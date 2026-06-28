@@ -32,7 +32,7 @@ stores into ``create_app``):
    ``<data_dir>/config.yaml``)::
 
        sandbox:
-         provider: modal          # lakebox|modal|daytona|boxlite|cwsandbox|islo|e2b|openshell
+         provider: modal          # modal|daytona|boxlite|cwsandbox|islo|e2b|openshell|kubernetes
          server_url: https://goalrail.example.com
          modal:                   # optional block
            image: docker.io/me/goalrail-host:latest  # default: official image
@@ -81,8 +81,8 @@ stores into ``create_app``):
    select`` (``$OPENSHELL_GATEWAY`` / ``~/.config/openshell/active_gateway``,
    or ``sandbox.openshell.cluster``), so the server process needs
    OpenShell gateway access. ``modal``, ``daytona``, ``cwsandbox``,
-   ``islo``, and ``openshell`` have managed-launch support; ``lakebox``
-   parses but rejects at launch.
+   ``islo``, ``openshell``, and ``kubernetes`` have managed-launch
+   support.
 
 2. **Direct construction** (embedding deployments): build
    :class:`ManagedSandboxConfig` with a custom
@@ -131,7 +131,6 @@ _logger = logging.getLogger(__name__)
 # their launcher factory IS the support.)
 SUPPORTED_SANDBOX_PROVIDERS: frozenset[str] = frozenset(
     {
-        "lakebox",
         "modal",
         "daytona",
         "boxlite",
@@ -350,17 +349,14 @@ class ManagedSandboxConfig:
         always re-authenticate its tunnel across reconnects.
     :param managed_launch_supported: Whether ``launcher_factory`` can
         actually serve a managed launch. The YAML path sets this from
-        :data:`PROVIDERS_WITH_MANAGED_LAUNCH` — staged providers
-        (``lakebox``) parse but get ``False``, since their factory
-        rejects at launch. Defaults to ``True`` for
-        directly-constructed configs (an embedding deployment's
+        :data:`PROVIDERS_WITH_MANAGED_LAUNCH`. Defaults to ``True``
+        for directly-constructed configs (an embedding deployment's
         custom factory IS the support). Drives the unauthenticated
-        ``managed_sandboxes_enabled`` capability flag on
-        ``GET /v1/info``, which gates the web UI's sandbox option.
+        ``managed_sandboxes_enabled`` capability flag on ``GET
+        /v1/info``, which gates the web UI's sandbox option.
     :param provider: Short provider name surfaced to the web UI so the
         new-session sandbox option can be labeled per provider (e.g.
-        ``"modal"`` → "Modal Sandbox", ``"lakebox"`` → "Databricks
-        Sandbox"). The YAML path sets it from the parsed
+        ``"modal"`` → "Modal Sandbox"). The YAML path sets it from the parsed
         ``sandbox.provider``. ``None`` for directly-constructed
         embedding configs that don't name a provider — the UI then
         falls back to the generic "New Sandbox" label. Exposed (when

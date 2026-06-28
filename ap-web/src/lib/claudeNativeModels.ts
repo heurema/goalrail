@@ -1,8 +1,8 @@
 /**
  * Claude-native model picker options: Claude Code's version-agnostic
  * aliases (not pinned IDs), so `/model opus` resolves to the latest
- * installed Opus — the list never drifts when a version retires, and the
- * ucode `ANTHROPIC_DEFAULT_*_MODEL` env pins redirect the same alias.
+ * installed Opus — the list never drifts when a version retires, and
+ * environment model pins redirect the same alias.
  *
  * Lives in a leaf module (no React / store imports) so both the picker UI
  * (`ChatPage`) and the store (`chatStore`) can read it without a circular
@@ -24,7 +24,7 @@ export const CLAUDE_NATIVE_MODELS = [
  * Accepts the version-agnostic aliases (`opus` / `sonnet` / `haiku`) and
  * any fully-qualified Anthropic id (anything containing `claude`, e.g.
  * `claude-fable-5`, `anthropic/claude-opus-4-8`,
- * `databricks-claude-sonnet-4-6`). The bare `fable` alias no longer
+ * `anthropic/claude-sonnet-4-6`). The bare `fable` alias no longer
  * matches while Fable is withheld, but pinned `claude-fable-5` sessions
  * still pass via the `claude` branch. Rejects everything else — notably the
  * Codex / OpenAI defaults (`gpt-5.4`, `gpt-5.4-mini`, …) that leak into the

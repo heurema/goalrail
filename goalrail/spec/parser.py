@@ -28,7 +28,6 @@ from goalrail.spec.types import (
     ApiKeyAuth,
     BuiltinToolConfig,
     CompactionConfig,
-    DatabricksAuth,
     ExecutorSpec,
     FunctionPolicySpec,
     FunctionRef,
@@ -564,19 +563,18 @@ def _parse_executor_auth(
     raw: dict[str, Any],  # type: ignore[explicit-any]
     *,
     expand_env: bool = True,
-) -> ApiKeyAuth | DatabricksAuth | ProviderAuth | None:
+) -> ApiKeyAuth | ProviderAuth | None:
     """
     Parse the ``executor.auth:`` block into a typed auth dataclass.
 
     Returns ``None`` when the ``auth:`` key is absent from the executor
-    block (the harness will fall back to env-var / profile defaults).
+    block (the harness will fall back to env-var defaults).
 
     Supported types:
 
     - ``type: api_key`` — requires ``api_key``.  Env-var references
       (e.g. ``$OPENAI_API_KEY``) are expanded when *expand_env* is
       ``True``.
-    - ``type: databricks`` — requires ``profile``.
     - ``type: provider`` — requires ``name`` (a provider declared in
       the ``providers:`` block of ``~/.goalrail/config.yaml``).
 
@@ -586,8 +584,8 @@ def _parse_executor_auth(
     :param expand_env: Whether to expand ``${VAR}`` / ``$VAR`` references
         in the ``api_key`` value. ``True`` for runtime; ``False`` for
         scaffolding / validation where env vars may not be set yet.
-    :returns: A populated :class:`ApiKeyAuth`, :class:`DatabricksAuth`,
-        or :class:`ProviderAuth`, or ``None`` when ``auth:`` is absent.
+    :returns: A populated :class:`ApiKeyAuth` or :class:`ProviderAuth`,
+        or ``None`` when ``auth:`` is absent.
     :raises GoalrailError: If the ``auth:`` block is present but
         malformed (unknown type, missing required field).
     """
@@ -596,7 +594,7 @@ def _parse_executor_auth(
         return None
     if not isinstance(raw_auth, dict):
         raise GoalrailError(
-            "executor.auth must be a mapping, e.g. {type: databricks, profile: oss}",
+            "executor.auth must be a mapping, e.g. {type: provider, name: openrouter}",
             code=ErrorCode.INVALID_INPUT,
         )
     auth_type = str(raw_auth.get("type", ""))
@@ -618,14 +616,6 @@ def _parse_executor_auth(
                 else raw_base_url_str
             )
         return ApiKeyAuth(api_key=api_key, base_url=base_url)
-    if auth_type == "databricks":
-        profile_val = str(raw_auth.get("profile") or "")
-        if not profile_val:
-            raise GoalrailError(
-                "executor.auth.profile is required when type is 'databricks'",
-                code=ErrorCode.INVALID_INPUT,
-            )
-        return DatabricksAuth(profile=profile_val)
     if auth_type == "provider":
         name_val = str(raw_auth.get("name") or "")
         if not name_val:
@@ -635,7 +625,7 @@ def _parse_executor_auth(
             )
         return ProviderAuth(name=name_val)
     raise GoalrailError(
-        f"executor.auth.type must be 'api_key', 'databricks', or 'provider', got {auth_type!r}",
+        f"executor.auth.type must be 'api_key' or 'provider', got {auth_type!r}",
         code=ErrorCode.INVALID_INPUT,
     )
 
@@ -2118,9 +2108,8 @@ def _parse_inline_mcp_servers(
     even when they appear as dict values.
 
     Transport is inferred: ``command`` present → ``"stdio"``,
-    ``url`` present → ``"http"``. Entries where neither is present
-    (e.g. ``databricks_server``-only Databricks MCPs) are skipped —
-    they don't have a local spawn or SSE endpoint to display.
+    ``url`` present → ``"http"``. Entries where neither is present are
+    skipped — they don't have a local spawn or SSE endpoint to display.
 
     :param raw_tools: The raw value of the top-level ``tools:`` key
         in config.yaml. ``None`` or a non-dict value returns an empty
@@ -2149,8 +2138,7 @@ def _parse_inline_mcp_servers(
         elif url is not None:
             transport = "http"
         else:
-            # Databricks-managed server or unknown shape — no local
-            # endpoint to display; skip.
+            # Unknown shape — no local endpoint to display; skip.
             continue
         raw_args = val.get("args", [])
         args = [str(a) for a in raw_args] if isinstance(raw_args, list) else []
@@ -2168,19 +2156,6 @@ def _parse_inline_mcp_servers(
                 code=ErrorCode.INVALID_INPUT,
             )
         env = expand_env_vars(raw_env) if expand_env and raw_env else raw_env
-        # Optional Databricks auth — resolves a bearer token at
-        # connection time from ~/.databrickscfg.
-        raw_auth = val.get("auth")
-        databricks_profile: str | None = None
-        if isinstance(raw_auth, dict) and str(raw_auth.get("type", "")) == "databricks":
-            raw_profile = raw_auth.get("profile")
-            if raw_profile is None:
-                raise GoalrailError(
-                    f"Inline MCP server {name!r} auth type 'databricks' "
-                    f"requires a 'profile' field",
-                    code=ErrorCode.INVALID_INPUT,
-                )
-            databricks_profile = str(raw_profile)
         servers.append(
             MCPServerConfig(
                 name=name,
@@ -2194,7 +2169,6 @@ def _parse_inline_mcp_servers(
                 args=args,
                 headers=headers,
                 env=env,
-                databricks_profile=databricks_profile,
             )
         )
     return servers

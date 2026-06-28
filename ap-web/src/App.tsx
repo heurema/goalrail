@@ -36,11 +36,11 @@ interface AppProps {
    * matches the FULL pathname, so paths are declared as `${basename}/c/:id`.
    *
    * Why not rely on descendant-route prefix stripping? When embedded, ap-web's
-   * `<Routes>` uses the host's externalized react-router instance, but the host
-   * mounts via `@databricks/web-shared/routing`, whose internal react-router
-   * may be a DIFFERENT physical module — so the parent route-match context that
-   * normally rebases descendant routes isn't reliably visible here. Matching
-   * the absolute pathname removes that dependency. Standalone passes no
+   * `<Routes>` may use the host's externalized react-router instance, whose
+   * internal react-router may be a different physical module — so the parent
+   * route-match context that normally rebases descendant routes isn't reliably
+   * visible here. Matching the absolute pathname removes that dependency.
+   * Standalone passes no
    * basename (BrowserRouter handles the root) and matches relatively (`prefix`
    * is empty, so every path is unchanged from the standalone route table).
    */

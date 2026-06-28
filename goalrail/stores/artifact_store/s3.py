@@ -68,7 +68,7 @@ def _validate_key(key: str) -> None:
     """
     Validate an artifact key against traversal attacks.
 
-    Same validation as ``LocalArtifactStore`` / ``DatabricksVolumesArtifactStore``
+    Same validation as ``LocalArtifactStore``.
     — reject empty keys, ``..`` sequences, backslashes, and absolute paths — so a
     crafted key can't escape the configured prefix.
 

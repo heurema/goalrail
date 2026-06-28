@@ -150,8 +150,7 @@ class _CredentialHeaderAuthProvider(AuthProvider):
 
     Returns the user id carried by a credential header when present,
     and ``None`` otherwise — exactly how ``UnifiedAuthProvider``
-    behaves in ``oidc`` / ``accounts`` mode (the deployed
-    Databricks-OAuth posture), where a missing or invalid cookie /
+    behaves in ``oidc`` / ``accounts`` mode, where a missing or invalid cookie /
     Bearer yields ``None``. This is deliberately *not* header mode,
     which falls back to :data:`RESERVED_USER_LOCAL` on a missing
     header and so never produces the ``None`` that the fail-closed gate turns on.

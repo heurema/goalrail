@@ -131,8 +131,8 @@ export function shouldRetryRunnerOffline(failureCount: number, error: Error): bo
  * Whether a 503 response is the app's `runner_unavailable` error rather
  * than a generic infrastructure 503.
  *
- * A 503 is NOT always the bound runner being offline: the Databricks Apps
- * front door / gateway returns 503 while the app restarts or cold-starts.
+ * A 503 is NOT always the bound runner being offline: a front door / gateway
+ * can return 503 while the app restarts or cold-starts.
  * Only the app-level error carries `{"error": {"code": "runner_unavailable"}}`,
  * so match on that — a bare/HTML 503 falls through to the normal
  * error+retry path instead of the (misleading) "agent is asleep" hint.

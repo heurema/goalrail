@@ -35,8 +35,8 @@ from goalrail.runner.cost_judge import (
 # Two configured tiers, multiple models each, so clamp / out-of-tier
 # behavior is observable.
 _TIERS: dict[str, tuple[str, ...]] = {
-    "cheap": ("databricks-claude-haiku-4-5", "databricks-gpt-5-4-mini"),
-    "expensive": ("databricks-claude-opus-4-8", "databricks-gpt-5-5"),
+    "cheap": ("anthropic/claude-haiku-4-5", "openai/gpt-5-4-mini"),
+    "expensive": ("anthropic/claude-opus-4-8", "openai/gpt-5-5"),
 }
 _ANCHOR = "2026-06-10T00:00:00+00:00"
 
@@ -121,15 +121,14 @@ async def test_verdict_carries_judged_tier_and_model() -> None:
     """A tier+model response becomes a verdict with that tier + model —
     proving the parsed JSON reached the caller intact."""
     client = _ScriptedClient(
-        '{"tier": "expensive", "model": "databricks-claude-opus-4-8", '
-        '"rationale": "deep refactor"}'
+        '{"tier": "expensive", "model": "anthropic/claude-opus-4-8", "rationale": "deep refactor"}'
     )
     verdict = await _judge(client).judge(query="refactor the auth flow", turn_anchor=_ANCHOR)
     assert verdict is not None
     # Exact verdict: a wrong tier/model means the JSON was dropped or
     # mis-mapped, and the brain would run at the wrong price.
     assert verdict.tier == "expensive"
-    assert verdict.model == "databricks-claude-opus-4-8"
+    assert verdict.model == "anthropic/claude-opus-4-8"
     assert verdict.rationale == "deep refactor"
     assert verdict.turn_anchor == _ANCHOR
     # The judge never sets applied — that is the advisor's decision.
@@ -142,14 +141,14 @@ async def test_verdict_carries_judged_tier_and_model() -> None:
 async def test_verdict_strips_markdown_code_fence() -> None:
     """A fenced JSON body (```json ... ```) still parses to a verdict."""
     client = _ScriptedClient(
-        '```json\n{"tier": "cheap", "model": "databricks-claude-haiku-4-5"}\n```'
+        '```json\n{"tier": "cheap", "model": "anthropic/claude-haiku-4-5"}\n```'
     )
     verdict = await _judge(client).judge(query="what's 2+2?", turn_anchor=_ANCHOR)
     assert verdict is not None
     # The fence must be stripped before json.loads; otherwise this turn
     # would have failed open (None) and the test would catch it below.
     assert verdict.tier == "cheap"
-    assert verdict.model == "databricks-claude-haiku-4-5"
+    assert verdict.model == "anthropic/claude-haiku-4-5"
 
 
 @pytest.mark.asyncio
@@ -179,14 +178,14 @@ async def test_out_of_tier_model_is_clamped_to_tier_first() -> None:
     """A model pin outside the named tier clamps to that tier's first model
     rather than failing the turn."""
     client = _ScriptedClient(
-        '{"tier": "cheap", "model": "databricks-claude-opus-4-8", "rationale": "r"}'
+        '{"tier": "cheap", "model": "anthropic/claude-opus-4-8", "rationale": "r"}'
     )
     verdict = await _judge(client).judge(query="rename a var", turn_anchor=_ANCHOR)
     assert verdict is not None
     assert verdict.tier == "cheap"
     # opus is an expensive-tier model; clamped to cheap's first model so a
     # hallucinated pin degrades to the tier's canonical model, not a crash.
-    assert verdict.model == "databricks-claude-haiku-4-5"
+    assert verdict.model == "anthropic/claude-haiku-4-5"
 
 
 @pytest.mark.asyncio
@@ -240,7 +239,7 @@ async def test_retry_recovers_from_transient_error() -> None:
     )
     # medium is not in _TIERS, so use a catalog that has it for this test.
     judge = build_llm_judge(
-        tiers={"medium": ("databricks-claude-sonnet-4-6",)},
+        tiers={"medium": ("anthropic/claude-sonnet-4-6",)},
         executor_config=None,
         connection=None,
         client=client,
@@ -250,7 +249,7 @@ async def test_retry_recovers_from_transient_error() -> None:
     assert verdict.tier == "medium"
     # Clamped to the only medium model — proves the recovered call's verdict
     # flowed through the clamp.
-    assert verdict.model == "databricks-claude-sonnet-4-6"
+    assert verdict.model == "anthropic/claude-sonnet-4-6"
     # Two calls: the failed one + the successful retry.
     assert client.call_count == 2
 
@@ -288,7 +287,7 @@ async def test_default_judge_model_is_cheapest_tier_first() -> None:
     client = _ScriptedClient('{"tier": null}')
     await _judge(client).judge(query="hi", turn_anchor=_ANCHOR)
     # The model the judge CALL used (captured kwargs), not the verdict's.
-    assert client.captured[0]["model"] == "databricks-claude-haiku-4-5"
+    assert client.captured[0]["model"] == "anthropic/claude-haiku-4-5"
 
 
 @pytest.mark.asyncio
@@ -297,12 +296,12 @@ async def test_advisor_model_override_picks_judge_model() -> None:
     client = _ScriptedClient('{"tier": null}')
     judge = build_llm_judge(
         tiers=_TIERS,
-        executor_config={"cost_optimize": {"advisor_model": "databricks-gpt-5-4-mini"}},
+        executor_config={"cost_optimize": {"advisor_model": "openai/gpt-5-4-mini"}},
         connection=None,
         client=client,
     )
     await judge.judge(query="hi", turn_anchor=_ANCHOR)
-    assert client.captured[0]["model"] == "databricks-gpt-5-4-mini"
+    assert client.captured[0]["model"] == "openai/gpt-5-4-mini"
 
 
 # ── Mode resolution precedence ──────────────────────────────────────────────────
@@ -338,7 +337,7 @@ def test_verdict_dataclass_is_unapplied_by_judge() -> None:
     # Build directly to assert the contract default the judge depends on.
     v = AdvisorVerdict(
         tier="cheap",
-        model="databricks-claude-haiku-4-5",
+        model="anthropic/claude-haiku-4-5",
         applied=False,
         rationale="r",
         turn_anchor=_ANCHOR,
@@ -346,99 +345,42 @@ def test_verdict_dataclass_is_unapplied_by_judge() -> None:
     assert v.applied is False
 
 
-# ── Databricks judge-model routing (real-client path) ─────────────────────────
+# ── Judge connection/model routing (real-client path) ─────────────────────────
 
 
 @pytest.mark.asyncio
-async def test_bare_databricks_judge_model_routes_via_databricks_adapter(
+async def test_real_client_path_passes_connection_params(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A bare ``databricks-*`` judge model is routed through the databricks
-    adapter on the real-client path: provider-prefixed model + a connection
-    resolved from the brain's profile.
-
-    Without the prefix the generic client routes the bare id to the default
-    openai adapter (api.openai.com) and the judge 401s and fails open on
-    EVERY turn — the live-run failure that motivated the routing.
-    """
-    from goalrail.runtime.credentials.databricks import WorkspaceCreds
-
+    """The production judge passes the orchestrator connection to the LLM client."""
     client = _ScriptedClient('{"tier": null}')
-    resolved_profiles: list[str | None] = []
-
-    def _fake_creds(profile: str | None) -> WorkspaceCreds:
-        resolved_profiles.append(profile)
-        return WorkspaceCreds(host="https://example.databricks.com", token="tok-123")
+    connection = {"base_url": "https://gateway.example.com/v1", "api_key": "tok-123"}
 
     # The real-client path lazily does `from goalrail.llms.client import
     # Client`; rebind that symbol so no real client is constructed.
     monkeypatch.setattr("goalrail.llms.client.Client", lambda: client)
-    monkeypatch.setattr("goalrail.runner.cost_judge._resolve_workspace_creds", _fake_creds)
     judge = build_llm_judge(
         tiers=_TIERS,
         executor_config={"cost_optimize": {"tiers": {}}},
-        connection=None,
-        databricks_profile="brain-profile",
+        connection=connection,
     )
     await judge.judge(query="hi", turn_anchor=_ANCHOR)
-    # Credentials were resolved from the BRAIN's profile — a None here
-    # means the advisor's profile threading broke (ambient fallback).
-    assert resolved_profiles == ["brain-profile"]
-    # Prefixed model = the databricks adapter handles the call; the bare id
-    # would mean the openai-adapter misroute regressed.
-    assert client.captured[0]["model"] == "databricks/databricks-claude-haiku-4-5"
-    # The call carries the gateway connection resolved from the profile.
-    assert client.captured[0]["connection_params"] == {
-        "base_url": "https://example.databricks.com/serving-endpoints",
-        "api_key": "tok-123",
-    }
+    assert client.captured[0]["model"] == "anthropic/claude-haiku-4-5"
+    assert client.captured[0]["connection_params"] == connection
 
 
 @pytest.mark.asyncio
-async def test_databricks_credential_failure_falls_back_to_adapter_defaults(
+async def test_provider_prefixed_judge_model_is_not_rerouted(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A failed credential resolution keeps the prefixed model but passes no
-    connection (the adapter then auto-resolves ambiently) — building the
-    judge never raises into the turn."""
-
-    def _broken_creds(profile: str | None) -> None:
-        raise OSError("no usable Databricks credentials")
+    """A provider-prefixed judge model is passed through untouched."""
 
     client = _ScriptedClient('{"tier": null}')
     monkeypatch.setattr("goalrail.llms.client.Client", lambda: client)
-    monkeypatch.setattr("goalrail.runner.cost_judge._resolve_workspace_creds", _broken_creds)
-    judge = build_llm_judge(
-        tiers=_TIERS,
-        executor_config={"cost_optimize": {"tiers": {}}},
-        connection=None,
-        databricks_profile="brain-profile",
-    )
-    await judge.judge(query="hi", turn_anchor=_ANCHOR)
-    # Still routed to the databricks adapter (prefix is independent of creds).
-    assert client.captured[0]["model"] == "databricks/databricks-claude-haiku-4-5"
-    # No connection: the adapter's own ambient resolution is the fallback.
-    assert client.captured[0]["connection_params"] is None
-
-
-@pytest.mark.asyncio
-async def test_non_databricks_judge_model_is_not_rerouted(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A provider-prefixed non-Databricks judge model is passed through
-    untouched and triggers NO Databricks credential resolution."""
-
-    def _must_not_resolve(profile: str | None) -> None:
-        raise AssertionError("credential resolution must not run for a non-Databricks model")
-
-    client = _ScriptedClient('{"tier": null}')
-    monkeypatch.setattr("goalrail.llms.client.Client", lambda: client)
-    monkeypatch.setattr("goalrail.runner.cost_judge._resolve_workspace_creds", _must_not_resolve)
     judge = build_llm_judge(
         tiers=_TIERS,
         executor_config={"cost_optimize": {"advisor_model": "anthropic/claude-haiku-4-5"}},
         connection=None,
-        databricks_profile="brain-profile",
     )
     await judge.judge(query="hi", turn_anchor=_ANCHOR)
     assert client.captured[0]["model"] == "anthropic/claude-haiku-4-5"

@@ -214,8 +214,7 @@ def remap_identities(
 
             # ── hosts.owner is a PK part (owner, name); a collision with
             # an existing (new, name) host would violate the PK, so guard
-            # per-row. Rare in OSS (hosts are a Databricks-connect
-            # feature), but correctness over assumption.
+            # per-row. Rare in OSS, but correctness over assumption.
             old_hosts = (
                 session.execute(select(SqlHost).where(SqlHost.owner == old_id)).scalars().all()
             )

@@ -4,7 +4,7 @@ The copilot harness drives the GitHub Copilot SDK (``github-copilot-sdk``,
 imported as ``copilot``). The SDK is replaced with an injected fake module (so
 no real backing CLI, GitHub token, or network is needed), letting us exercise
 the ``SessionEvent`` → ExecutorEvent mapping, the tool bridge into
-``_tool_executor``, persistent-session reuse across turns, the ``databricks-*``
+``_tool_executor``, persistent-session reuse across turns, provider-qualified
 model fallback, usage accumulation, and the failure/lifecycle paths. Live
 end-to-end coverage (a real Copilot model invoking a bridged tool) lives in the
 gated e2e test.
@@ -209,10 +209,10 @@ def _install_fake_copilot(
 # ---------------------------------------------------------------------------
 
 
-def test_resolve_model_passthrough_and_databricks_drop() -> None:
+def test_resolve_model_passthrough_and_provider_qualified_drop() -> None:
     assert _resolve_model(None) is None
     assert _resolve_model("claude-haiku-4.5") == "claude-haiku-4.5"
-    assert _resolve_model("databricks-claude-opus-4-8") is None
+    assert _resolve_model("anthropic/claude-opus-4-8") is None
 
 
 def test_build_prompt_first_turn_history_and_latest() -> None:
@@ -475,10 +475,10 @@ async def test_session_restart_on_system_prompt_change(
 @pytest.mark.asyncio
 async def test_system_message_and_model_threaded(monkeypatch: pytest.MonkeyPatch) -> None:
     state = _install_fake_copilot(monkeypatch, [[_ev("ASSISTANT_MESSAGE", content="ok")]])
-    ex = CopilotExecutor(github_token="gho_x", model="databricks-claude-opus-4-8")
+    ex = CopilotExecutor(github_token="gho_x", model="anthropic/claude-opus-4-8")
     _ = [e async for e in ex.run_turn([_user("hi")], [], "SYS")]
     kwargs = state["create_kwargs"][0]
-    # databricks-* model dropped to None (auto-select).
+    # provider-qualified model dropped to None (auto-select).
     assert kwargs["model"] is None
     # system prompt delivered as an append-mode system_message.
     assert kwargs["system_message"] == {"mode": "append", "content": "SYS"}

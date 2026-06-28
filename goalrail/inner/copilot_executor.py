@@ -94,24 +94,20 @@ _SEND_TIMEOUT_S = 3600.0
 
 
 def _resolve_model(model: str | None) -> str | None:
-    """Resolve the Copilot model id, dropping ids Copilot can't honor.
+    """Resolve the Copilot model id, dropping provider-qualified ids.
 
     The Copilot SDK accepts only ids in the account's catalog (``auto``,
-    ``claude-haiku-4.5``, ``gpt-5-mini``, ...), so a gateway-routed model id
-    (carried by a spec authored for another harness) falls back to Copilot's
-    own auto-select (``None`` → the SDK picks). ``None`` likewise lets the SDK
-    choose.
+    ``claude-haiku-4.5``, ``gpt-5-mini``, ...). ``None`` lets the SDK choose.
+    Provider-qualified ids such as ``anthropic/claude-sonnet`` belong to
+    Goalrail routing, not the native Copilot catalog, so they are dropped.
     """
-    if not model or model.startswith(("databricks-", "databricks/")):
-        if model:
-            # Warn, not debug: the requested model is silently NOT honored, and
-            # a debug line is invisible in the harness subprocess — so a user who
-            # pinned a non-Copilot model would otherwise have no idea it was dropped.
-            logger.warning(
-                "CopilotExecutor: requested model %r is not a Copilot model id; "
-                "falling back to Copilot's auto-select.",
-                model,
-            )
+    if not model:
+        return None
+    if "/" in model:
+        logger.warning(
+            "Ignoring provider-qualified model %r because it is not a Copilot model; using auto",
+            model,
+        )
         return None
     return model
 

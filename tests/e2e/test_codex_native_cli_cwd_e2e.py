@@ -19,9 +19,7 @@ Environment requirements (why this is opt-in, not pure-CI)
 
     GOALRAIL_E2E_CODEX_NATIVE=1 \
     .venv/bin/python -m pytest tests/e2e/test_codex_native_cli_cwd_e2e.py \
-        --profile oss \
-        --llm-api-key "$(databricks auth token -p oss \
-            | python -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')" \
+        --llm-api-key "$OPENAI_API_KEY" \
         -v
 """
 
@@ -64,7 +62,6 @@ _CWD_MARKER_FILE = "CWD_MARKER.txt"
 def test_codex_native_cli_runs_in_launch_cwd(
     resume_test_server: str,
     tmp_path: Path,
-    request: pytest.FixtureRequest,
 ) -> None:
     """
     ``goalrail codex`` launches the agent in the directory it was run from.
@@ -84,23 +81,17 @@ def test_codex_native_cli_runs_in_launch_cwd(
 
     :param resume_test_server: Base URL of the allow-list-free test server.
     :param tmp_path: Per-test temp dir; its ``pwd`` subdir is the launch cwd.
-    :param request: Pytest request — reads ``--profile`` for the LLM gateway.
     :returns: None.
     """
-    profile = request.config.getoption("--profile")
-    assert profile, "this test requires --profile (e.g. --profile oss) for the LLM gateway"
-
     pwd_dir = tmp_path / "pwd"
     pwd_dir.mkdir()
     marker = f"PWD_{uuid.uuid4().hex[:6].upper()}"
     (pwd_dir / _CWD_MARKER_FILE).write_text(marker + "\n")
 
     goalrail = str(goalrail_console_script())
-    # ``--profile`` was removed from the goalrail CLI; cli_env(profile=…)
-    # supplies the gateway routing via the config-home auth block instead.
     handle = spawn_cli_background(
         [goalrail, "codex", "--server", resume_test_server],
-        env=cli_env(profile=profile),
+        env=cli_env(),
         cwd=str(pwd_dir),
     )
     try:

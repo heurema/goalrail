@@ -15,21 +15,12 @@ from pathlib import Path
 from tests.e2e._run_with_group_timeout import run_with_group_timeout
 from tests.e2e.goalrail.conftest import configure_mock_llm
 
-# ``databricks-`` prefix is load-bearing on two counts:
-# 1. ``databricks-`` exempts ``llm.connection`` from
-#    ``goalrail.spec.validator._validate_executor_llm``; any other prefix
-#    rejects the YAML before any FM API call happens.
-# 2. ``databricks-gpt-`` routes through ``goalrail.llms.routing.infer_
-#    harness_from_model`` to ``openai-agents``; a bare ``databricks-`` prefix
-#    leaves ``executor.harness=""`` and the runtime wedges (no validator
-#    catches the empty harness when ``llm.model`` is set).
-#
 # The valid model is set to ``mock-model`` (routed to the "default" key
-# of the mock LLM queue, so any configured response is returned).
-# For the bogus-model case we use a ``databricks-gpt-`` prefix so routing
-# reaches the mock server, then configure an error response for that key.
+# of the mock LLM queue, so any configured response is returned). The bogus
+# case uses an OpenAI-style provider-qualified id so harness inference reaches
+# the openai-agents mock server and returns the configured error response.
 _VALID_MODEL = "mock-model"
-_BOGUS_MODEL = "databricks-gpt-this-model-does-not-exist-goalrail-env-test-9f3a"
+_BOGUS_MODEL = "openai/this-model-does-not-exist-goalrail-env-test-9f3a"
 
 _PROMPT = "say hi in 5 words"
 # Wall-clock budget for the subprocess. ``goalrail run`` spawns the

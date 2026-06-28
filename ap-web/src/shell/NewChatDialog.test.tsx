@@ -541,7 +541,6 @@ function renderLanding(infoOverrides: Partial<ServerInfo> = {}) {
     accounts_enabled: false,
     login_url: null,
     needs_setup: false,
-    databricks_features: false,
     managed_sandboxes_enabled: false,
     sandbox_provider: null,
     smart_routing_enabled: false,
@@ -1072,25 +1071,6 @@ describe("NewChatLandingScreen", () => {
     expect(body.host_type).toBe("managed");
     expect("host_id" in body).toBe(false);
     expect("git" in body).toBe(false);
-  });
-
-  it("shows host-provided git credentials tooltip content in the sandbox repo popover", async () => {
-    setGoalrailHostConfig({
-      docsLinks: { databricksGitCredentials: "Use Databricks Git credentials before cloning." },
-    });
-    renderLanding({ managed_sandboxes_enabled: true });
-    await waitFor(() =>
-      expect(screen.getByTestId("new-chat-landing-host-chip").textContent).toContain("New Sandbox"),
-    );
-    fireEvent.click(screen.getByTestId("new-chat-landing-repo-chip"));
-    const helpButton = screen.getByLabelText("How to set up Databricks git credentials");
-    expect(helpButton).toBeTruthy();
-    fireEvent.focus(helpButton);
-    await waitFor(() =>
-      expect(
-        screen.getAllByText("Use Databricks Git credentials before cloning.").length,
-      ).toBeGreaterThan(0),
-    );
   });
 
   it("blocks submit on an invalid repository URL or a dangling branch", () => {

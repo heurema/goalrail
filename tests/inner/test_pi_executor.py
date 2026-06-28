@@ -15,7 +15,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from goalrail.inner.databricks_executor import DatabricksCredentials
 from goalrail.inner.executor import (
     ExecutorConfig,
     ExecutorError,
@@ -38,7 +37,6 @@ from goalrail.inner.pi_executor import (
     _split_pi_prompt,
     _ToolServer,
 )
-from goalrail.onboarding.databricks_config import DATABRICKS_CLAUDE_DEFAULT_MODEL
 from goalrail.runtime.harnesses._scaffold import PolicyVerdictPayload
 
 
@@ -335,17 +333,17 @@ def test_sanitize_real_sys_session_send_args_collapses_to_object() -> None:
 
 class TestPiProviderForModel(unittest.TestCase):
     def test_gpt_model(self):
-        self.assertEqual(_pi_provider_for_model("databricks-gpt-5-4-mini"), "databricks")
+        self.assertEqual(_pi_provider_for_model("openai/gpt-5-4-mini"), "goalrail-openai")
 
     def test_claude_model(self):
         self.assertEqual(
-            _pi_provider_for_model("databricks-claude-sonnet-4-6"), "databricks-anthropic"
+            _pi_provider_for_model("anthropic/claude-sonnet-4-6"), "goalrail-anthropic"
         )
 
     def test_other_model(self):
         self.assertEqual(
-            _pi_provider_for_model("databricks-meta-llama-3.3-70b-instruct"),
-            "databricks-completions",
+            _pi_provider_for_model("goalrail-openai-meta-llama-3.3-70b-instruct"),
+            "goalrail-completions",
         )
 
 
@@ -423,116 +421,69 @@ def test_split_pi_prompt_rejects_genuinely_unknown_block_type():
 
 class TestBuildModelsJson(unittest.TestCase):
     def test_has_three_providers(self):
-        result = _build_models_json("https://host.example.com", "tok123")
+        result = _build_models_json(
+            token="tok123", base_url="https://host.example.com", model="openai/gpt-5-4"
+        )
         providers = result["providers"]
-        self.assertIn("databricks", providers)
-        self.assertIn("databricks-anthropic", providers)
-        self.assertIn("databricks-completions", providers)
+        self.assertIn("goalrail-openai", providers)
+        self.assertIn("goalrail-anthropic", providers)
+        self.assertIn("goalrail-completions", providers)
 
     def test_dynamic_model_declared_image_capable(self):
         # #515: a dynamically-registered model must advertise image input, or
         # Pi's transformMessages strips every image block ("model does not
         # support images") before the message reaches the provider.
-        model = "databricks-qwen2-5-vl-72b"
-        result = _build_models_json("https://host.example.com", "tok", model=model)
+        model = "qwen/qwen2-5-vl-72b"
+        result = _build_models_json(token="tok", base_url="https://host.example.com", model=model)
         provider = result["providers"][_pi_provider_for_model(model)]
         entry = next(e for e in provider["models"] if e["id"] == model)
         self.assertEqual(entry.get("input"), ["text", "image"])
 
-    def test_static_model_declared_image_capable(self):
-        # #516 review: a STATIC (pre-registered) vision model must also
-        # advertise image input. The dynamic-registration append is gated on
-        # the model not already being listed, so a default model like GPT-5.4
-        # (openai-completions) or Claude would otherwise keep an input-less
-        # entry and have its images stripped.
-        for model in ("databricks-gpt-5-4", "databricks-claude-opus-4-8"):
-            result = _build_models_json("https://host.example.com", "tok", model=model)
+    def test_claude_and_openai_models_route_to_expected_providers(self):
+        for model in ("openai/gpt-5-4", "anthropic/claude-opus-4-8"):
+            result = _build_models_json(
+                token="tok", base_url="https://host.example.com", model=model
+            )
             provider = result["providers"][_pi_provider_for_model(model)]
             entry = next(e for e in provider["models"] if e["id"] == model)
             self.assertEqual(entry.get("input"), ["text", "image"], model)
 
     def test_base_urls_use_host(self):
-        result = _build_models_json("https://host.example.com/", "tok")
-        p = result["providers"]
-        self.assertTrue(
-            p["databricks"]["baseUrl"].startswith("https://host.example.com/serving-endpoints")
-        )
-        self.assertIn("/anthropic", p["databricks-anthropic"]["baseUrl"])
-
-    def test_base_urls_can_come_from_ucode_state(self):
         result = _build_models_json(
-            "https://host.example.com",
-            "tok",
-            {
-                "claude": "https://host.example.com/ai-gateway/anthropic",
-                "openai": "https://host.example.com/ai-gateway/codex/v1",
+            token="tok", base_url="https://host.example.com/", model="openai/gpt-5-4"
+        )
+        p = result["providers"]
+        self.assertEqual(p["goalrail-openai"]["baseUrl"], "https://host.example.com/")
+        self.assertEqual(p["goalrail-anthropic"]["baseUrl"], "https://host.example.com/")
+
+    def test_base_urls_can_come_from_family_overrides(self):
+        result = _build_models_json(
+            token="tok",
+            base_url="https://fallback.example.com/v1",
+            base_urls={
+                "claude": "https://anthropic.example.com",
+                "openai": "https://openai.example.com/v1",
+                "completions": "https://completions.example.com/v1",
             },
+            model="openai/gpt-5-4",
         )
         p = result["providers"]
-        # The ucode ``openai`` value is the Codex Responses gateway; GPT and the
-        # catch-all re-route to serving-endpoints, claude keeps its gateway.
+        self.assertEqual(p["goalrail-openai"]["baseUrl"], "https://openai.example.com/v1")
+        self.assertEqual(p["goalrail-anthropic"]["baseUrl"], "https://anthropic.example.com")
         self.assertEqual(
-            p["databricks"]["baseUrl"],
-            "https://host.example.com/serving-endpoints",
+            p["goalrail-completions"]["baseUrl"], "https://completions.example.com/v1"
         )
-        self.assertEqual(
-            p["databricks-anthropic"]["baseUrl"],
-            "https://host.example.com/ai-gateway/anthropic",
-        )
-        self.assertEqual(
-            p["databricks-completions"]["baseUrl"],
-            "https://host.example.com/serving-endpoints",
-        )
-
-    def test_ucode_codex_gateway_rerouted_off_responses_path(self):
-        # The codex gateway 404s /chat/completions, so it must not survive onto
-        # a completions provider (#241 GPT 404).
-        result = _build_models_json(
-            "https://host.example.com",
-            "tok",
-            {"openai": "https://host.example.com/ai-gateway/codex/v1"},
-        )
-        for name in ("databricks", "databricks-completions"):
-            base_url = result["providers"][name]["baseUrl"]
-            self.assertNotIn("/ai-gateway/codex", base_url)
-            self.assertEqual(base_url, "https://host.example.com/serving-endpoints")
-
-    def test_gemini_model_routed_off_codex_gateway(self):
-        # Gemini falls to the databricks-completions catch-all; it must land on
-        # serving-endpoints, not the codex URL it used to inherit (#241).
-        result = _build_models_json(
-            "https://host.example.com",
-            "tok",
-            {"openai": "https://host.example.com/ai-gateway/codex/v1"},
-            model="databricks-gemini-2-5-pro",
-        )
-        provider = result["providers"][_pi_provider_for_model("databricks-gemini-2-5-pro")]
-        self.assertEqual(provider["baseUrl"], "https://host.example.com/serving-endpoints")
-        self.assertIn(
-            "databricks-gemini-2-5-pro",
-            [entry.get("id") for entry in provider["models"]],
-        )
-
-    def test_generic_openai_base_url_used_as_is(self):
-        # A non-ucode openai URL (no ``/ai-gateway/codex``) must pass through so
-        # the re-route never breaks generic gateways.
-        result = _build_models_json(
-            "https://host.example.com",
-            "tok",
-            {"openai": "https://openrouter.ai/api/v1"},
-        )
-        p = result["providers"]
-        self.assertEqual(p["databricks"]["baseUrl"], "https://openrouter.ai/api/v1")
-        self.assertEqual(p["databricks-completions"]["baseUrl"], "https://openrouter.ai/api/v1")
 
     def test_api_key_set(self):
-        result = _build_models_json("https://host.example.com", "mytoken")
+        result = _build_models_json(
+            token="mytoken", base_url="https://host.example.com", model="openai/gpt-5-4"
+        )
         for prov in result["providers"].values():
             self.assertEqual(prov["apiKey"], "mytoken")
 
     def test_gpt_provider_uses_completions_api(self):
-        result = _build_models_json("https://h", "t")
-        self.assertEqual(result["providers"]["databricks"]["api"], "openai-completions")
+        result = _build_models_json(token="t", base_url="https://h", model="openai/gpt-5-4")
+        self.assertEqual(result["providers"]["goalrail-openai"]["api"], "openai-completions")
 
 
 # ---------------------------------------------------------------------------
@@ -1280,37 +1231,29 @@ class TestPiExecutorConstructor(unittest.TestCase):
             with self.assertRaises(ImportError):
                 PiExecutor()
 
-    def test_constructor_databricks_with_env(self):
+    def test_constructor_gateway_requires_auth_command(self):
         with (
             patch("goalrail.inner.pi_executor._find_pi_cli", return_value="/usr/bin/pi"),
-            patch(
-                "goalrail.inner.pi_executor._read_databrickscfg",
-                return_value=DatabricksCredentials(host="https://h.example.com", token="tok"),
-            ),
-        ):
-            executor = PiExecutor(gateway=True)
-        self.assertTrue(executor._gateway)
-        self.assertEqual(executor._databricks_host, "https://h.example.com")
-        self.assertEqual(executor._databricks_token, "tok")
-
-    def test_constructor_databricks_with_host_override_requires_auth_command(self):
-        with (
-            patch("goalrail.inner.pi_executor._find_pi_cli", return_value="/usr/bin/pi"),
-            patch("goalrail.inner.pi_executor._read_databrickscfg") as read_cfg,
         ):
             with self.assertRaisesRegex(OSError, "requires a gateway auth command"):
                 PiExecutor(
                     gateway=True,
-                    databricks_profile="missing-profile",
-                    gateway_host="https://example.databricks.com/",
+                    base_url_override="https://goalrail.example/v1",
                 )
 
-        read_cfg.assert_not_called()
-
-    def test_constructor_databricks_with_auth_command(self):
+    def test_constructor_gateway_requires_base_url(self):
         with (
             patch("goalrail.inner.pi_executor._find_pi_cli", return_value="/usr/bin/pi"),
-            patch("goalrail.inner.pi_executor._read_databrickscfg") as read_cfg,
+        ):
+            with self.assertRaisesRegex(OSError, "requires a gateway base URL"):
+                PiExecutor(
+                    gateway=True,
+                    gateway_auth_command="printf token",
+                )
+
+    def test_constructor_gateway_with_auth_command(self):
+        with (
+            patch("goalrail.inner.pi_executor._find_pi_cli", return_value="/usr/bin/pi"),
             patch(
                 "goalrail.inner.pi_executor._fetch_shell_command_token",
                 return_value="command-token",
@@ -1318,31 +1261,18 @@ class TestPiExecutorConstructor(unittest.TestCase):
         ):
             executor = PiExecutor(
                 gateway=True,
-                databricks_profile="missing-profile",
-                gateway_host="https://example.databricks.com/",
-                base_urls_override={
-                    "claude": "https://example.databricks.com/ai-gateway/anthropic"
-                },
+                base_url_override="https://goalrail.example/v1",
+                base_urls_override={"claude": "https://goalrail.example/ai-gateway/anthropic"},
                 gateway_auth_command="printf token",
             )
 
-        read_cfg.assert_not_called()
         fetch_command_token.assert_called_once_with("printf token")
-        self.assertEqual(executor._databricks_host, "https://example.databricks.com")
-        self.assertEqual(executor._databricks_token, "command-token")
+        self.assertEqual(executor._base_url_override, "https://goalrail.example/v1")
+        self.assertEqual(executor._gateway_token, "command-token")
         self.assertEqual(
             executor._base_urls_override,
-            {"claude": "https://example.databricks.com/ai-gateway/anthropic"},
+            {"claude": "https://goalrail.example/ai-gateway/anthropic"},
         )
-
-    def test_constructor_databricks_no_creds_raises(self):
-        with (
-            patch("goalrail.inner.pi_executor._find_pi_cli", return_value="/usr/bin/pi"),
-            patch.dict("os.environ", {}, clear=True),
-            patch("goalrail.inner.pi_executor._read_databrickscfg", return_value=None),
-        ):
-            with self.assertRaises(EnvironmentError):
-                PiExecutor(gateway=True)
 
     def test_constructor_with_model_override(self):
         with patch("goalrail.inner.pi_executor._find_pi_cli", return_value="/usr/bin/pi"):
@@ -1500,17 +1430,22 @@ class TestResolveModel(unittest.TestCase):
 
 
 class TestBuildEnvAndDir(unittest.TestCase):
-    def test_databricks_creates_models_json(self):
+    def test_gateway_creates_models_json(self):
         with (
             patch("goalrail.inner.pi_executor._find_pi_cli", return_value="/usr/bin/pi"),
             patch(
-                "goalrail.inner.pi_executor._read_databrickscfg",
-                return_value=DatabricksCredentials(host="https://h.example.com", token="tok"),
+                "goalrail.inner.pi_executor._fetch_shell_command_token",
+                return_value="tok",
             ),
         ):
-            executor = PiExecutor(gateway=True)
+            executor = PiExecutor(
+                gateway=True,
+                base_url_override="https://h.example.com/v1",
+                gateway_auth_command="printf token",
+                model="openai/gpt-5-4",
+            )
 
-        config = executor._build_env_and_dir([], None, None, None)
+        config = executor._build_env_and_dir([], None, None, "openai/gpt-5-4")
         try:
             self.assertIn("PI_CODING_AGENT_DIR", config.env)
             models_path = os.path.join(config.env["PI_CODING_AGENT_DIR"], "models.json")
@@ -2653,59 +2588,14 @@ def test_resolve_pi_skill_args_no_bundle() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Databricks gateway default-model + models.json parity tests — the pi
-# mirror of the claude-sdk default plumbing. The ucode-cached
-# path gets its default from the producer (workflow.py); these cover the
-# executor's own profile-derived path and the models.json invariants.
+# Gateway models.json parity tests.
 # ---------------------------------------------------------------------------
 
 
-def test_profile_gateway_resolves_databricks_default_model() -> None:
+def test_gateway_path_does_not_inject_default_model() -> None:
     """
-    On the profile-derived gateway path (no gateway host / base URL — the
-    producer's ucode lookup early-returned), a missing model resolves to
-    the shared Databricks default instead of ``None``.
-
-    Failure means pi falls back to its own host default — an
-    Anthropic-direct id the Databricks AI gateway rejects, surfacing as a
-    model error on the agent's first turn.
-    """
-    with (
-        patch("goalrail.inner.pi_executor._find_pi_cli", return_value="/usr/bin/pi"),
-        patch(
-            "goalrail.inner.pi_executor._read_databrickscfg",
-            return_value=DatabricksCredentials(host="https://h.example.com", token="tok"),
-        ),
-    ):
-        executor = PiExecutor(gateway=True)
-    assert executor._resolve_model(ExecutorConfig(model=None)) == DATABRICKS_CLAUDE_DEFAULT_MODEL
-
-
-def test_profile_gateway_default_does_not_clobber_explicit_model() -> None:
-    """
-    The profile-path default only fills a gap — an explicit constructor
-    model (``HARNESS_PI_MODEL``) is used as-is.
-
-    Failure means the fallback overrides a model the spec or ucode
-    state pinned deliberately.
-    """
-    with (
-        patch("goalrail.inner.pi_executor._find_pi_cli", return_value="/usr/bin/pi"),
-        patch(
-            "goalrail.inner.pi_executor._read_databrickscfg",
-            return_value=DatabricksCredentials(host="https://h.example.com", token="tok"),
-        ),
-    ):
-        executor = PiExecutor(gateway=True, model="databricks-gpt-5-4")
-    assert executor._resolve_model(ExecutorConfig(model=None)) == "databricks-gpt-5-4"
-
-
-def test_ucode_gateway_host_path_does_not_inject_default_model() -> None:
-    """
-    On the ucode-cached gateway path (gateway host + auth command supplied
-    by the producer) the executor must NOT invent a model: the producer
-    already applied the default via ``UcodeHarnessConfig`` — mirrors
-    claude-sdk's gating, so the two layers can't fight over precedence.
+    On the gateway path, the executor must not invent a model: the producer
+    already applied the provider/default model selection.
 
     Failure (a non-None resolve here) means the executor would mask
     producer-side model resolution bugs instead of failing visibly.
@@ -2719,7 +2609,7 @@ def test_ucode_gateway_host_path_does_not_inject_default_model() -> None:
     ):
         executor = PiExecutor(
             gateway=True,
-            gateway_host="https://example.databricks.com",
+            base_url_override="https://goalrail.example/v1",
             gateway_auth_command="printf token",
         )
     assert executor._resolve_model(ExecutorConfig(model=None)) is None
@@ -2728,7 +2618,7 @@ def test_ucode_gateway_host_path_does_not_inject_default_model() -> None:
 def test_non_gateway_path_does_not_inject_default_model() -> None:
     """
     Off the gateway entirely (direct Anthropic / pi-native auth), a missing
-    model stays ``None`` so pi picks its own default — a ``databricks-*``
+    model stays ``None`` so pi picks its own default — a ``goalrail-openai-*``
     id would not resolve outside the gateway's models.json.
     """
     with patch("goalrail.inner.pi_executor._find_pi_cli", return_value="/usr/bin/pi"):
@@ -2736,89 +2626,24 @@ def test_non_gateway_path_does_not_inject_default_model() -> None:
     assert executor._resolve_model(ExecutorConfig(model=None)) is None
 
 
-def test_databricks_default_model_is_resolvable_in_models_json() -> None:
-    """
-    The shared Databricks default must route to the anthropic provider AND
-    be listed in that provider's models — otherwise the default the
-    producer/executor inject can't be resolved by pi at spawn time.
-
-    Failure means the default-model constant and pi's models.json drifted
-    apart: every modelless gateway agent would fail its first turn with a
-    pi "unknown model" error.
-    """
-    assert _pi_provider_for_model(DATABRICKS_CLAUDE_DEFAULT_MODEL) == "databricks-anthropic"
-    models = _build_models_json("https://host.example.com", "tok")
-    anthropic_ids = [m["id"] for m in models["providers"]["databricks-anthropic"]["models"]]
-    assert DATABRICKS_CLAUDE_DEFAULT_MODEL in anthropic_ids
-
-
-def test_models_json_lists_only_gateway_verified_models() -> None:
-    """
-    The hardcoded model lists match the set verified live against the
-    Databricks gateway endpoint metadata and the API paths pi uses
-    (Anthropic Messages for Claude, OpenAI-compatible serving endpoints for
-    GPT).
-
-    Failure direction matters: a missing working id silently shrinks pi's
-    model menu; a reintroduced broken id (``sonnet-4-5-v2`` rejects
-    Anthropic passthrough, the llama endpoint 404s) fails at request time
-    for anyone who selects it.
-    """
-    models = _build_models_json("https://host.example.com", "tok")
-    providers = models["providers"]
-    anthropic_ids = [m["id"] for m in providers["databricks-anthropic"]["models"]]
-    assert anthropic_ids == [
-        "databricks-claude-opus-4-8",
-        "databricks-claude-sonnet-4-6",
-        "databricks-claude-sonnet-4-5",
-    ]
-    openai_ids = [m["id"] for m in providers["databricks"]["models"]]
-    assert openai_ids == [
-        "databricks-gpt-5-4-mini",
-        "databricks-gpt-5-4",
-        "databricks-gpt-5-5",
-        "databricks-gpt-5-5-pro",
-    ]
-    # The llama serving endpoint no longer exists; the provider stays as
-    # the routing home for future non-Claude/GPT endpoints.
-    assert providers["databricks-completions"]["models"] == []
-
-
-def test_models_json_uses_oss_verified_gpt_55_caps() -> None:
-    """GPT-5.5 endpoint metadata on the OSS profile advertises 128K output."""
-    models = _build_models_json("https://host.example.com", "tok")
-    by_id = {m["id"]: m for m in models["providers"]["databricks"]["models"]}
-    for model_id in ("databricks-gpt-5-5", "databricks-gpt-5-5-pro"):
-        assert by_id[model_id]["contextWindow"] == 400000
-        assert by_id[model_id]["maxTokens"] == 128000
-
-
-if __name__ == "__main__":
-    unittest.main()
-
 # ---------------------------------------------------------------------------
 # _build_models_json: run-model registration (generic gateway models)
 # ---------------------------------------------------------------------------
 
 
-def test_build_models_json_registers_unknown_model_with_routed_provider() -> None:
-    """A model outside the static Databricks lists is registered so Pi resolves it.
+def test_build_models_json_registers_run_model_with_routed_provider() -> None:
+    """A run model is registered under the provider Pi will use for it.
 
-    Reproduces the OpenRouter failure: ``moonshotai/kimi-k2.6`` routes to
-    the ``databricks-completions`` catch-all, whose static model list is
-    empty — without registration Pi rejects the
-    ``databricks-completions/moonshotai/kimi-k2.6`` selector with
-    "Model not found" before the first turn. A regression that drops the
-    registration brings that startup failure back for every non-Databricks
-    gateway model.
+    Without registration Pi rejects the provider-qualified selector with
+    "Model not found" before the first turn.
     """
     result = _build_models_json(
-        "https://unused.example.com",
-        "or-key",
-        {"openai": "https://openrouter.ai/api/v1"},
+        token="or-key",
+        base_url="https://unused.example.com",
+        base_urls={"openai": "https://openrouter.ai/api/v1"},
         model="moonshotai/kimi-k2.6",
     )
-    completions = result["providers"]["databricks-completions"]
+    completions = result["providers"]["goalrail-completions"]
     # The run model is registered (so Pi resolves it) under the provider
     # _pi_provider_for_model routes it to, advertising image input so Pi
     # doesn't strip attached images (#515).
@@ -2831,32 +2656,31 @@ def test_build_models_json_registers_unknown_model_with_routed_provider() -> Non
     # The other providers don't pick up the foreign id.
     assert all(
         m.get("id") != "moonshotai/kimi-k2.6"
-        for name in ("databricks", "databricks-anthropic")
+        for name in ("goalrail-openai", "goalrail-anthropic")
         for m in result["providers"][name]["models"]
     )
 
 
-def test_build_models_json_known_model_not_duplicated_and_lists_not_mutated() -> None:
-    """A model already in a static list is not re-registered, and the static
-    module-level lists never absorb a run's model id.
+def test_build_models_json_run_model_does_not_leak_between_builds() -> None:
+    """Each build contains only the current run model.
 
-    The second build (no model) must not contain the first build's foreign
-    id — if it does, the registration mutated the shared module-level list
-    instead of rebinding, leaking one run's model into every later
-    subprocess config.
+    The second build must not contain the first build's foreign id. If it does,
+    model registration leaked state between subprocess configs.
     """
-    result = _build_models_json(
-        "https://host.example.com", "tok", model="databricks-claude-sonnet-4-6"
+    first = _build_models_json(
+        token="tok", base_url="https://host.example.com", model="moonshotai/kimi-k2.6"
     )
-    anthropic_ids = [m["id"] for m in result["providers"]["databricks-anthropic"]["models"]]
-    # Exactly one entry for the already-listed id — no duplicate appended.
-    assert anthropic_ids.count("databricks-claude-sonnet-4-6") == 1
+    second = _build_models_json(
+        token="tok", base_url="https://host.example.com", model="openai/gpt-5-4"
+    )
 
-    _build_models_json("https://host.example.com", "tok", model="moonshotai/kimi-k2.6")
-    fresh = _build_models_json("https://host.example.com", "tok")
-    # A model-less build after a foreign-model build is pristine: empty
-    # catch-all list, exactly the static Databricks ids elsewhere.
-    assert fresh["providers"]["databricks-completions"]["models"] == []
+    assert first["providers"]["goalrail-completions"]["models"] == [
+        {"id": "moonshotai/kimi-k2.6", "input": ["text", "image"]}
+    ]
+    assert second["providers"]["goalrail-completions"]["models"] == []
+    assert second["providers"]["goalrail-openai"]["models"] == [
+        {"id": "openai/gpt-5-4", "input": ["text", "image"]}
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -2868,7 +2692,7 @@ def test_clean_pi_env_excludes_host_secrets(monkeypatch) -> None:
     """Host/server credentials never pass the Pi env allowlist by default.
 
     The Pi spawn previously merged the full ``os.environ`` into the
-    subprocess, so server-side credentials (cloud tokens, Databricks
+    subprocess, so server-side credentials (cloud tokens, OpenAI-compatible gateway
     PATs, provider API keys) were readable inside the (sandboxed) Pi
     process.
 
@@ -2876,7 +2700,7 @@ def test_clean_pi_env_excludes_host_secrets(monkeypatch) -> None:
     """
     from goalrail.inner.pi_executor import _clean_pi_env
 
-    monkeypatch.setenv("DATABRICKS_TOKEN", "dapi-secret")
+    monkeypatch.setenv("OPENAI_API_KEY", "dapi-secret")
     monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "aws-secret")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
     monkeypatch.setenv("FAKE_HOST_SECRET", "PWNED")
@@ -2887,7 +2711,7 @@ def test_clean_pi_env_excludes_host_secrets(monkeypatch) -> None:
 
     # None of these match an allowlist entry; any one appearing means
     # the allowlist regressed to a denylist or an environ passthrough.
-    assert "DATABRICKS_TOKEN" not in env
+    assert "OPENAI_API_KEY" not in env
     assert "AWS_SECRET_ACCESS_KEY" not in env
     assert "ANTHROPIC_API_KEY" not in env
     assert "FAKE_HOST_SECRET" not in env
@@ -2910,14 +2734,14 @@ def test_clean_pi_env_extra_allowed_is_exact_opt_in(monkeypatch) -> None:
     from goalrail.inner.pi_executor import _clean_pi_env
 
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
-    monkeypatch.setenv("DATABRICKS_TOKEN", "dapi-secret")
+    monkeypatch.setenv("OPENAI_API_KEY", "dapi-secret")
 
     env = _clean_pi_env(["ANTHROPIC_API_KEY"])
 
     # The opted-in key passes through with its value intact…
     assert env.get("ANTHROPIC_API_KEY") == "sk-ant-test"
     # …without widening the allowlist for anything else.
-    assert "DATABRICKS_TOKEN" not in env
+    assert "OPENAI_API_KEY" not in env
 
 
 def test_clean_pi_env_passes_pi_and_proxy_config(monkeypatch) -> None:
@@ -3010,7 +2834,7 @@ def test_redact_argv_for_log_hides_system_prompt() -> None:
         "rpc",
         "--no-session",
         "--model",
-        "databricks/some-model",
+        "goalrail-openai/some-model",
         "--append-system-prompt",
         secret,
         "--extension",
@@ -3026,7 +2850,7 @@ def test_redact_argv_for_log_hides_system_prompt() -> None:
     assert "--mode" in redacted
     assert "rpc" in redacted
     assert "--model" in redacted
-    assert "databricks/some-model" in redacted
+    assert "goalrail-openai/some-model" in redacted
     assert "--extension" in redacted
     assert "/tmp/ext.js" in redacted
 
@@ -3628,7 +3452,7 @@ def test_pi_usage_model_falls_back_to_configured_model() -> None:
                 ),
                 json.dumps({"type": "agent_end", "messages": []}),
             ],
-            model="databricks-claude-sonnet-4-6",
+            model="anthropic/claude-sonnet-4-6",
         )
 
         events = [
@@ -3646,7 +3470,7 @@ def test_pi_usage_model_falls_back_to_configured_model() -> None:
         assert usage is not None
         # The message had no "model" key, so the executor's configured
         # model must fill in. A wrong value means the fallback was skipped.
-        assert usage["model"] == "databricks-claude-sonnet-4-6"
+        assert usage["model"] == "anthropic/claude-sonnet-4-6"
 
     _run(_test())
 

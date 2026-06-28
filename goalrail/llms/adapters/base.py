@@ -55,8 +55,6 @@ class BaseAdapter(ABC):
             - OpenAI-compatible: ``{"api_key": "...",
               "base_url": "..."}``
             - Anthropic: ``{"api_key": "..."}``
-            - Databricks: ``{"api_key": "...",
-              "base_url": "..."}``
             - Bedrock: ``{"aws_region": "...",
               "aws_access_key_id": "...",
               "aws_secret_access_key": "..."}``

@@ -3,9 +3,8 @@
 ``goalrail sandbox …`` bootstraps a Goalrail host inside a sandbox
 from one of the registered providers (``--provider``) so that sessions
 on it are reachable from the server-hosted UI, TUI, and ``goalrail
-resume``. Provider availability is build-dependent — the Databricks
-Lakebox launcher ships only internally — so cli.py registers this group
-only when at least one provider is available.
+resume``. Provider availability is build-dependent, so cli.py
+registers this group only when at least one provider is available.
 
 The provider-agnostic step implementations live in
 :mod:`goalrail.onboarding.sandboxes`.
@@ -110,13 +109,12 @@ def _normalize_server_url(server_url: str) -> str:
     Validate and normalize a ``--server`` value.
 
     Validation runs at the CLI boundary so a malformed URL fails
-    BEFORE any sandbox work — without it, a scheme-less value (e.g.
-    ``//myapp.databricksapps.com``, a paste artifact) sails through
-    provisioning, wheel build, and ship, and only explodes at the
-    final in-sandbox ``goalrail login`` step.
+    BEFORE any sandbox work — without it, a scheme-less value sails
+    through provisioning, wheel build, and ship, and only explodes at
+    the final in-sandbox ``goalrail login`` step.
 
     :param server_url: Raw ``--server`` value, e.g.
-        ``"https://myapp-123.aws.databricksapps.com/"``.
+        ``"https://app.example.com/"``.
     :returns: The URL without its trailing slash (a trailing slash
         breaks server-side URL joins).
     :raises click.ClickException: If the value does not start with
@@ -194,9 +192,8 @@ def sandbox() -> None:
     "--sandbox-id",
     "sandbox_id",
     default=None,
-    # Lakebox-flow option (re-ship code into a long-lived sandbox, dodging
-    # its slow provisioning + per-sandbox OAuth dance) — hidden from --help
-    # pending removal. Disposable-sandbox providers just create a new one.
+    # Re-ship code into an existing long-lived sandbox. Disposable
+    # providers just create a new one.
     hidden=True,
     help="Attach to an existing sandbox by id (skip provisioning).",
 )
@@ -211,11 +208,9 @@ def sandbox() -> None:
     "server_url",
     required=True,
     help=(
-        "Server URL the sandbox will register with. Determines the "
-        "Databricks workspace the sandbox is created in (same "
-        "inference as `goalrail login`), and the bootstrap finishes "
-        "by logging the sandbox in to it (`goalrail login` inside the "
-        "sandbox — one browser step)."
+        "Server URL the sandbox will register with. The bootstrap "
+        "finishes by logging the sandbox in to it (`goalrail login` "
+        "inside the sandbox — one browser step when required)."
     ),
 )
 @click.option(
@@ -230,7 +225,6 @@ def sandbox() -> None:
     "skip_auth",
     is_flag=True,
     default=False,
-    # Databricks-flow option — hidden from --help pending removal.
     hidden=True,
     help=(
         "Skip the in-sandbox server login. Providers that can't "
@@ -248,15 +242,11 @@ def sandbox_create(
     """
     Provision a sandbox and ship Goalrail into it.
 
-    The server's workspace is derived from ``--server`` (the same
-    unauthenticated probe ``goalrail login`` uses), and for lakebox
-    the sandbox is created IN that workspace — so the sandbox always
-    lives where the server lives, regardless of the local default
-    profile. Builds the local wheels from your local checkout,
-    installs them into the fresh sandbox, and finishes by logging the
-    sandbox in to the server (``goalrail login`` runs inside the
-    sandbox; the browser step is driven from this machine). Sandboxes
-    are disposable — when your code changes, just create a new one.
+    Builds the local wheels from your local checkout, installs them
+    into the fresh sandbox, and finishes by logging the sandbox in to
+    the server (``goalrail login`` runs inside the sandbox; the
+    browser step is driven from this machine). Sandboxes are disposable
+    — when your code changes, just create a new one.
 
     After this finishes, run ``goalrail sandbox connect`` to register
     the sandbox as a host with your server.
@@ -264,14 +254,10 @@ def sandbox_create(
     from goalrail.onboarding.sandboxes import (
         DEFAULT_SANDBOX_NAME,
         bootstrap_sandbox_host,
-        derive_workspace,
     )
 
     app_url = _normalize_server_url(server_url)
-    workspace = derive_workspace(app_url)
-    launcher = get_launcher(
-        provider, workspace_host=workspace.host if workspace is not None else None
-    )
+    launcher = get_launcher(provider)
     _require_cli_bootstrap(launcher)
     # The in-sandbox login only exists for providers that can forward
     # the browser's callback port — others skip it automatically, no
@@ -283,65 +269,10 @@ def sandbox_create(
         sandbox_id=sandbox_id,
         sandbox_name=sandbox_name or DEFAULT_SANDBOX_NAME,
         server_url=app_url,
-        workspace=workspace,
         repo_root=_resolve_repo_root(repo_root),
         skip_auth=skip_auth,
     )
     _print_ready_banner(provider, sandbox_id, app_url)
-
-
-# The auth flow is Databricks-specific (in-sandbox server login) —
-# hidden from --help pending removal; still invocable for lakebox users.
-@sandbox.command("auth", hidden=True)
-@click.option(
-    "--provider",
-    type=click.Choice(available_providers()),
-    required=True,
-    help="Sandbox provider to use.",
-)
-@click.option(
-    "--sandbox-id", "sandbox_id", required=True, help="Sandbox to re-authenticate inside."
-)
-@click.option(
-    "--server",
-    "server_url",
-    required=True,
-    help=(
-        "Server URL to log the sandbox in to. The in-sandbox "
-        "`goalrail login` infers the fronting Databricks workspace "
-        "from it automatically."
-    ),
-)
-def sandbox_auth(
-    provider: str,
-    sandbox_id: str,
-    server_url: str,
-) -> None:
-    """
-    Run the server login inside the sandbox (``goalrail login``).
-
-    Use this when the runner inside the sandbox starts failing because
-    its cached OAuth grant expired (~90 days). Strictly faster than
-    ``goalrail sandbox create --sandbox-id`` because it skips wheel
-    build / ship / pip install — it only re-authenticates.
-    """
-    from goalrail.onboarding.sandboxes import derive_workspace, login_app_oauth_in_sandbox
-
-    app_url = _normalize_server_url(server_url)
-    workspace = derive_workspace(app_url)
-    launcher = get_launcher(
-        provider, workspace_host=workspace.host if workspace is not None else None
-    )
-    _require_cli_bootstrap(launcher)
-    login_app_oauth_in_sandbox(
-        launcher,
-        sandbox_id,
-        server_url=app_url,
-        workspace=workspace,
-    )
-    ui.console.print()
-    ui.success("Sandbox logged in.")
-    ui.console.print()
 
 
 @sandbox.command("connect")
@@ -378,26 +309,18 @@ def sandbox_connect(
     Register the sandbox as a host with your server.
 
     Runs ``goalrail host --server <url>`` inside the sandbox — the
-    host resolves its own credentials (a stored ``goalrail login``
-    token, or the sandbox's ambient Databricks credentials such as the
-    Lakebox image's baked workspace PAT). The remote command holds a
-    WebSocket open until interrupted — Ctrl-C tears down the
-    foreground transport and the remote process.
+    host resolves its own credentials. The remote command holds a
+    WebSocket open until interrupted — Ctrl-C tears down the foreground
+    transport and the remote process.
 
     Pass ``--host-name <label>`` when registering multiple sandboxes —
     sandboxes that share a hostname collide on the server's
     (owner, name) primary key.
     """
-    from goalrail.onboarding.sandboxes import connect_sandbox_host, derive_workspace
+    from goalrail.onboarding.sandboxes import connect_sandbox_host
 
     app_url = _normalize_server_url(server_url)
-    # The sandbox lives in the server's workspace (create pinned it
-    # there) — the local `lakebox ssh` transport must resolve through
-    # the same workspace to find it.
-    workspace = derive_workspace(app_url)
-    launcher = get_launcher(
-        provider, workspace_host=workspace.host if workspace is not None else None
-    )
+    launcher = get_launcher(provider)
     _require_cli_bootstrap(launcher)
     connect_sandbox_host(
         launcher,
@@ -405,34 +328,3 @@ def sandbox_connect(
         server_url=app_url,
         host_name=host_name,
     )
-
-
-# Internal lakebox alias — hidden from the top-level --help pending
-# removal; still fully invocable.
-@click.group("lakebox", hidden=True)
-@click.pass_context
-def lakebox(ctx: click.Context) -> None:
-    """
-    Alias for ``goalrail sandbox … --provider lakebox``.
-
-    Kept so existing muscle memory and scripts keep working. The
-    subcommands (``create`` / ``auth`` / ``connect``) are the exact
-    ``goalrail sandbox`` commands with ``--provider lakebox``
-    pre-filled.
-    """
-    # Pre-fill --provider for the shared sandbox subcommands so
-    # `goalrail lakebox <sub>` ≡ `goalrail sandbox <sub> --provider
-    # lakebox`. default_map values satisfy the (required) --provider
-    # option without redeclaring it on these aliased commands.
-    ctx.default_map = {
-        "create": {"provider": "lakebox"},
-        "auth": {"provider": "lakebox"},
-        "connect": {"provider": "lakebox"},
-    }
-
-
-# Reuse the same command objects (Click allows a command to live in more
-# than one group); the default_map above fixes their provider to lakebox.
-lakebox.add_command(sandbox_create, "create")
-lakebox.add_command(sandbox_auth, "auth")
-lakebox.add_command(sandbox_connect, "connect")

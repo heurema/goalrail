@@ -23,7 +23,7 @@ def _restore_model_pool_context() -> Iterator[None]:
 def _key_that_rebalances(model: str) -> str:
     """Find a deterministic context key where hash-spread changes *model*.
 
-    :param model: Pooled model to resolve, e.g. ``"databricks-gpt-5-5"``.
+    :param model: Pooled model to resolve, e.g. ``"openai/gpt-5-5"``.
     :returns: A pytest-like nodeid key that resolves to a different pool member.
     :raises AssertionError: If the default pool no longer has a second member.
     """
@@ -38,7 +38,7 @@ def test_codex_default_model_stays_workflow_pinned_under_spread(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Codex keeps the workflow's GPT pin even when integration spreading is on."""
-    model = "databricks-gpt-5-5"
+    model = "openai/gpt-5-5"
     monkeypatch.setenv(_SPREAD_ENV, "1")
     monkeypatch.delenv(_GPT_POOL_ENV, raising=False)
 

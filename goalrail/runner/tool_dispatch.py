@@ -511,106 +511,6 @@ async def _execute_spec_callable_tool(
     return str(result) if result is not None else ""
 
 
-# ── Unity Catalog function dispatch ───────────────────────────
-#
-# UC function tools are declared with ``catalog_path:`` in the YAML
-# and executed via the Databricks SQL Statement Execution API.
-
-
-def _is_uc_function_tool(
-    tool_name: str,
-    agent_spec: Any | None,
-) -> bool:
-    """
-    Check whether *tool_name* is a UC function tool in the spec.
-
-    :param tool_name: Tool name from the LLM, e.g.
-        ``"classify_text"``.
-    :param agent_spec: The session's :class:`AgentSpec`. ``None``
-        when no spec is available.
-    :returns: ``True`` if the tool is a
-        :attr:`ToolRuntime.UC_FUNCTION` tool.
-    """
-    if agent_spec is None:
-        return False
-    local_tools = getattr(agent_spec, "local_tools", None) or []
-    from goalrail.spec.types import ToolRuntime
-
-    return any(
-        lt.name == tool_name and lt.runtime == ToolRuntime.UC_FUNCTION for lt in local_tools
-    )
-
-
-def _resolve_uc_profile(agent_spec: Any) -> str | None:
-    """
-    Extract the Databricks profile from the agent spec's executor
-    auth configuration.
-
-    Checks ``executor.auth`` (preferred) then falls back to
-    ``executor.profile`` (deprecated) and finally
-    ``executor.config["profile"]`` (compat bridge).
-
-    :param agent_spec: The session's :class:`AgentSpec`.
-    :returns: The profile name, e.g. ``"oss"``, or ``None`` for
-        SDK default resolution.
-    """
-    executor = getattr(agent_spec, "executor", None)
-    if executor is None:
-        return None
-    # Preferred: executor.auth.profile (DatabricksAuth).
-    auth = getattr(executor, "auth", None)
-    if auth is not None and hasattr(auth, "profile"):
-        return auth.profile
-    # Deprecated: executor.profile.
-    profile = getattr(executor, "profile", None)
-    if profile:
-        return profile
-    # Compat bridge: executor.config["profile"].
-    config = getattr(executor, "config", None) or {}
-    return config.get("profile")
-
-
-async def _execute_uc_function_tool(
-    tool_name: str,
-    args: dict[str, Any],
-    *,
-    agent_spec: Any | None = None,
-) -> str:
-    """
-    Execute a Unity Catalog function tool and return the output
-    string.
-
-    Resolves the ``catalog_path`` from the spec's ``local_tools``,
-    extracts the Databricks profile and warehouse ID from the
-    executor config, then delegates to
-    :func:`goalrail.runner.uc_function.execute_uc_function`.
-
-    :param tool_name: Tool name from the LLM, e.g.
-        ``"classify_text"``.
-    :param args: Parsed argument dict from the LLM.
-    :param agent_spec: The session's :class:`AgentSpec`. Must not
-        be ``None`` (caller checks via :func:`_is_uc_function_tool`
-        first).
-    :returns: Tool output as a string, or an error message.
-    """
-    from goalrail.runner.uc_function import execute_uc_function
-
-    local_tools = getattr(agent_spec, "local_tools", None) or []
-    tool_info = next((lt for lt in local_tools if lt.name == tool_name), None)
-    if tool_info is None or tool_info.catalog_path is None:
-        return f"Error: {tool_name} is not a UC function tool"
-
-    profile = _resolve_uc_profile(agent_spec)
-    warehouse_id = getattr(tool_info, "warehouse_id", None)
-
-    return await execute_uc_function(
-        catalog_path=tool_info.catalog_path,
-        args=args,
-        profile=profile,
-        warehouse_id=warehouse_id,
-    )
-
-
 @dataclass(frozen=True)
 class _SubagentLabel:
     """
@@ -918,11 +818,9 @@ def _normalize_subagent_model(
 
     Runs after the family guard (see
     :func:`goalrail.model_override.normalize_model_for_provider` for
-    the ordering rationale): a canonical vendor id is prefixed with
-    ``databricks-`` when the child routes through the Databricks
-    gateway, and the prefix is stripped for a vendor-direct child. When
-    the child's provider cannot be determined, the id passes through
-    unchanged — the existing fail-loud harness error stays the net.
+    the ordering rationale). When the child's provider cannot be
+    determined, the id passes through unchanged — the existing fail-loud
+    harness error stays the net.
 
     :param model: The validated requested model id, e.g.
         ``"claude-sonnet-4-6"``.
@@ -2056,9 +1954,6 @@ async def _execute_web_search_tool(
       (its built-in fence) and the third-party backend is never run. In normal
       operation OpenAI models never emit a ``web_search`` function call, so this
       is defensive — but it keeps the promise rather than silently weakening it.
-    - **``databricks-*`` models** skip provider inference (they don't support
-      ``web_search_preview``) and run in function-tool mode.
-
     :param args: Parsed LLM arguments — ``query`` (required).
     :param agent_spec: Parent agent's spec; carries the web_search config + model.
     :param conversation_id: Parent session id, threaded into the context.
@@ -2070,11 +1965,11 @@ async def _execute_web_search_tool(
     from goalrail.tools.builtins.web_search import WebSearchTool
 
     config = _web_search_config_from_spec(agent_spec)
-    # Mirror ToolManager._create_web_search's provider inference (same skip for
-    # databricks-*, same OpenAI passthrough fence) so dispatch honors session-setup invariants.
+    # Mirror ToolManager._create_web_search's provider inference so dispatch
+    # honors session-setup invariants.
     llm_provider: str | None = None
     model = getattr(getattr(agent_spec, "executor", None), "model", None)
-    if model and not model.startswith("databricks-"):
+    if model:
         from goalrail.llms.routing import parse_model_string
 
         llm_provider = parse_model_string(model).provider
@@ -3959,8 +3854,6 @@ async def execute_tool(
                 agent_id=agent_id,
                 runner_workspace=runner_workspace,
             )
-        elif _is_uc_function_tool(tool_name, agent_spec):
-            output = await _execute_uc_function_tool(tool_name, args, agent_spec=agent_spec)
         else:
             output = await _execute_spec_callable_tool(tool_name, args, agent_spec=agent_spec)
     except Exception as exc:  # noqa: BLE001

@@ -28,7 +28,6 @@ from goalrail.policies.base import Policy
 from goalrail.policies.function import resolve_function_policy
 from goalrail.policies.schema import SESSION_COST_ASK_APPROVED_STATE_KEY
 from goalrail.policies.types import PolicyLLMClient
-from goalrail.runtime.credentials.databricks import resolve_databricks_workspace
 from goalrail.runtime.policies.engine import PolicyEngine
 from goalrail.spec.types import (
     DEFAULT_ASK_TIMEOUT,
@@ -322,22 +321,17 @@ def _resolve_server_llm_connection(
     """
     Resolve the server-level LLM connection dict.
 
-    Returns ``server_llm.connection`` directly when present;
-    otherwise resolves ``server_llm.profile`` to a Databricks
-    workspace connection. ``None`` when no server LLM is
-    configured or it declares neither a connection nor a profile.
+    Returns ``server_llm.connection`` directly when present. ``None`` when no
+    server LLM is configured or no explicit connection is declared.
 
     :param server_llm: The server-level :class:`LLMConfig` from
         ``RuntimeCaps.llm``, or ``None``.
     :returns: A ``{"base_url", "api_key"}`` dict, or ``None``.
-    :raises OSError: When ``profile`` is set but cannot be resolved.
     """
     if server_llm is None:
         return None
     if server_llm.connection is not None:
         return server_llm.connection
-    if server_llm.profile is not None:
-        return _resolve_databricks_connection(server_llm.profile)
     return None
 
 
@@ -366,15 +360,7 @@ def _build_policy_llm_client(
         return None
     from goalrail.llms.client import Client
 
-    # Models prefixed with ``databricks-`` (e.g.
-    # ``databricks-claude-sonnet-4-6``) need the ``databricks/``
-    # provider prefix so the LLM adapter routes through
-    # DatabricksAdapter (Chat Completions) rather than
-    # OpenAIAdapter (Responses API). Without this, the request
-    # hits ``/responses`` on the Databricks gateway → 400.
     model = server_llm.model
-    if "/" not in model and model.startswith("databricks-"):
-        model = f"databricks/{model}"
 
     return PolicyLLMClient(
         _client=Client(),
@@ -382,31 +368,6 @@ def _build_policy_llm_client(
         _connection=connection,
         _request_timeout=server_llm.request_timeout,
     )
-
-
-def _resolve_databricks_connection(profile: str) -> dict[str, str]:
-    """
-    Resolve a Databricks CLI profile to a connection dict.
-
-    Uses
-    :func:`~goalrail.runtime.credentials.databricks.resolve_databricks_workspace`
-    to resolve the profile to workspace host + bearer token, then
-    builds the ``{"base_url": ..., "api_key": ...}`` dict that the
-    LLM adapter expects.
-
-    :param profile: The Databricks CLI profile name,
-        e.g. ``"my-workspace"``.
-    :returns: A connection dict with ``base_url`` (workspace host
-        + ``/serving-endpoints``) and ``api_key`` (bearer token),
-        e.g. ``{"base_url": "https://host/serving-endpoints",
-        "api_key": "dapi..."}``.
-    :raises OSError: When the profile cannot be resolved.
-    """
-    creds = resolve_databricks_workspace(profile)
-    return {
-        "base_url": creds.host + "/serving-endpoints",
-        "api_key": creds.token,
-    }
 
 
 def _instantiate_policy(
@@ -585,7 +546,7 @@ def _resolve_session_model(
     :param conversation_store: Store to read the conversation from.
     :param spec: The parsed agent spec (its ``llm.model`` is the
         fallback when no override is set).
-    :returns: The active model id, e.g. ``"databricks-claude-opus-4-8"``
+    :returns: The active model id, e.g. ``"anthropic/claude-opus-4-8"``
         or the native tier alias ``"opus"``; ``None`` when
         undeterminable.
     """

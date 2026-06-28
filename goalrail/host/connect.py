@@ -168,10 +168,10 @@ def _runner_exit_error(exit_code: int | None, log_path: Path) -> str:
 def _url_is_loopback(url: str) -> bool:
     """Whether ``url``'s host is loopback (``127.0.0.1`` / ``localhost`` / ``::1``).
 
-    Used to distinguish a daemon-spawned local server (no proxy in
-    front) from a remote deploy behind the Databricks Apps ingress, so
-    the reconnect heuristic only treats an abrupt ``no close frame`` as
-    a benign ingress recycle when there actually IS an ingress.
+    Used to distinguish a daemon-spawned local server (no proxy in front)
+    from a remote deploy behind an ingress, so the reconnect heuristic only
+    treats an abrupt ``no close frame`` as a benign ingress recycle when there
+    actually is an ingress.
 
     :param url: A server or ws:// URL, e.g. ``"ws://127.0.0.1:49175"``.
     :returns: ``True`` for a loopback host, ``False`` otherwise (incl.
@@ -225,12 +225,6 @@ _RUNNER_ENV_ALLOWLIST: frozenset[str] = frozenset(
         # and sandbox containers run as root — without it the
         # claude-sdk harness cannot start inside managed sandboxes.
         "IS_SANDBOX",
-        # Databricks config selectors are not bearer secrets. They must
-        # reach host-spawned runners so native harnesses resolve the same
-        # profile/config file the host resolved (e.g. a spec-declared
-        # executor.profile propagated into the daemon's env).
-        "DATABRICKS_CONFIG_PROFILE",
-        "DATABRICKS_CONFIG_FILE",
         # Runtime config/data-dir selection. These are filesystem PATHS, not
         # secrets, so they're safe to propagate to the host owner's own
         # daemon/runner subprocesses. They MUST propagate so the whole local
@@ -372,12 +366,12 @@ class HostConnectError(Exception):
     """A non-retryable failure while opening the host tunnel.
 
     Raised when the WebSocket upgrade fails in a way that reconnecting
-    can never fix — the Databricks Apps proxy bounced the connection to
-    a login page (wrong/absent workspace credentials), or the server
-    returned a permanent ``4xx`` (unauthenticated, unauthorized, or a
-    build that predates the host API). The reconnect loop re-raises this
-    instead of backing off, so ``goalrail host`` exits with an
-    actionable message rather than looping silently forever.
+    can never fix — the server bounced the connection to a login page
+    (wrong/absent credentials), or returned a permanent ``4xx``
+    (unauthenticated, unauthorized, or a build that predates the host API).
+    The reconnect loop re-raises this instead of backing off, so
+    ``goalrail host`` exits with an actionable message rather than looping
+    silently forever.
 
     The message is the full, user-facing explanation including the
     suggested fix; it is printed verbatim by :func:`run_host_process`.
@@ -408,8 +402,8 @@ def _build_runner_env(
 
     :param base_env: Host process environment to filter, e.g.
         ``os.environ``.
-    :param server_url: Goalrail server URL the runner connects back to, e.g.
-        ``"https://example.databricks.com"``.
+        :param server_url: Goalrail server URL the runner connects back to, e.g.
+        ``"https://goalrail.example.com"``.
     :param runner_id: Token-bound runner id, e.g. ``"runner_abc123"``.
     :param binding_token: One-time tunnel binding token.
     :param workspace: Absolute runner cwd on the host, e.g.
@@ -519,7 +513,7 @@ class HostProcess:
 
     :param identity: Host identity (id + name) from ``config.yaml``.
     :param server_url: Goalrail server URL, e.g.
-        ``"https://goalrail-app.databricksapps.com"``.
+        ``"https://goalrail.example.com"``.
     """
 
     def __init__(
@@ -584,21 +578,17 @@ class HostProcess:
             command, e.g. ``"Run `goalrail login <url>` ..."``.
         """
         return (
-            f"Run `goalrail login {self._server_url}` to authenticate (it "
-            "detects Databricks-fronted servers and logs in to the right "
-            "workspace), or check your ambient Databricks credentials."
+            f"Run `goalrail login {self._server_url}` to authenticate, then "
+            "restart `goalrail host`."
         )
 
     def _login_fix_hint(self) -> str:
         """Suggest ``goalrail login`` as a remedy for an auth rejection.
 
-        The host tunnel's bearer is resolved from a stored ``goalrail
-        login`` record first, then ambient Databricks credentials (see
-        :func:`goalrail.runner._entry._make_auth_token_factory`). When
-        the server runs Goalrail accounts or OIDC auth, a Databricks
-        workspace token can authenticate at the proxy yet still be rejected
-        by the server itself — so the actionable fix is to log in to the
-        server directly, which stores the session token the tunnel needs.
+        The host tunnel's bearer is resolved from a stored ``goalrail login``
+        record. If the server runs Goalrail accounts or OIDC auth, the
+        actionable fix is to log in to the server directly, which stores the
+        session token the tunnel needs.
 
         :returns: A one-sentence remedy naming the exact command, e.g.
             ``"If this server uses Goalrail accounts or OIDC login, run
@@ -1266,16 +1256,16 @@ class HostProcess:
                     # Classify the disconnect to choose a reconnect cadence.
                     #
                     # 1012 "service restart" / 1001 "going away" are explicit
-                    # close codes a server (or a graceful Apps recycle) sends —
-                    # always a prompt reconnect.
+                    # close codes a server (or a graceful proxy recycle) sends
+                    # — always a prompt reconnect.
                     #
                     # An abrupt "no close frame" / 502 is, on a REMOTE server,
-                    # the Databricks Apps ingress cycling a long-lived WebSocket
-                    # out from under a healthy app — also a prompt reconnect, so
-                    # the host tunnel isn't down long enough to drop a
-                    # launch_runner frame ("runner did not connect").
+                    # often an ingress cycling a long-lived WebSocket out from
+                    # under a healthy app — also a prompt reconnect, so the
+                    # host tunnel isn't down long enough to drop a launch_runner
+                    # frame ("runner did not connect").
                     #
-                    # But on a LOOPBACK server there is no Apps ingress — an
+                    # But on a LOOPBACK server there is no ingress — an
                     # abrupt drop is a real condition (the server closed our
                     # tunnel, e.g. a re-registration of the same host_id). Fast
                     # 0.5s reconnects there *fuel* a re-registration flap: the
@@ -1380,11 +1370,9 @@ class HostProcess:
         present it is sent on its dedicated header and the user-token
         path is skipped entirely (a sandbox has no user credentials).
 
-        Otherwise mints a fresh Databricks bearer token via the runner's
-        auth factory (refreshed every reconnect so long-lived hosts
-        survive token expiry). Token acquisition failures are swallowed —
-        the upgrade proceeds unauthenticated and the server/proxy
-        decides.
+        Otherwise resolves a stored ``goalrail login`` bearer token via the
+        runner's auth factory. Token acquisition failures are swallowed — the
+        upgrade proceeds unauthenticated and the server decides.
 
         :returns: Header mapping for the WS upgrade; carries either the
             managed-host token header or — only when a token could be
@@ -1409,8 +1397,7 @@ class HostProcess:
             # Pass server_url explicitly. The factory's OIDC-token path
             # would otherwise look up ``RUNNER_SERVER_URL`` from env,
             # which only the runner subprocess sets — without it the
-            # stored ``goalrail login`` token is silently skipped and
-            # the factory falls through to the Databricks path.
+            # stored ``goalrail login`` token is silently skipped.
             factory = _make_auth_token_factory(server_url=self._server_url)
             token = factory() if factory else None
             if token:
@@ -1452,8 +1439,7 @@ class HostProcess:
             del self._unreported_exits[runner_id]
             await self._report_runner_exit(runner_id, error)
         # ``print`` (not ``_logger.warning``) so the user always sees the
-        # success line after the noisy ``databricks.sdk`` warnings —
-        # otherwise the terminal goes silent after auth and there's no
+        # success line after auth; otherwise the terminal can go silent with no
         # signal the WS handshake actually completed.
         print(
             f"✓ Connected as {self._identity.name!r} "
@@ -1537,7 +1523,7 @@ def run_host_process(
     of ``~/.goalrail/config.yaml``, then runs the host process.
 
     :param server_url: Server URL to connect to, e.g.
-        ``"https://goalrail-app.databricksapps.com"``.
+        ``"https://goalrail.example.com"``.
     :param config_path: Optional path to ``config.yaml``.
         Defaults to ``~/.goalrail/config.yaml``.
     :raises SystemExit: With code 1 when the tunnel fails permanently

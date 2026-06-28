@@ -97,7 +97,7 @@ def _spawn_connect(
 
     The empty positional argument selects local mode — connect spawns (or
     reuses) the detached local Goalrail server and connects the foreground daemon
-    to it. Databricks auth comes from the env (the ``--profile`` flag was
+    to it. auth comes from the env (the ``--profile`` flag was
     removed from the goalrail CLI).
 
     :param goalrail_python: Python interpreter with Goalrail installed.

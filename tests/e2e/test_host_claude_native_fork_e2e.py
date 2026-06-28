@@ -491,7 +491,7 @@ def test_fork_sdk_source_into_native_builds_history(
     sdk_agent_name = upload_agent(
         http_client,
         _CLAUDE_CODER_DIR,
-        rewrite_model_for_databricks=False,
+        rewrite_models_for_gateway=False,
     )
 
     # Only the native CLONE shows Claude's folder-trust dialog; the

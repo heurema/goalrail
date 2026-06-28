@@ -59,11 +59,9 @@ GOALRAIL_EXECUTOR_TYPE = "goalrail"
 
 # Harness identifiers accepted by ``executor.config.harness`` when
 # ``executor.type == "goalrail"``. Matches the set of internal-loop
-# harnesses ``GoalrailExecutor`` wraps. ``databricks`` is
-# intentionally excluded — goalrail has a native databricks
-# adapter, so an goalrail+databricks
-# pairing is a spec misconfiguration. See
-# designs/GOALRAIL_INTEGRATION.md §1.
+# harnesses ``GoalrailExecutor`` wraps. Unsupported provider names are
+# intentionally excluded so a provider/harness mix-up fails at spec
+# validation time. See designs/GOALRAIL_INTEGRATION.md §1.
 #
 # ``open-responses`` is the OpenAI Responses-API harness that
 # ``goalrail.inner.open_responses_sdk.OpenResponsesExecutor``
@@ -153,9 +151,7 @@ def validate_goalrail_executor(
     The goalrail executor wraps an goalrail harness subprocess.
     ``executor.config.harness`` is optional — when absent, the
     goalrail factory selects a default. When set, it must be one
-    of :data:`GOALRAIL_HARNESSES`. ``executor.config.profile`` is
-    always optional and names a Databricks credential profile when
-    the harness routes through Databricks.
+    of :data:`GOALRAIL_HARNESSES`.
 
     The goalrail harness manages its own context window, so
     ``compaction`` is invalid.

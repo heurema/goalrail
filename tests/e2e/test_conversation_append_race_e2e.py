@@ -116,7 +116,7 @@ def ap_server_with_shared_db() -> Iterator[tuple[str, str]]:
         # at startup; stub satisfies the env check.
         "OPENAI_API_KEY": "stub-not-used",
     }
-    for var in ("DATABRICKS_TOKEN", "ANTHROPIC_API_KEY", "CODEX", "CLAUDE_CODE"):
+    for var in ("ANTHROPIC_API_KEY", "CODEX", "CLAUDE_CODE"):
         env.pop(var, None)
 
     log_handle = open(log_path, "w")  # noqa: SIM115 — subprocess holds the FD

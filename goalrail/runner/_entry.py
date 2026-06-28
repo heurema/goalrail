@@ -158,15 +158,12 @@ async def _run_inactivity_monitor(
         await asyncio.sleep(min(poll_interval_s, idle_timeout_s - elapsed_s))
 
 
-class _RunnerDatabricksAuth(httpx.Auth):
-    """httpx Auth that mints a fresh Databricks OAuth token per request.
+class _RunnerBearerAuth(httpx.Auth):
+    """httpx Auth that injects a bearer token per request.
 
     Used by the runner's HTTP client for callbacks to the Goalrail server
     (agent-bundle downloads, response lookups, file APIs, idle
-    notifications). Tokens are refreshed transparently so
-    long-running sessions survive the 1-hour OAuth token lifetime.
-
-    When no Databricks credentials are available (e.g. local
+    notifications). When no token factory is available (e.g. local
     unauthenticated servers), the auth flow is a no-op.
     """
 
@@ -185,20 +182,9 @@ class _RunnerDatabricksAuth(httpx.Auth):
     ) -> Generator[httpx.Request, httpx.Response, None]:
         """Inject a fresh ``Authorization`` header before each request.
 
-        Fails closed: when the factory is configured but returns no
-        token (transient SDK failure), raises rather than silently
-        sending an unauthenticated request. Retries once with a freshly
-        minted token on either:
-
-        - HTTP 401 (the standard "your bearer is invalid" response), or
-        - a 3xx redirect whose ``Location`` points at the Databricks
-          Apps OAuth login flow (``/oidc/`` or ``/.auth/``). The Apps
-          front door does NOT return 401 for an expired bearer; it
-          bounces the request to ``/oidc/oauth2/v2.0/authorize`` with
-          a 302. Without this branch, every subsequent runner→AP
-          callback after token expiry surfaces as a redirect that
-          the caller treats as a hard error (e.g. MCP-proxy tool
-          calls hang and "never resolve").
+        Fails closed: when the factory is configured but returns no token,
+        raises rather than silently sending an unauthenticated request. Retries
+        once with the current token source on HTTP 401.
 
         :param request: The outgoing httpx request.
         :yields: The request with the auth header set, or
@@ -209,46 +195,16 @@ class _RunnerDatabricksAuth(httpx.Auth):
         if self._factory is not None:
             token = self._factory()
             if not token:
-                raise httpx.RequestError("Databricks token refresh returned no token")
+                raise httpx.RequestError("auth token factory returned no token")
             request.headers["Authorization"] = f"Bearer {token}"
         response = yield request
         if self._factory is None:
             return
-        if _is_login_redirect_or_unauthorized(response):
+        if response.status_code == 401:
             token = self._factory()
             if token:
                 request.headers["Authorization"] = f"Bearer {token}"
                 yield request
-
-
-def _is_login_redirect_or_unauthorized(response: httpx.Response) -> bool:
-    """Return ``True`` when ``response`` is a re-auth signal.
-
-    Treats both HTTP 401 and a 3xx redirect to the Databricks Apps
-    OAuth login flow as a "the bearer is no good, mint a new one"
-    signal. The Apps proxy returns 302→``/oidc/oauth2/v2.0/authorize``
-    (with ``redirect_uri`` ending at ``/.auth/callback``) for expired
-    bearers instead of the standard 401, so callers that only check
-    for 401 silently fail.
-
-    Returns ``False`` for unrelated 3xx (e.g. an application-level
-    redirect to another resource) so the caller doesn't accidentally
-    re-mint on every redirect.
-
-    :param response: The httpx response to classify.
-    :returns: ``True`` when the response indicates the request should
-        be retried with a fresh token, ``False`` otherwise.
-    """
-    if response.status_code == 401:
-        return True
-    if not response.is_redirect:
-        return False
-    location = response.headers.get("location", "")
-    # Match the Apps front-door OAuth flow specifically. ``/oidc/`` is
-    # the OAuth provider mount; ``/.auth/`` covers the callback path
-    # (e.g. ``/.auth/callback``) the Apps proxy uses when stitching the
-    # browser-style flow back together.
-    return "/oidc/" in location or "/.auth/" in location
 
 
 def _make_auth_token_factory(
@@ -257,26 +213,21 @@ def _make_auth_token_factory(
     """Build a callable that mints fresh auth tokens.
 
     Resolution order:
-      1. Stored OIDC token from ``~/.goalrail/auth_tokens.json``
+      1. Stored Goalrail token from ``~/.goalrail/auth_tokens.json``
          (populated by ``goalrail login``), keyed by ``server_url``.
-      2. Databricks OAuth token (refreshed via the SDK) — host-keyed
-         when a Databricks Apps pointer record is stored for
-         ``server_url`` (``goalrail login <apps-url>``), ambient
-         otherwise.
 
     Returns ``None`` when no credentials are available.
 
     :param server_url: Server URL to look up the stored OIDC token
         for. When omitted, falls back to the ``RUNNER_SERVER_URL``
         env var — the runner subprocess always has this set, but
-        non-runner callers (e.g. ``goalrail host``) must pass
-        it explicitly or the OIDC token won't be discovered and the
-        factory will silently fall through to the Databricks path.
+        non-runner callers (e.g. ``goalrail host``) must pass it explicitly
+        or the stored token won't be discovered.
 
     Used by:
     - :func:`serve_tunnel` for the WebSocket ``Authorization`` header
       (refreshed on each reconnect).
-    - :class:`_RunnerDatabricksAuth` for the httpx client
+    - :class:`_RunnerBearerAuth` for the httpx client
       (refreshed on each HTTP callback to the Goalrail server).
     - ``goalrail/host/connect.py`` for the host tunnel's WS upgrade
       headers.
@@ -284,71 +235,12 @@ def _make_auth_token_factory(
     :returns: A sync callable returning a bearer token string, or
         ``None`` when no refresh mechanism is available.
     """
-    from goalrail.inner.databricks_executor import (
-        DatabricksAuthError,
-        _DatabricksBearerAuth,
-        _resolve_databricks_auth,
-    )
-
     resolved_server_url = server_url or os.environ.get(_RUNNER_SERVER_URL_ENV_VAR)
-
-    # Reused Databricks SDK auth, resolved once on first use and cached
-    # here for the life of the factory. Reusing one Config is the whole
-    # point: the SDK serves the minted OAuth token from its in-memory
-    # cache and only re-runs the Databricks CLI (~0.5s) when the token
-    # nears expiry. The previous implementation built a fresh Config on
-    # every call (via _read_databrickscfg), shelling out to the CLI on
-    # EVERY runner->AP request — ~6.5s across the ~13 requests of session
-    # establish alone, plus the same tax on every later turn.
-    # ``sdk_auth_resolved`` is the "have we tried resolving yet" flag;
-    # ``sdk_auth`` is the (possibly ``None``) reused auth once resolved.
-    sdk_auth: _DatabricksBearerAuth | None = None
-    sdk_auth_resolved = False
-
-    def _sdk_token() -> str | None:
-        """
-        Return a bearer token from the reused SDK auth, or ``None``.
-
-        Resolves the SDK auth on first call and reuses it thereafter, so
-        repeat fetches hit the SDK's in-memory token cache instead of
-        rebuilding ``Config`` / re-shelling to the Databricks CLI.
-
-        :returns: Bearer token string, or ``None`` when no Databricks
-            credentials resolve.
-        """
-        nonlocal sdk_auth, sdk_auth_resolved
-        if not sdk_auth_resolved:
-            # A stored Databricks Apps pointer record (from
-            # ``goalrail login <apps-url>``) names the exact workspace
-            # the Apps edge accepts tokens from, so it beats ambient
-            # profile resolution.
-            from goalrail.cli_auth import load_databricks_workspace_host
-
-            workspace_host = (
-                load_databricks_workspace_host(resolved_server_url)
-                if resolved_server_url
-                else None
-            )
-            try:
-                if workspace_host is not None:
-                    sdk_auth, _host = _resolve_databricks_auth(host=workspace_host)
-                else:
-                    sdk_auth, _host = _resolve_databricks_auth()
-            except (DatabricksAuthError, ImportError, ValueError):
-                sdk_auth = None
-            sdk_auth_resolved = True
-        if sdk_auth is None:
-            return None
-        try:
-            return sdk_auth.current_token()
-        except DatabricksAuthError:
-            return None
 
     def _factory() -> str | None:
         """Return a fresh auth token.
 
-        Checks the stored OIDC token first (from ``goalrail login``),
-        then falls back to the reused Databricks SDK auth.
+        Checks the stored token from ``goalrail login``.
 
         :returns: Bearer token string, or ``None`` if no credentials
             are configured.
@@ -360,7 +252,7 @@ def _make_auth_token_factory(
             oidc_token = load_token(resolved_server_url)
             if oidc_token:
                 return oidc_token
-        return _sdk_token()
+        return None
 
     # Probe once to check if credentials are available.
     try:
@@ -645,12 +537,9 @@ def create_app(
 ) -> FastAPI:
     """Factory for the runner FastAPI app exposing the harness-contract subset.
 
-    :param auth_token_factory: Pre-built Databricks token factory to reuse for
-        the server httpx client's auth, e.g. the one ``_run_tunnel_from_env``
-        already built for the WS tunnel header. When ``None``, the app builds
-        its own. Reusing the caller's factory shares one resolved SDK auth (and
-        its in-memory token cache) instead of resolving Databricks credentials
-        a second time during runner boot.
+    :param auth_token_factory: Pre-built token factory to reuse for the server
+        httpx client's auth, e.g. the one ``_run_tunnel_from_env`` already
+        built for the WS tunnel header. When ``None``, the app builds its own.
     :returns: A runner FastAPI app exposing the harness-contract subset.
     """
     from goalrail.runner.app import create_runner_app
@@ -693,13 +582,12 @@ def create_app(
     # ".venv/bin/python" resolve against the user's project root.
     from goalrail.runner.mcp_manager import RunnerMcpManager
 
-    # Reuse the caller's factory when given (shares one resolved SDK auth +
-    # token cache); otherwise build our own.
+    # Reuse the caller's factory when given; otherwise build our own.
     if auth_token_factory is None:
         auth_token_factory = _make_auth_token_factory()
     server_client = httpx.AsyncClient(
         base_url=server_url,
-        auth=_RunnerDatabricksAuth(auth_token_factory),
+        auth=_RunnerBearerAuth(auth_token_factory),
         # Announce the runner as a first-party non-browser client via the
         # sentinel Origin. The server's require_trusted_origin CSRF guard on
         # the multipart routes (POST /v1/sessions bundle create, file upload
@@ -708,14 +596,9 @@ def create_app(
         # what lets sys_session_create / sys_upload_file through.
         headers={"Origin": GOALRAIL_INTERNAL_WS_ORIGIN},
         timeout=httpx.Timeout(5.0, read=None),
-        # NOTE: ``follow_redirects`` deliberately stays False.
-        # ``_RunnerDatabricksAuth.auth_flow`` needs to *see* the
-        # Databricks Apps OAuth login redirect (302 →
-        # ``/oidc/...authorize``) to know it should re-mint the bearer
-        # and retry the original POST. With ``follow_redirects=True``,
-        # httpx walks the redirect chain inside the auth loop and
-        # hands the auth flow only the terminal HTML login page,
-        # defeating the retry. See ``_is_login_redirect_or_unauthorized``.
+        # NOTE: ``follow_redirects`` deliberately stays False so server auth
+        # failures remain visible to callers instead of becoming opaque HTML
+        # responses after an upstream redirect.
     )
 
     mcp_manager = RunnerMcpManager(
@@ -872,7 +755,7 @@ async def _run_tunnel_from_env() -> None:
         _logger.debug("telemetry init failed in runner", exc_info=True)
 
     # Reuse the tunnel's token factory for the app's httpx client so the
-    # runner resolves Databricks auth once at boot, not twice.
+    # runner resolves auth once at boot, not twice.
     app = create_app(auth_token_factory=auth_token_factory)
     idle_timeout_s = _load_runner_idle_timeout_s_from_config()
     await app.router.startup()

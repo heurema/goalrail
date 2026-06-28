@@ -3,12 +3,11 @@ Provider-agnostic sandbox bootstrap for Goalrail hosts.
 
 Composes a :class:`~goalrail.onboarding.sandboxes.base.SandboxLauncher`
 into the full host-bootstrap flow: build the Goalrail wheels locally,
-ship + install them in the sandbox, run the Databricks Apps OAuth flow
-*inside the sandbox* (driving the browser step from the local machine
-over a forwarded callback port), and register the sandbox as a host by
-holding ``goalrail host`` open in it. The end state is a sandbox whose
-sessions are reachable from the Goalrail server's UI, TUI, and
-``goalrail resume``.
+ship + install them in the sandbox, run ``goalrail login`` *inside the
+sandbox* when requested, and register the sandbox as a host by holding
+``goalrail host`` open in it. The end state is a sandbox whose sessions
+are reachable from the Goalrail server's UI, TUI, and ``goalrail
+resume``.
 
 The OAuth token is minted and stored by the sandbox's own CLI rather
 than shipped from the laptop. Shipping a laptop-minted token was
@@ -20,9 +19,7 @@ in inside the sandbox makes it the sole token holder and sidesteps all
 three.
 
 Everything provider-specific (transport, image quirks, pip flags) lives
-behind the launcher; see
-:mod:`goalrail.onboarding.sandboxes.lakebox` for the reference
-implementation.
+behind the launcher.
 """
 
 from __future__ import annotations
@@ -35,13 +32,11 @@ import subprocess
 import tarfile
 import tempfile
 import webbrowser
-from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 from urllib.parse import parse_qs, urlparse
 
 import click
-import httpx
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -61,7 +56,7 @@ DEFAULT_WHEELS_TGZ: str = "/tmp/oa-wheels.tgz"
 every bootstrap so the sandbox always gets exactly the current
 checkout's code."""
 
-DEFAULT_BUILD_LOG: str = "/tmp/lakebox-build.log"
+DEFAULT_BUILD_LOG: str = "/tmp/goalrail-sandbox-build.log"
 """Default ``uv build`` log location."""
 
 DEFAULT_SANDBOX_NAME: str = "goalrail-host"
@@ -72,9 +67,9 @@ _REMOTE_WHEELS_TGZ: str = "/tmp/oa-wheels.tgz"
 """Where :func:`ship_wheels` places the wheel tarball inside the
 sandbox before unpacking it."""
 
-# Matches ANSI CSI escape sequences. In-sandbox `databricks auth login`
-# output arrives over a PTY, so URL lines may be wrapped in color/cursor
-# codes that must be stripped before parsing.
+# Matches ANSI CSI escape sequences. In-sandbox login output arrives
+# over a PTY, so URL lines may be wrapped in color/cursor codes that
+# must be stripped before parsing.
 _ANSI_ESCAPE_PATTERN: re.Pattern[str] = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
 
 
@@ -200,8 +195,7 @@ def ship_wheels(
     Performs three remote operations, in order: ship wheels.tgz →
     pip install (the launcher supplies the image-appropriate flags) →
     PATH-export persistence. Credentials are *not* shipped — the
-    sandbox mints its own OAuth token via
-    :func:`login_app_oauth_in_sandbox`.
+    sandbox performs its own server login when requested.
 
     :param launcher: The provider's launcher.
     :param sandbox_id: Target sandbox, e.g. ``"lovable-wattlebird-1530"``.
@@ -231,10 +225,10 @@ def ship_wheels(
 
 def _extract_oauth_url(line: str) -> str | None:
     """
-    Pull a Databricks OAuth authorize URL out of one line of CLI output.
+    Pull an OAuth authorize URL out of one line of CLI output.
 
-    ``databricks auth login`` prints the verification URL on its own
-    line (``https://<host>/oidc/v1/authorize?...``). Sandbox output is
+    Login commands usually print the verification URL on its own line
+    (``https://<host>/oidc/v1/authorize?...``). Sandbox output is
     wrapped in a PTY, so the line may carry ANSI codes and a trailing
     carriage return; both are stripped before matching.
 
@@ -260,8 +254,8 @@ def _loopback_port_from_authorize_url(url: str) -> int:
     actual value must be read back from the URL to know which port to
     forward.
 
-    :param url: The authorize URL, e.g. ``"https://example.databricks."
-        "com/oidc/v1/authorize?...&redirect_uri=http%3A%2F%2Flocalhost"
+    :param url: The authorize URL, e.g. ``"https://auth.example.com/"
+        "oidc/v1/authorize?...&redirect_uri=http%3A%2F%2Flocalhost"
         "%3A8022&..."``.
     :returns: The callback port, e.g. ``8022``.
     :raises click.ClickException: If no ``redirect_uri`` with a loopback
@@ -291,7 +285,7 @@ def _read_login_url(stream: Iterable[str]) -> str | None:
         tests).
     :returns: The authorize URL, or ``None`` when the stream ends
         without printing one — which is NOT necessarily an error:
-        ``goalrail login`` reuses a cached workspace OAuth grant when
+        ``goalrail login`` reuses a cached OAuth grant when
         one verifies against the server, completing without a browser
         step. The caller distinguishes success from failure by the
         process's exit code.
@@ -322,103 +316,11 @@ def _drain_login_output(stream: Iterable[str]) -> None:
             click.echo(f"    {text}")
 
 
-def _probe_server(server_url: str) -> httpx.Response | None:
-    """
-    GET ``<server_url>/v1/me`` unauthenticated, without following
-    redirects (the 302 IS the signal for Databricks Apps).
-
-    :param server_url: The server URL, e.g.
-        ``"https://myapp-123.aws.databricksapps.com"``.
-    :returns: The probe response, or ``None`` when the server is
-        unreachable — the caller treats that as "shape unknown" and
-        lets the in-sandbox login surface the real connectivity error.
-    """
-    try:
-        return httpx.get(f"{server_url}/v1/me", timeout=10.0)
-    except httpx.HTTPError:
-        return None
-
-
-@dataclass
-class DerivedWorkspace:
-    """
-    Databricks workspace coordinates derived from unauthenticated
-    probes of a Goalrail server URL.
-
-    Consumed in two places: seeding the sandbox's ``~/.databrickscfg``
-    before the in-sandbox login, and pinning the LOCAL ``databricks
-    lakebox`` calls to the server's workspace (so the sandbox is
-    created where the server lives, regardless of the ambient default
-    profile).
-
-    :param host: Workspace host fronting the server, e.g.
-        ``"https://example.databricks.com"``.
-    :param workspace_id: The workspace's numeric id, e.g.
-        ``"4168070633950267"``, or ``None`` when the workspace didn't
-        reveal it (the cfg's ``workspace_id`` line is then omitted).
-    """
-
-    host: str
-    workspace_id: str | None
-
-
-def _workspace_org_id(workspace_host: str) -> str | None:
-    """
-    Read a workspace's numeric id off an unauthenticated response.
-
-    Databricks workspaces stamp ``x-databricks-org-id`` on responses
-    even for anonymous requests; ``/login.html`` is a stable
-    unauthenticated path to probe.
-
-    :param workspace_host: Workspace host, e.g.
-        ``"https://example.databricks.com"``.
-    :returns: The id, e.g. ``"4168070633950167"``, or ``None`` when
-        the header is absent or the workspace is unreachable.
-    """
-    try:
-        response = httpx.get(f"{workspace_host}/login.html", timeout=10.0)
-    except httpx.HTTPError:
-        return None
-    return response.headers.get("x-databricks-org-id")
-
-
-def derive_workspace(server_url: str) -> DerivedWorkspace | None:
-    """
-    Return the Databricks workspace fronting *server_url*, if any.
-
-    Runs the same unauthenticated detection ``goalrail login``
-    performs — but from the LOCAL machine. Two consumers: the in-sandbox
-    login step seeds the sandbox's ``~/.databrickscfg`` with the result,
-    and the sandbox CLI commands pin their local ``databricks lakebox``
-    calls to the derived workspace (so the sandbox is created and
-    reached where the server lives).
-
-    :param server_url: The server URL, e.g.
-        ``"https://myapp-123.aws.databricksapps.com"``.
-    :returns: The derived workspace, or ``None`` when the server is
-        unreachable or not Databricks-fronted (accounts / OIDC /
-        header-auth servers need no Databricks cfg).
-    """
-    # Deferred import: cli.py transitively imports this module at
-    # startup, so a top-level import would be a cycle. The classifier
-    # is cli-private; promoting it to a shared module is follow-up.
-    from goalrail.cli import _databricks_workspace_login_target
-
-    probe = _probe_server(server_url)
-    if probe is None:
-        return None
-    host = _databricks_workspace_login_target(server_url, probe)
-    if host is None:
-        return None
-    return DerivedWorkspace(host=host, workspace_id=_workspace_org_id(host))
-
-
 def login_app_oauth_in_sandbox(
     launcher: SandboxLauncher,
     sandbox_id: str,
     *,
     server_url: str | None,
-    workspace: DerivedWorkspace | None,
     skip: bool = False,
 ) -> None:
     """
@@ -426,16 +328,9 @@ def login_app_oauth_in_sandbox(
     **inside the sandbox**, driving the browser step from the local
     machine.
 
-    Databricks Apps front their HTTP/WS endpoints with an OAuth edge —
-    workspace PATs (including the Lakebox image's baked credential)
-    are rejected; only workspace OAuth tokens pass. ``goalrail
-    login`` owns the credential inference used everywhere else: it
-    probes *server_url*, discovers the fronting workspace
-    from the probe response, mints a workspace OAuth grant (running
-    ``databricks auth login --host <workspace>`` when no cached grant
-    verifies), and stores a pointer record so ``goalrail host`` and
-    runners mint fresh workspace tokens for this server automatically.
-    No Databricks profile is created or consulted.
+    ``goalrail login`` owns the credential inference used everywhere
+    else. The sandbox mints and stores its own credential rather than
+    receiving one from the laptop.
 
     The sandbox is headless, so when the login needs a browser this:
 
@@ -449,25 +344,12 @@ def login_app_oauth_in_sandbox(
     4. opens the authorize URL in the local browser.
 
     When the in-sandbox login completes without printing an authorize
-    URL (a cached workspace grant verified against the server), the
+    URL (for example, a cached grant verified against the server), the
     browser steps are skipped and success is read from the exit code.
 
     The sandbox ends up the sole holder of its OAuth grant — nothing is
     shipped from the laptop — which sidesteps CLI-version cache-format
     skew, OS-keyring storage, and single-use refresh-token rotation.
-
-    For Databricks-fronted servers (*workspace* is not ``None``), the
-    sandbox's ``~/.databrickscfg`` is first RESET to exactly one
-    ``[DEFAULT]`` entry naming the fronting workspace. Both halves
-    matter: the image's baked PAT must go — host-keyed credential
-    resolution prefers a host-matching cfg credential, and the Apps
-    edge 302s PATs, so it shadows the OAuth grant the login mints —
-    and a host entry must exist, because ``databricks auth login``
-    stalls on an interactive profile-name prompt when the cfg has no
-    entry for its host. The credential-less entry resolves through
-    the ``databricks-cli`` token cache (the minted grant), which also
-    serves in-sandbox workspace API calls, so nothing is lost with
-    the PAT.
 
     :param launcher: The provider's launcher. Must support
         ``forward_local_port`` (providers without it raise
@@ -475,15 +357,7 @@ def login_app_oauth_in_sandbox(
         hatch).
     :param sandbox_id: Target sandbox, e.g. ``"fast-tarantula-6030"``.
     :param server_url: Goalrail server URL to log in to, e.g.
-        ``"https://myapp-123.aws.databricksapps.com"``. Required
-        unless *skip*.
-    :param workspace: The workspace fronting *server_url*, from
-        :func:`derive_workspace` (the CLI derives once per command and
-        threads it down — to here for the cfg seed, and to the lakebox
-        launcher for its local workspace pin). ``None`` means the
-        server is not Databricks-fronted — the cfg seed is skipped and
-        the in-sandbox login runs the server's native (accounts /
-        OIDC) flow.
+        ``"https://app.example.com"``. Required unless *skip*.
     :param skip: When ``True``, skip authentication entirely (the
         ``--no-auth`` escape hatch).
     :raises click.ClickException: If *server_url* is missing, the
@@ -504,26 +378,6 @@ def login_app_oauth_in_sandbox(
         )
 
     click.echo(f"▸ Logging sandbox '{sandbox_id}' in to {server_url}")
-    if workspace is not None:
-        # Reset ~/.databrickscfg to exactly one [DEFAULT] entry shaped
-        # like what `databricks auth login` itself writes (host +
-        # auth_type + workspace_id) — see the docstring for why the
-        # baked PAT must go AND a host entry must exist. auth_type =
-        # databricks-cli pins the profile to the CLI token cache, so
-        # credential resolution can't wander to another strategy and
-        # miss the grant the login mints. Deterministic full reset
-        # (not a surgical edit): leftover image keys would pin the
-        # profile to the dead PAT instead. Idempotent; also replaces
-        # the image's read-only-mount symlink with a real file.
-        click.echo(f"  → seeding ~/.databrickscfg with workspace {workspace.host}")
-        cfg_lines = [f"host = {workspace.host}", "auth_type = databricks-cli"]
-        if workspace.workspace_id is not None:
-            cfg_lines.append(f"workspace_id = {workspace.workspace_id}")
-        cfg_body = "[DEFAULT]\n" + "\n".join(cfg_lines) + "\n"
-        launcher.run(
-            sandbox_id,
-            f"rm -f ~/.databrickscfg && printf '%s' {shlex.quote(cfg_body)} > ~/.databrickscfg",
-        )
     login = launcher.stream_exec(
         sandbox_id,
         f"goalrail login {shlex.quote(server_url)}",
@@ -547,7 +401,7 @@ def _complete_browser_login(
     URL's dynamically-chosen loopback callback port into the sandbox,
     opens the URL in the local browser, and waits for the login to
     finish. A login that completes without printing an authorize URL
-    (cached workspace grant verified) skips the browser steps entirely
+    (cached grant verified) skips the browser steps entirely
     — success vs. failure is then read from the exit code alone.
 
     :param launcher: The provider's launcher (supplies the port
@@ -561,8 +415,8 @@ def _complete_browser_login(
     url = _read_login_url(login.lines)
     if url is None:
         # No browser needed: `goalrail login` verified a cached
-        # workspace grant against the server (or failed before the
-        # browser step — the exit code tells which).
+        # grant against the server (or failed before the browser step
+        # — the exit code tells which).
         returncode = login.wait()
         if returncode != 0:
             raise click.ClickException(
@@ -570,7 +424,7 @@ def _complete_browser_login(
                 f"with code {returncode} before printing a verification "
                 "URL. Run it inside the sandbox manually to debug."
             )
-        click.echo("  → cached workspace credentials accepted; no browser login needed")
+        click.echo("  → cached credentials accepted; no browser login needed")
         return
     port = _loopback_port_from_authorize_url(url)
     # Stand up (and confirm) the forward BEFORE revealing the URL so
@@ -646,19 +500,14 @@ def connect_sandbox_host(
 
     The remote command is always the bare ``goalrail host --server
     <url>``: ``goalrail host`` no longer takes a ``--profile`` flag
-    — it resolves credentials itself, via a stored
-    ``goalrail login`` token or the sandbox's ambient Databricks
-    credentials (e.g. the Lakebox image's baked workspace PAT, which
-    authenticates to servers in the sandbox's own workspace).
+    — it resolves credentials itself, via a stored ``goalrail login``
+    token or provider-native ambient credentials.
 
     When *host_name* is set, the sandbox's
     ``~/.goalrail/config.yaml`` is updated so the host registers
     with that name instead of the default ``socket.gethostname()``.
-    This matters for Lakebox sandboxes because all of them share the
-    hostname ``databricks``, and the server's ``hosts`` table is
-    primary-keyed on ``(owner, name)`` — collisions overwrite each
-    other and (with existing conversations) FK-violate. Pick a unique
-    name per sandbox to avoid the clash.
+    This is useful when a provider reuses hostnames and the server's
+    ``hosts`` table would otherwise collide on ``(owner, name)``.
 
     :param launcher: The provider's launcher.
     :param sandbox_id: Target sandbox.
@@ -688,7 +537,6 @@ def bootstrap_sandbox_host(
     sandbox_id: str | None,
     sandbox_name: str,
     server_url: str | None,
-    workspace: DerivedWorkspace | None,
     repo_root: Path,
     skip_auth: bool,
 ) -> str:
@@ -706,9 +554,6 @@ def bootstrap_sandbox_host(
         *sandbox_id* is set).
     :param server_url: Goalrail server URL the sandbox logs in to.
         Required unless *skip_auth*.
-    :param workspace: The workspace fronting *server_url*, from
-        :func:`derive_workspace` (the CLI derives once per command).
-        ``None`` when the server is not Databricks-fronted.
     :param repo_root: Path to the Goalrail repo checkout.
     :param skip_auth: When ``True``, skip the in-sandbox login.
     :returns: The sandbox id (the one we created or attached to).
@@ -742,7 +587,6 @@ def bootstrap_sandbox_host(
         launcher,
         sandbox_id,
         server_url=server_url,
-        workspace=workspace,
         skip=skip_auth,
     )
     return sandbox_id
