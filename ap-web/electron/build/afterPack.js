@@ -13,10 +13,14 @@ module.exports = async function afterPack(context) {
 
   let iconFile = "";
   try {
-    iconFile = execFileSync("/usr/libexec/PlistBuddy", ["-c", "Print :CFBundleIconFile", infoPlist], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
+    iconFile = execFileSync(
+      "/usr/libexec/PlistBuddy",
+      ["-c", "Print :CFBundleIconFile", infoPlist],
+      {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      },
+    ).trim();
   } catch {
     // The key may be absent on future builder versions or non-mac targets.
   }

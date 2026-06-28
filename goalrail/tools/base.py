@@ -53,12 +53,24 @@ class ToolContext:
         addressing). ``None`` when not available (older workflow
         paths, unit tests) — tools that require it should fail
         loud.
+    :param sandbox_root: The runner's authoritative workspace /
+        sandbox root — the repository the session operates in (the
+        runner cwd, or a native harness's launch cwd). This is
+        **distinct** from :attr:`workspace`, which for runner-local
+        Python tools is a per-conversation *scratch* subdirectory
+        (``runner_workspace / conversation_id``) and is therefore
+        not the repo root. Code-intelligence tools resolve the repo
+        from this field and treat it as the trusted boundary.
+        ``None`` when no sandbox root is known (e.g. tests, the
+        web_search dispatch path); callers fall back to the process
+        cwd.
     """
 
     task_id: str
     agent_id: str
     workspace: Path | None = None
     conversation_id: str | None = None
+    sandbox_root: Path | None = None
 
 
 class Tool(abc.ABC):

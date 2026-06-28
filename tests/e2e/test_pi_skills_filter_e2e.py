@@ -36,6 +36,7 @@ Usage::
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -45,7 +46,9 @@ import pytest
 from tests.e2e._harness_probes import cli_unavailable_reason
 from tests.e2e.conftest import (
     create_runner_bound_session,
+    get_mock_requests,
     poll_session_until_terminal,
+    reset_mock_llm,
     send_user_message_to_session,
     upload_agent,
 )
@@ -137,6 +140,46 @@ def _enumerate_skills_with_retry(
     return text
 
 
+def _assert_mock_request_skills(
+    mock_llm_server_url: str | None,
+    *,
+    fixture: str,
+    expected_visible: list[str],
+    expected_hidden: list[str],
+) -> None:
+    """
+    Assert Pi's provider request carries the expected skill context.
+
+    In mock-LLM CI, the mock server returns static text and cannot reason
+    over Pi's injected skill context. The deterministic signal is the
+    provider request Pi sent to the mock server: visible skills must be
+    present there, and hidden skills must not be present.
+
+    :param mock_llm_server_url: Mock LLM server URL.
+    :param fixture: Fixture name for failure diagnostics.
+    :param expected_visible: Skill names expected in the provider payload.
+    :param expected_hidden: Skill names expected to be absent.
+    """
+    requests = get_mock_requests(mock_llm_server_url)
+    assert requests, (
+        f"fixture={fixture!r}: Pi sent no captured mock-LLM requests, "
+        "so the skills filter could not be verified."
+    )
+    payload = json.dumps(requests, ensure_ascii=False, sort_keys=True)
+    for name in expected_visible:
+        assert name in payload, (
+            f"fixture={fixture!r}: bundle skill {name!r} should be visible "
+            "in Pi's provider request, but it was absent. "
+            f"Captured request payload:\n{payload[:2000]}"
+        )
+    for name in expected_hidden:
+        assert name not in payload, (
+            f"fixture={fixture!r}: bundle skill {name!r} should be hidden "
+            "from Pi's provider request, but it leaked. "
+            f"Captured request payload:\n{payload[:2000]}"
+        )
+
+
 @pytest.mark.parametrize(
     "fixture, expected_visible, expected_hidden",
     [
@@ -177,6 +220,8 @@ def _enumerate_skills_with_retry(
 def test_pi_skills_filter_e2e(
     http_client: httpx.Client,
     live_runner_id: str,
+    mock_llm_server_url: str | None,
+    using_mock_llm: bool,
     fixture: str,
     expected_visible: list[str],
     expected_hidden: list[str],
@@ -209,6 +254,8 @@ def test_pi_skills_filter_e2e(
     :param http_client: The session-scoped ``httpx.Client`` from
         ``tests.e2e.conftest``, pointed at a live Goalrail server.
     :param live_runner_id: Id of the live runner the session binds to.
+    :param mock_llm_server_url: Mock LLM server URL, or ``None`` in real mode.
+    :param using_mock_llm: Whether the suite is routed to the mock provider.
     :param fixture: Name of the fixture agent dir under
         ``tests/resources/agents/`` whose ``skills:`` value determines
         what the agent is allowed to see.
@@ -219,6 +266,9 @@ def test_pi_skills_filter_e2e(
         fixture's distinctive names so the user's host skills don't
         pollute the assertion).
     """
+    if using_mock_llm:
+        reset_mock_llm(mock_llm_server_url)
+
     agent = upload_agent(http_client, _FIXTURE_ROOT / fixture)
 
     session_id = create_runner_bound_session(
@@ -227,6 +277,15 @@ def test_pi_skills_filter_e2e(
         runner_id=live_runner_id,
     )
     text = _enumerate_skills_with_retry(http_client, session_id)
+
+    if using_mock_llm:
+        _assert_mock_request_skills(
+            mock_llm_server_url,
+            fixture=fixture,
+            expected_visible=expected_visible,
+            expected_hidden=expected_hidden,
+        )
+        return
 
     # Visibility assertions — the listed skill names MUST appear. If a
     # name is absent, Pi didn't load that skill, which means either the

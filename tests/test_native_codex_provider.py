@@ -91,6 +91,18 @@ def test_provider_codex_overrides_preserve_responses_wire() -> None:
     assert 'wire_api="responses"' in "\n".join(overrides)
 
 
+def test_provider_codex_overrides_accepts_auth_refresh_interval() -> None:
+    """The generated provider honors an explicit auth refresh interval."""
+    overrides = _provider_codex_config_overrides(
+        model="gpt-5.5",
+        base_url="https://api.openai.com/v1",
+        auth_command="printf %s sk",
+        wire_api="responses",
+        auth_refresh_interval_ms=12345,
+    )
+    assert "refresh_interval_ms=12345" in "\n".join(overrides)
+
+
 def test_provider_codex_overrides_omit_model_line_when_none() -> None:
     """``model=None`` omits the ``model="..."`` line but still routes."""
     overrides = _provider_codex_config_overrides(

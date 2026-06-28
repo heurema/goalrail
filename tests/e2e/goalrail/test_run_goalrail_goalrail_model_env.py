@@ -189,6 +189,16 @@ def test_goalrail_model_env_var_bogus_value_fails_with_named_error(
         ],
         key=_BOGUS_MODEL,
     )
+    configure_mock_llm(
+        mock_llm_server_url,
+        [
+            {
+                "error": f"model not found: {_BOGUS_MODEL}",
+                "status_code": 404,
+            }
+        ],
+        key=_BOGUS_MODEL.split("/", 1)[1],
+    )
     result = _run_goalrail_with_model_env(
         model_env_value=_BOGUS_MODEL,
         goalrail_python=goalrail_python,

@@ -63,6 +63,7 @@ _MIN_REPLY_CHARS = 12
 # by the ``model`` field in the POST /v1/responses body, so the spec's executor
 # model must match the key used in configure_mock_llm.
 _MOCK_BRAIN_MODEL = "mock-polly-brain"
+_MOCK_CONFIG_HOMES: dict[str, Path] = {}
 
 
 def _free_port() -> int:
@@ -118,8 +119,11 @@ def _mock_env(mock_llm_server_url: str) -> dict[str, str]:
     env["GOALRAIL_NO_UPDATE_CHECK"] = "1"
     # Write an isolated config home so the spawned process doesn't inherit the
     # developer's real auth config.
-    config_home = Path(tempfile.mkdtemp(prefix="goalrail-polly-mock-config-"))
-    (config_home / "config.yaml").write_text("", encoding="utf-8")
+    config_home = _MOCK_CONFIG_HOMES.get(mock_llm_server_url)
+    if config_home is None:
+        config_home = Path(tempfile.mkdtemp(prefix="goalrail-polly-mock-config-"))
+        _MOCK_CONFIG_HOMES[mock_llm_server_url] = config_home
+        (config_home / "config.yaml").write_text("", encoding="utf-8")
     env["GOALRAIL_CONFIG_HOME"] = str(config_home)
     # Strip credentials that would shadow or conflict with mock access.
     # Covers Anthropic/Claude, OpenAI, AWS, GCP, Azure, GitHub,

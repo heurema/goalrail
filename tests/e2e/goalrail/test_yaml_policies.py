@@ -67,8 +67,10 @@ def _build_harness_env(
     if harness == "claude-sdk":
         env["ANTHROPIC_BASE_URL"] = mock_url
         env["HARNESS_CLAUDE_SDK_API_KEY_HELPER"] = "printf %s mock-key"
-        env.pop("OPENAI_BASE_URL", None)
-        env.pop("OPENAI_API_KEY", None)
+        # The fixture YAML still contains ``executor.auth.api_key:
+        # $OPENAI_API_KEY``. Keep the OpenAI mock vars so spec parsing can
+        # resolve that explicit auth block even when the turn itself is
+        # forced through the claude-sdk harness.
     return env
 
 

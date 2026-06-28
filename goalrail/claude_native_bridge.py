@@ -3559,6 +3559,8 @@ def _call_mcp_tool(
         agent_id="claude-native-ui",
         workspace=workspace,
         conversation_id=read_active_session_id(bridge_dir),
+        # The native launch cwd is the repo the session operates in.
+        sandbox_root=workspace,
     )
     result = tools[name].invoke(json.dumps(arguments), ctx)
     return {"content": [{"type": "text", "text": result}]}

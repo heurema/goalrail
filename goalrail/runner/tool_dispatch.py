@@ -253,6 +253,11 @@ _WEB_FETCH_TOOLS = frozenset({"web_fetch"})
 # web_search known-failure.
 _WEB_SEARCH_TOOLS = frozenset({"web_search"})
 
+# Priority 5f.1c: code-intel builtins — runner-local because the
+# repository root is resolved from the runner's authoritative
+# ``sandbox_root``. The agent never passes a filesystem path.
+_CODE_INTEL_TOOLS = frozenset({"code_index_status", "code_search"})
+
 # Priority 5f.2: sys_list_models — runner-local because provider resolution
 # reads the runner host's config/credentials, same as the spawn paths.
 _LIST_MODELS_TOOLS = frozenset({"sys_list_models"})
@@ -304,8 +309,8 @@ _POLICY_TOOLS = frozenset({"sys_add_policy", "sys_policy_registry"})
 # ignore the harness ``tools`` list, so the relay is their ONLY tool
 # surface; this set is the runner-/server-proxied builtin surface that
 # rides through the Goalrail ``/mcp`` endpoint (comment, session read/write,
-# async inbox, task lifecycle, agent-discovery, and terminal families —
-# the same dispatch posture non-native harnesses get via
+# async inbox, task lifecycle, code-intel, agent-discovery, and terminal
+# families — the same dispatch posture non-native harnesses get via
 # ``request.tools``). ``sys_terminal_*`` inherits the spec gate for
 # free: the relay only advertises names that ``ToolManager(spec)``
 # actually registered, and terminal tools register only when the spec
@@ -320,6 +325,7 @@ _NATIVE_RELAY_BUILTIN_TOOLS = (
     | _ASYNC_INBOX_TOOLS
     | _SUBAGENT_TOOLS
     | _LIST_MODELS_TOOLS
+    | _CODE_INTEL_TOOLS
     | _SESSION_CREATE_TOOLS
     | _TASK_LIFECYCLE_TOOLS
     | _AGENT_TOOLS
@@ -350,6 +356,7 @@ _ALL_LOCAL_TOOLS = (
     | _SESSION_QUERY_TOOLS
     | _WEB_FETCH_TOOLS
     | _WEB_SEARCH_TOOLS
+    | _CODE_INTEL_TOOLS
     | _TIMER_TOOLS
     | _TASK_LIFECYCLE_TOOLS
     | _SKILL_TOOLS
@@ -427,6 +434,9 @@ async def _execute_local_python_tool(
             agent_id=agent_id or getattr(agent_spec, "name", "runner-agent") or "runner-agent",
             workspace=workspace,
             conversation_id=conversation_id,
+            # Authoritative repo/sandbox root (the runner cwd), distinct
+            # from the per-conversation scratch ``workspace`` above.
+            sandbox_root=runner_workspace,
         )
         return await asyncio.to_thread(manager.call_tool, tool_name, args, ctx)
     except Exception as exc:
@@ -1980,6 +1990,48 @@ async def _execute_web_search_tool(
         conversation_id=conversation_id,
     )
     return await asyncio.to_thread(tool.invoke, json.dumps(args), ctx)
+
+
+async def _execute_code_intel_tool(
+    tool_name: str,
+    arguments: str,
+    *,
+    conversation_id: str | None = None,
+    task_id: str | None = None,
+    agent_id: str | None = None,
+    runner_workspace: Path | None = None,
+) -> str:
+    """
+    Dispatch first-party code-intel builtins against the runner repo root.
+
+    These tools deliberately resolve their target repository from
+    ``ToolContext.sandbox_root``. Passing the runner workspace here keeps the
+    trust boundary server-side and avoids accepting agent-supplied paths.
+
+    :param tool_name: ``code_index_status`` or ``code_search``.
+    :param arguments: Raw JSON arguments from the model.
+    :param conversation_id: Parent session id, threaded into the context.
+    :param task_id: Calling task id, threaded into the context.
+    :param agent_id: Calling agent id, threaded into the context.
+    :param runner_workspace: Authoritative runner cwd / sandbox root.
+    :returns: The tool's JSON result string, or an error string.
+    """
+    from goalrail.tools.builtins.code_intel import CodeIndexStatusTool, CodeSearchTool
+
+    if tool_name == CodeIndexStatusTool.name():
+        tool = CodeIndexStatusTool()
+    elif tool_name == CodeSearchTool.name():
+        tool = CodeSearchTool()
+    else:
+        return f"Error: unknown code-intel tool {tool_name}"
+
+    ctx = ToolContext(
+        task_id=task_id or "code-intel",
+        agent_id=agent_id or "code-intel",
+        conversation_id=conversation_id,
+        sandbox_root=runner_workspace,
+    )
+    return await asyncio.to_thread(tool.invoke, arguments, ctx)
 
 
 def _has_subagent(
@@ -3795,6 +3847,15 @@ async def execute_tool(
                 task_id=task_id,
                 agent_id=agent_id,
             )
+        elif tool_name in _CODE_INTEL_TOOLS:
+            output = await _execute_code_intel_tool(
+                tool_name,
+                arguments,
+                conversation_id=conversation_id,
+                task_id=task_id,
+                agent_id=agent_id,
+                runner_workspace=runner_workspace,
+            )
         elif tool_name in _TIMER_TOOLS:
             if tool_name == "sys_timer_set":
                 output = await _execute_timer_set(
@@ -4520,6 +4581,7 @@ async def _execute_terminal_tool(
         agent_id=agent_id or "unknown",
         workspace=runner_workspace,
         conversation_id=conversation_id,
+        sandbox_root=runner_workspace,
     )
 
     del session_inbox
