@@ -649,6 +649,7 @@ def _provider_codex_config_overrides(
     base_url: str,
     auth_command: str,
     wire_api: str,
+    auth_refresh_interval_ms: int | None = None,
 ) -> list[str]:
     """Return Codex config overrides routing through a generic provider.
 
@@ -664,6 +665,9 @@ def _provider_codex_config_overrides(
         while still routing through the provider).
     :param base_url: The provider's openai-family base URL, e.g.
         ``"https://openrouter.ai/api/v1"``.
+    :param auth_refresh_interval_ms: Optional auth-command refresh cadence for
+        Codex's generated provider config. Defaults to the standard gateway
+        refresh interval when unset.
     :param wire_api: The provider's configured wire protocol —
         ``"responses"`` (OpenAI / LiteLLM) or ``"chat"`` (OpenRouter and
         most OSS-model gateways). codex >= 0.137 no longer accepts ``"chat"``
@@ -685,6 +689,11 @@ def _provider_codex_config_overrides(
     # request time against a config codex can at least load, instead of failing
     # to start at all.
     effective_wire_api = "responses" if wire_api == "chat" else wire_api
+    refresh_interval_ms = (
+        auth_refresh_interval_ms
+        if auth_refresh_interval_ms is not None
+        else _GATEWAY_AUTH_REFRESH_MS
+    )
     overrides: list[str] = []
     if model:
         overrides.append(f"model={json.dumps(model)}")
@@ -696,7 +705,7 @@ def _provider_codex_config_overrides(
         'auth={command="sh",'
         f'args=["-c",{auth_command_json}],'
         "timeout_ms=5000,"
-        f"refresh_interval_ms={_GATEWAY_AUTH_REFRESH_MS}"
+        f"refresh_interval_ms={refresh_interval_ms}"
         "},"
         f'wire_api="{effective_wire_api}"}}'
     )
