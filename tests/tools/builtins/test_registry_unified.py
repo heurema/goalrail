@@ -120,6 +120,9 @@ def test_builtin_names_size_matches_registry() -> None:
                 "download_file",
                 "search_conversations",
                 "export_agent",
+                # code-intel: read-only index status, repo resolved
+                # server-side from session context (Phase 1 slice).
+                "code_index_status",
                 # Framework-owned (need runtime context, not
                 # user-instantiable). Policy ASKs surface as
                 # MCP-shape elicitations on the SSE stream and

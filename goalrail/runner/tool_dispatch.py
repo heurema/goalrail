@@ -427,6 +427,9 @@ async def _execute_local_python_tool(
             agent_id=agent_id or getattr(agent_spec, "name", "runner-agent") or "runner-agent",
             workspace=workspace,
             conversation_id=conversation_id,
+            # Authoritative repo/sandbox root (the runner cwd), distinct
+            # from the per-conversation scratch ``workspace`` above.
+            sandbox_root=runner_workspace,
         )
         return await asyncio.to_thread(manager.call_tool, tool_name, args, ctx)
     except Exception as exc:
@@ -4520,6 +4523,7 @@ async def _execute_terminal_tool(
         agent_id=agent_id or "unknown",
         workspace=runner_workspace,
         conversation_id=conversation_id,
+        sandbox_root=runner_workspace,
     )
 
     del session_inbox
