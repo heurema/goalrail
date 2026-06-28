@@ -63,7 +63,44 @@ if [[ "$touches_ui" != "true" ]]; then
   pass "PASS: PR touches no ap-web/** files; e2e_ui coverage not required."
 fi
 
-# --- 2. LLM judge: behavior change without adequate e2e_ui coverage? ------
+# --- 2. Skip label present? -----------------------------------------------
+# Check the maintainer-backed waiver before the LLM judge so it remains usable
+# when the judge gateway is temporarily unavailable or intentionally unset.
+HAS_LABEL=$(gh api "repos/$REPO/pulls/$PR" \
+  --jq '[.labels[].name] | index("skip-e2e-ui-test") != null')
+if [[ "$HAS_LABEL" == "true" ]]; then
+  if [[ -z "${MAINTAINERS// /}" ]]; then
+    fail "'skip-e2e-ui-test' is set but no maintainers are configured in .github/MAINTAINER on main; cannot honor the waiver."
+  fi
+
+  MAINTAINERS_LC=$(echo "$MAINTAINERS" | tr '[:upper:]' '[:lower:]')
+
+  AUTHOR=$(gh pr view "$PR" --repo "$REPO" --json author --jq '.author.login')
+  AUTHOR_LC=$(echo "$AUTHOR" | tr '[:upper:]' '[:lower:]')
+  for m in $MAINTAINERS_LC; do
+    if [[ "$m" == "$AUTHOR_LC" ]]; then
+      pass "PASS: 'skip-e2e-ui-test' waiver effective -- author @$AUTHOR is a maintainer."
+    fi
+  done
+
+  # Latest decisive (non-COMMENTED) review per user; effective if a maintainer's
+  # latest such review is APPROVED. Matches GitHub's UI: a later COMMENTED review
+  # doesn't supersede an approval, but CHANGES_REQUESTED or DISMISSED does.
+  APPROVERS=$(gh api "repos/$REPO/pulls/$PR/reviews" --paginate \
+    --jq '[.[] | select(.state != "COMMENTED")] | group_by(.user.login) | map(max_by(.submitted_at)) | .[] | select(.state == "APPROVED") | .user.login')
+  for u in $APPROVERS; do
+    u_lc=$(echo "$u" | tr '[:upper:]' '[:lower:]')
+    for m in $MAINTAINERS_LC; do
+      if [[ "$m" == "$u_lc" ]]; then
+        pass "PASS: 'skip-e2e-ui-test' waiver effective -- approved by maintainer @$u."
+      fi
+    done
+  done
+
+  fail "'skip-e2e-ui-test' is set but not effective: author @$AUTHOR is not a maintainer and no maintainer has approved this PR yet. A maintainer must approve to honor the waiver."
+fi
+
+# --- 3. LLM judge: behavior change without adequate e2e_ui coverage? ------
 # Build a bounded diff blob: only ap-web/** and tests/e2e_ui/** patches. Each
 # file's patch is truncated to MAX_PATCH_LINES so one huge file can't crowd out
 # the others, keeping the prompt representative across many-file PRs. An
@@ -149,40 +186,4 @@ fi
 
 echo "e2e_ui judge -> test required: $REASON"
 
-# --- 3. Skip label present? -----------------------------------------------
-HAS_LABEL=$(gh api "repos/$REPO/pulls/$PR" \
-  --jq '[.labels[].name] | index("skip-e2e-ui-test") != null')
-if [[ "$HAS_LABEL" != "true" ]]; then
-  fail "This PR changes UI behavior (ap-web/**) without a tests/e2e_ui/** test that covers it: $REASON. Add a UI test, or have a maintainer apply the 'skip-e2e-ui-test' label after reviewing your local-run proof."
-fi
-
-# --- 4. Skip label is only effective if a maintainer is on the hook -------
-if [[ -z "${MAINTAINERS// /}" ]]; then
-  fail "'skip-e2e-ui-test' is set but no maintainers are configured in .github/MAINTAINER on main; cannot honor the waiver."
-fi
-
-MAINTAINERS_LC=$(echo "$MAINTAINERS" | tr '[:upper:]' '[:lower:]')
-
-AUTHOR=$(gh pr view "$PR" --repo "$REPO" --json author --jq '.author.login')
-AUTHOR_LC=$(echo "$AUTHOR" | tr '[:upper:]' '[:lower:]')
-for m in $MAINTAINERS_LC; do
-  if [[ "$m" == "$AUTHOR_LC" ]]; then
-    pass "PASS: 'skip-e2e-ui-test' waiver effective -- author @$AUTHOR is a maintainer."
-  fi
-done
-
-# Latest decisive (non-COMMENTED) review per user; effective if a maintainer's
-# latest such review is APPROVED. Matches GitHub's UI: a later COMMENTED review
-# doesn't supersede an approval, but CHANGES_REQUESTED or DISMISSED does.
-APPROVERS=$(gh api "repos/$REPO/pulls/$PR/reviews" --paginate \
-  --jq '[.[] | select(.state != "COMMENTED")] | group_by(.user.login) | map(max_by(.submitted_at)) | .[] | select(.state == "APPROVED") | .user.login')
-for u in $APPROVERS; do
-  u_lc=$(echo "$u" | tr '[:upper:]' '[:lower:]')
-  for m in $MAINTAINERS_LC; do
-    if [[ "$m" == "$u_lc" ]]; then
-      pass "PASS: 'skip-e2e-ui-test' waiver effective -- approved by maintainer @$u."
-    fi
-  done
-done
-
-fail "'skip-e2e-ui-test' is set but not effective: author @$AUTHOR is not a maintainer and no maintainer has approved this PR yet. A maintainer must approve to honor the waiver."
+fail "This PR changes UI behavior (ap-web/**) without a tests/e2e_ui/** test that covers it: $REASON. Add a UI test, or have a maintainer apply the 'skip-e2e-ui-test' label after reviewing your local-run proof."
