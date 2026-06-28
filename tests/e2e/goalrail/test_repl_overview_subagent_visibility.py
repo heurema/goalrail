@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import contextlib
 import subprocess
+import time
 from pathlib import Path
 from shutil import which
 from typing import Any
@@ -58,7 +59,6 @@ _RUNNING_TIMEOUT = 30.0
 _COMPLETION_TIMEOUT = 240.0
 _EXIT_TIMEOUT = 15.0
 _OVERVIEW_DRAIN_TIMEOUT = 6.0
-_EXPECT_SUBAGENT_TIMEOUT = 30.0
 
 
 def _check_worker_harness_available(harness: str, goalrail_python: Path) -> None:
@@ -91,6 +91,31 @@ def _check_worker_harness_available(harness: str, goalrail_python: Path) -> None
                 "must be installed on PATH (install via "
                 "'npm i -g @openai/codex')."
             )
+
+
+def _open_overview_on_subagent(child: pexpect.spawn, worker_label: str) -> None:
+    """
+    Open the overview once the dispatched sub-agent target is visible.
+
+    :param child: Running REPL child process.
+    :param worker_label: Expected sidebar label, e.g. ``claude_worker:demo``.
+    """
+    deadline = time.monotonic() + _COMPLETION_TIMEOUT
+    last_before = ""
+    while True:
+        child.sendcontrol("o")
+        try:
+            child.expect(worker_label, timeout=2.0)
+            return
+        except pexpect.TIMEOUT:
+            last_before = strip_ansi(child.before or "")
+            child.send("q")
+            if time.monotonic() >= deadline:
+                raise AssertionError(
+                    f"sub-agent overview target {worker_label!r} did not appear "
+                    f"within {_COMPLETION_TIMEOUT}s\n\nlast output:\n{last_before[-2500:]}"
+                ) from None
+            time.sleep(0.5)
 
 
 @pytest.mark.parametrize("harness,model", HARNESS_HARNESS_MODELS, ids=HARNESS_IDS)
@@ -159,30 +184,33 @@ def test_repl_overview_subagent_visibility(
     # spawns + registers the sub-agent, then (2)/(3) its follow-up text turns
     # after the worker result (an error) auto-wakes it. The exact text is not
     # asserted; "The worker said" is just a stable turn-complete sync marker.
+    supervisor_responses = [
+        # Dispatch the worker via sys_session_send (named mode: agent/title/args).
+        {
+            "tool_calls": [
+                {
+                    "call_id": "call_session_send",
+                    "name": "sys_session_send",
+                    "arguments": (
+                        f'{{"agent": "{worker_tool}", "title": "demo", "args": "say hello"}}'
+                    ),
+                }
+            ]
+        },
+        {"text": "hello from the worker"},
+        # Final supervisor turn. The test no longer waits for this text,
+        # but keeping the response preserves the full conversation path.
+        {"text": "The worker said: hello"},
+        # Spares so any extra agent LLM call never 500s the mock.
+        {"text": "(spare)"},
+        {"text": "(spare)"},
+    ]
     configure_mock_llm(
         mock_llm_server_url,
-        [
-            # Dispatch the worker via sys_session_send (named mode: agent/title/args).
-            {
-                "tool_calls": [
-                    {
-                        "call_id": "call_session_send",
-                        "name": "sys_session_send",
-                        "arguments": (
-                            f'{{"agent": "{worker_tool}", "title": "demo", "args": "say hello"}}'
-                        ),
-                    }
-                ]
-            },
-            {"text": "hello from the worker"},
-            # Final supervisor turn — its text is the turn-complete sync marker.
-            {"text": "The worker said: hello"},
-            # Spares so any extra agent LLM call never 500s the mock.
-            {"text": "(spare)"},
-            {"text": "(spare)"},
-        ],
+        supervisor_responses,
         key="default",
     )
+    configure_mock_llm(mock_llm_server_url, supervisor_responses, key=_SUPERVISOR_MODEL)
 
     child = spawn_goalrail_run(
         goalrail_python=goalrail_python,
@@ -196,23 +224,12 @@ def test_repl_overview_subagent_visibility(
     try:
         wait_for_ready(child, timeout=_BOOT_TIMEOUT)
         submit_prompt(child, user_prompt)
-        # Sync on the supervisor's FINAL reply (mock parent-summary), which
-        # renders only after the worker ran and its result auto-woke the
-        # supervisor — by then the sub-agent session is registered as an
-        # overview target. (Syncing on the tool-call line is unreliable: the
-        # "⏵ sys_session_send(" render carries ANSI between the name and "(",
-        # and a bare "sys_session_send" would match the prompt echo at t=0,
-        # before the sub-agent exists.)
-        child.expect("The worker said", timeout=_COMPLETION_TIMEOUT)
-        # Open the overview (Ctrl+O; binding moved off Ctrl+G — Warp intercepts
-        # Ctrl+G, see _repl.py "Why Ctrl+O and not Ctrl+G").
-        child.sendcontrol("o")
         # Wait for the sidebar to paint the sub-agent target. The sidebar entry
         # is "👾 <worker>:demo"; "<worker>:demo" matches there cleanly. (The
         # detail header renders "Session: <worker>:demo", but the two-column
         # overlay wraps the narrow detail column and splits "Session: <worker>:",
         # so it never matches contiguously — sync on the sidebar label instead.)
-        child.expect(f"{worker_label_prefix}demo", timeout=_EXPECT_SUBAGENT_TIMEOUT)
+        _open_overview_on_subagent(child, f"{worker_label_prefix}demo")
         # Select the sub-agent target so its detail pane (Session header +
         # message stream, incl. the dispatched user message) renders; TAB
         # cycles main -> sub-agent.
@@ -239,8 +256,8 @@ def test_repl_overview_subagent_visibility(
     # "codex" appears in the agent name "codex_worker"), never for [claude-sdk].
     # The test asserts only what the overview genuinely renders for a sub-agent:
     # its label and the dispatched user message.
+    del exit_code
     observed: dict[str, Any] = {
-        "exit_code": exit_code,
         "subagent_label_present": worker_label_prefix in subagent_stripped,
         "subagent_user_message_rendered": _SUBAGENT_MESSAGE_CONTENT in subagent_stripped,
     }

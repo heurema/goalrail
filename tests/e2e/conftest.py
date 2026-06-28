@@ -616,6 +616,32 @@ def live_server(
         # The OpenAI SDK appends /responses to the base URL, so
         # include /v1 in the base so the SDK hits /v1/responses.
         env["OPENAI_BASE_URL"] = f"{mock_llm_server_url}/v1"
+        mock_config_home = tmp_path_factory.mktemp("e2e_goalrail_config")
+        (mock_config_home / "config.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "providers": {
+                        "mock-e2e": {
+                            "kind": "key",
+                            "default": ["anthropic", "openai", "pi"],
+                            "anthropic": {
+                                "base_url": mock_llm_server_url,
+                                "api_key": "mock-key",
+                                "models": {"default": "mock-claude"},
+                            },
+                            "openai": {
+                                "base_url": f"{mock_llm_server_url}/v1",
+                                "api_key": "mock-key",
+                                "models": {"default": "mock-openai"},
+                            },
+                        },
+                    },
+                },
+                sort_keys=False,
+            ),
+            encoding="utf-8",
+        )
+        env["GOALRAIL_CONFIG_HOME"] = str(mock_config_home)
     elif gateway_base_url is not None:
         env["OPENAI_BASE_URL"] = gateway_base_url
     # The CLI exposes ``--database-uri`` but not an env var, so the
