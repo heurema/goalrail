@@ -1,8 +1,8 @@
-"""The Goalrail brand wordmark and Otto lockup for CLI output.
+"""The Goalrail brand wordmark and terminal-mark lockup for CLI output.
 
 A bold "ANSI-Shadow" block-letter ``goalrail`` wordmark — the canonical
 figlet font with one duplicate body row dropped (5 rows), so every letter
-stays legible and it sits exactly as tall as the Otto-the-starfish mascot
+stays legible and it sits exactly as tall as the terminal monogram
 from :mod:`goalrail.inner.mascots`, which it pairs with 1:1.
 
 This module owns the *art* and its rendering onto a caller-supplied
@@ -12,7 +12,7 @@ banner (TTY gating, ``GOALRAIL_NO_BANNER``) lives one layer up in
 by command code. Keeping the gate out of here avoids a circular import
 (``ui`` imports ``wordmark``) and keeps the art unit-testable in isolation.
 
-The brand color is Otto's magenta-pink ``#F43BA6`` (see
+The brand color is Goalrail's terminal accent ``#F43BA6`` (see
 :data:`goalrail.inner.mascots.MASCOT_ART_COLOR`); the optional gradient
 fades it toward a lighter pink across the wordmark columns.
 """
@@ -25,8 +25,8 @@ from rich.text import Text
 
 from .mascots import MASCOT_ART_COL_WIDTH, MASCOT_ART_COLOR, MASCOT_ART_LINES
 
-# Flat brand accent — kept in sync with the mascot/banner border so the
-# wordmark, Otto, and the interactive REPL box all read as one color.
+# Flat brand accent — kept in sync with the terminal mark / banner border so
+# the wordmark, mark, and interactive REPL box all read as one color.
 WORDMARK_COLOR = MASCOT_ART_COLOR
 
 # Gradient endpoints (magenta → soft pink). Used only when a caller asks
@@ -35,7 +35,7 @@ WORDMARK_COLOR = MASCOT_ART_COLOR
 _GRADIENT_START = (0xF4, 0x3B, 0xA6)  # #F43BA6
 _GRADIENT_END = (0xFF, 0x9F, 0xD6)  # #FF9FD6
 
-# Two-space gutter between Otto and the wordmark in the lockup.
+# Two-space gutter between the terminal mark and the wordmark in the lockup.
 _GAP = "  "
 # Left indent applied to every printed row so the banner doesn't hug the
 # terminal edge (matches the installer's two-space banner indent).
@@ -44,11 +44,11 @@ _INDENT = "  "
 # Per-letter "ANSI-Shadow" glyphs — the canonical figlet font (as used by
 # NeonX and TAAG) with a single near-duplicate body row dropped, leaving 5
 # rows. This keeps the full-height, fully-legible letterforms while sitting
-# exactly as tall as Otto (5 rows), so the lockup pairs 1:1 with no unpaired
-# rows. Stored as a glyph map rather than a frozen multi-line blob so the
-# wordmark is regenerable and a missing letter fails loud at import. Each
-# glyph's rows are equal display width so columns stay aligned when letters
-# are concatenated.
+# exactly as tall as the terminal mark (5 rows), so the lockup pairs 1:1 with
+# no unpaired rows. Stored as a glyph map rather than a frozen multi-line blob so
+# the wordmark is regenerable and a missing letter fails loud at import. Each
+# glyph's rows are equal display width so columns stay aligned when letters are
+# concatenated.
 _GLYPH_ROWS = 5
 _GLYPHS: dict[str, tuple[str, ...]] = {
     "o": (" ██████╗ ", "██╔═══██╗", "██║   ██║", "╚██████╔╝", " ╚═════╝ "),
@@ -85,9 +85,9 @@ def _build_wordmark(word: str) -> tuple[str, ...]:
 #: The rows of the ``goalrail`` wordmark, as plain (uncolored) text.
 WORDMARK_LINES: tuple[str, ...] = _build_wordmark(_WORDMARK_TEXT)
 
-# Which Otto row each wordmark row sits on. Otto and the wordmark are both
-# five rows tall, so they pair 1:1 — no unpaired rows on either side.
-_WORDMARK_ROW_FOR_OTTO_ROW = {0: 0, 1: 1, 2: 2, 3: 3, 4: 4}
+# Which terminal-mark row each wordmark row sits on. The mark and wordmark are
+# both five rows tall, so they pair 1:1 — no unpaired rows on either side.
+_WORDMARK_ROW_FOR_MARK_ROW = {0: 0, 1: 1, 2: 2, 3: 3, 4: 4}
 
 
 def wordmark_lines() -> list[str]:
@@ -102,9 +102,9 @@ def wordmark_lines() -> list[str]:
 
 def lockup_lines() -> list[str]:
     """
-    Return the Otto + wordmark lockup as plain text rows (no color).
+    Return the terminal mark + wordmark lockup as plain text rows (no color).
 
-    Otto sits on the left (5 rows × :data:`MASCOT_ART_COL_WIDTH` cells)
+    The mark sits on the left (5 rows × :data:`MASCOT_ART_COL_WIDTH` cells)
     with the 5-row wordmark aligned 1:1 beside it. Trailing whitespace is
     stripped so the plain form is clean for snapshots and docs.
 
@@ -113,7 +113,7 @@ def lockup_lines() -> list[str]:
     out: list[str] = []
     for i, art in enumerate(MASCOT_ART_LINES):
         pad = " " * (MASCOT_ART_COL_WIDTH - cell_len(art))
-        wm_index = _WORDMARK_ROW_FOR_OTTO_ROW.get(i)
+        wm_index = _WORDMARK_ROW_FOR_MARK_ROW.get(i)
         wm = WORDMARK_LINES[wm_index] if wm_index is not None else ""
         out.append(f"{_INDENT}{art}{pad}{_GAP}{wm}".rstrip())
     return out
@@ -166,7 +166,7 @@ def render_lockup(
     epilogue: list[tuple[str, str]] | None = None,
 ) -> None:
     """
-    Print the Otto + wordmark lockup to *console*.
+    Print the terminal mark + wordmark lockup to *console*.
 
     Color is applied via rich styles, so the console's own color settings
     (NO_COLOR, terminal capability) decide whether color actually renders;
@@ -186,7 +186,7 @@ def render_lockup(
         pad = " " * (MASCOT_ART_COL_WIDTH - cell_len(art))
         line = Text(_INDENT)
         line.append(f"{art}{pad}", style=WORDMARK_COLOR)
-        wm_index = _WORDMARK_ROW_FOR_OTTO_ROW.get(i)
+        wm_index = _WORDMARK_ROW_FOR_MARK_ROW.get(i)
         if wm_index is not None:
             line.append(_GAP)
             line.append_text(
@@ -220,7 +220,7 @@ def _print_epilogue(console: Console, rows: list[tuple[str, str]]) -> None:
 
 def render_compact(console: Console, *, subtitle: str | None = None) -> None:
     """
-    Print the one-line brandmark: ``✦ goalrail  <subtitle>``.
+    Print the one-line brandmark: ``GR goalrail  <subtitle>``.
 
     Used as a lightweight branded header on non-interactive commands that
     don't warrant the full lockup (``version``, ``status``, ``upgrade``…).
@@ -230,7 +230,7 @@ def render_compact(console: Console, *, subtitle: str | None = None) -> None:
     :returns: None.
     """
     line = Text(_INDENT)
-    line.append("✦ ", style=WORDMARK_COLOR)
+    line.append("GR ", style=f"bold {WORDMARK_COLOR}")
     line.append("goalrail", style=f"bold {WORDMARK_COLOR}")
     if subtitle:
         line.append(f"  {subtitle}", style="dim")

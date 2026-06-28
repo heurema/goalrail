@@ -12,19 +12,21 @@ from goalrail.inner.mascots import (
 )
 
 
-def test_random_mascot_lines_returns_otto_the_starfish() -> None:
-    """The TUI mascot uses the static Otto-the-starfish art."""
+def test_random_mascot_lines_returns_goalrail_terminal_mark() -> None:
+    """The TUI mascot uses the static Goalrail monogram art."""
 
     lines = random_mascot_lines()
 
     assert lines == [
-        "⠀⠀⠀⢠⣿⡄⠀⠀⠀",
-        "⢴⣶⣶⠉⣿⠉⣶⣶⡦",
-        "⠀⠙⣿⣶⣿⣶⣿⠋⠀",
-        "⠀⢠⣿⡿⠿⢿⣿⡄⠀",
-        "⠀⠈⠁⠀⠀⠀⠈⠁⠀",
+        "╭────╮ ╭╮",
+        "│ ╭──╯ ││",
+        "│ │╭─╮ ├╯",
+        "│ ╰╯ │ │╲",
+        "╰────╯ ╰╯",
     ]
     assert MASCOT_ART_COL_WIDTH == 9
+    joined = "\n".join(lines)
+    assert all(old_glyph not in joined for old_glyph in ("⣿", "⣶", "⡿", "⢴"))
     # The art is symbol-only: no letters or digits anywhere.
     assert all(not any(ch.isalnum() for ch in line) for line in lines)
     assert all(len(line) == MASCOT_ART_COL_WIDTH for line in lines)

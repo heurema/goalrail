@@ -426,9 +426,9 @@ def _render_startup_banner_ansi(
     """
     Build the ANSI-styled startup banner shown when the REPL boots.
 
-    Renders the mascot art + accent-bordered box, using the SDK's
-    starfish magenta-pink brand color (``#F43BA6``) so the box border,
-    mascot, prompt marker, and bottom toolbar all read as one accent.
+    Renders the terminal monogram + accent-bordered box using Goalrail's
+    terminal accent color (``#F43BA6``), so the box border, mark, prompt
+    marker, and bottom toolbar all read as one accent.
 
     When *header* is supplied, the box becomes a Claude-Code-style header:
     the agent name (bold) plus dim rows for the one-line summary, the
@@ -4169,7 +4169,7 @@ async def run_repl(
             session._event_log_path = _event_log_path  # type: ignore[attr-defined]
             _event_log_fh = open(_event_log_path, "a")  # noqa: SIM115 — closed in finally below
 
-        # Mirror the legacy CLI's mascot-art startup banner so the
+        # Mirror the CLI's branded startup banner so the
         # Goalrail REPL feels identical at boot. Raw stdout write
         # (matching ``goalrail/inner/cli.py:2962``) — the banner
         # is a pre-formatted ANSI string with explicit centering;

@@ -1048,7 +1048,7 @@ def _print_version_callback(ctx: click.Context, _param: click.Parameter, value: 
 class _GoalrailCLI(click.Group):
     """Top-level group that prints the brand lockup above its help.
 
-    The Otto + wordmark lockup is drawn on stderr (decoration) and is
+    The terminal mark + wordmark lockup is drawn on stderr (decoration) and is
     TTY-gated by :func:`goalrail.inner.ui.show_banner`, so ``goalrail
     --help`` shows the banner interactively while piped/CI help stays
     clean. Only the top-level group overrides help; subcommand help

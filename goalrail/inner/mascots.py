@@ -19,24 +19,22 @@ class MascotPayload(TypedDict):
     color: str
 
 
-# Otto the starfish — a compact Braille (U+28xx) silhouette of a
-# five-point star with two tall carved eyes, rasterized from a star
-# polygon and packed two-dots-wide by four-dots-tall per cell. Replaces
-# the old 29x12 PNG-converted blob with a 9x5 glyph that keeps the welcome
-# box at header height. Blanks are the Braille blank (U+2800) so every row
-# is a solid 9 cells wide.
+# Goalrail terminal monogram — a compact 9x5 line-art approximation of the
+# app icon's linked G/R mark. It intentionally replaces the previous mascot
+# silhouette while keeping the same column width, so existing welcome boxes stay
+# under their terminal-width budget.
 MASCOT_ART_LINES: tuple[str, ...] = (
-    "⠀⠀⠀⢠⣿⡄⠀⠀⠀",
-    "⢴⣶⣶⠉⣿⠉⣶⣶⡦",
-    "⠀⠙⣿⣶⣿⣶⣿⠋⠀",
-    "⠀⢠⣿⡿⠿⢿⣿⡄⠀",
-    "⠀⠈⠁⠀⠀⠀⠈⠁⠀",
+    "╭────╮ ╭╮",
+    "│ ╭──╯ ││",
+    "│ │╭─╮ ├╯",
+    "│ ╰╯ │ │╲",
+    "╰────╯ ╰╯",
 )
 
 MASCOT_ART_COL_WIDTH = max(len(line) for line in MASCOT_ART_LINES)
 
 # Truecolor hex: must stay in sync with the interactive welcome ``Panel`` border in
-# ``goalrail.cli``. Otto's starfish magenta-pink — the Goalrail brand accent.
+# ``goalrail.cli``. Goalrail's terminal accent color.
 MASCOT_ART_COLOR = "#F43BA6"
 
 
@@ -56,9 +54,9 @@ def random_mascot_lines() -> list[str]:
     Return the startup mascot ASCII art.
 
     The function name is kept for compatibility with the old procedural
-    mascot API, but the TUI now uses the single static Goalrail mascot.
+    mascot API, but the TUI now uses the single static Goalrail mark.
 
-    :returns: The multi-row Otto-the-starfish mascot art.
+    :returns: The multi-row Goalrail terminal mark.
     """
 
     return list(MASCOT_ART_LINES)
@@ -77,7 +75,7 @@ def mascot_payload_for_identity(agent_identity: str) -> MascotPayload:
     """
 
     digest = hashlib.sha256(agent_identity.encode("utf-8")).digest()
-    # Starfish magenta-pink range from hash bytes, centered on the brand
+    # Terminal accent range from hash bytes, centered on the brand
     # accent ``#F43BA6`` (244, 59, 166).
     r = 223 + (digest[8] % 33)
     g = 39 + (digest[9] % 40)
