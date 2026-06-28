@@ -3,8 +3,8 @@
 // `false` standalone (`main.tsx` never mounts the provider), `true` when a host
 // renders ap-web through `embed.tsx` (which wraps the tree in
 // `<EmbeddedProvider>`). Use it to branch UI that only makes sense in one mode
-// — e.g. hide the theme switcher in the embed, where the host owns the theme
-// and `embed.tsx` forces light via `NextThemesProvider forcedTheme="light"`.
+// — e.g. hide UI that only makes sense in the standalone shell; `embed.tsx`
+// wraps the tree in the shared forced Dracula dark theme.
 //
 // It's a context (not a module-level flag) so it's reactive, overridable in
 // tests via the provider, and reads cleanly with a hook from any component.

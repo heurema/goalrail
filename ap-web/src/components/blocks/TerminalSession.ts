@@ -15,43 +15,37 @@ import { WebglAddon } from "@xterm/addon-webgl";
 import { type ITheme, Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 
-// Card background colors derived from the app's CSS palette.
-// Light: --card: oklch(1.000 0 0) = pure white.
-// Dark:  --card: oklch(0.195 0.004 240) ≈ rgb(19, 21, 23) via OKLab → sRGB.
-const CARD_LIGHT = "#ffffff";
-const CARD_DARK = "#131517";
+const DRACULA_SURFACE = "#282a36";
+const DRACULA_INK = "#f8f8f2";
+const DRACULA_ACCENT = "#ff79c6";
 
 /**
  * Return an xterm `ITheme` object matched to the app's light or dark palette.
  */
-export function terminalTheme(isDark: boolean): ITheme {
-  const bg = isDark ? CARD_DARK : CARD_LIGHT;
-  return isDark
-    ? {
-        background: bg,
-        foreground: "#e4e4e7",
-        cursor: "#22d3ee",
-        cursorAccent: bg,
-        selectionBackground: "#22d3ee33",
-        black: "#09090b",
-        brightBlack: "#71717a",
-      }
-    : {
-        background: bg,
-        foreground: "#18181b",
-        cursor: "#0891b2",
-        cursorAccent: bg,
-        selectionBackground: "#0891b233",
-        black: "#18181b",
-        brightBlack: "#e4e4e7",
-        // CLIs that assume a dark terminal paint primary text with ANSI
-        // white / bright-white. On the white card background those slots
-        // must be dark tones, or the text renders white-on-white and
-        // vanishes. brightWhite is the most emphasized text, so it maps to
-        // the strongest (darkest) tone; white is a slightly muted gray.
-        white: "#3f3f46",
-        brightWhite: "#18181b",
-      };
+export function terminalTheme(_isDark: boolean): ITheme {
+  return {
+    background: DRACULA_SURFACE,
+    foreground: DRACULA_INK,
+    cursor: DRACULA_ACCENT,
+    cursorAccent: DRACULA_SURFACE,
+    selectionBackground: `${DRACULA_ACCENT}33`,
+    black: "#21222c",
+    red: "#ff5555",
+    green: "#50fa7b",
+    yellow: "#f1fa8c",
+    blue: "#bd93f9",
+    magenta: DRACULA_ACCENT,
+    cyan: "#8be9fd",
+    white: DRACULA_INK,
+    brightBlack: "#6272a4",
+    brightRed: "#ff5555",
+    brightGreen: "#50fa7b",
+    brightYellow: "#f1fa8c",
+    brightBlue: "#bd93f9",
+    brightMagenta: DRACULA_ACCENT,
+    brightCyan: "#8be9fd",
+    brightWhite: "#ffffff",
+  };
 }
 
 /**

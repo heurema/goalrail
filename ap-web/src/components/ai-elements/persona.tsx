@@ -80,15 +80,7 @@ const sources = {
 };
 
 const getCurrentTheme = (): "light" | "dark" => {
-  if (typeof window !== "undefined") {
-    if (document.documentElement.classList.contains("dark")) {
-      return "dark";
-    }
-    if (window.matchMedia?.("(prefers-color-scheme: dark)").matches) {
-      return "dark";
-    }
-  }
-  return "light";
+  return "dark";
 };
 
 const useTheme = (enabled: boolean) => {
@@ -110,22 +102,8 @@ const useTheme = (enabled: boolean) => {
       attributes: true,
     });
 
-    // Watch for OS-level theme changes
-    let mql: MediaQueryList | null = null;
-    const handleMediaChange = () => {
-      setTheme(getCurrentTheme());
-    };
-
-    if (window.matchMedia) {
-      mql = window.matchMedia("(prefers-color-scheme: dark)");
-      mql.addEventListener("change", handleMediaChange);
-    }
-
     return () => {
       observer.disconnect();
-      if (mql) {
-        mql.removeEventListener("change", handleMediaChange);
-      }
     };
   }, [enabled]);
 

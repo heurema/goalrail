@@ -2169,10 +2169,8 @@ export function JumpToTopButton({
         className={cn(
           "h-7 gap-1.5 rounded-full px-3 text-xs shadow-sm",
           // Force an OPAQUE background in both themes and on hover. The outline
-          // variant's hover (bg-muted) is a translucent black wash (--muted is
-          // #0000000f), so over the faded chat text behind the pill it bleeds
-          // through and reads as transparent. bg-background is opaque (#fff /
-          // #0d1218); hover feedback comes from a brightness filter, which keeps
+          // variant's hover can blend with faded chat text behind the pill.
+          // bg-background is opaque; hover feedback comes from a brightness filter, which keeps
           // the fill fully opaque.
           "bg-background hover:bg-background hover:brightness-95",
           "dark:bg-background dark:hover:bg-background dark:hover:brightness-125",

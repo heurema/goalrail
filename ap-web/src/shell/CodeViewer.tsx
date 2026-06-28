@@ -606,8 +606,7 @@ export function CodeViewer({
         </div>
       )}
 
-      {/* GitHub Light/Dark backgrounds match the shiki themes used by highlightCode */}
-      <div ref={codeContainerRef} className="font-mono text-xs bg-white dark:bg-[#0d1117]">
+      <div ref={codeContainerRef} className="font-mono text-xs bg-background">
         {rawLines.map((rawLine, idx) => {
           const lineNum = idx + 1;
           const isMatchLine =

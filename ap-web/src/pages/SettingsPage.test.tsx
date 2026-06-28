@@ -1,6 +1,6 @@
 // Tests for the Settings content panel. The section nav lives in the sidebar
 // card (see settingsNav); the page renders only the section named by the URL.
-// Covers the Appearance theme picker, the auth-gated Account section, and the
+// Covers the Appearance theme state, the auth-gated Account section, and the
 // Archived sessions list (which moved here out of the sidebar).
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
@@ -77,13 +77,14 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("SettingsPage", () => {
-  it("renders the Appearance section and applies a theme on card click", () => {
+  it("renders the fixed Dracula Appearance section", () => {
     renderPage("/settings/appearance");
     expect(screen.getByRole("heading", { name: "Appearance" })).toBeInTheDocument();
-    // System is selected (theme = "system").
-    expect(screen.getByTestId("theme-system")).toHaveAttribute("aria-checked", "true");
-    fireEvent.click(screen.getByTestId("theme-dark"));
-    expect(mocks.setTheme).toHaveBeenCalledWith("dark");
+    expect(screen.getByTestId("theme-dracula")).toHaveTextContent("Dracula");
+    expect(screen.queryByTestId("theme-system")).toBeNull();
+    expect(screen.queryByTestId("theme-light")).toBeNull();
+    expect(screen.queryByTestId("theme-dark")).toBeNull();
+    expect(mocks.setTheme).not.toHaveBeenCalled();
   });
 
   it("defaults bare /settings to Account when accounts is on, else Appearance", async () => {

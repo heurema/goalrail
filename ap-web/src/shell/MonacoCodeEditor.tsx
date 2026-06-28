@@ -5,7 +5,7 @@
 //     highlighting, and comment decorations still work.
 //   • editable (edit permission)     → save via Cmd/Ctrl+S or the Save button.
 //
-// Highlighting comes from Shiki via @shikijs/monaco (github-light/dark), so
+// Highlighting comes from Shiki via @shikijs/monaco (Dracula), so
 // colors match the read-only Shiki views and chat code blocks. The structure
 // mirrors MarkdownRichTextViewer: an outer component owns the sync hook and
 // remount key; the inner component owns the live editor instance.
