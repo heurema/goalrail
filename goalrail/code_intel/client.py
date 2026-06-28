@@ -131,6 +131,16 @@ class RepoBoundaryError(CodeIntelError):
     """
 
 
+class CodeIntelNotIndexedError(CodeIntelError):
+    """The repository has no index, so the query cannot be answered.
+
+    Raised by query operations (e.g. :meth:`CodeIntelClient.search`)
+    when no engine project matches the resolved repo root. The status
+    tool reports this as a state rather than raising; query tools raise
+    so the caller can prompt for indexing.
+    """
+
+
 # ── Result models ─────────────────────────────────────────
 
 
@@ -155,6 +165,45 @@ class IndexStatus:
     nodes: int | None = None
     edges: int | None = None
     raw: _Json = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class SearchHit:
+    """One symbol match from a code search.
+
+    :param name: Simple symbol name, e.g. ``"resolve_repo_root"``.
+    :param qualified_name: Fully-qualified name (stable handle for a
+        follow-up snippet/trace lookup).
+    :param label: Node kind, e.g. ``"Function"``, ``"Class"``,
+        ``"Method"``.
+    :param file: Repo-relative file path of the definition.
+    :param signature: Declared signature when known, else ``None``.
+    :param return_type: Declared return type when known, else ``None``.
+    """
+
+    name: str
+    qualified_name: str
+    label: str
+    file: str
+    signature: str | None = None
+    return_type: str | None = None
+
+
+@dataclass(frozen=True)
+class SearchResults:
+    """Result of a code search over the knowledge graph.
+
+    :param repo_root: Absolute repo root the search ran against.
+    :param query: The name pattern that was searched.
+    :param total: Total matches the engine reported (may exceed
+        ``len(hits)`` when capped by ``limit``).
+    :param hits: The returned (possibly truncated) matches.
+    """
+
+    repo_root: str
+    query: str
+    total: int
+    hits: list[SearchHit]
 
 
 # ── Repo resolution (server-side) ─────────────────────────
@@ -457,4 +506,57 @@ class CodeIntelClient:
             nodes=result.get("nodes"),
             edges=result.get("edges"),
             raw=result,
+        )
+
+    def search(
+        self,
+        repo_root: Path,
+        query: str,
+        *,
+        limit: int = 20,
+        label: str | None = None,
+    ) -> SearchResults:
+        """Search the knowledge graph for symbols matching ``query``.
+
+        Backed by the engine's ``search_graph`` (structural symbol
+        search by name). Returns a trimmed, agent-friendly projection
+        of each match.
+
+        :param repo_root: Resolved repo root (server-side).
+        :param query: Name pattern to match against symbol names.
+        :param limit: Maximum number of hits to return.
+        :param label: Optional node-kind filter, e.g. ``"Function"``.
+        :raises CodeIntelNotIndexedError: If the repo is not indexed.
+        """
+        project = self.find_project_by_root(repo_root)
+        if project is None:
+            raise CodeIntelNotIndexedError(
+                f"repository {repo_root} is not indexed; run indexing first"
+            )
+        payload: _Json = {
+            "project": project["name"],
+            "name_pattern": query,
+            "limit": limit,
+        }
+        if label:
+            payload["label"] = label
+        result = self._run("search_graph", payload)
+        raw_hits = result.get("results", [])
+        hits = [
+            SearchHit(
+                name=str(hit.get("name", "")),
+                qualified_name=str(hit.get("qualified_name", "")),
+                label=str(hit.get("label", "")),
+                file=str(hit.get("file_path", "")),
+                signature=hit.get("signature"),
+                return_type=hit.get("return_type"),
+            )
+            for hit in raw_hits
+            if isinstance(hit, dict)
+        ]
+        return SearchResults(
+            repo_root=str(repo_root),
+            query=query,
+            total=int(result.get("total", len(hits))),
+            hits=hits,
         )

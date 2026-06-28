@@ -16,6 +16,7 @@ import pytest
 
 from goalrail.code_intel import (
     CodeIntelClient,
+    CodeIntelNotIndexedError,
     CodeIntelNotInstalledError,
     CodeIntelProtocolError,
     CodeIntelTimeoutError,
@@ -25,7 +26,7 @@ from goalrail.code_intel import (
 )
 from goalrail.code_intel.client import _BINARY_ENV_VAR
 from goalrail.tools.base import ToolContext
-from goalrail.tools.builtins.code_intel import CodeIndexStatusTool
+from goalrail.tools.builtins.code_intel import CodeIndexStatusTool, CodeSearchTool
 
 # ── Fakes / fixtures ──────────────────────────────────────
 
@@ -69,6 +70,14 @@ if tool == "index_status":
     print(json.dumps({{"schema_version": 1, "project": args.get("project"),
                       "status": "ready", "nodes": 100, "edges": 200,
                       "root_path": root}}))
+    sys.exit(0)
+
+if tool == "search_graph":
+    print(json.dumps({{"schema_version": 1, "total": 1, "results": [
+        {{"name": args.get("name_pattern", ""),
+         "qualified_name": "pkg.mod." + args.get("name_pattern", ""),
+         "label": "Function", "file_path": "pkg/mod.py",
+         "signature": "()", "return_type": "int"}}]}}))
     sys.exit(0)
 
 # Target error contract: JSON envelope on stderr, non-zero exit.
@@ -234,3 +243,61 @@ def test_tool_not_installed_returns_error_payload(
     result = json.loads(CodeIndexStatusTool().invoke("{}", _ctx(repo)))
     assert result["error"] == "code_intel_not_installed"
     assert "message" in result
+
+
+# ── search ────────────────────────────────────────────────
+
+
+def test_search_happy(fake_engine: Path, repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Search over an indexed repo returns trimmed hits."""
+    monkeypatch.setenv("FAKE_MODE", "happy")
+    monkeypatch.setenv("FAKE_ROOT", str(repo))
+    client = CodeIntelClient(binary=fake_engine)
+    results = client.search(repo, "widget", limit=5)
+    assert results.total == 1
+    assert results.query == "widget"
+    assert len(results.hits) == 1
+    hit = results.hits[0]
+    assert hit.name == "widget"
+    assert hit.qualified_name == "pkg.mod.widget"
+    assert hit.label == "Function"
+    assert hit.file == "pkg/mod.py"
+
+
+def test_search_not_indexed_raises(
+    fake_engine: Path, repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Searching an unindexed repo raises CodeIntelNotIndexedError."""
+    monkeypatch.setenv("FAKE_MODE", "not_indexed")
+    client = CodeIntelClient(binary=fake_engine)
+    with pytest.raises(CodeIntelNotIndexedError):
+        client.search(repo, "widget")
+
+
+def test_tool_search_happy(fake_engine: Path, repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The code_search builtin returns results resolved server-side."""
+    monkeypatch.setenv(_BINARY_ENV_VAR, str(fake_engine))
+    monkeypatch.setenv("FAKE_MODE", "happy")
+    monkeypatch.setenv("FAKE_ROOT", str(repo))
+
+    result = json.loads(CodeSearchTool().invoke(json.dumps({"query": "widget"}), _ctx(repo)))
+    assert result["total"] == 1
+    assert result["query"] == "widget"
+    assert result["results"][0]["qualified_name"] == "pkg.mod.widget"
+
+
+def test_tool_search_requires_query(repo: Path) -> None:
+    """A missing query is rejected before any engine call."""
+    result = json.loads(CodeSearchTool().invoke("{}", _ctx(repo)))
+    assert result["error"] == "invalid_arguments"
+
+
+def test_tool_search_not_indexed(
+    fake_engine: Path, repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """code_search surfaces not_indexed as a structured payload."""
+    monkeypatch.setenv(_BINARY_ENV_VAR, str(fake_engine))
+    monkeypatch.setenv("FAKE_MODE", "not_indexed")
+
+    result = json.loads(CodeSearchTool().invoke(json.dumps({"query": "widget"}), _ctx(repo)))
+    assert result["error"] == "not_indexed"

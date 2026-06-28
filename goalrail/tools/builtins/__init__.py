@@ -178,6 +178,18 @@ def _create_code_index_status(config: dict[str, str]) -> Tool:
     return CodeIndexStatusTool()
 
 
+def _create_code_search(config: dict[str, str]) -> Tool:
+    """
+    Lazy factory for CodeSearchTool.
+
+    :param config: Tool config (unused).
+    :returns: A CodeSearchTool instance.
+    """
+    from goalrail.tools.builtins.code_intel import CodeSearchTool
+
+    return CodeSearchTool()
+
+
 # Unified registry for every reserved builtin name. The value
 # is either a factory callable (for user-enablable tools) or
 # ``None`` for framework-owned names that occupy the name-space
@@ -201,6 +213,7 @@ _BUILTIN_REGISTRY: dict[str, _BuiltinFactory | None] = {
     "search_conversations": _create_search_conversations,
     "export_agent": _create_export_agent,
     "code_index_status": _create_code_index_status,
+    "code_search": _create_code_search,
     # Framework-owned: need runtime context. ``web_fetch`` is
     # constructed by ToolManager before reaching this registry.
     # ``list_comments`` and ``update_comment`` are auto-registered by
