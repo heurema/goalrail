@@ -77,6 +77,26 @@ it("renders the not-indexed state", async () => {
   await waitFor(() => expect(screen.getByText("Not indexed")).toBeInTheDocument());
 });
 
+it("renders the host-unsupported state honestly", async () => {
+  fetchMock.mockResolvedValue(
+    jsonResponse({
+      repo_root: "",
+      indexed: false,
+      status: "host_unsupported",
+      nodes: null,
+      edges: null,
+      head: null,
+      project: null,
+      message: "Code intelligence is not available for host workspaces yet.",
+    }),
+  );
+
+  renderPanel();
+
+  await waitFor(() => expect(screen.getByText("Host workspace")).toBeInTheDocument());
+  expect(screen.getByText(/not available for host workspaces yet/i)).toBeInTheDocument();
+});
+
 it("searches symbols and previews selected source", async () => {
   fetchMock.mockImplementation((url: string) => {
     if (url.includes("/status")) {

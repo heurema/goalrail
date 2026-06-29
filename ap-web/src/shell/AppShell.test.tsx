@@ -1615,9 +1615,9 @@ describe("Right workspace card visibility", () => {
     );
   });
 
-  it("hides Code for a host-bound workspace", () => {
-    // A host-bound workspace path belongs to the host/runner filesystem, so
-    // the desktop rail must not expose the server-local Code API.
+  it("shows Code for a host-bound workspace", () => {
+    // A host-bound workspace still gets the Code tab; CodeIntelPanel renders
+    // the explicit unsupported state while the server refuses local FS access.
     useEnvironmentMock.mockReturnValue({
       data: { available: false, root: null, home: null },
       isLoading: false,
@@ -1628,8 +1628,11 @@ describe("Right workspace card visibility", () => {
 
     renderShell("/c/conv_host");
 
-    expect(screen.queryByRole("tab", { name: /^Code$/i })).toBeNull();
-    expect(screen.getByRole("tab", { name: /Agents/i })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: /^Code$/i })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByTestId("code-intel-panel")).toHaveAttribute(
+      "data-conversation-id",
+      "conv_host",
+    );
   });
 
   it("keeps the card and collapse toggle when terminals are the only rail content", () => {
@@ -2617,6 +2620,33 @@ describe("Mobile session menu", () => {
     expect(within(drawer).getByTestId("code-intel-panel")).toHaveAttribute(
       "data-conversation-id",
       "conv_abc",
+    );
+  });
+
+  it("keeps the Code drawer available for a host workspace", () => {
+    useEnvironmentMock.mockReturnValue({
+      data: { available: false, root: null },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useWorkspaceEnvironment>);
+    mockConversations([
+      {
+        id: "conv_host",
+        permission_level: null,
+        host_id: "host_e2e",
+        workspace: "/host/repo",
+      },
+    ]);
+
+    renderShell("/c/conv_host");
+
+    openSessionMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: /^Code$/i }));
+
+    const drawer = screen.getByTestId("code-panel-drawer");
+    expect(drawer).toHaveAttribute("data-state", "open");
+    expect(within(drawer).getByTestId("code-intel-panel")).toHaveAttribute(
+      "data-conversation-id",
+      "conv_host",
     );
   });
 });

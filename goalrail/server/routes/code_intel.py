@@ -4,8 +4,10 @@ Exposes the native :class:`~goalrail.code_intel.CodeIntelClient` to the
 web UI without inventing a second logic layer: for local sessions, the
 repository is resolved **server-side** from the session's stored workspace
 (the canonical realpath the runner cd's into), never passed by the client.
-Host-bound sessions are deliberately rejected until code-intel can execute
-and preview files on the owning runner/host.
+Host-bound sessions never read a path on the server: status/search report
+an honest ``host_unsupported`` state (the Code tab stays visible) and the
+file-content route is rejected, until code-intel can execute on the owning
+host (Phase 2: host frame RPC).
 
 Routes (all under ``/v1``):
 
@@ -35,6 +37,7 @@ from goalrail.code_intel import (
     CodeIntelTimeoutError,
     resolve_repo_root,
 )
+from goalrail.entities import Conversation
 from goalrail.errors import ErrorCode, GoalrailError
 from goalrail.server.auth import LEVEL_READ, AuthProvider
 from goalrail.server.routes._auth_helpers import get_user_id, require_access
@@ -46,6 +49,15 @@ from goalrail.tools.base import ToolContext
 _SEARCH_LIMIT_DEFAULT = 20
 _SEARCH_LIMIT_MAX = 50
 _FILE_READ_LIMIT_BYTES = 256 * 1024
+
+# Status reported for host-bound sessions. Code intelligence runs only
+# where the repository physically lives; the server must never read a
+# host workspace path as one of its own (that would be a path-confusion
+# security bug). Until the host-side execution path lands, status/search
+# report this honest state — the UI keeps the Code tab visible and shows
+# the message rather than erroring. See the host RPC plan (Phase 2).
+_HOST_UNSUPPORTED_STATUS = "host_unsupported"
+_HOST_UNSUPPORTED_MESSAGE = "Code intelligence is not available for host workspaces yet."
 
 
 def _head_info(raw: dict[str, Any]) -> dict[str, Any] | None:
@@ -109,11 +121,14 @@ def create_code_intel_router(
     router = APIRouter()
     engine = client or CodeIntelClient()
 
-    async def _resolve_repo(session_id: str, request: Request) -> Path:
-        """Authorize the caller and resolve the session's repo root.
+    async def _load_session(session_id: str, request: Request) -> Conversation:
+        """Authorize the caller and load the session.
 
-        :raises GoalrailError: 401/403 on access denial, 404 if the
-            session is unknown, 409 if it has no workspace recorded.
+        Does not touch the filesystem — callers decide whether the
+        session is local (resolve a server-side repo root) or host-bound
+        (report the unsupported state without reading any path).
+
+        :raises GoalrailError: 401/403 on access denial, 404 if unknown.
         """
         user_id = get_user_id(request, auth_provider)
         if permission_store is not None:
@@ -123,6 +138,19 @@ def create_code_intel_router(
         conv = await asyncio.to_thread(conversation_store.get_conversation, session_id)
         if conv is None:
             raise GoalrailError("Session not found", code=ErrorCode.NOT_FOUND)
+        return conv
+
+    def _resolve_local_repo(conv: Conversation) -> Path:
+        """Resolve the server-side repo root for a *local* session.
+
+        Host-bound sessions are rejected here as defense-in-depth: the
+        server must never resolve or stat a host workspace path. Callers
+        that want a graceful UI state check ``conv.host_id`` first and
+        return the unsupported envelope instead of calling this.
+
+        :raises GoalrailError: 409 for host-bound or workspace-less
+            sessions.
+        """
         if conv.host_id:
             raise GoalrailError(
                 "Code intelligence is only available for local server workspaces",
@@ -145,9 +173,22 @@ def create_code_intel_router(
 
         :returns: ``{repo_root, indexed, status, nodes, edges, head,
             project, message}``. ``status`` is ``"ready"``,
-            ``"not_indexed"``, or ``"engine_unavailable"``.
+            ``"not_indexed"``, ``"engine_unavailable"``, or
+            ``"host_unsupported"``.
         """
-        repo_root = await _resolve_repo(session_id, request)
+        conv = await _load_session(session_id, request)
+        if conv.host_id:
+            return {
+                "repo_root": "",
+                "indexed": False,
+                "status": _HOST_UNSUPPORTED_STATUS,
+                "nodes": None,
+                "edges": None,
+                "head": None,
+                "project": None,
+                "message": _HOST_UNSUPPORTED_MESSAGE,
+            }
+        repo_root = _resolve_local_repo(conv)
         try:
             status = await asyncio.to_thread(engine.index_status, repo_root)
         except (CodeIntelNotInstalledError, CodeIntelTimeoutError) as exc:
@@ -184,10 +225,20 @@ def create_code_intel_router(
         :param q: Name pattern to match against symbol names.
         :param limit: Max hits (clamped to ``_SEARCH_LIMIT_MAX``).
         :returns: ``{repo_root, query, status, total, results, message}``.
-            ``status`` is ``"ok"``, ``"not_indexed"``, or
-            ``"engine_unavailable"``.
+            ``status`` is ``"ok"``, ``"not_indexed"``,
+            ``"engine_unavailable"``, or ``"host_unsupported"``.
         """
-        repo_root = await _resolve_repo(session_id, request)
+        conv = await _load_session(session_id, request)
+        if conv.host_id:
+            return {
+                "repo_root": "",
+                "query": q,
+                "status": _HOST_UNSUPPORTED_STATUS,
+                "total": 0,
+                "results": [],
+                "message": _HOST_UNSUPPORTED_MESSAGE,
+            }
+        repo_root = _resolve_local_repo(conv)
         if not q.strip():
             raise GoalrailError("q is required", code=ErrorCode.INVALID_INPUT)
         capped = min(limit, _SEARCH_LIMIT_MAX) if limit > 0 else _SEARCH_LIMIT_DEFAULT
@@ -241,9 +292,11 @@ def create_code_intel_router(
         This deliberately uses the same session workspace boundary as
         status/search instead of the runner filesystem resource API. The
         Code tab can therefore preview indexed files for local sessions
-        that are not currently bound to a runner.
+        that are not currently bound to a runner. Host-bound sessions are
+        rejected — the server must never read a host workspace path.
         """
-        repo_root = await _resolve_repo(session_id, request)
+        conv = await _load_session(session_id, request)
+        repo_root = _resolve_local_repo(conv)
         file_path = _resolve_repo_file(repo_root, path)
         size = file_path.stat().st_size
         with file_path.open("rb") as fh:

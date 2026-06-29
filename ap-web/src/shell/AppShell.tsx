@@ -264,7 +264,6 @@ export function AppShell() {
   // is the only path through which the UI learns the user's permission
   // level. ``derivePermissionLevel`` prefers this over ``activeConv``.
   const { session: activeSession, isLoading: sessionLoading } = useSession(conversationId);
-  const sessionHostId = activeSession?.hostId ?? activeConv?.host_id ?? null;
   const sessionWorkspace = activeSession?.workspace ?? activeConv?.workspace ?? null;
   // Same liveness the chat surface switches on (see ChatPage / useSessionLiveness).
   // AppShell reads it only to drive the Terminal pill's "loading" state: a session
@@ -425,7 +424,7 @@ export function AppShell() {
   // it is enough to prove availability without paying for directory contents.
   const environmentQuery = useWorkspaceEnvironment(conversationId);
   const showFilesPanel = environmentQuery.data?.available !== false;
-  const showCodePanel = sessionHostId === null && Boolean(sessionWorkspace);
+  const showCodePanel = Boolean(sessionWorkspace);
   // Per-tab availability for the right workspace rail — the single source
   // of truth shared by the tab-fallback effect below, the rail's mount
   // gate, and the header's collapse toggle, so they can never disagree.
@@ -433,9 +432,9 @@ export function AppShell() {
     () =>
       ({
         files: showFilesPanel,
-        // Code tab is local-workspace-only for now. Host-bound workspaces are
-        // paths on the user's machine/runner, not necessarily on this server;
-        // the server route rejects them too, so the UI stays fail-closed.
+        // Code tab stays visible for any session with a workspace. Host-bound
+        // workspaces render an explicit unsupported state inside CodeIntelPanel;
+        // the server route still refuses to interpret host paths locally.
         code: showCodePanel,
         // Agents tab is unconditional: the panel always lists at least
         // the main agent (its "main" row), so there's never a dead end.
