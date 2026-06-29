@@ -51,6 +51,7 @@ from goalrail.server.performance_metrics import (
     set_request_duration_for_access_log,
 )
 from goalrail.server.routes.builtin_agents import create_builtin_agents_router
+from goalrail.server.routes.code_intel import create_code_intel_router
 from goalrail.server.routes.comments import create_comments_router
 from goalrail.server.routes.default_policies import create_default_policies_router
 from goalrail.server.routes.policy_registry import create_policy_registry_router
@@ -1777,6 +1778,15 @@ def create_app(
             prefix="/v1",
             tags=["comments"],
         )
+    app.include_router(
+        create_code_intel_router(
+            conversation_store,
+            auth_provider=auth_provider,
+            permission_store=permission_store,
+        ),
+        prefix="/v1",
+        tags=["code_intel"],
+    )
     if policy_store is not None:
         app.include_router(
             create_session_policies_router(

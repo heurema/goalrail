@@ -129,6 +129,11 @@ vi.mock("./FileViewer", () => ({
     </div>
   ),
 }));
+vi.mock("./CodeIntelPanel", () => ({
+  CodeIntelPanel: ({ conversationId }: { conversationId: string }) => (
+    <div data-testid="code-intel-panel" data-conversation-id={conversationId} />
+  ),
+}));
 vi.mock("./InlineTerminalsSection", () => ({
   // Minimal stand-in exposing onExpand so tests can trigger the inline terminal expand path.
   InlineTerminalsSection: ({ onExpand }: { onExpand: (key: string) => void }) => (
@@ -347,6 +352,7 @@ function mockConversations(
     labels?: Record<string, string>;
     host_id?: string | null;
     runner_id?: string | null;
+    workspace?: string | null;
   }>,
 ) {
   useConvMock.mockReturnValue({
@@ -363,6 +369,7 @@ function mockConversations(
             permission_level: c.permission_level,
             host_id: c.host_id ?? null,
             runner_id: c.runner_id ?? null,
+            workspace: c.workspace ?? null,
           })),
           first_id: null,
           last_id: null,
@@ -1567,12 +1574,12 @@ describe("FilesPanel visibility", () => {
 });
 
 describe("Right workspace card visibility", () => {
-  it("keeps the card mounted with Agents as the only tab for a minimal agent", () => {
+  it("keeps the card mounted with Agents selected for a minimal agent without workspace", () => {
     // A no-os_env agent (available: false) with no shells and no todos
-    // still has the unconditional Agents tab (the panel lists at least
-    // the main agent), so the card mounts, the Agents tab is selected
-    // by the fallback, and Files/Shells/Tasks are absent. An unmounted
-    // card here means the always-visible Agents rule regressed.
+    // still has the unconditional Agents tab, so the card mounts,
+    // the fallback lands on Agents (Code requires a local workspace),
+    // and Files/Shells/Tasks are absent. An unmounted card here means
+    // the always-visible rail rule regressed.
     useEnvironmentMock.mockReturnValue({
       data: { available: false, root: null, home: null },
       isLoading: false,
@@ -1583,10 +1590,46 @@ describe("Right workspace card visibility", () => {
 
     expect(screen.getByRole("complementary", { name: "Workspace" })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: /Files/i })).toBeNull();
+    expect(screen.queryByRole("tab", { name: /^Code$/i })).toBeNull();
     expect(screen.queryByRole("tab", { name: /Shells/i })).toBeNull();
-    // The tab-fallback effect lands on Agents (the only available tab).
     expect(screen.getByRole("tab", { name: /Agents/i })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("button", { name: "Collapse right panel" })).toBeInTheDocument();
+  });
+
+  it("shows Code for a local workspace and selects it after Files disappears", () => {
+    // Local session (host_id null) with a stored workspace can use the
+    // server-local code-intel routes. Files is unavailable, so the fallback
+    // lands on Code before Agents.
+    useEnvironmentMock.mockReturnValue({
+      data: { available: false, root: null, home: null },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useWorkspaceEnvironment>);
+    mockConversations([{ id: "conv_abc", permission_level: null, workspace: "/repo" }]);
+
+    renderShell("/c/conv_abc");
+
+    expect(screen.getByRole("tab", { name: /^Code$/i })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByTestId("code-intel-panel")).toHaveAttribute(
+      "data-conversation-id",
+      "conv_abc",
+    );
+  });
+
+  it("hides Code for a host-bound workspace", () => {
+    // A host-bound workspace path belongs to the host/runner filesystem, so
+    // the desktop rail must not expose the server-local Code API.
+    useEnvironmentMock.mockReturnValue({
+      data: { available: false, root: null, home: null },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useWorkspaceEnvironment>);
+    mockConversations([
+      { id: "conv_host", permission_level: null, host_id: "host_1", workspace: "/repo" },
+    ]);
+
+    renderShell("/c/conv_host");
+
+    expect(screen.queryByRole("tab", { name: /^Code$/i })).toBeNull();
+    expect(screen.getByRole("tab", { name: /Agents/i })).toHaveAttribute("aria-selected", "true");
   });
 
   it("keeps the card and collapse toggle when terminals are the only rail content", () => {
@@ -2553,7 +2596,28 @@ describe("Mobile session menu", () => {
     });
     expect(screen.getByRole("menuitem", { name: /Agents\s*1/i })).toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: /Files/i })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: /^Code$/i })).toBeNull();
     expect(screen.queryByRole("menuitem", { name: /Shells/i })).toBeNull();
+  });
+
+  it("opens the Code drawer from the mobile menu for a local workspace", () => {
+    useEnvironmentMock.mockReturnValue({
+      data: { available: false, root: null },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useWorkspaceEnvironment>);
+    mockConversations([{ id: "conv_abc", permission_level: null, workspace: "/repo" }]);
+
+    renderShell("/c/conv_abc");
+
+    openSessionMenu();
+    fireEvent.click(screen.getByRole("menuitem", { name: /^Code$/i }));
+
+    const drawer = screen.getByTestId("code-panel-drawer");
+    expect(drawer).toHaveAttribute("data-state", "open");
+    expect(within(drawer).getByTestId("code-intel-panel")).toHaveAttribute(
+      "data-conversation-id",
+      "conv_abc",
+    );
   });
 });
 

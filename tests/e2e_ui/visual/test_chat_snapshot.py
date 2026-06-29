@@ -142,6 +142,27 @@ _DONE_SSE = "data: [DONE]\n\n"
 _BUBBLE = '[data-testid="message-bubble"]'
 
 
+def _wait_for_python_highlight(page: Page) -> None:
+    """Wait until the async Shiki highlighter has replaced raw code tokens."""
+    page.wait_for_function(
+        """
+        () => {
+          const code = document.querySelector('[data-language="python"] code');
+          if (!code) {
+            return false;
+          }
+          const codeColor = getComputedStyle(code).color;
+          const spans = Array.from(code.querySelectorAll('span'));
+          return spans.some((span) => (
+            span.textContent === 'with'
+            && getComputedStyle(span).color !== codeColor
+          ));
+        }
+        """,
+        timeout=30_000,
+    )
+
+
 @pytest.mark.visual
 def test_chat_conversation_matches_baseline(
     snapshot_page: Page,
@@ -152,8 +173,8 @@ def test_chat_conversation_matches_baseline(
 ) -> None:
     """A mocked chat transcript renders pixel-identical to the committed baseline.
 
-    :param snapshot_page: page pinned to a fixed viewport + light palette (see
-        the suite ``conftest.py``).
+    :param snapshot_page: page pinned to a fixed viewport with deterministic
+        OS theme emulation (see the suite ``conftest.py``).
     :param live_server: Base URL of the spawned ``goalrail server`` serving the
         built SPA. Every data call the chat bind makes is stubbed below, so no
         real session / LLM is involved.
@@ -187,6 +208,7 @@ def test_chat_conversation_matches_baseline(
     expect(page.locator(f'{_BUBBLE}[data-role="assistant"]')).to_be_visible(timeout=30_000)
     # No live turn is in flight, so the working shimmer must be absent.
     expect(page.locator('[data-testid="working-indicator"]')).to_have_count(0)
+    _wait_for_python_highlight(page)
 
     # Settle web fonts + kill the blinking caret (both time-dependent).
     settle_for_snapshot(page)

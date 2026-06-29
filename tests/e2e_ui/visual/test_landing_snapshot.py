@@ -71,8 +71,8 @@ def test_empty_landing_matches_baseline(
 ) -> None:
     """The default empty "/" view renders pixel-identical to the committed baseline.
 
-    :param snapshot_page: page pinned to a fixed viewport + light palette (see
-        the suite ``conftest.py``).
+    :param snapshot_page: page pinned to a fixed viewport with deterministic
+        OS theme emulation (see the suite ``conftest.py``).
     :param live_server: Base URL of the spawned ``goalrail server`` serving the
         built SPA. The landing's data calls are stubbed below, so no real agent
         catalog / host / session state (or LLM credentials) is involved.

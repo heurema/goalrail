@@ -1,6 +1,7 @@
 import {
   BotIcon,
   ChevronLeftIcon,
+  Code2Icon,
   EllipsisVerticalIcon,
   FileIcon,
   InfoIcon,
@@ -44,6 +45,8 @@ interface MobileSessionMenuProps {
   executionLogsOpen: boolean;
   /** True while the mobile files drawer is open. */
   filesPanelOpen: boolean;
+  /** True while the mobile Code drawer is open. */
+  codePanelOpen: boolean;
   /** True while the mobile agents drawer is open. */
   subagentsPanelOpen: boolean;
   /** True while the mobile tasks drawer is open. */
@@ -62,6 +65,8 @@ interface MobileSessionMenuProps {
   debugMode: boolean;
   /** Changed-file count (Files entry badge). */
   changedCount: number;
+  /** Whether the Code entry is available for this session. */
+  showCodePanel: boolean;
   /** Working child-agent count (Agents entry badge). */
   subagentsWorking: number;
   /**
@@ -71,6 +76,8 @@ interface MobileSessionMenuProps {
   agentCount: number;
   /** Open the mobile files drawer. */
   onOpenFiles: () => void;
+  /** Open the mobile Code drawer. */
+  onOpenCode: () => void;
   /** Open the first terminal in the terminals push panel. */
   onOpenFirstTerminal: () => void;
   /** Open the mobile agents drawer. */
@@ -343,7 +350,7 @@ export function ChatHeader({
         )}
         {/* Mobile-only FAB → dropdown of rail entries. Each entry opens
             the matching rail tab's content as a full-screen drawer,
-            mirroring the desktop rail's tab strip (Files · Agents ·
+            mirroring the desktop rail's tab strip (Files · Code · Agents ·
             Shells · Tasks). Hidden when a push panel is
             already taking up the right side, and suppressed entirely
             when there's nothing to show.
@@ -356,6 +363,7 @@ export function ChatHeader({
           (!mobileMenu.panelOpen || mobileMenu.terminalFirst) &&
           !mobileMenu.executionLogsOpen &&
           !mobileMenu.filesPanelOpen &&
+          !mobileMenu.codePanelOpen &&
           !mobileMenu.subagentsPanelOpen &&
           !mobileMenu.todosPanelOpen &&
           (hasRailContent || mobileMenu.debugMode) && (
@@ -386,6 +394,15 @@ export function ChatHeader({
                         {mobileMenu.changedCount}
                       </span>
                     )}
+                  </DropdownMenuItem>
+                )}
+                {mobileMenu.showCodePanel && (
+                  <DropdownMenuItem
+                    onSelect={mobileMenu.onOpenCode}
+                    className="gap-2.5 px-2.5 py-2 text-base"
+                  >
+                    <Code2Icon className="size-4" />
+                    Code
                   </DropdownMenuItem>
                 )}
                 {/* Agents — always present (the panel lists at least

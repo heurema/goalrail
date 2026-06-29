@@ -7541,6 +7541,171 @@
         ]
       }
     },
+    "/v1/sessions/{session_id}/code-intel/files/{path}": {
+      "get": {
+        "description": "Return read-only source text for a repo-relative path.\n\nThis deliberately uses the same session workspace boundary as\nstatus/search instead of the runner filesystem resource API. The\nCode tab can therefore preview indexed files for local sessions\nthat are not currently bound to a runner.",
+        "operationId": "code_intel_file_v1_sessions__session_id__code_intel_files__path__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "title": "Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Code Intel File V1 Sessions  Session Id  Code Intel Files  Path  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Code Intel File",
+        "tags": [
+          "code_intel"
+        ]
+      }
+    },
+    "/v1/sessions/{session_id}/code-intel/search": {
+      "get": {
+        "description": "Search the session repo's knowledge graph for symbols.\n\n**Returns:** `{repo_root, query, status, total, results, message}`. `status` is `\"ok\"`, `\"not_indexed\"`, or `\"engine_unavailable\"`.",
+        "operationId": "code_intel_search_v1_sessions__session_id__code_intel_search_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Name pattern to match against symbol names.",
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Max hits (clamped to `_SEARCH_LIMIT_MAX`).",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Code Intel Search V1 Sessions  Session Id  Code Intel Search Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Code Intel Search",
+        "tags": [
+          "code_intel"
+        ]
+      }
+    },
+    "/v1/sessions/{session_id}/code-intel/status": {
+      "get": {
+        "description": "Return the index status and head info for the session's repo.\n\n**Returns:** `{repo_root, indexed, status, nodes, edges, head, project, message}`. `status` is `\"ready\"`, `\"not_indexed\"`, or `\"engine_unavailable\"`.",
+        "operationId": "code_intel_status_v1_sessions__session_id__code_intel_status_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Code Intel Status V1 Sessions  Session Id  Code Intel Status Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Code Intel Status",
+        "tags": [
+          "code_intel"
+        ]
+      }
+    },
     "/v1/sessions/{session_id}/codex_goal": {
       "delete": {
         "description": "Clear the current Codex app-server goal.\n\n**Returns:** Whether Codex removed an existing goal.\n\n**Raises**\n\n- `GoalrailError` \u2014 400 for non-Codex sessions, 404 for missing sessions, or 503 when no live Codex runner can clear the goal.",

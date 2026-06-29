@@ -20,10 +20,11 @@ _VIEWPORT = {"width": 1280, "height": 800}
 
 @pytest.fixture
 def snapshot_page(page: Page) -> Page:
-    """A page pinned to a fixed viewport and light palette, ready for stubbing.
+    """A page pinned to a fixed viewport and deterministic OS theme, ready for stubbing.
 
-    Both are set before navigation so the SPA reads them on boot. The light
-    scheme pins the whole palette regardless of the runner's
+    Both are set before navigation so the SPA reads them on boot. Goalrail forces
+    the Dracula dark app theme; emulating a light OS keeps the suite deterministic
+    and guards that the app palette does not follow the runner's
     ``prefers-color-scheme`` default.
 
     :param page: pytest-playwright page (fresh context per test).
