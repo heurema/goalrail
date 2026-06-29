@@ -169,21 +169,65 @@ async def test_status_no_workspace_conflicts(
     assert resp.status_code == 409
 
 
-async def test_status_host_bound_workspace_conflicts(
-    conv_store: SqlAlchemyConversationStore, db_uri: str, tmp_path: Path
+async def test_status_host_bound_returns_unsupported_without_fs(
+    conv_store: SqlAlchemyConversationStore,
+    db_uri: str,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Host-bound workspaces are runner-local paths, not server-local roots."""
+    """Host-bound status reports host_unsupported and never resolves a path.
+
+    Monkeypatching ``resolve_repo_root`` to detonate proves the server
+    does not interpret the host workspace as a local path.
+    """
+
+    def _boom(*_a: object, **_k: object) -> Path:
+        raise AssertionError("server resolved a host workspace path")
+
+    monkeypatch.setattr("goalrail.server.routes.code_intel.resolve_repo_root", _boom)
     session_id = conv_store.create_conversation(
         host_id=_register_host(db_uri),
-        workspace=str(tmp_path),
+        workspace="/host/only/repo",
     ).id
-    engine = _FakeEngine(status=IndexStatus(repo_root=str(tmp_path), status="ready"))
+    engine = _FakeEngine(status=IndexStatus(repo_root="/x", status="ready"))
 
     async with await _client(_build_app(conv_store, engine)) as c:
         resp = await c.get(f"/v1/sessions/{session_id}/code-intel/status")
 
-    assert resp.status_code == 409
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "host_unsupported"
+    assert body["indexed"] is False
+    # Host workspace path must not leak back to the client.
+    assert body["repo_root"] == ""
     assert engine.index_status_calls == 0
+
+
+async def test_search_host_bound_returns_unsupported_without_fs(
+    conv_store: SqlAlchemyConversationStore,
+    db_uri: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Host-bound search reports host_unsupported and never resolves a path."""
+
+    def _boom(*_a: object, **_k: object) -> Path:
+        raise AssertionError("server resolved a host workspace path")
+
+    monkeypatch.setattr("goalrail.server.routes.code_intel.resolve_repo_root", _boom)
+    session_id = conv_store.create_conversation(
+        host_id=_register_host(db_uri),
+        workspace="/host/only/repo",
+    ).id
+    engine = _FakeEngine(results=SearchResults(repo_root="/x", query="x", total=0, hits=[]))
+
+    async with await _client(_build_app(conv_store, engine)) as c:
+        resp = await c.get(f"/v1/sessions/{session_id}/code-intel/search?q=widget")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "host_unsupported"
+    assert body["results"] == []
+    assert body["repo_root"] == ""
+    assert engine.search_calls == 0
 
 
 async def test_status_unknown_session_404(

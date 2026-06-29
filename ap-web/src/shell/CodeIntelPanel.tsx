@@ -45,6 +45,8 @@ function statusBadge(status: CodeIntelStatus): StatusBadge {
         label: "Engine unavailable",
         className: "bg-destructive/15 text-destructive",
       };
+    case "host_unsupported":
+      return { label: "Host workspace", className: "bg-muted text-muted-foreground" };
     default:
       return { label: status.status, className: "bg-muted text-muted-foreground" };
   }
@@ -137,6 +139,10 @@ function SearchSection({ conversationId }: { conversationId: string }) {
         ) : data && data.status === "engine_unavailable" ? (
           <p className="px-3 py-2 text-[12px] text-destructive">
             Code-intel engine is unavailable.
+          </p>
+        ) : data && data.status === "host_unsupported" ? (
+          <p className="px-3 py-2 text-[12px] text-muted-foreground">
+            Code intelligence is not available for host workspaces yet.
           </p>
         ) : data && data.results.length === 0 ? (
           <p className="px-3 py-2 text-[12px] text-muted-foreground">No matches.</p>
