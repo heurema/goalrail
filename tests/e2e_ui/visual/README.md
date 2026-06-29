@@ -1,15 +1,15 @@
 # UI diff snapshot tests
 
 One committed visual-regression baseline per page, each captured full-viewport at
-1280×800 with the color scheme pinned to `light`, gated together in CI.
+1280×800 with the app's forced Dracula dark theme, gated together in CI.
 
 Each page's data calls are stubbed via `page.route` with fixed fixtures, so the
 rendered view is a pure function of the committed bundle and needs no element
 masking. `live_server` still serves the SPA bundle; only `/v1/info` / `/v1/me`
-reach the real (and deterministic) server. The shared bits (fixed viewport +
-light palette, the JSON-route helper, the pre-capture fonts/caret settle) live in
-[`conftest.py`](conftest.py), so each `test_*_snapshot.py` only declares its own
-stubs.
+reach the real (and deterministic) server. The shared bits (fixed viewport,
+light OS emulation as a guard against system preference drift, the JSON-route
+helper, and the pre-capture fonts/caret settle) live in [`conftest.py`](conftest.py),
+so each `test_*_snapshot.py` only declares its own stubs.
 
 Pages covered:
 

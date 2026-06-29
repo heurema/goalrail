@@ -45,6 +45,7 @@ import { useChatStore } from "@/store/chatStore";
 import { livenessRowFromSession, useSessionLiveness } from "@/hooks/useSessionLiveness";
 import { useResizableInlinePanel } from "@/hooks/useResizableInlinePanel";
 import { ChatHeader } from "./ChatHeader";
+import { CodeIntelPanel } from "./CodeIntelPanel";
 import { ExecutionLogsPanel } from "./ExecutionLogsPanel";
 import { FileViewer } from "./FileViewer";
 import { FileViewerContext } from "./FileViewerContext";
@@ -91,13 +92,13 @@ import type { RightRailTab } from "./railTabs";
  *
  * **Mobile session-rail entry**: the desktop right column has no room on
  * a phone, so the rail's contents are reached via a top-right FAB that
- * opens a dropdown with "Files" and "Terminals" (the latter only when
- * one or more terminals exist). Each entry opens the matching push
- * panel — the FAB and the desktop rail cards route through the same
- * open*() handlers.
+ * opens a dropdown with the available workspace entries (Files, Code,
+ * Agents, Shells, Tasks, and Logs). Each entry opens the matching push
+ * panel or drawer — the FAB and the desktop rail cards route through the
+ * same open*() handlers.
  *
  * **Right rail tabs (desktop)**: the aside is internally tabbed between
- * Files, Terminals and Agents so each can claim the full rail height
+ * Files, Code, Agents, Shells, and Tasks so each can claim the full rail height
  * instead of competing for a vertically-split slot. Files is the default;
  * within it a "Changed only" toggle filters the full folder tree down to
  * just the changed files (flat list). Opening a file (chat link or rail
@@ -204,6 +205,7 @@ export function AppShell() {
   // Mobile-only full-screen drawers for the rail tabs that have no desktop
   // push panel of their own. On desktop these are tabs in the workspace rail;
   // on a phone they open as full-screen overlays from the session-menu FAB.
+  const [codePanelOpen, setCodePanelOpen] = useState(false);
   const [subagentsPanelOpen, setSubagentsPanelOpen] = useState(false);
   const [todosPanelOpen, setTodosPanelOpen] = useState(false);
   // The right "Workspace" rail (WorkspacePanel) is open by default and
@@ -262,6 +264,8 @@ export function AppShell() {
   // is the only path through which the UI learns the user's permission
   // level. ``derivePermissionLevel`` prefers this over ``activeConv``.
   const { session: activeSession, isLoading: sessionLoading } = useSession(conversationId);
+  const sessionHostId = activeSession?.hostId ?? activeConv?.host_id ?? null;
+  const sessionWorkspace = activeSession?.workspace ?? activeConv?.workspace ?? null;
   // Same liveness the chat surface switches on (see ChatPage / useSessionLiveness).
   // AppShell reads it only to drive the Terminal pill's "loading" state: a session
   // in `starting` (a relaunch the moment a message is sent — `turnActive`) is
@@ -421,6 +425,7 @@ export function AppShell() {
   // it is enough to prove availability without paying for directory contents.
   const environmentQuery = useWorkspaceEnvironment(conversationId);
   const showFilesPanel = environmentQuery.data?.available !== false;
+  const showCodePanel = sessionHostId === null && Boolean(sessionWorkspace);
   // Per-tab availability for the right workspace rail — the single source
   // of truth shared by the tab-fallback effect below, the rail's mount
   // gate, and the header's collapse toggle, so they can never disagree.
@@ -428,6 +433,10 @@ export function AppShell() {
     () =>
       ({
         files: showFilesPanel,
+        // Code tab is local-workspace-only for now. Host-bound workspaces are
+        // paths on the user's machine/runner, not necessarily on this server;
+        // the server route rejects them too, so the UI stays fail-closed.
+        code: showCodePanel,
         // Agents tab is unconditional: the panel always lists at least
         // the main agent (its "main" row), so there's never a dead end.
         subagents: true,
@@ -445,6 +454,7 @@ export function AppShell() {
       }) as const,
     [
       showFilesPanel,
+      showCodePanel,
       hideTerminalsTab,
       railTerminals.length,
       agentSupportsShells,
@@ -458,14 +468,15 @@ export function AppShell() {
   // render an empty white card with no way to dismiss it.
   const hasRailContent = Object.values(railTabsAvailable).some(Boolean);
   // Keep the selected tab valid. When the current tab disappears — files
-  // panel turns off, or the Shells tab hides (native wrapper / no shell
-  // and no shell access) — fall back to the first still-visible tab in
-  // display order (Files · Agents · Shells · Tasks). Picking the first
+  // panel turns off, Code is unavailable for a host-bound session, or the
+  // Shells tab hides (native wrapper / no shell and no shell access) — fall
+  // back to the first still-visible tab in display order (Files · Code ·
+  // Agents · Shells · Tasks). Picking the first
   // available (rather than ping-ponging between two effects) keeps this
   // convergent even when several tabs vanish at once.
   useEffect(() => {
     if (railTabsAvailable[rightRailTab]) return;
-    const next = (["files", "subagents", "terminals", "todos"] as const).find(
+    const next = (["files", "code", "subagents", "terminals", "todos"] as const).find(
       (t) => railTabsAvailable[t],
     );
     if (next) setRightRailTab(next);
@@ -641,6 +652,23 @@ export function AppShell() {
     writeFilesPanelPreferences({ ...readFilesPanelPreferences(), sort: s });
   }, []);
 
+  // Strip the file-viewer URL params (file/diff/comment). Memoized on
+  // ``setSearchParams`` so it always closes over react-router's *current*
+  // ``navigate`` — which is bound to the live ``locationPathname`` — rather
+  // than a stale one captured at first mount (see ``showScopeView`` below).
+  const clearFileViewerUrl = useCallback(() => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("file");
+        next.delete("diff");
+        next.delete("comment");
+        return next;
+      },
+      { replace: true },
+    );
+  }, [setSearchParams]);
+
   const openFileViewer = useCallback(
     (path: string) => {
       setSelectedFilePath(path);
@@ -660,13 +688,16 @@ export function AppShell() {
       }
       setExecutionLogsKey(null); // close execution-logs panel
       setFilesPanelOpen(false); // close files drawer so the viewer is unobscured
+      setCodePanelOpen(false); // close mobile code drawer
       setSubagentsPanelOpen(false); // close mobile agents drawer
       setTodosPanelOpen(false); // close mobile tasks drawer
       // Pull the rail to the Files tab when parked on a tab where the viewer
       // won't render (Terminals, Subagents, Todos). The Files tab surfaces the
       // FileViewer inline, so leave it undisturbed.
       setRightRailTab((prev) =>
-        prev === "terminals" || prev === "subagents" || prev === "todos" ? "files" : prev,
+        prev === "code" || prev === "terminals" || prev === "subagents" || prev === "todos"
+          ? "files"
+          : prev,
       );
       // Reveal the rail so the viewer is actually visible — the rail defaults
       // open but a session the user collapsed restores collapsed, so opening a
@@ -689,24 +720,7 @@ export function AppShell() {
       );
     },
     [setPanelInitialKey, terminalFirst, setSearchParams, conversationId],
-  ); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Strip the file-viewer URL params (file/diff/comment). Memoized on
-  // ``setSearchParams`` so it always closes over react-router's *current*
-  // ``navigate`` — which is bound to the live ``locationPathname`` — rather
-  // than a stale one captured at first mount (see ``showScopeView`` below).
-  const clearFileViewerUrl = useCallback(() => {
-    setSearchParams(
-      (prev) => {
-        const next = new URLSearchParams(prev);
-        next.delete("file");
-        next.delete("diff");
-        next.delete("comment");
-        return next;
-      },
-      { replace: true },
-    );
-  }, [setSearchParams]);
+  );
 
   // Toggle the right (Workspace) sidebar — shared by the header's collapse
   // button and the ⌘⌥]/Ctrl+Alt+] hotkey so they can't drift. Beyond flipping the
@@ -820,8 +834,8 @@ export function AppShell() {
         return next;
       });
     },
-    [setSearchParams],
-  ); // eslint-disable-line react-hooks/exhaustive-deps
+    [clearFileViewerUrl, setSearchParams],
+  );
 
   // Switch the workspace rail's tab. The side effect (closing any open
   // file + its comments + URL) lives here, not in WorkspacePanel, so the
@@ -843,6 +857,7 @@ export function AppShell() {
     clearFileViewerUrl();
     setExecutionLogsKey(null); // close execution-logs panel
     setFilesPanelOpen(false); // close files drawer
+    setCodePanelOpen(false); // close mobile code drawer
     setSubagentsPanelOpen(false); // close mobile agents drawer
     setTodosPanelOpen(false); // close mobile tasks drawer
     setPanelInitialKey(key);
@@ -856,6 +871,7 @@ export function AppShell() {
     setSubagentsPanelOpen(false); // close mobile agents drawer
     setTodosPanelOpen(false); // close mobile tasks drawer
     setExecutionLogsKey(key);
+    setCodePanelOpen(false); // close mobile code drawer
   }
 
   // Mobile FAB → "Files" opens the files drawer (mirrors the desktop rail's
@@ -866,9 +882,22 @@ export function AppShell() {
     clearFileViewerUrl();
     setPanelInitialKey(null); // close terminals panel
     setExecutionLogsKey(null); // close execution-logs panel
+    setCodePanelOpen(false); // close mobile code drawer
     setSubagentsPanelOpen(false); // close mobile agents drawer
     setTodosPanelOpen(false); // close mobile tasks drawer
     setFilesPanelOpen(true);
+  }
+
+  // Mobile FAB -> "Code" opens the code-intel panel as a full-screen drawer.
+  function openCodePanel() {
+    setSelectedFilePath(null); // close file viewer
+    clearFileViewerUrl();
+    setPanelInitialKey(null); // close terminals panel
+    setExecutionLogsKey(null); // close execution-logs panel
+    setFilesPanelOpen(false); // close files drawer
+    setSubagentsPanelOpen(false); // close mobile agents drawer
+    setTodosPanelOpen(false); // close mobile tasks drawer
+    setCodePanelOpen(true);
   }
 
   // Mobile FAB → "Agents" opens the subagents list (the desktop rail's
@@ -879,6 +908,7 @@ export function AppShell() {
     setPanelInitialKey(null); // close terminals panel
     setExecutionLogsKey(null); // close execution-logs panel
     setFilesPanelOpen(false); // close files drawer
+    setCodePanelOpen(false); // close mobile code drawer
     setTodosPanelOpen(false); // close mobile tasks drawer
     setSubagentsPanelOpen(true);
   }
@@ -891,6 +921,7 @@ export function AppShell() {
     setPanelInitialKey(null); // close terminals panel
     setExecutionLogsKey(null); // close execution-logs panel
     setFilesPanelOpen(false); // close files drawer
+    setCodePanelOpen(false); // close mobile code drawer
     setSubagentsPanelOpen(false); // close mobile agents drawer
     setTodosPanelOpen(true);
   }
@@ -1086,6 +1117,7 @@ export function AppShell() {
                     terminalFirst,
                     executionLogsOpen,
                     filesPanelOpen,
+                    codePanelOpen,
                     subagentsPanelOpen,
                     todosPanelOpen,
                     hideTerminalsTab,
@@ -1095,9 +1127,11 @@ export function AppShell() {
                     todosTotal: todos.length,
                     debugMode,
                     changedCount,
+                    showCodePanel,
                     subagentsWorking,
                     agentCount,
                     onOpenFiles: openFilesPanel,
+                    onOpenCode: openCodePanel,
                     onOpenFirstTerminal: openFirstTerminal,
                     onOpenSubagents: openSubagentsPanel,
                     onOpenTodos: openTodosPanel,
@@ -1132,6 +1166,7 @@ export function AppShell() {
                       rightRailTab={rightRailTab}
                       onRightRailTabChange={handleRightRailTabChange}
                       showFilesPanel={showFilesPanel}
+                      showCodePanel={showCodePanel}
                       changedCount={changedCount}
                       showShellsTab={railTabsAvailable.terminals}
                       terminalsLength={railTerminals.length}
@@ -1196,6 +1231,16 @@ export function AppShell() {
                   sort={filesPanelSort}
                   onSortChange={handleFilesSortChange}
                 />
+              )}
+              {conversationId && showCodePanel && (
+                <MobilePanelDrawer
+                  open={codePanelOpen}
+                  title="Code"
+                  onClose={() => setCodePanelOpen(false)}
+                  testId="code-panel-drawer"
+                >
+                  <CodeIntelPanel conversationId={conversationId} />
+                </MobilePanelDrawer>
               )}
               {/* Mobile-only full-screen drawers for the rail tabs that have no
           desktop push panel of their own. `MobilePanelDrawer` is `md:hidden`,

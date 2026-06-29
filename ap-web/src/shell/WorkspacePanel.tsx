@@ -1,7 +1,8 @@
-import { BotIcon, FileIcon, ListTodoIcon, TerminalIcon, XIcon } from "lucide-react";
+import { BotIcon, Code2Icon, FileIcon, ListTodoIcon, TerminalIcon, XIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CodeIntelPanel } from "./CodeIntelPanel";
 import { FilesPanel } from "./FilesPanel";
 import { FileViewer } from "./FileViewer";
 import type { ChangedSort } from "./FlatFileList";
@@ -142,6 +143,8 @@ interface WorkspacePanelProps {
   onRightRailTabChange: (next: RightRailTab) => void;
   /** Whether the Files tab is available (agent spec exposes an os_env). */
   showFilesPanel: boolean;
+  /** Whether the Code tab is available for this session's workspace. */
+  showCodePanel: boolean;
   /** Count of changed files, shown as the Files tab badge. */
   changedCount: number;
   /**
@@ -207,7 +210,7 @@ interface WorkspacePanelProps {
  * WorkspacePanel — the desktop right "Workspace" rail, rendered as a
  * floating card (bg-card, rounded, bordered, shadowed) sitting below the
  * full-width chat header band. Internally tabbed between Files,
- * Terminals, Agents and Tasks so each can claim the full rail height
+ * Files, Code, Agents, Shells, and Tasks so each can claim the full rail height
  * instead of competing for a vertically-split slot.
  *
  * Desktop-only (``hidden md:flex``): on mobile the rail's contents are
@@ -226,6 +229,7 @@ export function WorkspacePanel({
   rightRailTab,
   onRightRailTabChange,
   showFilesPanel,
+  showCodePanel,
   changedCount,
   showShellsTab,
   terminalsLength,
@@ -274,9 +278,9 @@ export function WorkspacePanel({
         {...handleProps}
         className="absolute inset-y-0 left-0 z-10 w-1 cursor-col-resize hover:bg-primary/30 active:bg-primary/50 transition-colors"
       />
-      {/* Tab strip, in display order Files · Agents · Shells · Tasks.
-          Files and Agents are always present (the Agents panel lists at
-          least the main agent). Shells shows whenever AppShell's gate
+      {/* Tab strip, in display order Files · Code · Agents · Shells · Tasks.
+          Files and Code are session-gated; Agents is always present (the
+          Agents panel lists at least the main agent). Shells shows whenever AppShell's gate
           allows it (the agent declares shell access, or a shell already
           exists) — the empty state carries the "+ New shell"
           affordance, so an empty tab is an entry point, not a dead end.
@@ -316,6 +320,15 @@ export function WorkspacePanel({
                     {changedCount}
                   </span>
                 )}
+              </TabsTrigger>
+            )}
+            {showCodePanel && (
+              <TabsTrigger
+                value="code"
+                className="h-[32px] gap-[6px] rounded-[8px] px-[12px] text-[13px] leading-5"
+              >
+                <Code2Icon className="size-4" />
+                Code
               </TabsTrigger>
             )}
             <TabsTrigger
@@ -416,6 +429,8 @@ export function WorkspacePanel({
             onCommentsOpenChange={onCommentsOpenChange}
             sort={filesPanelSort}
           />
+        ) : rightRailTab === "code" && showCodePanel ? (
+          <CodeIntelPanel conversationId={conversationId} />
         ) : rightRailTab === "subagents" && rootSessionId ? (
           <SubagentsPanel conversationId={conversationId} rootSessionId={rootSessionId} />
         ) : rightRailTab === "todos" && isClaudeNative ? (
