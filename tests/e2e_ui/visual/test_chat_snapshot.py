@@ -49,6 +49,7 @@ _SESSION_DETAIL_RE = re.compile(rf"/v1/sessions/{_SESSION_ID}(\?.*)?$")
 _ITEMS_RE = re.compile(rf"/v1/sessions/{_SESSION_ID}/items")
 _STREAM_RE = re.compile(rf"/v1/sessions/{_SESSION_ID}/stream")
 _AGENT_RE = re.compile(rf"/v1/sessions/{_SESSION_ID}/agent")
+_CODE_STATUS_RE = re.compile(rf"/v1/sessions/{_SESSION_ID}/code-intel/status")
 # Side-rail chrome (agents-rail badge, terminals, environments). Stubbed empty so
 # the real server's 404 for this (server-unknown) session can't leak an error.
 _SUBRESOURCE_RE = re.compile(rf"/v1/sessions/{_SESSION_ID}/(child_sessions|resources)")
@@ -119,9 +120,21 @@ _SESSION_BODY = {
     "id": _SESSION_ID,
     "agent_id": _AGENT_ID,
     "agent_name": _AGENT_NAME,
+    "host_id": _HOST_ID,
+    "workspace": "/host/repo",
     "status": "idle",
     "created_at": 1704067200,
     "updated_at": 1704067200,
+}
+_CODE_STATUS_BODY = {
+    "repo_root": "",
+    "indexed": False,
+    "status": "host_unsupported",
+    "nodes": None,
+    "edges": None,
+    "head": None,
+    "project": None,
+    "message": "Code intelligence is not available for host workspaces yet.",
 }
 _AGENT_BODY = {
     "id": _AGENT_ID,
@@ -192,6 +205,7 @@ def test_chat_conversation_matches_baseline(
     page.route(_SESSIONS_LIST_RE, lambda r: fulfill_json(r, _EMPTY_LIST_BODY))
     page.route(_ITEMS_RE, lambda r: fulfill_json(r, _ITEMS_BODY))
     page.route(_AGENT_RE, lambda r: fulfill_json(r, _AGENT_BODY))
+    page.route(_CODE_STATUS_RE, lambda r: fulfill_json(r, _CODE_STATUS_BODY))
     page.route(_SUBRESOURCE_RE, lambda r: fulfill_json(r, _EMPTY_LIST_BODY))
     page.route(_SESSION_DETAIL_RE, lambda r: fulfill_json(r, _SESSION_BODY))
     page.route(_HEALTH_RE, lambda r: fulfill_json(r, _HEALTH_BODY))
