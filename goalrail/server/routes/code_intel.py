@@ -32,10 +32,8 @@ from fastapi import APIRouter, Request
 
 from goalrail.code_intel import (
     CodeIntelClient,
-    CodeIntelNotIndexedError,
-    CodeIntelNotInstalledError,
-    CodeIntelTimeoutError,
     resolve_repo_root,
+    service,
 )
 from goalrail.entities import Conversation
 from goalrail.errors import ErrorCode, GoalrailError
@@ -45,36 +43,10 @@ from goalrail.stores import ConversationStore
 from goalrail.stores.permission_store import PermissionStore
 from goalrail.tools.base import ToolContext
 
-# Hard cap on hits returned to the UI, mirroring the code_search builtin.
-_SEARCH_LIMIT_DEFAULT = 20
-_SEARCH_LIMIT_MAX = 50
+# Cap on file-preview bytes returned to the UI. Status/search shaping and
+# limits live in ``goalrail.code_intel.service`` (shared with the future
+# host handler).
 _FILE_READ_LIMIT_BYTES = 256 * 1024
-
-# Status reported for host-bound sessions. Code intelligence runs only
-# where the repository physically lives; the server must never read a
-# host workspace path as one of its own (that would be a path-confusion
-# security bug). Until the host-side execution path lands, status/search
-# report this honest state — the UI keeps the Code tab visible and shows
-# the message rather than erroring. See the host RPC plan (Phase 2).
-_HOST_UNSUPPORTED_STATUS = "host_unsupported"
-_HOST_UNSUPPORTED_MESSAGE = "Code intelligence is not available for host workspaces yet."
-
-
-def _head_info(raw: dict[str, Any]) -> dict[str, Any] | None:
-    """Extract a compact head/freshness block from an engine git envelope.
-
-    :param raw: The full ``index_status`` engine response.
-    :returns: ``{branch, head_sha, base_sha}`` when git info is present,
-        else ``None``.
-    """
-    git = raw.get("git")
-    if not isinstance(git, dict):
-        return None
-    return {
-        "branch": git.get("branch"),
-        "head_sha": git.get("head_sha"),
-        "base_sha": git.get("base_sha"),
-    }
 
 
 def _resolve_repo_file(repo_root: Path, path: str) -> Path:
@@ -178,108 +150,33 @@ def create_code_intel_router(
         """
         conv = await _load_session(session_id, request)
         if conv.host_id:
-            return {
-                "repo_root": "",
-                "indexed": False,
-                "status": _HOST_UNSUPPORTED_STATUS,
-                "nodes": None,
-                "edges": None,
-                "head": None,
-                "project": None,
-                "message": _HOST_UNSUPPORTED_MESSAGE,
-            }
+            return service.host_unsupported_status_envelope()
         repo_root = _resolve_local_repo(conv)
-        try:
-            status = await asyncio.to_thread(engine.index_status, repo_root)
-        except (CodeIntelNotInstalledError, CodeIntelTimeoutError) as exc:
-            return {
-                "repo_root": str(repo_root),
-                "indexed": False,
-                "status": "engine_unavailable",
-                "nodes": None,
-                "edges": None,
-                "head": None,
-                "project": None,
-                "message": str(exc),
-            }
-        return {
-            "repo_root": status.repo_root,
-            "indexed": status.status == "ready",
-            "status": status.status,
-            "nodes": status.nodes,
-            "edges": status.edges,
-            "head": _head_info(status.raw),
-            "project": status.project,
-            "message": None,
-        }
+        return await asyncio.to_thread(service.status_envelope, engine, repo_root)
 
     @router.get("/sessions/{session_id}/code-intel/search")
     async def code_intel_search(
         request: Request,
         session_id: str,
         q: str,
-        limit: int = _SEARCH_LIMIT_DEFAULT,
+        limit: int = service.SEARCH_LIMIT_DEFAULT,
     ) -> dict[str, Any]:
         """Search the session repo's knowledge graph for symbols.
 
         :param q: Name pattern to match against symbol names.
-        :param limit: Max hits (clamped to ``_SEARCH_LIMIT_MAX``).
+        :param limit: Max hits (clamped to ``service.SEARCH_LIMIT_MAX``).
         :returns: ``{repo_root, query, status, total, results, message}``.
             ``status`` is ``"ok"``, ``"not_indexed"``,
             ``"engine_unavailable"``, or ``"host_unsupported"``.
         """
         conv = await _load_session(session_id, request)
         if conv.host_id:
-            return {
-                "repo_root": "",
-                "query": q,
-                "status": _HOST_UNSUPPORTED_STATUS,
-                "total": 0,
-                "results": [],
-                "message": _HOST_UNSUPPORTED_MESSAGE,
-            }
+            return service.host_unsupported_search_envelope(q)
         repo_root = _resolve_local_repo(conv)
         if not q.strip():
             raise GoalrailError("q is required", code=ErrorCode.INVALID_INPUT)
-        capped = min(limit, _SEARCH_LIMIT_MAX) if limit > 0 else _SEARCH_LIMIT_DEFAULT
-        try:
-            results = await asyncio.to_thread(engine.search, repo_root, q, limit=capped)
-        except CodeIntelNotIndexedError as exc:
-            return {
-                "repo_root": str(repo_root),
-                "query": q,
-                "status": "not_indexed",
-                "total": 0,
-                "results": [],
-                "message": str(exc),
-            }
-        except (CodeIntelNotInstalledError, CodeIntelTimeoutError) as exc:
-            return {
-                "repo_root": str(repo_root),
-                "query": q,
-                "status": "engine_unavailable",
-                "total": 0,
-                "results": [],
-                "message": str(exc),
-            }
-        return {
-            "repo_root": results.repo_root,
-            "query": results.query,
-            "status": "ok",
-            "total": results.total,
-            "results": [
-                {
-                    "name": hit.name,
-                    "qualified_name": hit.qualified_name,
-                    "label": hit.label,
-                    "file": hit.file,
-                    "signature": hit.signature,
-                    "return_type": hit.return_type,
-                }
-                for hit in results.hits
-            ],
-            "message": None,
-        }
+        capped = service.clamp_search_limit(limit)
+        return await asyncio.to_thread(service.search_envelope, engine, repo_root, q, capped)
 
     @router.get("/sessions/{session_id}/code-intel/files/{path:path}")
     async def code_intel_file(
