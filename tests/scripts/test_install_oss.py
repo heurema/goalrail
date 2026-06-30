@@ -407,6 +407,38 @@ def test_install_codebase_memory_falls_back_to_legacy_without_broken_new_shim(
     assert any(line.endswith("codebase-memory-mcp config set auto_index true") for line in lines)
 
 
+def test_install_codebase_memory_does_not_uninstall_existing_tool_after_install_failure(
+    lib: Path, tmp_path: Path
+) -> None:
+    """If the new install never succeeds, keep any previously working tool."""
+    legacy = tmp_path / "codebase-memory-mcp"
+    legacy.write_text("#!/bin/sh\nexit 0\n")
+    legacy.chmod(0o755)
+    log = tmp_path / "commands.log"
+    r = run(
+        lib,
+        (
+            f"LOG={shlex.quote(str(log))}\n"
+            "run_with_spinner() {\n"
+            '  printf "%s\\n" "$*" >> "$LOG"\n'
+            '  case "$1" in\n'
+            '    "uv tool install code-intel-memory") return 42 ;;\n'
+            "  esac\n"
+            "  return 0\n"
+            "}\n"
+            f"install_codebase_memory {shlex.quote(str(tmp_path))}\n"
+            'cat "$LOG"\n'
+        ),
+    )
+    assert r.returncode == 0, r.stderr
+    lines = r.stdout.splitlines()
+    assert any(line.startswith("uv tool install code-intel-memory ") for line in lines)
+    assert not any(line.startswith("uv tool uninstall code-intel-memory ") for line in lines)
+    assert any(line.startswith("uv tool install codebase-memory-mcp ") for line in lines)
+    assert any(line.endswith("codebase-memory-mcp --version") for line in lines)
+    assert any(line.endswith("codebase-memory-mcp config set auto_index true") for line in lines)
+
+
 def test_install_codebase_memory_failure_warns_without_failing(lib: Path) -> None:
     """Code-intel companion failures warn but never abort the base Goalrail installer."""
     r = run(

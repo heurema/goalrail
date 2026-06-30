@@ -551,7 +551,10 @@ install_code_intel_candidate() {
     return 1
   fi
 
-  configure_code_intel_tool "$bin_dir" "$tool_name"
+  if configure_code_intel_tool "$bin_dir" "$tool_name"; then
+    return 0
+  fi
+  return 2
 }
 
 cleanup_failed_code_intel_candidate() {
@@ -569,10 +572,14 @@ install_codebase_memory() {
   step "Installing code-intel-memory companion tool (Python $PYTHON_VERSION)"
   if install_code_intel_candidate "$bin_dir" "$CODE_INTEL_MEMORY_PACKAGE_SPEC" "$CODE_INTEL_MEMORY_BIN"; then
     return 0
+  else
+    code_intel_status=$?
   fi
 
   warn "code-intel-memory is not usable yet; falling back to legacy codebase-memory-mcp."
-  cleanup_failed_code_intel_candidate "$CODE_INTEL_MEMORY_BIN"
+  if [ "$code_intel_status" -eq 2 ]; then
+    cleanup_failed_code_intel_candidate "$CODE_INTEL_MEMORY_BIN"
+  fi
 
   if install_code_intel_candidate "$bin_dir" "$LEGACY_CODEBASE_MEMORY_PACKAGE_SPEC" "$LEGACY_CODEBASE_MEMORY_BIN"; then
     return 0
