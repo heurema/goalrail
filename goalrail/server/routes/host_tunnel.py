@@ -26,6 +26,7 @@ from collections.abc import Awaitable, Callable
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from goalrail.host.frames import (
+    HostCodeIntelStatusResultFrame,
     HostCreateDirResultFrame,
     HostCreateWorktreeResultFrame,
     HostHelloFrame,
@@ -414,6 +415,18 @@ async def _receive_loop(
                         "exists": frame.exists,
                         "type": frame.type,
                         "canonical_path": frame.canonical_path,
+                        "error": frame.error,
+                    }
+                )
+            continue
+
+        if isinstance(frame, HostCodeIntelStatusResultFrame):
+            code_intel_future = conn.pending_code_intel_status.pop(frame.request_id, None)
+            if code_intel_future is not None and not code_intel_future.done():
+                code_intel_future.set_result(
+                    {
+                        "status": frame.status,
+                        "envelope": frame.envelope,
                         "error": frame.error,
                     }
                 )

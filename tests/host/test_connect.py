@@ -22,6 +22,8 @@ from goalrail.host.connect import (
 )
 from goalrail.host.frames import (
     HARNESS_NOT_CONFIGURED_ERROR_CODE,
+    HostCodeIntelStatusFrame,
+    HostCodeIntelStatusResultFrame,
     HostCreateDirFrame,
     HostCreateDirResultFrame,
     HostHelloFrame,
@@ -2117,3 +2119,81 @@ def test_run_host_process_announces_session_log_dir_on_start(
 
     out = capsys.readouterr().out
     assert "Session logs: ~/.goalrail/logs/host-runner/" in out
+
+
+async def test_handle_code_intel_status_ok(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A successful host-side compute is wrapped as a status='ok' result."""
+    envelope = {"repo_root": "/repo", "indexed": True, "status": "ready"}
+    monkeypatch.setitem(
+        HostProcess._handle_code_intel_status.__globals__,
+        "_compute_code_intel_status_envelope",
+        lambda workspace: envelope,
+    )
+    host = _make_host_process()
+    result = await host._handle_code_intel_status(
+        HostCodeIntelStatusFrame(request_id="r_ci_ok", workspace="~/repo")
+    )
+    assert result.request_id == "r_ci_ok"
+    assert result.status == "ok"
+    assert result.envelope == envelope
+    assert result.error is None
+
+
+async def test_handle_code_intel_status_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A compute exception collapses to a status='failed' result."""
+
+    def _boom(workspace: str) -> dict[str, object]:
+        raise RuntimeError("workspace gone")
+
+    monkeypatch.setitem(
+        HostProcess._handle_code_intel_status.__globals__,
+        "_compute_code_intel_status_envelope",
+        _boom,
+    )
+    host = _make_host_process()
+    result = await host._handle_code_intel_status(
+        HostCodeIntelStatusFrame(request_id="r_ci_fail", workspace="/missing")
+    )
+    assert result.status == "failed"
+    assert result.envelope is None
+    assert "workspace gone" in (result.error or "")
+
+
+async def test_dispatch_code_intel_status_does_not_block_frame_loop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Dispatch returns before a slow status computation finishes."""
+    host = _make_host_process()
+    tunnel = _FakeTunnel()
+    release = asyncio.Event()
+
+    async def _slow_status(frame: HostCodeIntelStatusFrame) -> HostCodeIntelStatusResultFrame:
+        await release.wait()
+        return HostCodeIntelStatusResultFrame(
+            request_id=frame.request_id,
+            status="ok",
+            envelope={"status": "ready"},
+        )
+
+    monkeypatch.setattr(host, "_handle_code_intel_status", _slow_status)
+
+    await asyncio.wait_for(
+        host._dispatch_host_frame(
+            tunnel,
+            HostCodeIntelStatusFrame(request_id="r_ci_bg", workspace="/repo"),
+        ),
+        timeout=0.05,
+    )
+    assert tunnel.sent == []
+
+    release.set()
+    for _ in range(10):
+        if tunnel.sent:
+            break
+        await asyncio.sleep(0)
+
+    assert len(tunnel.sent) == 1
+    decoded = decode_host_frame(tunnel.sent[0])
+    assert isinstance(decoded, HostCodeIntelStatusResultFrame)
+    assert decoded.request_id == "r_ci_bg"
+    assert decoded.status == "ok"

@@ -24,6 +24,9 @@ from goalrail._env_compat import data_home_path
 from goalrail._platform import WINDOWS_ENV_PASSTHROUGH
 from goalrail.host.frames import (
     HARNESS_NOT_CONFIGURED_ERROR_CODE,
+    HOST_FEATURE_CODE_INTEL_STATUS,
+    HostCodeIntelStatusFrame,
+    HostCodeIntelStatusResultFrame,
     HostCreateDirFrame,
     HostCreateDirResultFrame,
     HostCreateWorktreeFrame,
@@ -545,6 +548,10 @@ class HostProcess:
         # Strong refs to per-runner watcher tasks; asyncio only keeps
         # weak refs, so an unreferenced task can be GC'd mid-flight.
         self._watcher_tasks: set[asyncio.Task[None]] = set()
+        # Strong refs to background code-intel status replies. These
+        # are intentionally detached from the frame dispatch loop so a
+        # slow engine cannot block later host control frames.
+        self._code_intel_status_tasks: set[asyncio.Task[None]] = set()
 
     def _alive_runner_ids(self) -> list[str]:
         """Return IDs of runners that are still alive.
@@ -977,6 +984,63 @@ class HostProcess:
             type=entry_type,
             canonical_path=canonical,
         )
+
+    async def _handle_code_intel_status(
+        self, frame: HostCodeIntelStatusFrame
+    ) -> HostCodeIntelStatusResultFrame:
+        """Handle a ``host.code_intel_status`` request from the server.
+
+        Resolves the workspace against the host filesystem (source of
+        truth for ``~`` / symlinks, like ``host.stat``), runs the engine
+        via the shared service, and returns the status envelope. The
+        blocking engine call runs in a worker thread so the tunnel event
+        loop stays responsive. Resolution failures collapse to a
+        ``status: "failed"`` result; the server then falls back to the
+        ``host_unsupported`` envelope.
+
+        :param frame: The code-intel status request frame.
+        :returns: Result frame carrying the envelope or a failure.
+        """
+        try:
+            envelope = await asyncio.to_thread(
+                _compute_code_intel_status_envelope, frame.workspace
+            )
+        except Exception as exc:  # noqa: BLE001 — report any failure to the server
+            return HostCodeIntelStatusResultFrame(
+                request_id=frame.request_id,
+                status="failed",
+                error=str(exc),
+            )
+        return HostCodeIntelStatusResultFrame(
+            request_id=frame.request_id,
+            status="ok",
+            envelope=envelope,
+        )
+
+    async def _send_code_intel_status_result(
+        self,
+        ws: websockets.asyncio.client.ClientConnection,
+        frame: HostCodeIntelStatusFrame,
+    ) -> None:
+        """Compute and send a code-intel status result without blocking dispatch.
+
+        Code-intel can shell out to an engine and may be slow. Running this
+        in its own task keeps the host receive loop free to process later
+        launch/stop/stat frames on the same tunnel.
+
+        :param ws: The open tunnel connection.
+        :param frame: The status request frame.
+        :returns: None.
+        """
+        try:
+            result = await self._handle_code_intel_status(frame)
+            await ws.send(encode_host_frame(result))
+        except Exception:  # noqa: BLE001 - tunnel send failures are best-effort
+            _logger.debug(
+                "Failed to send code-intel status result for %s",
+                frame.request_id,
+                exc_info=True,
+            )
 
     def _handle_list_dir(self, frame: HostListDirFrame) -> HostListDirResultFrame:
         """Handle a ``host.list_dir`` request from the server.
@@ -1424,6 +1488,7 @@ class HostProcess:
             frame_protocol_version=1,
             name=self._identity.name,
             runners=self._alive_runner_ids(),
+            features={HOST_FEATURE_CODE_INTEL_STATUS: True},
             # Off the event loop: probes PATH (shutil.which) and reads
             # ~/.goalrail/config.yaml. Recomputed on every (re)connect, so
             # the server's view refreshes whenever the tunnel does; the
@@ -1503,6 +1568,13 @@ class HostProcess:
             await ws.send(encode_host_frame(self._handle_stop(frame)))
         elif isinstance(frame, HostStatFrame):
             await ws.send(encode_host_frame(self._handle_stat(frame)))
+        elif isinstance(frame, HostCodeIntelStatusFrame):
+            status_task = asyncio.create_task(
+                self._send_code_intel_status_result(ws, frame),
+                name=f"host-code-intel-status:{frame.request_id}",
+            )
+            self._code_intel_status_tasks.add(status_task)
+            status_task.add_done_callback(self._code_intel_status_tasks.discard)
         elif isinstance(frame, HostListDirFrame):
             await ws.send(encode_host_frame(self._handle_list_dir(frame)))
         elif isinstance(frame, HostCreateDirFrame):
@@ -1511,6 +1583,30 @@ class HostProcess:
             await ws.send(encode_host_frame(await self._handle_create_worktree(frame)))
         elif isinstance(frame, HostRemoveWorktreeFrame):
             await ws.send(encode_host_frame(await self._handle_remove_worktree(frame)))
+
+
+def _compute_code_intel_status_envelope(workspace: str) -> dict[str, object]:
+    """Resolve a workspace on the host filesystem and compute its status.
+
+    Synchronous — runs the engine subprocess via the shared service.
+    Call it through ``asyncio.to_thread`` so the tunnel loop is not
+    blocked. Resolution is host-side: ``~`` is expanded against the host
+    process owner's home (the host is the source of truth, never the
+    server), then :func:`resolve_repo_root` canonicalizes within the
+    workspace boundary.
+
+    :param workspace: The session's workspace path on this host.
+    :returns: The status envelope dict (same shape the local route
+        returns), including ``engine_unavailable`` when the binary is
+        missing.
+    """
+    from goalrail.code_intel import CodeIntelClient, resolve_repo_root, service
+    from goalrail.tools.base import ToolContext
+
+    expanded = os.path.expanduser(workspace)
+    ctx = ToolContext(task_id="", agent_id="", sandbox_root=Path(expanded))
+    repo_root = resolve_repo_root(ctx)
+    return service.status_envelope(CodeIntelClient(), repo_root)
 
 
 def run_host_process(

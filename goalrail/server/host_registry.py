@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import secrets
 import threading
 import time
 from dataclasses import dataclass, field
@@ -22,9 +23,27 @@ from typing import Any, Protocol
 
 from cachetools import TTLCache
 
-from goalrail.host.frames import HostHelloFrame
+from goalrail.host.frames import (
+    HostCodeIntelStatusFrame,
+    HostHelloFrame,
+    encode_host_frame,
+)
 
 _logger = logging.getLogger(__name__)
+
+# How long the server waits for a host to answer a code-intel status
+# request before falling back. Index reads are sub-second; this is
+# generous headroom that still fails fast for an unresponsive host.
+_CODE_INTEL_STATUS_TIMEOUT_S = 15.0
+
+
+class HostCodeIntelError(Exception):
+    """A host code-intel request failed (timeout, drop, or host error).
+
+    The route catches this and falls back to the ``host_unsupported``
+    envelope so the Code tab degrades gracefully.
+    """
+
 
 # How long a runner exit report stays answerable, and how many are kept.
 # Reports only matter while a client is still waiting for the runner to
@@ -185,6 +204,12 @@ class HostConnection:
         host sends ``host.create_dir_result``. Values carry the
         result fields (``status``, ``path``, ``error``). Same
         ``Any`` typing rationale as ``pending_stats``.
+    :param pending_code_intel_status: Per-``request_id`` futures for
+        in-flight ``host.code_intel_status`` requests. Resolved when
+        the host sends ``host.code_intel_status_result``. Values carry
+        ``status`` (transport ok/failed), ``envelope`` (the status
+        envelope dict), and ``error``. Same ``Any`` typing rationale
+        as ``pending_stats``.
     """
 
     host_id: str
@@ -213,6 +238,9 @@ class HostConnection:
         default_factory=dict,
     )
     pending_create_dirs: dict[str, asyncio.Future[dict[str, Any]]] = field(
+        default_factory=dict,
+    )
+    pending_code_intel_status: dict[str, asyncio.Future[dict[str, Any]]] = field(
         default_factory=dict,
     )
 
@@ -322,3 +350,58 @@ class HostRegistry:
                 raise ConnectionError(f"host {conn.host_id!r} connection was replaced")
 
         conn.outbound_queue.put_nowait(data)
+
+
+async def request_code_intel_status(
+    host_registry: HostRegistry,
+    host_conn: HostConnection,
+    workspace: str,
+    *,
+    timeout: float = _CODE_INTEL_STATUS_TIMEOUT_S,
+) -> dict[str, Any]:
+    """Ask a host to compute the code-intel status envelope for a workspace.
+
+    Sends ``host.code_intel_status`` and awaits the matching result frame
+    (routed back into ``pending_code_intel_status`` by the host tunnel).
+    The server never reads the workspace path itself — the host owns
+    resolution.
+
+    :param host_registry: Registry used to enqueue the outbound frame.
+    :param host_conn: The live host connection.
+    :param workspace: The session's workspace path on the host.
+    :param timeout: Seconds to wait before giving up.
+    :returns: The status envelope dict computed on the host.
+    :raises HostCodeIntelError: On connection loss, timeout, or a
+        host-reported failure.
+    """
+    request_id = secrets.token_hex(8)
+    loop = asyncio.get_event_loop()
+    future: asyncio.Future[dict[str, Any]] = loop.create_future()
+    host_conn.pending_code_intel_status[request_id] = future
+
+    frame = encode_host_frame(HostCodeIntelStatusFrame(request_id=request_id, workspace=workspace))
+    try:
+        try:
+            host_registry.send_text(host_conn, frame)
+        except ConnectionError as exc:
+            raise HostCodeIntelError(
+                f"host '{host_conn.host_id}' connection lost during code-intel status"
+            ) from exc
+        try:
+            result = await asyncio.wait_for(future, timeout=timeout)
+        except asyncio.TimeoutError as exc:
+            raise HostCodeIntelError(
+                f"host '{host_conn.host_id}' did not respond to code-intel "
+                f"status within {timeout:.0f}s"
+            ) from exc
+    finally:
+        host_conn.pending_code_intel_status.pop(request_id, None)
+
+    if result.get("status") == "failed":
+        raise HostCodeIntelError(
+            f"host code-intel status failed: {result.get('error') or 'unknown error'}"
+        )
+    envelope = result.get("envelope")
+    if not isinstance(envelope, dict):
+        raise HostCodeIntelError("host returned no code-intel status envelope")
+    return envelope
