@@ -7620,7 +7620,7 @@
             }
           },
           {
-            "description": "Max hits (clamped to `_SEARCH_LIMIT_MAX`).",
+            "description": "Max hits, clamped to the configured search limit.",
             "in": "query",
             "name": "limit",
             "required": false,

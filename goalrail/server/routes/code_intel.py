@@ -164,7 +164,7 @@ def create_code_intel_router(
         """Search the session repo's knowledge graph for symbols.
 
         :param q: Name pattern to match against symbol names.
-        :param limit: Max hits (clamped to ``service.SEARCH_LIMIT_MAX``).
+        :param limit: Max hits, clamped to the configured search limit.
         :returns: ``{repo_root, query, status, total, results, message}``.
             ``status`` is ``"ok"``, ``"not_indexed"``,
             ``"engine_unavailable"``, or ``"host_unsupported"``.
