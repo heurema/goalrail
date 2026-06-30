@@ -15,6 +15,7 @@ import {
   CheckIcon,
   ChevronRightIcon,
   CircleStopIcon,
+  FolderKanbanIcon,
   GitBranchIcon,
   InboxIcon,
   ListChecksIcon,
@@ -119,13 +120,19 @@ interface SidebarProps {
  * which is `inbox` in both standalone and embedded modes. Conversation ids are
  * `conv_…`-prefixed, so a chat route's leaf can never collide with `inbox`.
  */
-function useActiveNavItem(): { isNewChatPage: boolean; isInboxPage: boolean } {
+function useActiveNavItem(): {
+  isNewChatPage: boolean;
+  isInboxPage: boolean;
+  isProjectsPage: boolean;
+} {
   const { conversationId: activeConversationId } = useParams<{ conversationId: string }>();
-  const isInboxPage = useLocation().pathname.split("/").filter(Boolean).at(-1) === "inbox";
+  const pathSegments = useLocation().pathname.split("/").filter(Boolean);
+  const isInboxPage = pathSegments.at(-1) === "inbox";
+  const isProjectsPage = pathSegments.includes("projects");
   // Exclude inbox: it also has no `:conversationId`, so it would otherwise
   // light up the "New session" button.
-  const isNewChatPage = activeConversationId == null && !isInboxPage;
-  return { isNewChatPage, isInboxPage };
+  const isNewChatPage = activeConversationId == null && !isInboxPage && !isProjectsPage;
+  return { isNewChatPage, isInboxPage, isProjectsPage };
 }
 
 /**
@@ -232,7 +239,7 @@ export function Sidebar({ open, onClose, dragProgress = null }: SidebarProps) {
   }
 
   // Which top-level nav button to highlight for the current route.
-  const { isNewChatPage, isInboxPage } = useActiveNavItem();
+  const { isNewChatPage, isInboxPage, isProjectsPage } = useActiveNavItem();
 
   // On /settings the card keeps its chrome but swaps the conversation list
   // for the settings section nav (see settingsNav.tsx) — entering settings
@@ -411,6 +418,21 @@ export function Sidebar({ open, onClose, dragProgress = null }: SidebarProps) {
                     {inboxCount}
                   </span>
                 )}
+              </Link>
+            </Button>
+            <Button
+              asChild
+              className={cn(
+                "w-full justify-start gap-2 text-sm",
+                isProjectsPage && "bg-muted font-semibold",
+              )}
+              variant="ghost"
+              data-testid="projects-button"
+            >
+              <Link to="/projects" onClick={onNavClick}>
+                <FolderKanbanIcon className="size-4" />
+                Projects
+                <span className="ml-auto text-[11px] text-muted-foreground">preview</span>
               </Link>
             </Button>
             {selectionMode ? (

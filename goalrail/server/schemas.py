@@ -2051,6 +2051,37 @@ class SessionList(BaseModel):
     has_more: bool = False
 
 
+class ProjectListItem(BaseModel):
+    """
+    Minimal project summary for ``GET /v1/projects``.
+
+    Projects are an MVP read model over existing session workspaces, not
+    durable rows. The shape is deliberately narrow so the first
+    ``/projects`` page stays a project picker rather than a PM dashboard.
+
+    :param id: Stable opaque identifier derived from the normalized
+        workspace path, e.g. ``"proj_abcd1234"``.
+    :param name: Human-readable project name, usually the final path
+        segment of ``workspace``.
+    :param workspace: Stored workspace path used to group the sessions.
+    :param last_activity_at: Newest session ``updated_at`` timestamp in
+        this workspace.
+    """
+
+    id: str
+    object: Literal["project"] = "project"
+    name: str
+    workspace: str
+    last_activity_at: int
+
+
+class ProjectList(BaseModel):
+    """List of minimal project summaries."""
+
+    object: Literal["list"] = "list"
+    data: list[ProjectListItem] = Field(default_factory=list)
+
+
 class ChildSessionList(BaseModel):
     """Paginated list of child sessions; ``data`` is a page of ``ChildSessionSummary``."""
 

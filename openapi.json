@@ -2200,6 +2200,65 @@
         "title": "PresenceViewer",
         "type": "object"
       },
+      "ProjectList": {
+        "description": "List of minimal project summaries.",
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectListItem"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "object": {
+            "const": "list",
+            "default": "list",
+            "title": "Object",
+            "type": "string"
+          }
+        },
+        "title": "ProjectList",
+        "type": "object"
+      },
+      "ProjectListItem": {
+        "description": "Minimal project summary for `GET /v1/projects`.\n\nProjects are an MVP read model over existing session workspaces, not\ndurable rows. The shape is deliberately narrow so the first\n`/projects` page stays a project picker rather than a PM dashboard.",
+        "properties": {
+          "id": {
+            "description": "Stable opaque identifier derived from the normalized workspace path, e.g. `\"proj_abcd1234\"`.",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_activity_at": {
+            "description": "Newest session `updated_at` timestamp in this workspace.",
+            "title": "Last Activity At",
+            "type": "integer"
+          },
+          "name": {
+            "description": "Human-readable project name, usually the final path segment of `workspace`.",
+            "title": "Name",
+            "type": "string"
+          },
+          "object": {
+            "const": "project",
+            "default": "project",
+            "title": "Object",
+            "type": "string"
+          },
+          "workspace": {
+            "description": "Stored workspace path used to group the sessions.",
+            "title": "Workspace",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "workspace",
+          "last_activity_at"
+        ],
+        "title": "ProjectListItem",
+        "type": "object"
+      },
       "QueuedEvent": {
         "description": "Optional event emitted between `created` and `in_progress`\nfor background tasks that are queued before they start.\n\nForeground streaming responses skip this event.",
         "properties": {
@@ -6631,6 +6690,28 @@
         "summary": "List Registry",
         "tags": [
           "policy_registry"
+        ]
+      }
+    },
+    "/v1/projects": {
+      "get": {
+        "description": "Return minimal project summaries grouped by session workspace.",
+        "operationId": "list_projects_v1_projects_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Projects",
+        "tags": [
+          "projects"
         ]
       }
     },

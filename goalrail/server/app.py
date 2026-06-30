@@ -55,6 +55,7 @@ from goalrail.server.routes.code_intel import create_code_intel_router
 from goalrail.server.routes.comments import create_comments_router
 from goalrail.server.routes.default_policies import create_default_policies_router
 from goalrail.server.routes.policy_registry import create_policy_registry_router
+from goalrail.server.routes.projects import create_projects_router
 from goalrail.server.routes.runner_tunnel import create_runner_tunnel_router
 from goalrail.server.routes.session_mcp_servers import create_session_mcp_servers_router
 from goalrail.server.routes.session_policies import create_session_policies_router
@@ -1744,6 +1745,14 @@ def create_app(
         ),
         prefix="/v1",
         tags=["agents"],
+    )
+    app.include_router(
+        create_projects_router(
+            conversation_store,
+            auth_provider=auth_provider,
+        ),
+        prefix="/v1",
+        tags=["projects"],
     )
     app.include_router(
         create_terminal_attach_router(
