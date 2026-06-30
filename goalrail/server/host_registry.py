@@ -24,6 +24,7 @@ from typing import Any, Protocol
 from cachetools import TTLCache
 
 from goalrail.host.frames import (
+    HostCodeIntelFileFrame,
     HostCodeIntelSearchFrame,
     HostCodeIntelStatusFrame,
     HostHelloFrame,
@@ -39,6 +40,10 @@ _CODE_INTEL_STATUS_TIMEOUT_S = 15.0
 # Search shares the same posture (sub-second engine query + generous
 # headroom for an unresponsive host).
 _CODE_INTEL_SEARCH_TIMEOUT_S = 15.0
+# File preview is a bounded local read on the host. Keep the same timeout
+# posture as status/search: generous for transient host load, fast for a
+# dead tunnel.
+_CODE_INTEL_FILE_TIMEOUT_S = 15.0
 
 
 class HostCodeIntelError(Exception):
@@ -219,6 +224,11 @@ class HostConnection:
         host sends ``host.code_intel_search_result``. Values carry the
         same transport fields as ``pending_code_intel_status`` (with the
         search envelope dict). Same ``Any`` typing rationale.
+    :param pending_code_intel_files: Per-``request_id`` futures for
+        in-flight ``host.code_intel_file`` requests. Resolved when the
+        host sends ``host.code_intel_file_result``. Values carry
+        ``status`` (transport ok/failed), ``file`` (the preview payload),
+        and ``error``. Same ``Any`` typing rationale.
     """
 
     host_id: str
@@ -253,6 +263,9 @@ class HostConnection:
         default_factory=dict,
     )
     pending_code_intel_search: dict[str, asyncio.Future[dict[str, Any]]] = field(
+        default_factory=dict,
+    )
+    pending_code_intel_files: dict[str, asyncio.Future[dict[str, Any]]] = field(
         default_factory=dict,
     )
 
@@ -480,3 +493,53 @@ async def request_code_intel_search(
     if not isinstance(envelope, dict):
         raise HostCodeIntelError("host returned no code-intel search envelope")
     return envelope
+
+
+async def request_code_intel_file(
+    host_registry: HostRegistry,
+    host_conn: HostConnection,
+    workspace: str,
+    path: str,
+    *,
+    timeout: float = _CODE_INTEL_FILE_TIMEOUT_S,
+) -> dict[str, Any]:
+    """Ask a host to read a bounded code-intel file preview.
+
+    The server passes the workspace as an opaque host-owned ref and never
+    resolves the path locally. The host resolves the workspace, validates
+    the repo-relative file path, and returns the same payload shape as the
+    local file-preview route.
+    """
+    request_id = secrets.token_hex(8)
+    loop = asyncio.get_event_loop()
+    future: asyncio.Future[dict[str, Any]] = loop.create_future()
+    host_conn.pending_code_intel_files[request_id] = future
+
+    frame = encode_host_frame(
+        HostCodeIntelFileFrame(request_id=request_id, workspace=workspace, path=path)
+    )
+    try:
+        try:
+            host_registry.send_text(host_conn, frame)
+        except ConnectionError as exc:
+            raise HostCodeIntelError(
+                f"host '{host_conn.host_id}' connection lost during code-intel file preview"
+            ) from exc
+        try:
+            result = await asyncio.wait_for(future, timeout=timeout)
+        except asyncio.TimeoutError as exc:
+            raise HostCodeIntelError(
+                f"host '{host_conn.host_id}' did not respond to code-intel "
+                f"file preview within {timeout:.0f}s"
+            ) from exc
+    finally:
+        host_conn.pending_code_intel_files.pop(request_id, None)
+
+    if result.get("status") == "failed":
+        raise HostCodeIntelError(
+            f"host code-intel file preview failed: {result.get('error') or 'unknown error'}"
+        )
+    file_payload = result.get("file")
+    if not isinstance(file_payload, dict):
+        raise HostCodeIntelError("host returned no code-intel file preview payload")
+    return file_payload

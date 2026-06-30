@@ -41,6 +41,11 @@ HOST_FEATURE_CODE_INTEL_STATUS = "code_intel_status"
 # same compatibility-gate (not engine-availability) semantics.
 HOST_FEATURE_CODE_INTEL_SEARCH = "code_intel_search"
 
+# Host hello feature bit for code-intel file preview RPC support.
+# Search results become useful only when the host can also serve previews
+# for the same host-owned workspace.
+HOST_FEATURE_CODE_INTEL_FILE = "code_intel_file"
+
 
 class HostFrameKind(str, Enum):
     """All host frame kinds; the value is the JSON wire string."""
@@ -65,6 +70,8 @@ class HostFrameKind(str, Enum):
     CODE_INTEL_STATUS_RESULT = "host.code_intel_status_result"
     CODE_INTEL_SEARCH = "host.code_intel_search"
     CODE_INTEL_SEARCH_RESULT = "host.code_intel_search_result"
+    CODE_INTEL_FILE = "host.code_intel_file"
+    CODE_INTEL_FILE_RESULT = "host.code_intel_file_result"
 
 
 # ── Frame dataclasses ────────────────────────────────────
@@ -572,6 +579,25 @@ class HostCodeIntelSearchResultFrame:
     error: str | None = None
 
 
+@dataclass
+class HostCodeIntelFileFrame:
+    """Server → host: read a repo-relative file preview for a workspace."""
+
+    request_id: str
+    workspace: str
+    path: str
+
+
+@dataclass
+class HostCodeIntelFileResultFrame:
+    """Host → server: code-intel file preview payload or transport failure."""
+
+    request_id: str
+    status: str
+    file: dict[str, object] | None = None
+    error: str | None = None
+
+
 HostFrame = (
     HostHelloFrame
     | HostLaunchRunnerFrame
@@ -593,6 +619,8 @@ HostFrame = (
     | HostCodeIntelStatusResultFrame
     | HostCodeIntelSearchFrame
     | HostCodeIntelSearchResultFrame
+    | HostCodeIntelFileFrame
+    | HostCodeIntelFileResultFrame
 )
 
 
@@ -811,6 +839,25 @@ def encode_host_frame(frame: HostFrame) -> str:
                 "error": frame.error,
             }
         )
+    if isinstance(frame, HostCodeIntelFileFrame):
+        return json.dumps(
+            {
+                "kind": HostFrameKind.CODE_INTEL_FILE.value,
+                "request_id": frame.request_id,
+                "workspace": frame.workspace,
+                "path": frame.path,
+            }
+        )
+    if isinstance(frame, HostCodeIntelFileResultFrame):
+        return json.dumps(
+            {
+                "kind": HostFrameKind.CODE_INTEL_FILE_RESULT.value,
+                "request_id": frame.request_id,
+                "status": frame.status,
+                "file": frame.file,
+                "error": frame.error,
+            }
+        )
     raise TypeError(f"unknown host frame type: {type(frame).__name__}")
 
 
@@ -911,6 +958,10 @@ def _decode_known_host_frame(
             return _decode_code_intel_search(msg)
         case HostFrameKind.CODE_INTEL_SEARCH_RESULT:
             return _decode_code_intel_search_result(msg)
+        case HostFrameKind.CODE_INTEL_FILE:
+            return _decode_code_intel_file(msg)
+        case HostFrameKind.CODE_INTEL_FILE_RESULT:
+            return _decode_code_intel_file_result(msg)
     raise ValueError(f"unhandled host frame kind: {kind.value!r}")  # pragma: no cover
 
 
@@ -1244,6 +1295,30 @@ def _decode_code_intel_search_result(  # type: ignore[explicit-any]  # Host fram
         request_id=_required_str(msg, "request_id"),
         status=_required_str(msg, "status"),
         envelope=envelope if isinstance(envelope, dict) else None,
+        error=_optional_nullable_str(msg, "error"),
+    )
+
+
+def _decode_code_intel_file(  # type: ignore[explicit-any]  # Host frames decode raw JSON.
+    msg: dict[str, Any],
+) -> HostCodeIntelFileFrame:
+    """Decode a host.code_intel_file request frame."""
+    return HostCodeIntelFileFrame(
+        request_id=_required_str(msg, "request_id"),
+        workspace=_required_str(msg, "workspace"),
+        path=_required_str(msg, "path"),
+    )
+
+
+def _decode_code_intel_file_result(  # type: ignore[explicit-any]  # Host frames decode raw JSON.
+    msg: dict[str, Any],
+) -> HostCodeIntelFileResultFrame:
+    """Decode a host.code_intel_file_result frame."""
+    file_payload = msg.get("file")
+    return HostCodeIntelFileResultFrame(
+        request_id=_required_str(msg, "request_id"),
+        status=_required_str(msg, "status"),
+        file=file_payload if isinstance(file_payload, dict) else None,
         error=_optional_nullable_str(msg, "error"),
     )
 

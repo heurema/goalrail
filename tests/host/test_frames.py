@@ -8,7 +8,10 @@ import pytest
 
 from goalrail.host.frames import (
     HARNESS_NOT_CONFIGURED_ERROR_CODE,
+    HOST_FEATURE_CODE_INTEL_FILE,
     HOST_FEATURE_CODE_INTEL_STATUS,
+    HostCodeIntelFileFrame,
+    HostCodeIntelFileResultFrame,
     HostCodeIntelSearchFrame,
     HostCodeIntelSearchResultFrame,
     HostCodeIntelStatusFrame,
@@ -162,11 +165,17 @@ def test_hello_frame_features_round_trip() -> None:
         version="0.1.0",
         frame_protocol_version=1,
         name="corey-laptop",
-        features={HOST_FEATURE_CODE_INTEL_STATUS: True},
+        features={
+            HOST_FEATURE_CODE_INTEL_STATUS: True,
+            HOST_FEATURE_CODE_INTEL_FILE: True,
+        },
     )
     decoded = decode_host_frame(encode_host_frame(original))
     assert isinstance(decoded, HostHelloFrame)
-    assert decoded.features == {HOST_FEATURE_CODE_INTEL_STATUS: True}
+    assert decoded.features == {
+        HOST_FEATURE_CODE_INTEL_STATUS: True,
+        HOST_FEATURE_CODE_INTEL_FILE: True,
+    }
 
 
 def test_hello_frame_feature_false_round_trip() -> None:
@@ -1045,4 +1054,43 @@ def test_code_intel_search_result_failure_round_trip() -> None:
     assert isinstance(decoded, HostCodeIntelSearchResultFrame)
     assert decoded.status == "failed"
     assert decoded.envelope is None
+    assert decoded.error == "workspace not found"
+
+
+def test_code_intel_file_request_round_trip() -> None:
+    """The code-intel file request survives encode → decode."""
+    original = HostCodeIntelFileFrame(request_id="req_cf_1", workspace="~/repo", path="pkg/mod.py")
+    decoded = decode_host_frame(encode_host_frame(original))
+    assert isinstance(decoded, HostCodeIntelFileFrame)
+    assert decoded.request_id == "req_cf_1"
+    assert decoded.workspace == "~/repo"
+    assert decoded.path == "pkg/mod.py"
+
+
+def test_code_intel_file_result_round_trip() -> None:
+    """The file result frame preserves the nested preview payload."""
+    payload = {
+        "repo_root": "/repo",
+        "path": "pkg/mod.py",
+        "content": "class Widget:\n",
+        "size_bytes": 14,
+        "truncated": False,
+    }
+    original = HostCodeIntelFileResultFrame(request_id="req_cf_2", status="ok", file=payload)
+    decoded = decode_host_frame(encode_host_frame(original))
+    assert isinstance(decoded, HostCodeIntelFileResultFrame)
+    assert decoded.status == "ok"
+    assert decoded.file == payload
+    assert decoded.error is None
+
+
+def test_code_intel_file_result_failure_round_trip() -> None:
+    """A failed file result round-trips with the error and no payload."""
+    original = HostCodeIntelFileResultFrame(
+        request_id="req_cf_3", status="failed", error="workspace not found"
+    )
+    decoded = decode_host_frame(encode_host_frame(original))
+    assert isinstance(decoded, HostCodeIntelFileResultFrame)
+    assert decoded.status == "failed"
+    assert decoded.file is None
     assert decoded.error == "workspace not found"

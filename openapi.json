@@ -7543,7 +7543,7 @@
     },
     "/v1/sessions/{session_id}/code-intel/files/{path}": {
       "get": {
-        "description": "Return read-only source text for a repo-relative path.\n\nThis deliberately uses the same session workspace boundary as\nstatus/search instead of the runner filesystem resource API. The\nCode tab can therefore preview indexed files for local sessions\nthat are not currently bound to a runner. Host-bound sessions are\nrejected \u2014 the server must never read a host workspace path.",
+        "description": "Return read-only source text for a repo-relative path.\n\nThis deliberately uses the same session workspace boundary as\nstatus/search instead of the runner filesystem resource API. The\nCode tab can therefore preview indexed files for local sessions\nthat are not currently bound to a runner. Host-bound sessions are\nserved by the owning host over the host tunnel; the server must\nnever read a host workspace path.",
         "operationId": "code_intel_file_v1_sessions__session_id__code_intel_files__path__get",
         "parameters": [
           {

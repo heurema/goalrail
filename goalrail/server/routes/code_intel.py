@@ -35,9 +35,11 @@ from goalrail.code_intel import (
     resolve_repo_root,
     service,
 )
+from goalrail.code_intel.file_preview import read_repo_file
 from goalrail.entities import Conversation
 from goalrail.errors import ErrorCode, GoalrailError
 from goalrail.host.frames import (
+    HOST_FEATURE_CODE_INTEL_FILE,
     HOST_FEATURE_CODE_INTEL_SEARCH,
     HOST_FEATURE_CODE_INTEL_STATUS,
 )
@@ -45,6 +47,7 @@ from goalrail.server.auth import LEVEL_READ, AuthProvider
 from goalrail.server.host_registry import (
     HostCodeIntelError,
     HostRegistry,
+    request_code_intel_file,
     request_code_intel_search,
     request_code_intel_status,
 )
@@ -52,34 +55,6 @@ from goalrail.server.routes._auth_helpers import get_user_id, require_access
 from goalrail.stores import ConversationStore
 from goalrail.stores.permission_store import PermissionStore
 from goalrail.tools.base import ToolContext
-
-# Cap on file-preview bytes returned to the UI. Status/search shaping and
-# limits live in ``goalrail.code_intel.service`` (shared with the future
-# host handler).
-_FILE_READ_LIMIT_BYTES = 256 * 1024
-
-
-def _resolve_repo_file(repo_root: Path, path: str) -> Path:
-    """Resolve a repo-relative file path without allowing workspace escape.
-
-    :param repo_root: Canonical repository root.
-    :param path: Repo-relative file path from the URL.
-    :returns: Absolute resolved path inside ``repo_root``.
-    :raises GoalrailError: 400 for invalid/escaping paths, 404 for
-        missing files.
-    """
-    rel = Path(path)
-    if not path.strip() or rel.is_absolute():
-        raise GoalrailError("path must be repo-relative", code=ErrorCode.INVALID_INPUT)
-    root = repo_root.resolve()
-    candidate = (root / rel).resolve()
-    if not candidate.is_relative_to(root):
-        raise GoalrailError("path escapes repository root", code=ErrorCode.INVALID_INPUT)
-    if not candidate.exists():
-        raise GoalrailError("File not found", code=ErrorCode.NOT_FOUND)
-    if not candidate.is_file():
-        raise GoalrailError("path is not a file", code=ErrorCode.INVALID_INPUT)
-    return candidate
 
 
 def create_code_intel_router(
@@ -99,9 +74,9 @@ def create_code_intel_router(
         disables permission checks (single-user mode).
     :param client: Override for the engine client (tests). Defaults to a
         process-wide :class:`CodeIntelClient`.
-    :param host_registry: Live host connections. When provided, status
-        and search for a host-bound session are fetched from the owning
-        host via ``host.code_intel_status`` / ``host.code_intel_search``;
+    :param host_registry: Live host connections. When provided, status,
+        search, and file preview for a host-bound session are fetched from
+        the owning host via code-intel host frames;
         without it (or when the host is offline / lacks the feature /
         is unresponsive) the route falls back to the ``host_unsupported``
         envelope.
@@ -156,6 +131,32 @@ def create_code_intel_router(
             )
         except HostCodeIntelError:
             return service.host_unsupported_search_envelope(query)
+
+    async def _host_file_payload(conv: Conversation, path: str) -> dict[str, Any]:
+        """Fetch a file preview from the owning host.
+
+        The server never resolves the host workspace path. Host-side failures
+        surface as a conflict so the UI sees a failed preview instead of a
+        misleading server-filesystem result.
+        """
+        if host_registry is None or not conv.workspace:
+            raise GoalrailError(
+                "Code intelligence file preview is unavailable for this host",
+                code=ErrorCode.CONFLICT,
+            )
+        host_conn = host_registry.get(conv.host_id) if conv.host_id else None
+        if host_conn is None or not _host_supports(host_conn, HOST_FEATURE_CODE_INTEL_FILE):
+            raise GoalrailError(
+                "Code intelligence file preview is unavailable for this host",
+                code=ErrorCode.CONFLICT,
+            )
+        try:
+            return await request_code_intel_file(host_registry, host_conn, conv.workspace, path)
+        except HostCodeIntelError as exc:
+            raise GoalrailError(
+                "Code intelligence file preview is unavailable for this host",
+                code=ErrorCode.CONFLICT,
+            ) from exc
 
     async def _load_session(session_id: str, request: Request) -> Conversation:
         """Authorize the caller and load the session.
@@ -254,23 +255,13 @@ def create_code_intel_router(
         status/search instead of the runner filesystem resource API. The
         Code tab can therefore preview indexed files for local sessions
         that are not currently bound to a runner. Host-bound sessions are
-        rejected — the server must never read a host workspace path.
+        served by the owning host over the host tunnel; the server must
+        never read a host workspace path.
         """
         conv = await _load_session(session_id, request)
+        if conv.host_id:
+            return await _host_file_payload(conv, path)
         repo_root = _resolve_local_repo(conv)
-        file_path = _resolve_repo_file(repo_root, path)
-        size = file_path.stat().st_size
-        with file_path.open("rb") as fh:
-            raw = fh.read(_FILE_READ_LIMIT_BYTES + 1)
-        truncated = len(raw) > _FILE_READ_LIMIT_BYTES
-        if truncated:
-            raw = raw[:_FILE_READ_LIMIT_BYTES]
-        return {
-            "repo_root": str(repo_root),
-            "path": str(file_path.relative_to(repo_root.resolve())),
-            "size_bytes": size,
-            "truncated": truncated,
-            "content": raw.decode("utf-8", errors="replace"),
-        }
+        return read_repo_file(repo_root, path)
 
     return router

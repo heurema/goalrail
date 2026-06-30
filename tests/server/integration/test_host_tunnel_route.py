@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from goalrail.db.db_models import SqlHost
 from goalrail.db.utils import get_or_create_engine, now_epoch
 from goalrail.host.frames import (
+    HostCodeIntelFileResultFrame,
     HostHelloFrame,
     HostLaunchRunnerResultFrame,
     encode_host_frame,
@@ -425,6 +426,36 @@ async def test_host_tunnel_routes_launch_result_to_future(
     result = await asyncio.wait_for(future, timeout=2.0)
     assert result["status"] == "launched"
     assert result["runner_id"] == "runner_token_xyz"
+    assert result["error"] is None
+
+
+async def test_host_tunnel_routes_code_intel_file_result_to_future(
+    host_app: tuple[FastAPI, HostRegistry, HostStore],
+) -> None:
+    """A code-intel file result resolves the matching pending future."""
+    app, registry, _store = host_app
+    comm = await _connect_route(app, _TUNNEL_PATH)
+    await _send_hello_and_wait(comm, registry)
+
+    conn = registry.get(_HOST_ID)
+    assert conn is not None
+
+    loop = asyncio.get_event_loop()
+    future: asyncio.Future[dict[str, object]] = loop.create_future()
+    conn.pending_code_intel_files["req_file"] = future
+
+    result_frame = encode_host_frame(
+        HostCodeIntelFileResultFrame(
+            request_id="req_file",
+            status="ok",
+            file={"path": "pkg/mod.py", "content": "class Widget:\n"},
+        )
+    )
+    await comm.send_input({"type": "websocket.receive", "text": result_frame})
+
+    result = await asyncio.wait_for(future, timeout=2.0)
+    assert result["status"] == "ok"
+    assert result["file"] == {"path": "pkg/mod.py", "content": "class Widget:\n"}
     assert result["error"] is None
 
 
