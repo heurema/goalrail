@@ -1783,6 +1783,7 @@ def create_app(
             conversation_store,
             auth_provider=auth_provider,
             permission_store=permission_store,
+            host_registry=host_registry,
         ),
         prefix="/v1",
         tags=["code_intel"],

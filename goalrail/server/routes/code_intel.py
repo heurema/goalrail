@@ -37,7 +37,13 @@ from goalrail.code_intel import (
 )
 from goalrail.entities import Conversation
 from goalrail.errors import ErrorCode, GoalrailError
+from goalrail.host.frames import HOST_FEATURE_CODE_INTEL_STATUS
 from goalrail.server.auth import LEVEL_READ, AuthProvider
+from goalrail.server.host_registry import (
+    HostCodeIntelError,
+    HostRegistry,
+    request_code_intel_status,
+)
 from goalrail.server.routes._auth_helpers import get_user_id, require_access
 from goalrail.stores import ConversationStore
 from goalrail.stores.permission_store import PermissionStore
@@ -77,6 +83,7 @@ def create_code_intel_router(
     auth_provider: AuthProvider | None = None,
     permission_store: PermissionStore | None = None,
     client: CodeIntelClient | None = None,
+    host_registry: HostRegistry | None = None,
 ) -> APIRouter:
     """Build the code-intelligence router.
 
@@ -88,10 +95,41 @@ def create_code_intel_router(
         disables permission checks (single-user mode).
     :param client: Override for the engine client (tests). Defaults to a
         process-wide :class:`CodeIntelClient`.
+    :param host_registry: Live host connections. When provided, status
+        for a host-bound session is fetched from the owning host via
+        ``host.code_intel_status``; without it (or when the host is
+        offline / unresponsive) the route falls back to the
+        ``host_unsupported`` envelope.
     :returns: A configured :class:`APIRouter`.
     """
     router = APIRouter()
     engine = client or CodeIntelClient()
+
+    def _host_supports_code_intel_status(host_conn: object) -> bool:
+        """Return whether a connected host advertised status RPC support."""
+        hello = getattr(host_conn, "hello", None)
+        features = getattr(hello, "features", None)
+        return isinstance(features, dict) and features.get(HOST_FEATURE_CODE_INTEL_STATUS) is True
+
+    async def _host_status_envelope(conv: Conversation) -> dict[str, Any]:
+        """Fetch status from the owning host, or fall back to unsupported.
+
+        The server never reads the host workspace path; it asks the host
+        (which owns resolution) over the tunnel. Any failure — no
+        registry, host offline, timeout, host-side error — degrades to
+        the honest ``host_unsupported`` envelope.
+        """
+        if host_registry is None or not conv.workspace:
+            return service.host_unsupported_status_envelope()
+        host_conn = host_registry.get(conv.host_id) if conv.host_id else None
+        if host_conn is None:
+            return service.host_unsupported_status_envelope()
+        if not _host_supports_code_intel_status(host_conn):
+            return service.host_unsupported_status_envelope()
+        try:
+            return await request_code_intel_status(host_registry, host_conn, conv.workspace)
+        except HostCodeIntelError:
+            return service.host_unsupported_status_envelope()
 
     async def _load_session(session_id: str, request: Request) -> Conversation:
         """Authorize the caller and load the session.
@@ -150,7 +188,7 @@ def create_code_intel_router(
         """
         conv = await _load_session(session_id, request)
         if conv.host_id:
-            return service.host_unsupported_status_envelope()
+            return await _host_status_envelope(conv)
         repo_root = _resolve_local_repo(conv)
         return await asyncio.to_thread(service.status_envelope, engine, repo_root)
 

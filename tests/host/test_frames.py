@@ -8,6 +8,9 @@ import pytest
 
 from goalrail.host.frames import (
     HARNESS_NOT_CONFIGURED_ERROR_CODE,
+    HOST_FEATURE_CODE_INTEL_STATUS,
+    HostCodeIntelStatusFrame,
+    HostCodeIntelStatusResultFrame,
     HostCreateDirFrame,
     HostCreateDirResultFrame,
     HostCreateWorktreeFrame,
@@ -151,6 +154,32 @@ def test_hello_frame_configured_harnesses_round_trip() -> None:
     assert decoded.configured_harnesses == {"claude-sdk": True, "codex": False}
 
 
+def test_hello_frame_features_round_trip() -> None:
+    """Feature bits survive hello encode → decode for compatibility gating."""
+    original = HostHelloFrame(
+        version="0.1.0",
+        frame_protocol_version=1,
+        name="corey-laptop",
+        features={HOST_FEATURE_CODE_INTEL_STATUS: True},
+    )
+    decoded = decode_host_frame(encode_host_frame(original))
+    assert isinstance(decoded, HostHelloFrame)
+    assert decoded.features == {HOST_FEATURE_CODE_INTEL_STATUS: True}
+
+
+def test_hello_frame_feature_false_round_trip() -> None:
+    """False feature bits remain explicit so the server can fail fast."""
+    original = HostHelloFrame(
+        version="0.1.0",
+        frame_protocol_version=1,
+        name="corey-laptop",
+        features={HOST_FEATURE_CODE_INTEL_STATUS: False},
+    )
+    decoded = decode_host_frame(encode_host_frame(original))
+    assert isinstance(decoded, HostHelloFrame)
+    assert decoded.features == {HOST_FEATURE_CODE_INTEL_STATUS: False}
+
+
 def test_hello_frame_legacy_payload_decodes_unknown_harnesses() -> None:
     """
     Verify a hello payload from an OLDER host (no configured_harnesses
@@ -172,6 +201,44 @@ def test_hello_frame_legacy_payload_decodes_unknown_harnesses() -> None:
     decoded = decode_host_frame(legacy)
     assert isinstance(decoded, HostHelloFrame)
     assert decoded.configured_harnesses is None
+    assert decoded.features is None
+
+
+def test_hello_frame_non_dict_features_decodes_as_none() -> None:
+    """Malformed feature bits must not break the hello handshake."""
+    malformed = json.dumps(
+        {
+            "kind": "host.hello",
+            "version": "0.1.0",
+            "frame_protocol_version": 1,
+            "name": "laptop",
+            "runners": [],
+            "features": ["code_intel_status"],
+        }
+    )
+    decoded = decode_host_frame(malformed)
+    assert isinstance(decoded, HostHelloFrame)
+    assert decoded.features is None
+
+
+def test_hello_frame_features_drop_non_bool_entries() -> None:
+    """Feature maps use only string→bool entries."""
+    raw = json.dumps(
+        {
+            "kind": "host.hello",
+            "version": "0.1.0",
+            "frame_protocol_version": 1,
+            "name": "laptop",
+            "runners": [],
+            "features": {
+                HOST_FEATURE_CODE_INTEL_STATUS: True,
+                "bad": "yes",
+            },
+        }
+    )
+    decoded = decode_host_frame(raw)
+    assert isinstance(decoded, HostHelloFrame)
+    assert decoded.features == {HOST_FEATURE_CODE_INTEL_STATUS: True}
 
 
 def test_hello_frame_non_dict_configured_harnesses_decodes_as_none() -> None:
@@ -880,3 +947,46 @@ def test_create_dir_result_error_round_trip() -> None:
     assert decoded.status == "ok"
     assert decoded.path is None
     assert decoded.error == "directory already exists"
+
+
+def test_code_intel_status_request_round_trip() -> None:
+    """The code-intel status request survives encode → decode."""
+    original = HostCodeIntelStatusFrame(request_id="req_ci_1", workspace="~/repo")
+    decoded = decode_host_frame(encode_host_frame(original))
+    assert isinstance(decoded, HostCodeIntelStatusFrame)
+    assert decoded.request_id == "req_ci_1"
+    assert decoded.workspace == "~/repo"
+
+
+def test_code_intel_status_result_round_trip() -> None:
+    """The result frame preserves the nested status envelope."""
+    envelope = {
+        "repo_root": "/repo",
+        "indexed": True,
+        "status": "ready",
+        "nodes": 10,
+        "edges": 20,
+        "head": {"branch": "main", "head_sha": "abc", "base_sha": None},
+        "project": "proj",
+        "message": None,
+    }
+    original = HostCodeIntelStatusResultFrame(
+        request_id="req_ci_2", status="ok", envelope=envelope
+    )
+    decoded = decode_host_frame(encode_host_frame(original))
+    assert isinstance(decoded, HostCodeIntelStatusResultFrame)
+    assert decoded.status == "ok"
+    assert decoded.envelope == envelope
+    assert decoded.error is None
+
+
+def test_code_intel_status_result_failure_round_trip() -> None:
+    """A failed result round-trips with the error and no envelope."""
+    original = HostCodeIntelStatusResultFrame(
+        request_id="req_ci_3", status="failed", error="workspace not found"
+    )
+    decoded = decode_host_frame(encode_host_frame(original))
+    assert isinstance(decoded, HostCodeIntelStatusResultFrame)
+    assert decoded.status == "failed"
+    assert decoded.envelope is None
+    assert decoded.error == "workspace not found"

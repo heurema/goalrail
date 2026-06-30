@@ -31,6 +31,11 @@ from typing import Any
 # ``ErrorCode.HARNESS_NOT_CONFIGURED``), and tests.
 HARNESS_NOT_CONFIGURED_ERROR_CODE = "harness_not_configured"
 
+# Host hello feature bit for status-only code-intel RPC support. This is a
+# compatibility gate, not an engine-availability promise: a supporting host can
+# still return an ``engine_unavailable`` status envelope.
+HOST_FEATURE_CODE_INTEL_STATUS = "code_intel_status"
+
 
 class HostFrameKind(str, Enum):
     """All host frame kinds; the value is the JSON wire string."""
@@ -51,6 +56,8 @@ class HostFrameKind(str, Enum):
     REMOVE_WORKTREE_RESULT = "host.remove_worktree_result"
     CREATE_DIR = "host.create_dir"
     CREATE_DIR_RESULT = "host.create_dir_result"
+    CODE_INTEL_STATUS = "host.code_intel_status"
+    CODE_INTEL_STATUS_RESULT = "host.code_intel_status_result"
 
 
 # ── Frame dataclasses ────────────────────────────────────
@@ -75,6 +82,10 @@ class HostHelloFrame:
         unknown (an older host that doesn't report it) — never
         treat ``None`` as "nothing is configured". Recomputed on
         each (re)connect; the launch-time check is authoritative.
+    :param features: Optional protocol feature bits supported by this
+        host. ``None`` means an older host that has not advertised
+        feature support; the server must not send newer optional frames
+        unless the matching feature is explicitly ``True``.
     """
 
     version: str
@@ -82,6 +93,7 @@ class HostHelloFrame:
     name: str
     runners: list[str] = field(default_factory=list)
     configured_harnesses: dict[str, bool] | None = None
+    features: dict[str, bool] | None = None
 
 
 @dataclass
@@ -472,6 +484,48 @@ class HostCreateDirResultFrame:
     error: str | None = None
 
 
+@dataclass
+class HostCodeIntelStatusFrame:
+    """Server → host: compute the code-intel index status for a workspace.
+
+    Sent for host-bound sessions, where the repository lives on the host
+    and the server must never read the path itself. The host expands
+    ``~`` / resolves symlinks against its own filesystem (source of
+    truth, like ``host.stat``), runs the engine, and returns the same
+    status envelope the local route produces.
+
+    :param request_id: Unique ID for correlating the result.
+    :param workspace: The session's workspace path on the host (absolute
+        or tilde-prefixed). The server passes it as an opaque ref; the
+        host owns resolution.
+    """
+
+    request_id: str
+    workspace: str
+
+
+@dataclass
+class HostCodeIntelStatusResultFrame:
+    """Host → server: code-intel status envelope (or transport failure).
+
+    :param request_id: Correlates to the :class:`HostCodeIntelStatusFrame`.
+    :param status: Transport-level outcome — ``"ok"`` or ``"failed"``.
+        This is distinct from the *envelope's* own ``status`` field
+        (``"ready"`` / ``"not_indexed"`` / ``"engine_unavailable"``),
+        which the host computes via ``code_intel.service.status_envelope``.
+    :param envelope: The status envelope dict when ``status`` is
+        ``"ok"``; ``None`` on failure.
+    :param error: Failure message when ``status`` is ``"failed"``
+        (e.g. the workspace path could not be resolved on the host).
+        ``None`` on success.
+    """
+
+    request_id: str
+    status: str
+    envelope: dict[str, object] | None = None
+    error: str | None = None
+
+
 HostFrame = (
     HostHelloFrame
     | HostLaunchRunnerFrame
@@ -489,6 +543,8 @@ HostFrame = (
     | HostRemoveWorktreeResultFrame
     | HostCreateDirFrame
     | HostCreateDirResultFrame
+    | HostCodeIntelStatusFrame
+    | HostCodeIntelStatusResultFrame
 )
 
 
@@ -511,6 +567,7 @@ def encode_host_frame(frame: HostFrame) -> str:
                 "name": frame.name,
                 "runners": list(frame.runners),
                 "configured_harnesses": frame.configured_harnesses,
+                "features": frame.features,
             }
         )
     if isinstance(frame, HostLaunchRunnerFrame):
@@ -668,6 +725,24 @@ def encode_host_frame(frame: HostFrame) -> str:
                 "error": frame.error,
             }
         )
+    if isinstance(frame, HostCodeIntelStatusFrame):
+        return json.dumps(
+            {
+                "kind": HostFrameKind.CODE_INTEL_STATUS.value,
+                "request_id": frame.request_id,
+                "workspace": frame.workspace,
+            }
+        )
+    if isinstance(frame, HostCodeIntelStatusResultFrame):
+        return json.dumps(
+            {
+                "kind": HostFrameKind.CODE_INTEL_STATUS_RESULT.value,
+                "request_id": frame.request_id,
+                "status": frame.status,
+                "envelope": frame.envelope,
+                "error": frame.error,
+            }
+        )
     raise TypeError(f"unknown host frame type: {type(frame).__name__}")
 
 
@@ -760,6 +835,10 @@ def _decode_known_host_frame(
             return _decode_create_dir(msg)
         case HostFrameKind.CREATE_DIR_RESULT:
             return _decode_create_dir_result(msg)
+        case HostFrameKind.CODE_INTEL_STATUS:
+            return _decode_code_intel_status(msg)
+        case HostFrameKind.CODE_INTEL_STATUS_RESULT:
+            return _decode_code_intel_status_result(msg)
     raise ValueError(f"unhandled host frame kind: {kind.value!r}")  # pragma: no cover
 
 
@@ -775,6 +854,7 @@ def _decode_host_hello(msg: dict[str, Any]) -> HostHelloFrame:
         name=_required_str(msg, "name"),
         runners=_optional_str_list(msg, "runners"),
         configured_harnesses=_optional_str_bool_map(msg, "configured_harnesses"),
+        features=_optional_str_bool_map(msg, "features"),
     )
 
 
@@ -1028,6 +1108,37 @@ def _decode_create_dir_result(msg: dict[str, Any]) -> HostCreateDirResultFrame:
         request_id=_required_str(msg, "request_id"),
         status=_required_str(msg, "status"),
         path=_optional_nullable_str(msg, "path"),
+        error=_optional_nullable_str(msg, "error"),
+    )
+
+
+def _decode_code_intel_status(  # type: ignore[explicit-any]  # Host frames decode raw JSON.
+    msg: dict[str, Any],
+) -> HostCodeIntelStatusFrame:
+    """Decode a host.code_intel_status request frame.
+
+    :param msg: Decoded frame object.
+    :returns: Typed host.code_intel_status frame.
+    """
+    return HostCodeIntelStatusFrame(
+        request_id=_required_str(msg, "request_id"),
+        workspace=_required_str(msg, "workspace"),
+    )
+
+
+def _decode_code_intel_status_result(  # type: ignore[explicit-any]  # Host frames decode raw JSON.
+    msg: dict[str, Any],
+) -> HostCodeIntelStatusResultFrame:
+    """Decode a host.code_intel_status_result frame.
+
+    :param msg: Decoded frame object.
+    :returns: Typed host.code_intel_status_result frame.
+    """
+    envelope = msg.get("envelope")
+    return HostCodeIntelStatusResultFrame(
+        request_id=_required_str(msg, "request_id"),
+        status=_required_str(msg, "status"),
+        envelope=envelope if isinstance(envelope, dict) else None,
         error=_optional_nullable_str(msg, "error"),
     )
 

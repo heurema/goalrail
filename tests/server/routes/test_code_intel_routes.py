@@ -9,6 +9,7 @@ exercised without a real engine binary or index. A real
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -67,7 +68,11 @@ class _FakeEngine:
         return self._results
 
 
-def _build_app(conv_store: SqlAlchemyConversationStore, engine: _FakeEngine) -> FastAPI:
+def _build_app(
+    conv_store: SqlAlchemyConversationStore,
+    engine: _FakeEngine,
+    host_registry: object | None = None,
+) -> FastAPI:
     """Mount the code-intel router with a minimal GoalrailError handler."""
     app = FastAPI()
 
@@ -79,10 +84,27 @@ def _build_app(conv_store: SqlAlchemyConversationStore, engine: _FakeEngine) -> 
         )
 
     app.include_router(
-        create_code_intel_router(conv_store, client=engine),  # type: ignore[arg-type]
+        create_code_intel_router(
+            conv_store,
+            client=engine,  # type: ignore[arg-type]
+            host_registry=host_registry,  # type: ignore[arg-type]
+        ),
         prefix="/v1",
     )
     return app
+
+
+class _FakeHostRegistry:
+    """Minimal host registry: ``get`` returns a connection or ``None``."""
+
+    def __init__(self, *, online: bool, code_intel_status: bool | None = True) -> None:
+        features = None
+        if code_intel_status is not None:
+            features = {"code_intel_status": code_intel_status}
+        self._conn = SimpleNamespace(hello=SimpleNamespace(features=features)) if online else None
+
+    def get(self, host_id: str) -> object | None:
+        return self._conn
 
 
 async def _client(app: FastAPI) -> httpx.AsyncClient:
@@ -357,3 +379,127 @@ async def test_file_preview_rejects_host_bound_workspace_before_local_read(
 
     assert resp.status_code == 409
     assert engine.index_status_calls == 0
+
+
+# ── host remote status RPC (Phase 2c) ─────────────────────
+
+
+async def test_status_host_remote_returns_envelope_without_server_fs(
+    conv_store: SqlAlchemyConversationStore,
+    db_uri: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An online host returns its remote status; the server never resolves FS."""
+
+    def _boom(*_a: object, **_k: object) -> Path:
+        raise AssertionError("server resolved a host workspace path")
+
+    async def _fake_request(registry: object, conn: object, workspace: str) -> dict:
+        return {
+            "repo_root": "",
+            "indexed": True,
+            "status": "ready",
+            "nodes": 5,
+            "edges": 7,
+            "head": None,
+            "project": "remote",
+            "message": None,
+        }
+
+    monkeypatch.setattr("goalrail.server.routes.code_intel.resolve_repo_root", _boom)
+    monkeypatch.setattr(
+        "goalrail.server.routes.code_intel.request_code_intel_status", _fake_request
+    )
+    session_id = conv_store.create_conversation(
+        host_id=_register_host(db_uri), workspace="/host/only/repo"
+    ).id
+    engine = _FakeEngine(status=IndexStatus(repo_root="/x", status="ready"))
+
+    async with await _client(
+        _build_app(conv_store, engine, host_registry=_FakeHostRegistry(online=True))
+    ) as c:
+        resp = await c.get(f"/v1/sessions/{session_id}/code-intel/status")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "ready"
+    assert body["project"] == "remote"
+    assert engine.index_status_calls == 0
+
+
+async def test_status_host_remote_failure_falls_back(
+    conv_store: SqlAlchemyConversationStore,
+    db_uri: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A host RPC failure degrades to the host_unsupported envelope."""
+    from goalrail.server.host_registry import HostCodeIntelError
+
+    async def _fail(registry: object, conn: object, workspace: str) -> dict:
+        raise HostCodeIntelError("host timed out")
+
+    monkeypatch.setattr("goalrail.server.routes.code_intel.request_code_intel_status", _fail)
+    session_id = conv_store.create_conversation(
+        host_id=_register_host(db_uri), workspace="/host/only/repo"
+    ).id
+    engine = _FakeEngine(status=IndexStatus(repo_root="/x", status="ready"))
+
+    async with await _client(
+        _build_app(conv_store, engine, host_registry=_FakeHostRegistry(online=True))
+    ) as c:
+        resp = await c.get(f"/v1/sessions/{session_id}/code-intel/status")
+
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "host_unsupported"
+
+
+async def test_status_host_without_code_intel_feature_falls_back_without_rpc(
+    conv_store: SqlAlchemyConversationStore,
+    db_uri: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A legacy/unsupported host must not receive an unknown status frame."""
+
+    async def _unexpected_request(registry: object, conn: object, workspace: str) -> dict:
+        raise AssertionError("status RPC should be gated by host feature support")
+
+    monkeypatch.setattr(
+        "goalrail.server.routes.code_intel.request_code_intel_status",
+        _unexpected_request,
+    )
+    session_id = conv_store.create_conversation(
+        host_id=_register_host(db_uri), workspace="/host/only/repo"
+    ).id
+    engine = _FakeEngine(status=IndexStatus(repo_root="/x", status="ready"))
+
+    async with await _client(
+        _build_app(
+            conv_store,
+            engine,
+            host_registry=_FakeHostRegistry(online=True, code_intel_status=None),
+        )
+    ) as c:
+        resp = await c.get(f"/v1/sessions/{session_id}/code-intel/status")
+
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "host_unsupported"
+    assert engine.index_status_calls == 0
+
+
+async def test_status_host_offline_falls_back(
+    conv_store: SqlAlchemyConversationStore,
+    db_uri: str,
+) -> None:
+    """An offline host (no live connection) reports host_unsupported."""
+    session_id = conv_store.create_conversation(
+        host_id=_register_host(db_uri), workspace="/host/only/repo"
+    ).id
+    engine = _FakeEngine(status=IndexStatus(repo_root="/x", status="ready"))
+
+    async with await _client(
+        _build_app(conv_store, engine, host_registry=_FakeHostRegistry(online=False))
+    ) as c:
+        resp = await c.get(f"/v1/sessions/{session_id}/code-intel/status")
+
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "host_unsupported"
