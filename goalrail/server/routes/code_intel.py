@@ -37,11 +37,15 @@ from goalrail.code_intel import (
 )
 from goalrail.entities import Conversation
 from goalrail.errors import ErrorCode, GoalrailError
-from goalrail.host.frames import HOST_FEATURE_CODE_INTEL_STATUS
+from goalrail.host.frames import (
+    HOST_FEATURE_CODE_INTEL_SEARCH,
+    HOST_FEATURE_CODE_INTEL_STATUS,
+)
 from goalrail.server.auth import LEVEL_READ, AuthProvider
 from goalrail.server.host_registry import (
     HostCodeIntelError,
     HostRegistry,
+    request_code_intel_search,
     request_code_intel_status,
 )
 from goalrail.server.routes._auth_helpers import get_user_id, require_access
@@ -96,20 +100,21 @@ def create_code_intel_router(
     :param client: Override for the engine client (tests). Defaults to a
         process-wide :class:`CodeIntelClient`.
     :param host_registry: Live host connections. When provided, status
-        for a host-bound session is fetched from the owning host via
-        ``host.code_intel_status``; without it (or when the host is
-        offline / unresponsive) the route falls back to the
-        ``host_unsupported`` envelope.
+        and search for a host-bound session are fetched from the owning
+        host via ``host.code_intel_status`` / ``host.code_intel_search``;
+        without it (or when the host is offline / lacks the feature /
+        is unresponsive) the route falls back to the ``host_unsupported``
+        envelope.
     :returns: A configured :class:`APIRouter`.
     """
     router = APIRouter()
     engine = client or CodeIntelClient()
 
-    def _host_supports_code_intel_status(host_conn: object) -> bool:
-        """Return whether a connected host advertised status RPC support."""
+    def _host_supports(host_conn: object, feature: str) -> bool:
+        """Return whether a connected host advertised a code-intel feature."""
         hello = getattr(host_conn, "hello", None)
         features = getattr(hello, "features", None)
-        return isinstance(features, dict) and features.get(HOST_FEATURE_CODE_INTEL_STATUS) is True
+        return isinstance(features, dict) and features.get(feature) is True
 
     async def _host_status_envelope(conv: Conversation) -> dict[str, Any]:
         """Fetch status from the owning host, or fall back to unsupported.
@@ -124,12 +129,33 @@ def create_code_intel_router(
         host_conn = host_registry.get(conv.host_id) if conv.host_id else None
         if host_conn is None:
             return service.host_unsupported_status_envelope()
-        if not _host_supports_code_intel_status(host_conn):
+        if not _host_supports(host_conn, HOST_FEATURE_CODE_INTEL_STATUS):
             return service.host_unsupported_status_envelope()
         try:
             return await request_code_intel_status(host_registry, host_conn, conv.workspace)
         except HostCodeIntelError:
             return service.host_unsupported_status_envelope()
+
+    async def _host_search_envelope(conv: Conversation, query: str, limit: int) -> dict[str, Any]:
+        """Fetch search results from the owning host, or fall back.
+
+        Mirrors :func:`_host_status_envelope`: no registry, host offline,
+        missing feature, timeout, or host-side error all degrade to the
+        honest ``host_unsupported`` search envelope.
+        """
+        if host_registry is None or not conv.workspace:
+            return service.host_unsupported_search_envelope(query)
+        host_conn = host_registry.get(conv.host_id) if conv.host_id else None
+        if host_conn is None:
+            return service.host_unsupported_search_envelope(query)
+        if not _host_supports(host_conn, HOST_FEATURE_CODE_INTEL_SEARCH):
+            return service.host_unsupported_search_envelope(query)
+        try:
+            return await request_code_intel_search(
+                host_registry, host_conn, conv.workspace, query, limit
+            )
+        except HostCodeIntelError:
+            return service.host_unsupported_search_envelope(query)
 
     async def _load_session(session_id: str, request: Request) -> Conversation:
         """Authorize the caller and load the session.
@@ -208,12 +234,12 @@ def create_code_intel_router(
             ``"engine_unavailable"``, or ``"host_unsupported"``.
         """
         conv = await _load_session(session_id, request)
-        if conv.host_id:
-            return service.host_unsupported_search_envelope(q)
-        repo_root = _resolve_local_repo(conv)
         if not q.strip():
             raise GoalrailError("q is required", code=ErrorCode.INVALID_INPUT)
         capped = service.clamp_search_limit(limit)
+        if conv.host_id:
+            return await _host_search_envelope(conv, q, capped)
+        repo_root = _resolve_local_repo(conv)
         return await asyncio.to_thread(service.search_envelope, engine, repo_root, q, capped)
 
     @router.get("/sessions/{session_id}/code-intel/files/{path:path}")

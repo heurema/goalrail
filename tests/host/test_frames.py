@@ -9,6 +9,8 @@ import pytest
 from goalrail.host.frames import (
     HARNESS_NOT_CONFIGURED_ERROR_CODE,
     HOST_FEATURE_CODE_INTEL_STATUS,
+    HostCodeIntelSearchFrame,
+    HostCodeIntelSearchResultFrame,
     HostCodeIntelStatusFrame,
     HostCodeIntelStatusResultFrame,
     HostCreateDirFrame,
@@ -987,6 +989,60 @@ def test_code_intel_status_result_failure_round_trip() -> None:
     )
     decoded = decode_host_frame(encode_host_frame(original))
     assert isinstance(decoded, HostCodeIntelStatusResultFrame)
+    assert decoded.status == "failed"
+    assert decoded.envelope is None
+    assert decoded.error == "workspace not found"
+
+
+def test_code_intel_search_request_round_trip() -> None:
+    """The code-intel search request survives encode → decode."""
+    original = HostCodeIntelSearchFrame(
+        request_id="req_cs_1", workspace="~/repo", query="widget", limit=25
+    )
+    decoded = decode_host_frame(encode_host_frame(original))
+    assert isinstance(decoded, HostCodeIntelSearchFrame)
+    assert decoded.request_id == "req_cs_1"
+    assert decoded.workspace == "~/repo"
+    assert decoded.query == "widget"
+    assert decoded.limit == 25
+
+
+def test_code_intel_search_result_round_trip() -> None:
+    """The search result frame preserves the nested envelope."""
+    envelope = {
+        "repo_root": "/repo",
+        "query": "widget",
+        "status": "ok",
+        "total": 1,
+        "results": [
+            {
+                "name": "widget",
+                "qualified_name": "pkg.widget",
+                "label": "Function",
+                "file": "pkg/mod.py",
+                "signature": None,
+                "return_type": None,
+            }
+        ],
+        "message": None,
+    }
+    original = HostCodeIntelSearchResultFrame(
+        request_id="req_cs_2", status="ok", envelope=envelope
+    )
+    decoded = decode_host_frame(encode_host_frame(original))
+    assert isinstance(decoded, HostCodeIntelSearchResultFrame)
+    assert decoded.status == "ok"
+    assert decoded.envelope == envelope
+    assert decoded.error is None
+
+
+def test_code_intel_search_result_failure_round_trip() -> None:
+    """A failed search result round-trips with the error and no envelope."""
+    original = HostCodeIntelSearchResultFrame(
+        request_id="req_cs_3", status="failed", error="workspace not found"
+    )
+    decoded = decode_host_frame(encode_host_frame(original))
+    assert isinstance(decoded, HostCodeIntelSearchResultFrame)
     assert decoded.status == "failed"
     assert decoded.envelope is None
     assert decoded.error == "workspace not found"

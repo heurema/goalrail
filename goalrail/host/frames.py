@@ -36,6 +36,11 @@ HARNESS_NOT_CONFIGURED_ERROR_CODE = "harness_not_configured"
 # still return an ``engine_unavailable`` status envelope.
 HOST_FEATURE_CODE_INTEL_STATUS = "code_intel_status"
 
+# Host hello feature bit for code-intel symbol search RPC support.
+# Advertised independently of status so search can roll out separately;
+# same compatibility-gate (not engine-availability) semantics.
+HOST_FEATURE_CODE_INTEL_SEARCH = "code_intel_search"
+
 
 class HostFrameKind(str, Enum):
     """All host frame kinds; the value is the JSON wire string."""
@@ -58,6 +63,8 @@ class HostFrameKind(str, Enum):
     CREATE_DIR_RESULT = "host.create_dir_result"
     CODE_INTEL_STATUS = "host.code_intel_status"
     CODE_INTEL_STATUS_RESULT = "host.code_intel_status_result"
+    CODE_INTEL_SEARCH = "host.code_intel_search"
+    CODE_INTEL_SEARCH_RESULT = "host.code_intel_search_result"
 
 
 # ── Frame dataclasses ────────────────────────────────────
@@ -526,6 +533,45 @@ class HostCodeIntelStatusResultFrame:
     error: str | None = None
 
 
+@dataclass
+class HostCodeIntelSearchFrame:
+    """Server → host: search the code-intel knowledge graph for a workspace.
+
+    Same host-side-resolution contract as :class:`HostCodeIntelStatusFrame`:
+    the host owns ``~`` / symlink resolution and runs the engine; the
+    server never reads the path.
+
+    :param request_id: Unique ID for correlating the result.
+    :param workspace: The session's workspace path on the host.
+    :param query: Symbol name pattern to search for.
+    :param limit: Maximum hits to return (already clamped by the server).
+    """
+
+    request_id: str
+    workspace: str
+    query: str
+    limit: int
+
+
+@dataclass
+class HostCodeIntelSearchResultFrame:
+    """Host → server: code-intel search envelope (or transport failure).
+
+    :param request_id: Correlates to the :class:`HostCodeIntelSearchFrame`.
+    :param status: Transport-level outcome — ``"ok"`` or ``"failed"`` —
+        distinct from the envelope's own ``status`` (``"ok"`` /
+        ``"not_indexed"`` / ``"engine_unavailable"``).
+    :param envelope: The search envelope dict when ``status`` is
+        ``"ok"``; ``None`` on failure.
+    :param error: Failure message when ``status`` is ``"failed"``.
+    """
+
+    request_id: str
+    status: str
+    envelope: dict[str, object] | None = None
+    error: str | None = None
+
+
 HostFrame = (
     HostHelloFrame
     | HostLaunchRunnerFrame
@@ -545,6 +591,8 @@ HostFrame = (
     | HostCreateDirResultFrame
     | HostCodeIntelStatusFrame
     | HostCodeIntelStatusResultFrame
+    | HostCodeIntelSearchFrame
+    | HostCodeIntelSearchResultFrame
 )
 
 
@@ -743,6 +791,26 @@ def encode_host_frame(frame: HostFrame) -> str:
                 "error": frame.error,
             }
         )
+    if isinstance(frame, HostCodeIntelSearchFrame):
+        return json.dumps(
+            {
+                "kind": HostFrameKind.CODE_INTEL_SEARCH.value,
+                "request_id": frame.request_id,
+                "workspace": frame.workspace,
+                "query": frame.query,
+                "limit": frame.limit,
+            }
+        )
+    if isinstance(frame, HostCodeIntelSearchResultFrame):
+        return json.dumps(
+            {
+                "kind": HostFrameKind.CODE_INTEL_SEARCH_RESULT.value,
+                "request_id": frame.request_id,
+                "status": frame.status,
+                "envelope": frame.envelope,
+                "error": frame.error,
+            }
+        )
     raise TypeError(f"unknown host frame type: {type(frame).__name__}")
 
 
@@ -839,6 +907,10 @@ def _decode_known_host_frame(
             return _decode_code_intel_status(msg)
         case HostFrameKind.CODE_INTEL_STATUS_RESULT:
             return _decode_code_intel_status_result(msg)
+        case HostFrameKind.CODE_INTEL_SEARCH:
+            return _decode_code_intel_search(msg)
+        case HostFrameKind.CODE_INTEL_SEARCH_RESULT:
+            return _decode_code_intel_search_result(msg)
     raise ValueError(f"unhandled host frame kind: {kind.value!r}")  # pragma: no cover
 
 
@@ -1136,6 +1208,39 @@ def _decode_code_intel_status_result(  # type: ignore[explicit-any]  # Host fram
     """
     envelope = msg.get("envelope")
     return HostCodeIntelStatusResultFrame(
+        request_id=_required_str(msg, "request_id"),
+        status=_required_str(msg, "status"),
+        envelope=envelope if isinstance(envelope, dict) else None,
+        error=_optional_nullable_str(msg, "error"),
+    )
+
+
+def _decode_code_intel_search(  # type: ignore[explicit-any]  # Host frames decode raw JSON.
+    msg: dict[str, Any],
+) -> HostCodeIntelSearchFrame:
+    """Decode a host.code_intel_search request frame.
+
+    :param msg: Decoded frame object.
+    :returns: Typed host.code_intel_search frame.
+    """
+    return HostCodeIntelSearchFrame(
+        request_id=_required_str(msg, "request_id"),
+        workspace=_required_str(msg, "workspace"),
+        query=_required_str(msg, "query"),
+        limit=_required_int(msg, "limit"),
+    )
+
+
+def _decode_code_intel_search_result(  # type: ignore[explicit-any]  # Host frames decode raw JSON.
+    msg: dict[str, Any],
+) -> HostCodeIntelSearchResultFrame:
+    """Decode a host.code_intel_search_result frame.
+
+    :param msg: Decoded frame object.
+    :returns: Typed host.code_intel_search_result frame.
+    """
+    envelope = msg.get("envelope")
+    return HostCodeIntelSearchResultFrame(
         request_id=_required_str(msg, "request_id"),
         status=_required_str(msg, "status"),
         envelope=envelope if isinstance(envelope, dict) else None,
