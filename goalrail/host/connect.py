@@ -24,8 +24,11 @@ from goalrail._env_compat import data_home_path
 from goalrail._platform import WINDOWS_ENV_PASSTHROUGH
 from goalrail.host.frames import (
     HARNESS_NOT_CONFIGURED_ERROR_CODE,
+    HOST_FEATURE_CODE_INTEL_FILE,
     HOST_FEATURE_CODE_INTEL_SEARCH,
     HOST_FEATURE_CODE_INTEL_STATUS,
+    HostCodeIntelFileFrame,
+    HostCodeIntelFileResultFrame,
     HostCodeIntelSearchFrame,
     HostCodeIntelSearchResultFrame,
     HostCodeIntelStatusFrame,
@@ -1099,6 +1102,44 @@ class HostProcess:
                 exc_info=True,
             )
 
+    async def _handle_code_intel_file(
+        self, frame: HostCodeIntelFileFrame
+    ) -> HostCodeIntelFileResultFrame:
+        """Handle a ``host.code_intel_file`` request from the server."""
+        try:
+            file_payload = await asyncio.to_thread(
+                _compute_code_intel_file_payload,
+                frame.workspace,
+                frame.path,
+            )
+        except Exception as exc:  # noqa: BLE001 — report any failure to the server
+            return HostCodeIntelFileResultFrame(
+                request_id=frame.request_id,
+                status="failed",
+                error=str(exc),
+            )
+        return HostCodeIntelFileResultFrame(
+            request_id=frame.request_id,
+            status="ok",
+            file=file_payload,
+        )
+
+    async def _send_code_intel_file_result(
+        self,
+        ws: websockets.asyncio.client.ClientConnection,
+        frame: HostCodeIntelFileFrame,
+    ) -> None:
+        """Compute and send a code-intel file preview without blocking dispatch."""
+        try:
+            result = await self._handle_code_intel_file(frame)
+            await ws.send(encode_host_frame(result))
+        except Exception:  # noqa: BLE001 - tunnel send failures are best-effort
+            _logger.debug(
+                "Failed to send code-intel file result for %s",
+                frame.request_id,
+                exc_info=True,
+            )
+
     def _handle_list_dir(self, frame: HostListDirFrame) -> HostListDirResultFrame:
         """Handle a ``host.list_dir`` request from the server.
 
@@ -1548,6 +1589,7 @@ class HostProcess:
             features={
                 HOST_FEATURE_CODE_INTEL_STATUS: True,
                 HOST_FEATURE_CODE_INTEL_SEARCH: True,
+                HOST_FEATURE_CODE_INTEL_FILE: True,
             },
             # Off the event loop: probes PATH (shutil.which) and reads
             # ~/.goalrail/config.yaml. Recomputed on every (re)connect, so
@@ -1642,6 +1684,13 @@ class HostProcess:
             )
             self._code_intel_search_tasks.add(search_task)
             search_task.add_done_callback(self._code_intel_search_tasks.discard)
+        elif isinstance(frame, HostCodeIntelFileFrame):
+            file_task = asyncio.create_task(
+                self._send_code_intel_file_result(ws, frame),
+                name=f"host-code-intel-file:{frame.request_id}",
+            )
+            self._code_intel_search_tasks.add(file_task)
+            file_task.add_done_callback(self._code_intel_search_tasks.discard)
         elif isinstance(frame, HostListDirFrame):
             await ws.send(encode_host_frame(self._handle_list_dir(frame)))
         elif isinstance(frame, HostCreateDirFrame):
@@ -1707,6 +1756,14 @@ def _compute_code_intel_search_envelope(
 
     repo_root = _resolve_host_repo_root(workspace)
     return service.search_envelope(CodeIntelClient(), repo_root, query, limit)
+
+
+def _compute_code_intel_file_payload(workspace: str, path: str) -> dict[str, object]:
+    """Resolve a workspace on the host filesystem and read a file preview."""
+    from goalrail.code_intel.file_preview import read_repo_file
+
+    repo_root = _resolve_host_repo_root(workspace)
+    return read_repo_file(repo_root, path)
 
 
 def run_host_process(

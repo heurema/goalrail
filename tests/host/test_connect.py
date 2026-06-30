@@ -22,6 +22,8 @@ from goalrail.host.connect import (
 )
 from goalrail.host.frames import (
     HARNESS_NOT_CONFIGURED_ERROR_CODE,
+    HostCodeIntelFileFrame,
+    HostCodeIntelFileResultFrame,
     HostCodeIntelSearchFrame,
     HostCodeIntelStatusFrame,
     HostCodeIntelStatusResultFrame,
@@ -2202,11 +2204,9 @@ async def test_dispatch_code_intel_status_does_not_block_frame_loop(
 
 async def test_handle_code_intel_search_ok(monkeypatch: pytest.MonkeyPatch) -> None:
     """A successful host-side search is wrapped as a status='ok' result."""
-    import goalrail.host.connect as connect_mod
-
     envelope = {"repo_root": "/repo", "query": "widget", "status": "ok", "total": 0, "results": []}
-    monkeypatch.setattr(
-        connect_mod,
+    monkeypatch.setitem(
+        HostProcess._handle_code_intel_search.__globals__,
         "_compute_code_intel_search_envelope",
         lambda workspace, query, limit: envelope,
     )
@@ -2224,12 +2224,15 @@ async def test_handle_code_intel_search_ok(monkeypatch: pytest.MonkeyPatch) -> N
 
 async def test_handle_code_intel_search_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     """A compute exception collapses to a status='failed' search result."""
-    import goalrail.host.connect as connect_mod
 
     def _boom(workspace: str, query: str, limit: int) -> dict[str, object]:
         raise RuntimeError("workspace gone")
 
-    monkeypatch.setattr(connect_mod, "_compute_code_intel_search_envelope", _boom)
+    monkeypatch.setitem(
+        HostProcess._handle_code_intel_search.__globals__,
+        "_compute_code_intel_search_envelope",
+        _boom,
+    )
     host = _make_host_process()
     result = await host._handle_code_intel_search(
         HostCodeIntelSearchFrame(request_id="r_cs_fail", workspace="/missing", query="x", limit=10)
@@ -2237,3 +2240,67 @@ async def test_handle_code_intel_search_failure(monkeypatch: pytest.MonkeyPatch)
     assert result.status == "failed"
     assert result.envelope is None
     assert "workspace gone" in (result.error or "")
+
+
+async def test_handle_code_intel_file_ok(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A successful host-side file read is wrapped as a status='ok' result."""
+    file_payload = {
+        "repo_root": "/repo",
+        "path": "pkg/mod.py",
+        "content": "class Widget:\n",
+        "size_bytes": 14,
+        "truncated": False,
+    }
+    monkeypatch.setitem(
+        HostProcess._handle_code_intel_file.__globals__,
+        "_compute_code_intel_file_payload",
+        lambda workspace, path: file_payload,
+    )
+    host = _make_host_process()
+    result = await host._handle_code_intel_file(
+        HostCodeIntelFileFrame(request_id="r_cf_ok", workspace="~/repo", path="pkg/mod.py")
+    )
+    assert result.request_id == "r_cf_ok"
+    assert result.status == "ok"
+    assert result.file == file_payload
+    assert result.error is None
+
+
+async def test_dispatch_code_intel_file_does_not_block_frame_loop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Dispatch returns before a slow file preview computation finishes."""
+    host = _make_host_process()
+    tunnel = _FakeTunnel()
+    release = asyncio.Event()
+
+    async def _slow_file(frame: HostCodeIntelFileFrame) -> HostCodeIntelFileResultFrame:
+        await release.wait()
+        return HostCodeIntelFileResultFrame(
+            request_id=frame.request_id,
+            status="ok",
+            file={"path": frame.path, "content": ""},
+        )
+
+    monkeypatch.setattr(host, "_handle_code_intel_file", _slow_file)
+
+    await asyncio.wait_for(
+        host._dispatch_host_frame(
+            tunnel,
+            HostCodeIntelFileFrame(request_id="r_cf_bg", workspace="/repo", path="pkg/mod.py"),
+        ),
+        timeout=0.05,
+    )
+    assert tunnel.sent == []
+
+    release.set()
+    for _ in range(10):
+        if tunnel.sent:
+            break
+        await asyncio.sleep(0)
+
+    assert len(tunnel.sent) == 1
+    decoded = decode_host_frame(tunnel.sent[0])
+    assert isinstance(decoded, HostCodeIntelFileResultFrame)
+    assert decoded.request_id == "r_cf_bg"
+    assert decoded.status == "ok"

@@ -15,6 +15,8 @@ import pytest
 
 from goalrail.server.host_registry import (
     HostCodeIntelError,
+    request_code_intel_file,
+    request_code_intel_search,
     request_code_intel_status,
 )
 
@@ -46,6 +48,7 @@ class _FakeRegistry:
 def _fake_conn() -> Any:
     return SimpleNamespace(
         host_id="host_1",
+        pending_code_intel_files={},
         pending_code_intel_status={},
         pending_code_intel_search={},
     )
@@ -121,8 +124,6 @@ async def test_request_status_does_not_block_event_loop() -> None:
 
 
 async def test_request_search_happy_returns_envelope() -> None:
-    from goalrail.server.host_registry import request_code_intel_search
-
     envelope = {"query": "widget", "status": "ok", "total": 1, "results": [{}]}
     registry = _FakeRegistry(
         {"status": "ok", "envelope": envelope, "error": None},
@@ -141,11 +142,6 @@ async def test_request_search_happy_returns_envelope() -> None:
 
 
 async def test_request_search_host_failure_raises() -> None:
-    from goalrail.server.host_registry import (
-        HostCodeIntelError,
-        request_code_intel_search,
-    )
-
     registry = _FakeRegistry(
         {"status": "failed", "envelope": None, "error": "boom"},
         pending_attr="pending_code_intel_search",
@@ -158,14 +154,50 @@ async def test_request_search_host_failure_raises() -> None:
 
 
 async def test_request_search_timeout_raises() -> None:
-    from goalrail.server.host_registry import (
-        HostCodeIntelError,
-        request_code_intel_search,
-    )
-
     registry = _FakeRegistry(None, pending_attr="pending_code_intel_search")
     conn = _fake_conn()
 
     with pytest.raises(HostCodeIntelError, match="did not respond"):
         await request_code_intel_search(registry, conn, "/repo", "widget", 20, timeout=0.05)
     assert conn.pending_code_intel_search == {}
+
+
+# ── file preview RPC ──────────────────────────────────────
+
+
+async def test_request_file_happy_returns_payload() -> None:
+    payload = {"path": "pkg/mod.py", "content": "class Widget:\n"}
+    registry = _FakeRegistry(
+        {"status": "ok", "file": payload, "error": None},
+        pending_attr="pending_code_intel_files",
+    )
+    conn = _fake_conn()
+
+    result = await request_code_intel_file(registry, conn, "~/repo", "pkg/mod.py")
+
+    assert result == payload
+    sent = json.loads(registry.sent[0])
+    assert sent["workspace"] == "~/repo"
+    assert sent["path"] == "pkg/mod.py"
+    assert conn.pending_code_intel_files == {}
+
+
+async def test_request_file_host_failure_raises() -> None:
+    registry = _FakeRegistry(
+        {"status": "failed", "file": None, "error": "boom"},
+        pending_attr="pending_code_intel_files",
+    )
+    conn = _fake_conn()
+
+    with pytest.raises(HostCodeIntelError, match="boom"):
+        await request_code_intel_file(registry, conn, "/repo", "pkg/mod.py")
+    assert conn.pending_code_intel_files == {}
+
+
+async def test_request_file_timeout_raises() -> None:
+    registry = _FakeRegistry(None, pending_attr="pending_code_intel_files")
+    conn = _fake_conn()
+
+    with pytest.raises(HostCodeIntelError, match="did not respond"):
+        await request_code_intel_file(registry, conn, "/repo", "pkg/mod.py", timeout=0.05)
+    assert conn.pending_code_intel_files == {}

@@ -101,12 +101,19 @@ class _FakeHostRegistry:
         self,
         *,
         online: bool,
+        code_intel_file: bool | None = True,
         code_intel_status: bool | None = True,
         code_intel_search: bool | None = True,
     ) -> None:
         features: dict[str, bool] | None = None
-        if code_intel_status is not None or code_intel_search is not None:
+        if (
+            code_intel_file is not None
+            or code_intel_status is not None
+            or code_intel_search is not None
+        ):
             features = {}
+            if code_intel_file is not None:
+                features["code_intel_file"] = code_intel_file
             if code_intel_status is not None:
                 features["code_intel_status"] = code_intel_status
             if code_intel_search is not None:
@@ -386,6 +393,73 @@ async def test_file_preview_rejects_host_bound_workspace_before_local_read(
 
     async with await _client(_build_app(conv_store, engine)) as c:
         resp = await c.get(f"/v1/sessions/{session_id}/code-intel/files/etc/passwd")
+
+    assert resp.status_code == 409
+    assert engine.index_status_calls == 0
+
+
+async def test_file_preview_host_remote_returns_payload_without_server_fs(
+    conv_store: SqlAlchemyConversationStore,
+    db_uri: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An online host previews a remote file; the server never resolves FS."""
+
+    def _boom(*_a: object, **_k: object) -> Path:
+        raise AssertionError("server resolved a host workspace path")
+
+    async def _fake_file(registry: object, conn: object, workspace: str, path: str) -> dict:
+        assert workspace == "/host/only/repo"
+        assert path == "pkg/mod.py"
+        return {
+            "repo_root": "",
+            "path": "pkg/mod.py",
+            "size_bytes": 14,
+            "truncated": False,
+            "content": "class Widget:\n",
+        }
+
+    monkeypatch.setattr("goalrail.server.routes.code_intel.resolve_repo_root", _boom)
+    monkeypatch.setattr("goalrail.server.routes.code_intel.request_code_intel_file", _fake_file)
+    session_id = conv_store.create_conversation(
+        host_id=_register_host(db_uri), workspace="/host/only/repo"
+    ).id
+    engine = _FakeEngine(status=IndexStatus(repo_root="/x", status="ready"))
+
+    async with await _client(
+        _build_app(conv_store, engine, host_registry=_FakeHostRegistry(online=True))
+    ) as c:
+        resp = await c.get(f"/v1/sessions/{session_id}/code-intel/files/pkg/mod.py")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["path"] == "pkg/mod.py"
+    assert body["content"] == "class Widget:\n"
+    assert engine.index_status_calls == 0
+
+
+async def test_file_preview_host_without_feature_falls_back_without_rpc(
+    conv_store: SqlAlchemyConversationStore,
+    db_uri: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A host that doesn't advertise file preview support is rejected."""
+
+    async def _unexpected_file(registry: object, conn: object, workspace: str, path: str) -> dict:
+        raise AssertionError("file RPC should be gated by host feature support")
+
+    monkeypatch.setattr(
+        "goalrail.server.routes.code_intel.request_code_intel_file",
+        _unexpected_file,
+    )
+    session_id = conv_store.create_conversation(
+        host_id=_register_host(db_uri), workspace="/host/only/repo"
+    ).id
+    engine = _FakeEngine(status=IndexStatus(repo_root="/x", status="ready"))
+    registry = _FakeHostRegistry(online=True, code_intel_file=False)
+
+    async with await _client(_build_app(conv_store, engine, host_registry=registry)) as c:
+        resp = await c.get(f"/v1/sessions/{session_id}/code-intel/files/pkg/mod.py")
 
     assert resp.status_code == 409
     assert engine.index_status_calls == 0
