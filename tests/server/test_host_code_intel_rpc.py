@@ -24,8 +24,13 @@ pytestmark = pytest.mark.asyncio
 class _FakeRegistry:
     """Resolves the pending future inline to simulate a host reply."""
 
-    def __init__(self, reply: dict[str, Any] | None) -> None:
+    def __init__(
+        self,
+        reply: dict[str, Any] | None,
+        pending_attr: str = "pending_code_intel_status",
+    ) -> None:
         self._reply = reply
+        self._pending_attr = pending_attr
         self.sent: list[str] = []
 
     def send_text(self, conn: Any, data: str) -> None:
@@ -33,13 +38,17 @@ class _FakeRegistry:
         if self._reply is None:
             return  # simulate a host that never answers (timeout path)
         request_id = json.loads(data)["request_id"]
-        future = conn.pending_code_intel_status[request_id]
+        future = getattr(conn, self._pending_attr)[request_id]
         if not future.done():
             future.set_result(self._reply)
 
 
 def _fake_conn() -> Any:
-    return SimpleNamespace(host_id="host_1", pending_code_intel_status={})
+    return SimpleNamespace(
+        host_id="host_1",
+        pending_code_intel_status={},
+        pending_code_intel_search={},
+    )
 
 
 async def test_request_status_happy_returns_envelope() -> None:
@@ -106,3 +115,57 @@ async def test_request_status_does_not_block_event_loop() -> None:
         {"status": "ok", "envelope": {"status": "ready"}, "error": None}
     )
     assert (await task) == {"status": "ready"}
+
+
+# ── search RPC ────────────────────────────────────────────
+
+
+async def test_request_search_happy_returns_envelope() -> None:
+    from goalrail.server.host_registry import request_code_intel_search
+
+    envelope = {"query": "widget", "status": "ok", "total": 1, "results": [{}]}
+    registry = _FakeRegistry(
+        {"status": "ok", "envelope": envelope, "error": None},
+        pending_attr="pending_code_intel_search",
+    )
+    conn = _fake_conn()
+
+    result = await request_code_intel_search(registry, conn, "~/repo", "widget", 25)
+
+    assert result == envelope
+    sent = json.loads(registry.sent[0])
+    assert sent["query"] == "widget"
+    assert sent["limit"] == 25
+    assert sent["workspace"] == "~/repo"
+    assert conn.pending_code_intel_search == {}
+
+
+async def test_request_search_host_failure_raises() -> None:
+    from goalrail.server.host_registry import (
+        HostCodeIntelError,
+        request_code_intel_search,
+    )
+
+    registry = _FakeRegistry(
+        {"status": "failed", "envelope": None, "error": "boom"},
+        pending_attr="pending_code_intel_search",
+    )
+    conn = _fake_conn()
+
+    with pytest.raises(HostCodeIntelError, match="boom"):
+        await request_code_intel_search(registry, conn, "/repo", "widget", 20)
+    assert conn.pending_code_intel_search == {}
+
+
+async def test_request_search_timeout_raises() -> None:
+    from goalrail.server.host_registry import (
+        HostCodeIntelError,
+        request_code_intel_search,
+    )
+
+    registry = _FakeRegistry(None, pending_attr="pending_code_intel_search")
+    conn = _fake_conn()
+
+    with pytest.raises(HostCodeIntelError, match="did not respond"):
+        await request_code_intel_search(registry, conn, "/repo", "widget", 20, timeout=0.05)
+    assert conn.pending_code_intel_search == {}

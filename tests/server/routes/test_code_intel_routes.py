@@ -97,10 +97,20 @@ def _build_app(
 class _FakeHostRegistry:
     """Minimal host registry: ``get`` returns a connection or ``None``."""
 
-    def __init__(self, *, online: bool, code_intel_status: bool | None = True) -> None:
-        features = None
-        if code_intel_status is not None:
-            features = {"code_intel_status": code_intel_status}
+    def __init__(
+        self,
+        *,
+        online: bool,
+        code_intel_status: bool | None = True,
+        code_intel_search: bool | None = True,
+    ) -> None:
+        features: dict[str, bool] | None = None
+        if code_intel_status is not None or code_intel_search is not None:
+            features = {}
+            if code_intel_status is not None:
+                features["code_intel_status"] = code_intel_status
+            if code_intel_search is not None:
+                features["code_intel_search"] = code_intel_search
         self._conn = SimpleNamespace(hello=SimpleNamespace(features=features)) if online else None
 
     def get(self, host_id: str) -> object | None:
@@ -503,3 +513,122 @@ async def test_status_host_offline_falls_back(
 
     assert resp.status_code == 200
     assert resp.json()["status"] == "host_unsupported"
+
+
+# ── host remote search RPC (Phase 2d) ─────────────────────
+
+
+async def test_search_host_remote_returns_envelope_without_server_fs(
+    conv_store: SqlAlchemyConversationStore,
+    db_uri: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An online host returns remote search; the server never resolves FS."""
+
+    def _boom(*_a: object, **_k: object) -> Path:
+        raise AssertionError("server resolved a host workspace path")
+
+    async def _fake_search(
+        registry: object, conn: object, workspace: str, query: str, limit: int
+    ) -> dict:
+        return {
+            "repo_root": "",
+            "query": query,
+            "status": "ok",
+            "total": 1,
+            "results": [
+                {
+                    "name": "widget",
+                    "qualified_name": "pkg.widget",
+                    "label": "Function",
+                    "file": "pkg/mod.py",
+                    "signature": None,
+                    "return_type": None,
+                }
+            ],
+            "message": None,
+        }
+
+    monkeypatch.setattr("goalrail.server.routes.code_intel.resolve_repo_root", _boom)
+    monkeypatch.setattr(
+        "goalrail.server.routes.code_intel.request_code_intel_search", _fake_search
+    )
+    session_id = conv_store.create_conversation(
+        host_id=_register_host(db_uri), workspace="/host/only/repo"
+    ).id
+    engine = _FakeEngine(results=SearchResults(repo_root="/x", query="x", total=0, hits=[]))
+
+    async with await _client(
+        _build_app(conv_store, engine, host_registry=_FakeHostRegistry(online=True))
+    ) as c:
+        resp = await c.get(f"/v1/sessions/{session_id}/code-intel/search?q=widget")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "ok"
+    assert body["results"][0]["qualified_name"] == "pkg.widget"
+    assert engine.search_calls == 0
+
+
+async def test_search_host_remote_failure_falls_back(
+    conv_store: SqlAlchemyConversationStore,
+    db_uri: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A host search RPC failure degrades to host_unsupported."""
+    from goalrail.server.host_registry import HostCodeIntelError
+
+    async def _fail(
+        registry: object, conn: object, workspace: str, query: str, limit: int
+    ) -> dict:
+        raise HostCodeIntelError("host timed out")
+
+    monkeypatch.setattr("goalrail.server.routes.code_intel.request_code_intel_search", _fail)
+    session_id = conv_store.create_conversation(
+        host_id=_register_host(db_uri), workspace="/host/only/repo"
+    ).id
+    engine = _FakeEngine(results=SearchResults(repo_root="/x", query="x", total=0, hits=[]))
+
+    async with await _client(
+        _build_app(conv_store, engine, host_registry=_FakeHostRegistry(online=True))
+    ) as c:
+        resp = await c.get(f"/v1/sessions/{session_id}/code-intel/search?q=widget")
+
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "host_unsupported"
+
+
+async def test_search_host_without_feature_falls_back(
+    conv_store: SqlAlchemyConversationStore,
+    db_uri: str,
+) -> None:
+    """A host that doesn't advertise search support reports host_unsupported."""
+    session_id = conv_store.create_conversation(
+        host_id=_register_host(db_uri), workspace="/host/only/repo"
+    ).id
+    engine = _FakeEngine(results=SearchResults(repo_root="/x", query="x", total=0, hits=[]))
+
+    registry = _FakeHostRegistry(online=True, code_intel_search=False)
+    async with await _client(_build_app(conv_store, engine, host_registry=registry)) as c:
+        resp = await c.get(f"/v1/sessions/{session_id}/code-intel/search?q=widget")
+
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "host_unsupported"
+
+
+async def test_search_host_blank_query_rejected(
+    conv_store: SqlAlchemyConversationStore,
+    db_uri: str,
+) -> None:
+    """A blank query is rejected with 400 before any host RPC."""
+    session_id = conv_store.create_conversation(
+        host_id=_register_host(db_uri), workspace="/host/only/repo"
+    ).id
+    engine = _FakeEngine(results=SearchResults(repo_root="/x", query="x", total=0, hits=[]))
+
+    async with await _client(
+        _build_app(conv_store, engine, host_registry=_FakeHostRegistry(online=True))
+    ) as c:
+        resp = await c.get(f"/v1/sessions/{session_id}/code-intel/search?q=%20")
+
+    assert resp.status_code == 400

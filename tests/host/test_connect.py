@@ -22,6 +22,7 @@ from goalrail.host.connect import (
 )
 from goalrail.host.frames import (
     HARNESS_NOT_CONFIGURED_ERROR_CODE,
+    HostCodeIntelSearchFrame,
     HostCodeIntelStatusFrame,
     HostCodeIntelStatusResultFrame,
     HostCreateDirFrame,
@@ -2197,3 +2198,42 @@ async def test_dispatch_code_intel_status_does_not_block_frame_loop(
     assert isinstance(decoded, HostCodeIntelStatusResultFrame)
     assert decoded.request_id == "r_ci_bg"
     assert decoded.status == "ok"
+
+
+async def test_handle_code_intel_search_ok(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A successful host-side search is wrapped as a status='ok' result."""
+    import goalrail.host.connect as connect_mod
+
+    envelope = {"repo_root": "/repo", "query": "widget", "status": "ok", "total": 0, "results": []}
+    monkeypatch.setattr(
+        connect_mod,
+        "_compute_code_intel_search_envelope",
+        lambda workspace, query, limit: envelope,
+    )
+    host = _make_host_process()
+    result = await host._handle_code_intel_search(
+        HostCodeIntelSearchFrame(
+            request_id="r_cs_ok", workspace="~/repo", query="widget", limit=20
+        )
+    )
+    assert result.request_id == "r_cs_ok"
+    assert result.status == "ok"
+    assert result.envelope == envelope
+    assert result.error is None
+
+
+async def test_handle_code_intel_search_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A compute exception collapses to a status='failed' search result."""
+    import goalrail.host.connect as connect_mod
+
+    def _boom(workspace: str, query: str, limit: int) -> dict[str, object]:
+        raise RuntimeError("workspace gone")
+
+    monkeypatch.setattr(connect_mod, "_compute_code_intel_search_envelope", _boom)
+    host = _make_host_process()
+    result = await host._handle_code_intel_search(
+        HostCodeIntelSearchFrame(request_id="r_cs_fail", workspace="/missing", query="x", limit=10)
+    )
+    assert result.status == "failed"
+    assert result.envelope is None
+    assert "workspace gone" in (result.error or "")
