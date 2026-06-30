@@ -14,6 +14,7 @@
 #   --extra NAME  install an optional-dependency extra (repeatable, or
 #                 comma-separated), e.g. --extra cursor
 #   --non-interactive, --verbose
+#   --skip-code-intel-memory  skip the optional code intelligence companion
 #
 # uv and git (only with --repo) are required; the installer offers to install
 # them if missing. Node/npm are needed by the Claude/Codex/Pi harnesses, tmux
@@ -38,6 +39,10 @@ INSTALL_URL=
 NON_INTERACTIVE=false
 VERBOSE=false
 INSTALL_CODEBASE_MEMORY=true
+CODE_INTEL_MEMORY_PACKAGE_SPEC="code-intel-memory @ git+https://github.com/heurema/code-intel-memory.git@b98cabf511396e64c5271ef36c2a9598efdcc0b7#subdirectory=pkg/pypi"
+CODE_INTEL_MEMORY_BIN="code-intel-memory"
+LEGACY_CODEBASE_MEMORY_PACKAGE_SPEC="codebase-memory-mcp"
+LEGACY_CODEBASE_MEMORY_BIN="codebase-memory-mcp"
 ESC=$(printf '\033')
 RESET=
 BOLD=
@@ -80,7 +85,7 @@ print_banner() {
 }
 
 usage() {
-  printf 'Usage: install_oss.sh [--non-interactive] [--verbose] [--version X] [--repo URL] [--extra NAME] [--skip-codebase-memory]\n'
+  printf 'Usage: install_oss.sh [--non-interactive] [--verbose] [--version X] [--repo URL] [--extra NAME] [--skip-code-intel-memory]\n'
 }
 
 step() {
@@ -173,7 +178,7 @@ parse_args() {
       --verbose)
         VERBOSE=true
         ;;
-      --skip-codebase-memory)
+      --skip-code-intel-memory | --skip-codebase-memory)
         INSTALL_CODEBASE_MEMORY=false
         ;;
       --repo)
@@ -500,36 +505,88 @@ install_goalrail() {
   run_with_spinner "uv tool install" uv tool install --force -q --python "$PYTHON_VERSION" "$target"
 }
 
+find_tool_path() {
+  bin_dir="$1"
+  tool_name="$2"
+
+  tool_path="$bin_dir/$tool_name"
+  if [ ! -x "$tool_path" ]; then
+    tool_path="$(command -v "$tool_name" 2>/dev/null || true)"
+  fi
+  printf '%s\n' "$tool_path"
+}
+
+configure_code_intel_tool() {
+  bin_dir="$1"
+  tool_name="$2"
+
+  tool_path="$(find_tool_path "$bin_dir" "$tool_name")"
+  if [ -z "$tool_path" ]; then
+    warn "$tool_name installed, but the command was not found."
+    return 1
+  fi
+
+  if ! run_with_spinner "$tool_name --version" "$tool_path" --version; then
+    warn "$tool_name version check failed."
+    return 1
+  fi
+
+  if ! run_with_spinner "$tool_name config set auto_index true" "$tool_path" config set auto_index true; then
+    warn "$tool_name auto_index configuration failed. Run manually: $tool_path config set auto_index true"
+    return 1
+  fi
+
+  step "Configured $tool_name auto_index=true"
+  step "To review local agent config repair, run: $tool_path install --plan"
+  return 0
+}
+
+install_code_intel_candidate() {
+  bin_dir="$1"
+  package_spec="$2"
+  tool_name="$3"
+
+  if ! run_with_spinner "uv tool install $tool_name" uv tool install --force -q --python "$PYTHON_VERSION" "$package_spec"; then
+    warn "$tool_name companion install failed."
+    return 1
+  fi
+
+  if configure_code_intel_tool "$bin_dir" "$tool_name"; then
+    return 0
+  fi
+  return 2
+}
+
+cleanup_failed_code_intel_candidate() {
+  tool_name="$1"
+  # If the new source shim installs but cannot fetch a verified binary yet
+  # (for example before the fork publishes release assets), do not leave a
+  # broken higher-priority command on PATH. Goalrail probes code-intel-memory
+  # before the legacy codebase-memory-mcp alias.
+  run_with_spinner "uv tool uninstall $tool_name" sh -c 'uv tool uninstall -q "$1" >/dev/null 2>&1 || true' sh "$tool_name" || true
+}
+
 install_codebase_memory() {
   bin_dir="$1"
 
-  step "Installing codebase-memory-mcp companion tool (Python $PYTHON_VERSION)"
-  if ! run_with_spinner "uv tool install codebase-memory-mcp" uv tool install --force -q --python "$PYTHON_VERSION" codebase-memory-mcp; then
-    warn "codebase-memory-mcp companion install failed; continuing without codebase memory."
+  step "Installing code-intel-memory companion tool (Python $PYTHON_VERSION)"
+  if install_code_intel_candidate "$bin_dir" "$CODE_INTEL_MEMORY_PACKAGE_SPEC" "$CODE_INTEL_MEMORY_BIN"; then
+    return 0
+  else
+    code_intel_status=$?
+  fi
+
+  warn "code-intel-memory is not usable yet; falling back to legacy codebase-memory-mcp."
+  if [ "$code_intel_status" -eq 2 ]; then
+    cleanup_failed_code_intel_candidate "$CODE_INTEL_MEMORY_BIN"
+  fi
+
+  if install_code_intel_candidate "$bin_dir" "$LEGACY_CODEBASE_MEMORY_PACKAGE_SPEC" "$LEGACY_CODEBASE_MEMORY_BIN"; then
     return 0
   fi
 
-  cbm_path="$bin_dir/codebase-memory-mcp"
-  if [ ! -x "$cbm_path" ]; then
-    cbm_path="$(command -v codebase-memory-mcp 2>/dev/null || true)"
-  fi
-  if [ -z "$cbm_path" ]; then
-    warn "codebase-memory-mcp installed, but the command was not found; continuing without configuring auto_index."
-    return 0
-  fi
-
-  if ! run_with_spinner "codebase-memory-mcp --version" "$cbm_path" --version; then
-    warn "codebase-memory-mcp version check failed; continuing without configuring auto_index."
-    return 0
-  fi
-
-  if ! run_with_spinner "codebase-memory-mcp config set auto_index true" "$cbm_path" config set auto_index true; then
-    warn "codebase-memory-mcp auto_index configuration failed; continuing. Run manually: $cbm_path config set auto_index true"
-    return 0
-  fi
-
-  step "Configured codebase-memory-mcp auto_index=true"
-  step "To review local agent config repair, run: $cbm_path install --plan"
+  warn "code-intel companion install failed; continuing without code intelligence memory."
+  return 0
 }
 
 uv_tool_bin_dir() {
@@ -665,7 +722,7 @@ main() {
   if [ "$INSTALL_CODEBASE_MEMORY" = true ]; then
     install_codebase_memory "$bin_dir"
   else
-    step "Skipping codebase-memory-mcp companion install"
+    step "Skipping code-intel-memory companion install"
   fi
   maybe_add_bin_to_path "$bin_dir"
   print_next_steps "$bin_dir"

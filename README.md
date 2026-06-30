@@ -90,6 +90,9 @@ uv tool install -q --python 3.12 git+https://github.com/heurema/goalrail.git
 - **`uv`** (required). https://docs.astral.sh/uv/getting-started/installation/
   The installer offers to set this up for you.
 - **`git`** (required).
+- **`code-intel-memory`** (optional). The installer attempts to install and
+  configure the local code intelligence companion; pass
+  `--skip-code-intel-memory` to opt out.
 - **Node.js 22 LTS or newer** with **`npm`**, for the Claude, Codex, and Pi
   coding harnesses. `goalrail run` installs the harness CLI you pick.
   https://docs.npmjs.com/downloading-and-installing-node-js-and-npm

@@ -81,13 +81,20 @@ def test_parse_args_sets_flags(lib: Path) -> None:
     )
 
 
-def test_parse_args_can_skip_codebase_memory(lib: Path) -> None:
-    """``--skip-codebase-memory`` disables the optional companion install."""
-    r = run(lib, 'parse_args --skip-codebase-memory; echo "$INSTALL_CODEBASE_MEMORY"')
+def test_parse_args_can_skip_code_intel_memory(lib: Path) -> None:
+    """``--skip-code-intel-memory`` disables the optional companion install."""
+    r = run(lib, 'parse_args --skip-code-intel-memory; echo "$INSTALL_CODEBASE_MEMORY"')
     assert r.returncode == 0, r.stderr
     assert r.stdout.strip() == "false", (
-        f"The skip flag should disable codebase-memory-mcp, got {r.stdout.strip()!r}."
+        f"The skip flag should disable code-intel-memory, got {r.stdout.strip()!r}."
     )
+
+
+def test_parse_args_keeps_legacy_skip_codebase_memory_alias(lib: Path) -> None:
+    """The old skip flag remains accepted so existing install docs/scripts do not break."""
+    r = run(lib, 'parse_args --skip-codebase-memory; echo "$INSTALL_CODEBASE_MEMORY"')
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.strip() == "false"
 
 
 def test_parse_args_captures_version_and_repo(lib: Path) -> None:
@@ -338,10 +345,10 @@ def test_check_bubblewrap_missing_no_pkg_manager_warns_generically(
 
 
 def test_install_codebase_memory_runs_safe_companion_commands(lib: Path, tmp_path: Path) -> None:
-    """The companion install installs/checks CBM and enables auto-index only."""
-    cbm = tmp_path / "codebase-memory-mcp"
-    cbm.write_text("#!/bin/sh\nexit 0\n")
-    cbm.chmod(0o755)
+    """The companion install prefers code-intel-memory and enables auto-index only."""
+    cim = tmp_path / "code-intel-memory"
+    cim.write_text("#!/bin/sh\nexit 0\n")
+    cim.chmod(0o755)
     log = tmp_path / "commands.log"
     r = run(
         lib,
@@ -354,21 +361,86 @@ def test_install_codebase_memory_runs_safe_companion_commands(lib: Path, tmp_pat
     )
     assert r.returncode == 0, r.stderr
     lines = r.stdout.splitlines()
-    expected_install = (
-        "uv tool install codebase-memory-mcp uv tool install --force -q "
-        "--python 3.12 codebase-memory-mcp"
+    assert any(
+        line.startswith("uv tool install code-intel-memory uv tool install --force -q ")
+        and "git+https://github.com/heurema/code-intel-memory.git" in line
+        for line in lines
     )
-    assert expected_install in lines
+    assert any(line.endswith("code-intel-memory --version") for line in lines)
+    assert any(line.endswith("code-intel-memory config set auto_index true") for line in lines)
+    assert not any("codebase-memory-mcp" in line for line in lines)
+    assert not any(" install -y" in line for line in lines), (
+        "`code-intel-memory install -y` can repair agent config and should not "
+        "run automatically from the Goalrail installer."
+    )
+
+
+def test_install_codebase_memory_falls_back_to_legacy_without_broken_new_shim(
+    lib: Path, tmp_path: Path
+) -> None:
+    """If the new source shim cannot verify, uninstall it and use the legacy package."""
+    legacy = tmp_path / "codebase-memory-mcp"
+    legacy.write_text("#!/bin/sh\nexit 0\n")
+    legacy.chmod(0o755)
+    log = tmp_path / "commands.log"
+    r = run(
+        lib,
+        (
+            f"LOG={shlex.quote(str(log))}\n"
+            "run_with_spinner() {\n"
+            '  printf "%s\\n" "$*" >> "$LOG"\n'
+            '  case "$1" in\n'
+            '    "code-intel-memory --version") return 42 ;;\n'
+            "  esac\n"
+            "  return 0\n"
+            "}\n"
+            f"install_codebase_memory {shlex.quote(str(tmp_path))}\n"
+            'cat "$LOG"\n'
+        ),
+    )
+    assert r.returncode == 0, r.stderr
+    lines = r.stdout.splitlines()
+    assert any(line.startswith("uv tool install code-intel-memory ") for line in lines)
+    assert any(line.startswith("uv tool uninstall code-intel-memory ") for line in lines)
+    assert any(line.startswith("uv tool install codebase-memory-mcp ") for line in lines)
     assert any(line.endswith("codebase-memory-mcp --version") for line in lines)
     assert any(line.endswith("codebase-memory-mcp config set auto_index true") for line in lines)
-    assert not any(" install -y" in line for line in lines), (
-        "`codebase-memory-mcp install -y` can delete existing indexes and must "
-        "not run automatically."
+
+
+def test_install_codebase_memory_does_not_uninstall_existing_tool_after_install_failure(
+    lib: Path, tmp_path: Path
+) -> None:
+    """If the new install never succeeds, keep any previously working tool."""
+    legacy = tmp_path / "codebase-memory-mcp"
+    legacy.write_text("#!/bin/sh\nexit 0\n")
+    legacy.chmod(0o755)
+    log = tmp_path / "commands.log"
+    r = run(
+        lib,
+        (
+            f"LOG={shlex.quote(str(log))}\n"
+            "run_with_spinner() {\n"
+            '  printf "%s\\n" "$*" >> "$LOG"\n'
+            '  case "$1" in\n'
+            '    "uv tool install code-intel-memory") return 42 ;;\n'
+            "  esac\n"
+            "  return 0\n"
+            "}\n"
+            f"install_codebase_memory {shlex.quote(str(tmp_path))}\n"
+            'cat "$LOG"\n'
+        ),
     )
+    assert r.returncode == 0, r.stderr
+    lines = r.stdout.splitlines()
+    assert any(line.startswith("uv tool install code-intel-memory ") for line in lines)
+    assert not any(line.startswith("uv tool uninstall code-intel-memory ") for line in lines)
+    assert any(line.startswith("uv tool install codebase-memory-mcp ") for line in lines)
+    assert any(line.endswith("codebase-memory-mcp --version") for line in lines)
+    assert any(line.endswith("codebase-memory-mcp config set auto_index true") for line in lines)
 
 
 def test_install_codebase_memory_failure_warns_without_failing(lib: Path) -> None:
-    """CBM failures warn but never abort the base Goalrail installer."""
+    """Code-intel companion failures warn but never abort the base Goalrail installer."""
     r = run(
         lib,
         (
@@ -379,7 +451,7 @@ def test_install_codebase_memory_failure_warns_without_failing(lib: Path) -> Non
     )
     assert r.returncode == 0, r.stderr
     assert "continued" in r.stdout
-    assert "codebase-memory-mcp companion install failed" in r.stderr
+    assert "code-intel companion install failed" in r.stderr
 
 
 def test_verify_goalrail_uses_goalrail_entrypoint(lib: Path, tmp_path: Path) -> None:
