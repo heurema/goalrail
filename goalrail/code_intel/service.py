@@ -50,11 +50,18 @@ HOST_UNSUPPORTED_MESSAGE = "Code intelligence is not available for host workspac
 class _Engine(Protocol):
     """The subset of :class:`CodeIntelClient` the service needs."""
 
-    def index_status(self, repo_root: Path) -> IndexStatus: ...
+    def index_status(self, repo_root: Path) -> IndexStatus:
+        raise NotImplementedError
 
     def search(
-        self, repo_root: Path, query: str, *, limit: int = ..., label: str | None = ...
-    ) -> SearchResults: ...
+        self,
+        repo_root: Path,
+        query: str,
+        *,
+        limit: int = SEARCH_LIMIT_DEFAULT,
+        label: str | None = None,
+    ) -> SearchResults:
+        raise NotImplementedError
 
 
 def clamp_search_limit(limit: int) -> int:
