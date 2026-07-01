@@ -187,9 +187,10 @@ def _trusted_parent_for_bridge_dir(target: Path) -> Path:
     Return the trusted parent for an allowed bridge directory.
 
     Claude-native files live below the uid-scoped temp bridge root.
-    Codex-, Cursor-, and Qwen-native reuse the relay/MCP implementation but keep
-    bridge files below their own bridge roots. All roots use the same
-    owner-only ancestor validation; only the trusted anchor differs.
+    Codex-, Cursor-, Qwen-, Hermes-, Antigravity-, and OpenCode-native reuse the
+    relay/MCP implementation but keep bridge files below their own bridge roots.
+    All roots use the same owner-only ancestor validation; only the trusted
+    anchor differs.
 
     :param target: Normalized bridge directory path being created or validated,
         e.g. ``Path("/tmp/goalrail-501/claude-native/abc")``.
@@ -245,10 +246,23 @@ def _trusted_parent_for_bridge_dir(target: Path) -> Path:
         # bridge-owned directories below it.
         return _absolute_syntactic_path(hermes_root.parent.parent)
 
+    from goalrail.opencode_native_bridge import bridge_root as opencode_bridge_root
+
+    # opencode-native keeps its bridge files below the Goalrail data home, the
+    # same ``<data-home>/<harness>-native`` shape codex/antigravity use, so
+    # apply the identical anchor logic.
+    opencode_root = _absolute_syntactic_path(opencode_bridge_root())
+    if target.is_relative_to(opencode_root):
+        trusted_parent = _trusted_parent_for_data_home_bridge_root(
+            opencode_root,
+            "opencode-native",
+        )
+        return _absolute_syntactic_path(trusted_parent)
+
     raise RuntimeError(
         f"bridge dir {target!s} is not under an allowed bridge root "
         f"({claude_root!s}, {codex_root!s}, {cursor_root!s}, "
-        f"{antigravity_root!s}, {qwen_root!s}, {hermes_root!s})"
+        f"{antigravity_root!s}, {qwen_root!s}, {hermes_root!s}, {opencode_root!s})"
     )
 
 

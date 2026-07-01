@@ -49,6 +49,12 @@
       "AgentObject": {
         "description": "API representation of a registered agent.",
         "properties": {
+          "builtin": {
+            "default": false,
+            "description": "Whether this is a server-*seeded* built-in agent (deterministic, name-derived id) as opposed to an operator/user-registered template (random id, e.g. via `goalrail server --agent`) or a session-scoped upload. The Web UI's new-session picker uses this to decide whether a same-named `goalrail run` upload may shadow the catalog entry: seeded built-ins are protected, while a user-registered template is superseded by a newer same-named upload. Always `False` for session-scoped agents.",
+            "title": "Builtin",
+            "type": "boolean"
+          },
           "created_at": {
             "description": "Unix epoch timestamp of creation.",
             "title": "Created At",
@@ -2842,6 +2848,7 @@
             "session.sandbox_status": "#/components/schemas/SessionSandboxStatusEvent",
             "session.skills": "#/components/schemas/SessionSkillsEvent",
             "session.status": "#/components/schemas/SessionStatusEvent",
+            "session.superseded": "#/components/schemas/SessionSupersededEvent",
             "session.terminal.activity": "#/components/schemas/SessionTerminalActivityEvent",
             "session.terminal_pending": "#/components/schemas/SessionTerminalPendingEvent",
             "session.todos": "#/components/schemas/SessionTodosEvent",
@@ -2895,6 +2902,9 @@
           },
           {
             "$ref": "#/components/schemas/SessionCreatedEvent"
+          },
+          {
+            "$ref": "#/components/schemas/SessionSupersededEvent"
           },
           {
             "$ref": "#/components/schemas/SessionPresenceEvent"
@@ -3251,6 +3261,18 @@
             ],
             "description": "Built-in agent to bind the fork to, switching it away from the source's agent/harness (e.g. fork a Claude session into a Codex one, or a Claude-SDK session into Claude Code). When `None`, the fork keeps the source's agent. Must be a built-in agent (one listed by `GET /v1/agents`).",
             "title": "Agent Id"
+          },
+          "model_override": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Model id to launch the fork on, e.g. `\"databricks-gpt-5-4-mini\"` \u2014 the \"restart with model\" path. Overrides the model the fork would otherwise inherit from the source; the value is validated and family-checked against the fork's harness. When `None` (default), the fork keeps the source's model (within the same provider family).",
+            "title": "Model Override"
           },
           "title": {
             "anyOf": [
@@ -4347,7 +4369,7 @@
                 "type": "null"
               }
             ],
-            "description": "Per-session LLM model override, e.g. `\"claude-opus-4-7\"`. `None` means no override is active (the agent's `llm_model` applies). Set via `PATCH /v1/sessions/{id}` or the REPL's `/model` command; both write the same column so the ap-web UI and the TUI stay in sync.",
+            "description": "Per-session LLM model override, e.g. `\"claude-opus-4-7\"`. `None` means no override is active (the agent's `llm_model` applies). Set via `PATCH /v1/sessions/{id}` or the REPL's `/model` command; both write the same column so the web UI and the TUI stay in sync.",
             "title": "Model Override"
           },
           "parent_session_id": {
@@ -4739,6 +4761,53 @@
         "title": "SessionStatusEvent",
         "type": "object"
       },
+      "SessionSupersededEvent": {
+        "description": "This conversation was superseded by another and clients should\nfollow to it.\n\nEmitted by `_publish_session_superseded` in\n`goalrail/server/routes/sessions.py` when the claude-native\nforwarder rotates a session away on a Claude `/clear` (the old\nconversation keeps its history but the live terminal moves to a\nfresh conversation \u2014 see `_post_clear_supersession` in\n`goalrail/claude_native_forwarder.py`). A client actively viewing\nthe superseded conversation auto-redirects to `target_conversation_id`.\n\nCategory: **transient** (SSE-only), live-only by design. There is no\nSSE replay: a client that connects after the rotation does not get\nthis event. The durable counterpart is the persisted notice message\nappended to the old conversation (a `message` item linking to the\nnew conversation), which a reloading client renders instead of being\nforce-redirected.\n\nThe wire shape is FLAT (not enveloped):\n`{\"type\": \"session.superseded\", \"conversation_id\": <old>, \"target_conversation_id\": <new>, \"reason\": \"clear\"}`.",
+        "properties": {
+          "conversation_id": {
+            "description": "The superseded (old) conversation id this event rides the stream of, e.g. `\"conv_old\"`.",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "reason": {
+            "const": "clear",
+            "default": "clear",
+            "description": "Why the session was superseded. Currently always `\"clear\"` (a Claude Code `/clear`); kept as a field so the client can branch on future supersession causes.",
+            "title": "Reason",
+            "type": "string"
+          },
+          "sequence_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Sequence Number"
+          },
+          "target_conversation_id": {
+            "description": "The conversation to follow to, e.g. `\"conv_new\"`.",
+            "title": "Target Conversation Id",
+            "type": "string"
+          },
+          "type": {
+            "const": "session.superseded",
+            "description": "Always `\"session.superseded\"`.",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "conversation_id",
+          "target_conversation_id"
+        ],
+        "title": "SessionSupersededEvent",
+        "type": "object"
+      },
       "SessionSwitchAgentRequest": {
         "additionalProperties": false,
         "description": "Request body for `POST /v1/sessions/{id}/switch-agent`.\n\nRebinds an existing session in place to a different agent/harness,\nkeeping the same session (transcript, comments, files, workspace).\nUnlike fork, no new session is created.",
@@ -4796,7 +4865,7 @@
         "type": "object"
       },
       "SessionTerminalPendingEvent": {
-        "description": "Terminal spin-up status for a terminal-first session.\n\nTwo sources emit this event:\n\n1. The Goalrail server at `POST /v1/sessions` for host-launched\n   terminal-first sessions \u2014 the earliest possible point, before\n   the runner even starts, so the spinner appears immediately on\n   session create rather than after the runner boots.\n2. The Goalrail relay when the runner's `session.terminal_pending` frame\n   arrives \u2014 covers non-host-launched sessions (e.g. server-dispatched\n   sub-agents) and carries the authoritative `pending=False` clear\n   emitted by the runner's `finally` block.\n\nTogether they allow ap-web to show a spinner on the Terminal pill\nwhile the backend boots the terminal instead of a silent greyed-out\nbutton, and to distinguish \"still starting up\" from \"no terminal\"\n(killed or never created).",
+        "description": "Terminal spin-up status for a terminal-first session.\n\nTwo sources emit this event:\n\n1. The Goalrail server at `POST /v1/sessions` for host-launched\n   terminal-first sessions \u2014 the earliest possible point, before\n   the runner even starts, so the spinner appears immediately on\n   session create rather than after the runner boots.\n2. The Goalrail relay when the runner's `session.terminal_pending` frame\n   arrives \u2014 covers non-host-launched sessions (e.g. server-dispatched\n   sub-agents) and carries the authoritative `pending=False` clear\n   emitted by the runner's `finally` block.\n\nTogether they allow web to show a spinner on the Terminal pill\nwhile the backend boots the terminal instead of a silent greyed-out\nbutton, and to distinguish \"still starting up\" from \"no terminal\"\n(killed or never created).",
         "properties": {
           "conversation_id": {
             "description": "Session identifier, e.g. `\"conv_abc123\"`.",
@@ -4836,7 +4905,7 @@
         "type": "object"
       },
       "SessionTodosEvent": {
-        "description": "Todo-list update from a Claude Code terminal-backed session.\n\nEmitted after an `external_session_todos` POST from the\n`goalrail claude` transcript forwarder, which captures todo\nupdates via `PostToolUse`/`TodoWrite` hook events from Claude\nCode and forwards them to the Goalrail server. Lets ap-web render a\nlive todo panel in the right column without polling.",
+        "description": "Todo-list update from a Claude Code terminal-backed session.\n\nEmitted after an `external_session_todos` POST from the\n`goalrail claude` transcript forwarder, which captures todo\nupdates via `PostToolUse`/`TodoWrite` hook events from Claude\nCode and forwards them to the Goalrail server. Lets web render a\nlive todo panel in the right column without polling.",
         "properties": {
           "conversation_id": {
             "description": "Session identifier, e.g. `\"conv_abc123\"`.",
@@ -5525,7 +5594,7 @@
           },
           "silent": {
             "default": false,
-            "description": "When `True`, persist metadata changes but skip the runner-side side effects \u2014 specifically the native `/effort` / `/model` / Codex collaboration-mode forwards into the live runtime. Used by automatic bind-time handoffs (ap-web's sticky-pref apply on session switch, the REPL's pre-create `/model` snapshot) where injecting a visible slash command into a freshly-spawned pane would render as an unexpected \"Command model X\" item before the user has sent anything. Default `False` preserves the user-driven picker / `/model` behaviour where the live forward IS the desired feedback.",
+            "description": "When `True`, persist metadata changes but skip the runner-side side effects \u2014 specifically the native `/effort` / `/model` / Codex collaboration-mode forwards into the live runtime. Used by automatic bind-time handoffs (web's sticky-pref apply on session switch, the REPL's pre-create `/model` snapshot) where injecting a visible slash command into a freshly-spawned pane would render as an unexpected \"Command model X\" item before the user has sent anything. Default `False` preserves the user-driven picker / `/model` behaviour where the live forward IS the desired feedback.",
             "title": "Silent",
             "type": "boolean"
           },
@@ -5799,7 +5868,7 @@
     },
     "/health": {
       "get": {
-        "description": "Liveness check with optional session-scoped runner status.\n\nWithout session params, returns `{\"status\": \"ok\"}` (bare\nliveness). With `session_id`, adds a single `session`\nobject. With `session_ids` (comma-separated), adds a\n`sessions` dict keyed by id \u2014 used by the sidebar to\nbatch-check all visible sessions in one request. The batch\npath runs a single SQL `IN` query, not N per-id round-trips.\n\nEach per-session object carries both `runner_online` (strict\nrunner reachability) and `host_online` (host tunnel live, or\n`None` when the session has no host binding) \u2014 see\n`~goalrail.server.routes.sessions.SessionLiveness`.\n\n**Returns:** `{\"status\": \"ok\"}` with optional `session` and/or `sessions` fields. Each session object has shape `{\"runner_online\": bool, \"host_online\": bool | None}` (the single `session` object also includes its `id`).",
+        "description": "Liveness check with optional session-scoped runner status.\n\nWithout session params, returns `{\"status\": \"ok\"}` (bare\nliveness). With `session_id`, adds a single `session`\nobject. With `session_ids` (comma-separated), adds a\n`sessions` dict keyed by id \u2014 used by the sidebar to\nbatch-check all visible sessions in one request. The batch\npath runs a single SQL `IN` query, not N per-id round-trips.\n\nEach per-session object carries both `runner_online` (strict\nrunner reachability) and `host_online` (host tunnel live, or\n`None` when the session has no host binding) \u2014 see\n`~goalrail.server.routes.sessions.SessionLiveness`.\n\n**Returns:** `{\"status\": \"ok\"}` with optional `session` and/or `sessions` fields. Each session object has shape `{\"runner_online\": bool, \"host_online\": bool | None, \"host_version\": str | None}` (the single `session` object also includes its `id`). `host_version` is the bound host's reported version, or `None` when there's no host binding / the version isn't resolvable on this replica.",
         "operationId": "health_health_get",
         "parameters": [
           {
@@ -6346,7 +6415,7 @@
     },
     "/v1/info": {
       "get": {
-        "description": "Runtime capabilities probe for the SPA + CLI.\n\nReturned at app boot by the frontend (and by `goalrail login` when it needs to choose between flows). Drives\nconditional route registration and chrome on the SPA side\n\u2014 when `accounts_enabled` is false, the SPA never\nregisters `/login`, `/register`, `/members` and\nnever renders the AccountMenu, so the bundle behaves\nidentically to a pre-PR-2008 build for header / OIDC\ndeploys (in particular, the internal hosted product that\nsyncs from this repo).\n\nAuthentication: this endpoint is intentionally UNAUTHED\nso the SPA can probe it before holding a session cookie.\nIt exposes no sensitive state \u2014 only the active auth\nsource, the login URL, whether first-run admin setup is\nstill pending (`needs_setup`), coarse capability\nbooleans (`managed_sandboxes_enabled`) and the short\nsandbox provider name (`sandbox_provider`) the web UI labels\nthe new-session sandbox option with.",
+        "description": "Runtime capabilities probe for the SPA + CLI.\n\nReturned at app boot by the frontend (and by `goalrail login` when it needs to choose between flows). Drives\nconditional route registration and chrome on the SPA side\n\u2014 when `accounts_enabled` is false, the SPA never\nregisters `/login`, `/register`, `/members` and\nnever renders the AccountMenu, so the bundle behaves\nidentically to a pre-PR-2008 build for header / OIDC\ndeploys (in particular, the internal hosted product that\nsyncs from this repo).\n\nAuthentication: this endpoint is intentionally UNAUTHED\nso the SPA can probe it before holding a session cookie.\nIt exposes no sensitive state \u2014 only the active auth\nsource, the login URL, whether first-run admin setup is\nstill pending (`needs_setup`), coarse capability\nbooleans (`managed_sandboxes_enabled`), the short sandbox\nprovider name (`sandbox_provider`) the web UI labels the\nnew-session sandbox option with, and the installed\n`server_version` (already public via `/api/version`).",
         "operationId": "info_v1_info_get",
         "responses": {
           "200": {
@@ -6868,6 +6937,22 @@
               "title": "Kind",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project"
+            }
           }
         ],
         "responses": {
@@ -6911,6 +6996,26 @@
           }
         },
         "summary": "Create Session",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
+    "/v1/sessions/projects": {
+      "get": {
+        "description": "Return all project names for the authenticated user, ordered\nalphabetically.\n\nProjects are implicit: they exist while at least one session\nhas a `conversation_labels` row with `key=\"goalrail.project\"`.\n\n**Returns:** List of project names.",
+        "operationId": "list_session_projects_v1_sessions_projects_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Session Projects",
         "tags": [
           "sessions"
         ]

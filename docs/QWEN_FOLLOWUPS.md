@@ -129,7 +129,7 @@ comments; this is the *what*, not the *how*.)
 - [ ] **Composer status line: real model + context ring (Web UI).** For
   native-qwen the composer's model/effort chip is currently **hidden** (web UI
   flag `nativeVendorOwnsModel` in `chatStore.sessionBindingPatch` →
-  `ComposerStatusLine` in `ap-web/src/pages/ChatPage.tsx`). It was showing the
+  `ComposerStatusLine` in `web/src/pages/ChatPage.tsx`). It was showing the
   bound spec's *default* model (`claude-sonnet-4-6`) because the qwen-native-ui
   spec sets no model and qwen picks its model inside the vendor TUI (OpenAI-compat
   env / qwen's own `/model`), so Goalrail's `llmModel` was a misleading default.
@@ -140,9 +140,13 @@ comments; this is the *what*, not the *how*.)
   metadata. The forwarder (`goalrail/qwen_native_forwarder.py`) could parse it
   and report it onto the session so the chip reflects qwen's reality.
   - **Context ring + cost tracking also missing**, same root cause: native-qwen
-    emits no token usage, so `tokensUsed` / `contextWindow` stay null (the ring
-    renders only when `contextWindow > 0 && tokensUsed != null`) and the session
-    cost stays $0 (cost is derived from per-turn usage × model price). The ACP
+    doesn't yet parse/forward token usage, so `tokensUsed` / `contextWindow` stay
+    null (the ring renders only when `contextWindow > 0 && tokensUsed != null`)
+    and the session cost stays $0 (cost is derived from per-turn usage × model
+    price). The usage *is* on the stream, though — verified live (`qwen`
+    v0.18.2): each turn's final `assistant` event carries `message.usage`
+    (`{input_tokens, output_tokens, cache_read_input_tokens, total_tokens}`), so
+    the forwarder could parse it and POST `external_session_usage`. The ACP
     `qwen` harness already does this — see "Cost / token tracking" in *What works
     today* (`_accumulate_usage`); native-qwen needs the equivalent off the
     `--json-file` stream. Parse `result.usage` (`input_tokens` / `output_tokens`
@@ -181,38 +185,41 @@ comments; this is the *what*, not the *how*.)
 
 ### Medium
 
-- [ ] **Compaction / context-compression mirroring (TUI → web).** qwen calls
-  compaction *compression*: it auto-compresses when the context fills and exposes
-  a `/compress` command, rendering an inline item in its TUI
-  (`{type:"compression", compression:{isPending, originalTokenCount,
-  newTokenCount, compressionStatus}}` and an internal `chat_compressed` event).
-  Native-qwen does **not** surface any of this in the web UI today — during a
-  compression the Chat tab just shows the turn stall, and afterward the mirrored
-  token counts don't reflect the shrink. Goalrail already has the web-facing
-  primitives — `response.compaction.in_progress` / `.completed` / `.failed`
-  (`goalrail/runtime/compaction.py`, `goalrail/server/schemas.py:3158+`,
-  rendered by `ap-web` as the "Compacting…" spinner / compaction divider) — so
-  this is a *forwarder* change, not new UI.
-  - **Verify the wire shape first (live E2E):** confirm whether qwen emits a
-    structured compression marker on the `--json-file` dual-output stream (a
-    `compression`/`chat_compressed`-shaped event) the way it emits
-    `control_request` for approvals, or whether compression is TUI-only and must
-    be inferred (e.g. from a token-count drop between consecutive `assistant`
-    `usage` events, or a `system`-style notice). The `control_request` →
-    elicitation work proved the stream carries non-transcript control events, so
-    a compression event is plausible but unconfirmed — `permission_suggestions`
-    was null, so don't assume field richness.
-  - **Mirror it:** in `goalrail/qwen_native_forwarder.py`, on a
-    compression-in-progress marker publish `response.compaction.in_progress`
-    (POST to the session) so the spinner shows, and on completion publish
-    `response.compaction.completed` with the post-compression `total_tokens`
-    (pairs with the usage/context-ring work in the "Composer status line" item —
-    one usage path feeds the ring, cost, and the compaction token count). If the
-    stream has no compression event, scope this to "best-effort: emit completed
-    with the new token count when usage drops" and `log()` the limitation.
+- [x] **Compaction via `/compact` (web → TUI), with spinner + divider.**
+  Implemented, mirroring cursor-native PR #1259 — the web composer's `/compact`
+  now drives qwen's `/compress` in the TUI, with a "Compacting conversation…"
+  spinner that resolves to the "Conversation compacted" divider when qwen
+  actually finishes. Works for both explicit `/compact` and auto-compaction.
+  - **Server (existing, harness-agnostic):** `/compact` → forwards `{"type":
+    "compact"}` to the bound runner; a 200 means the control was handled in the
+    terminal (server skips its own AP-side compaction, which 400s on the
+    LLM-less native pseudo-agent).
+  - **Runner (`_handle_qwen_native_compact`):** publishes
+    `response.compaction.in_progress` (raises the spinner), submits `/compress`
+    via the **input file** (`submit_user_message`), returns 200; on failure
+    publishes `response.compaction.failed` (dismisses the spinner) + 503. Unlike
+    cursor's bracketed-paste, qwen's input-file `submit` routes through
+    `RemoteInputWatcher` → `submitQuery` (the keyboard's own path), which
+    processes the slash command directly — no autocomplete-dropdown trap, and no
+    `/compress` user bubble on the stream (verified live, `qwen` v0.18.2).
+  - **Completion signal — the chat recording, not the stream.** qwen emits **no**
+    compression event on the `--json-file` stream (`session_start`'s
+    `supported_events` omits it; the green "compressed from…" TUI line is an
+    internal `addItem`, never streamed). But it writes a `{"type":"system",
+    "subtype":"chat_compression","systemPayload":{"info":{originalTokenCount,
+    newTokenCount,compressionStatus}}}` record to its on-disk recording
+    (`~/.qwen/projects/<slug>/chats/<id>.jsonl`) the instant compression
+    finishes. `supervise_qwen_compaction_mirror` tails that recording (seeded at
+    EOF so a resumed session's prior records don't re-fire) and POSTs
+    `external_compaction_status` — `completed` on `compressionStatus == 1`,
+    `failed` on the `COMPRESSION_FAILED_*` codes (2/3) — which the server
+    republishes as `response.compaction.completed/failed`.
   - **Note on the ACP `qwen` harness:** the in-process executor compresses
     internally over ACP and is opaque to us (same boundary as the LLM-phase
     policy exclusion below), so this item is **native-qwen only**.
+  - **Follow-up:** the context ring won't shrink after compaction until usage is
+    forwarded as `external_session_usage` (see the "Composer status line" item) —
+    the recording's `newTokenCount` could feed that.
 
 - [ ] **Provider routing: settings.json precedence + token refresh.** The
   base injection now works (see What works today), but two gaps remain before

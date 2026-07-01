@@ -24,6 +24,7 @@ import json
 import secrets
 import sys
 import time
+from collections.abc import Callable
 
 import httpx
 
@@ -55,8 +56,35 @@ _USER_PROMPT_SUBMIT = "UserPromptSubmit"
 # body). Mirrors the runner-side fail-closed default in
 # ``goalrail.runner.app._evaluate_policy_via_goalrail`` (PR #163).
 _EVAL_UNAVAILABLE_REASON = (
-    "Goalrail policy evaluation unavailable; failing closed for this tool call."
+    "Goalrail policy evaluation unavailable (could not reach or authenticate to the "
+    "Goalrail server); failing closed for this tool call."
 )
+
+
+def _is_login_redirect_or_unauthorized(response: httpx.Response) -> bool:
+    """
+    Return ``True`` when a response means "the bearer is no good — re-auth".
+
+    A hosted deployment sitting behind a reverse proxy or SSO front door can
+    bounce an *expired* bearer with a login-page ``302`` redirect instead of
+    a ``401`` — so a hook that only treats ``401`` as auth failure would
+    silently fail closed once the one-shot ``ap_auth_headers`` token
+    (snapshotted at launch by ``build_hook_settings``) lapses. Treat both a
+    ``401`` and a login-flow redirect (``/oidc/`` or ``/.auth/``, the common
+    OIDC/SSO login-path shapes) as a re-auth signal.
+
+    Unrelated 3xx (an application-level redirect to another resource) return
+    ``False`` so the caller does not waste a token round-trip on every redirect.
+
+    :param response: The hook's POST response to classify.
+    :returns: ``True`` when the caller should re-mint a token and retry.
+    """
+    if response.status_code == 401:
+        return True
+    if not response.is_redirect:
+        return False
+    location = response.headers.get("location", "")
+    return "/oidc/" in location or "/.auth/" in location
 
 
 def hook_payload_to_evaluation_request(
@@ -293,6 +321,7 @@ def post_evaluate_with_retry(
     eval_request: dict[str, object],
     read_timeout: float,
     hook_label: str,
+    reauth: Callable[[], dict[str, str] | None] | None = None,
 ) -> httpx.Response | None:
     """
     POST to the Goalrail policy evaluate endpoint, retrying on transient errors.
@@ -326,6 +355,15 @@ def post_evaluate_with_retry(
         large (e.g. one day) to accommodate long-polling ASK gates.
     :param hook_label: Diagnostic label used in stderr messages,
         e.g. ``"evaluate-policy hook"`` or ``"codex evaluate-policy hook"``.
+    :param reauth: Optional callable that re-mints fresh auth headers when
+        the server bounces the request to a login-flow redirect (``302`` to
+        ``/oidc/`` or ``/.auth/``) or returns ``401`` — i.e. the one-shot
+        ``ap_auth_headers`` token lapsed. Called at most once; returning new
+        headers triggers an immediate retry with them, mirroring the runner's
+        refresh-capable :class:`~goalrail.runner._entry._RunnerBearerAuth`.
+        ``None`` (the default) keeps the legacy behavior for callers that have
+        no token source. Returning ``None`` from it falls through to the
+        normal failure handling (the caller fails closed).
     :returns: Successful :class:`httpx.Response`, or ``None`` when retries
         are exhausted or the error is non-retryable.
     """
@@ -338,10 +376,34 @@ def post_evaluate_with_retry(
     deadline = time.monotonic() + _EVALUATE_POLICY_RETRY_BUDGET_S
     backoff_s = _EVALUATE_POLICY_RETRY_INITIAL_BACKOFF_S
     timeout = httpx.Timeout(read_timeout, connect=_EVALUATE_POLICY_CONNECT_TIMEOUT_S)
+    reauthed = False
     while True:
         try:
             with httpx.Client(headers=headers, timeout=timeout) as client:
                 resp = client.post(url, json=request_body)
+                if (
+                    reauth is not None
+                    and not reauthed
+                    and _is_login_redirect_or_unauthorized(resp)
+                ):
+                    # The one-shot ``ap_auth_headers`` token lapsed: the server
+                    # (or a fronting proxy) bounces an expired bearer with a
+                    # 302→/oidc/ (or a 401). Re-mint and retry once with the
+                    # fresh token instead of failing closed — exactly as
+                    # ``_RunnerBearerAuth`` does for the runner's own
+                    # callbacks. Without this, every tool call on a session
+                    # older than the token lifetime fails CLOSED while chat
+                    # (refresh-capable) keeps working.
+                    refreshed = reauth()
+                    if refreshed:
+                        headers = refreshed
+                        reauthed = True
+                        print(
+                            f"goalrail {hook_label}: Goalrail auth expired "
+                            "(login redirect/401); re-minted token and retrying",
+                            file=sys.stderr,
+                        )
+                        continue
                 resp.raise_for_status()
                 return resp
         except httpx.HTTPStatusError as exc:

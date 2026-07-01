@@ -47,6 +47,8 @@ from goalrail.onboarding.provider_config import (
     FamilyConfig,
     ProviderEntry,
     default_provider_for_harness,
+    first_available_provider,
+    harness_family,
     load_config,
     load_providers,
 )
@@ -725,25 +727,32 @@ def _resolve_provider_for_build(
     spec: AgentSpec,
     *,
     harness_type: AgentHarnessType,
+    for_launch: bool = False,
 ) -> ProviderEntry | None:
-    """Resolve the generic provider that should route *harness_type*, if any.
+    """Resolve the provider that should route *harness_type*, if any.
 
-    Implements the provider branch of auth precedence:
+    The single credential resolver, shared by the spawn-env builders (with
+    *for_launch*) and the readout / cost / native paths (without). Precedence,
+    most explicit first:
 
-    1. ``spec.executor.auth`` is a :class:`ProviderAuth` → resolve that named
-       provider via the ``providers:`` config block, **failing loud** when no
-       such provider is declared.
-    2. The spec declares **no** auth at all → use the per-family global
-       default returned by :func:`default_provider_for_harness` for this
-       harness, if one is configured (``default: true``).
-
-    Returns ``None`` in every other case (a non-provider explicit auth, or no
-    provider configured), leaving the caller's existing branches untouched.
+    1. ``spec.executor.auth`` is a :class:`ProviderAuth` → that named provider
+       (fails loud when undeclared).
+    2. An :class:`ApiKeyAuth` (spec or global) → ``None`` (the claude-sdk /
+       openai-agents builders thread the key themselves).
+    3. The per-family global default (``providers: … default: true``), then an
+       ambient-detected default.
+    4. (``for_launch`` only) the first credential that can serve the family even
+       though it is not marked default — so a launch credentials the head (e.g.
+       Debby's codex head with only a never-defaulted credential) rather than
+       failing with "Invalid API key". Off for the readout / cost paths so they
+       never show a provider the user did not choose.
 
     :param spec: The agent spec.
     :param harness_type: Canonical workflow harness type, e.g. ``"codex"``.
-    :returns: The :class:`ProviderEntry` to route through, or ``None`` when
-        no provider applies.
+    :param for_launch: ``True`` for the spawn-env builders (permissive: fall
+        back to the first available credential). ``False`` (readout / cost /
+        native) keeps strict, config-only resolution with no fallback.
+    :returns: The :class:`ProviderEntry` to route through, or ``None``.
     :raises GoalrailError: If a named :class:`ProviderAuth` references a
         provider absent from the ``providers:`` block.
     """
@@ -763,23 +772,33 @@ def _resolve_provider_for_build(
                 code=ErrorCode.INVALID_INPUT,
             )
         return entry
-    # An explicit non-provider auth (api_key) takes its own branch; only the
-    # no-auth case consults a default.
     if auth is not None:
+        # ApiKeyAuth — threaded by the claude-sdk / openai-agents builders.
         return None
 
-    # No spec auth. Precedence — most explicit wins, ambient last:
-    #   1. an EXPLICIT provider default (providers: ... default: true);
-    #   2. else an EXPLICIT global ``auth:`` block — return None so the
-    #      caller's global-auth path runs, NOT shadowed by an ambient key;
-    #   3. else an AMBIENT-detected provider, so a fresh machine with only an
-    #      env key / CLI login still routes (first run without configure).
+    # No spec auth. Most explicit wins, ambient last, then a launch-only fallback.
     explicit_default = default_provider_for_harness(explicit_config, harness)
     if explicit_default is not None:
         return explicit_default
     if _load_global_auth() is not None:
+        # Global ApiKeyAuth — threaded by the builder's global-auth branch.
         return None
-    return default_provider_for_harness(effective_config_with_detected(explicit_config), harness)
+    effective = effective_config_with_detected(explicit_config)
+    ambient_default = default_provider_for_harness(effective, harness)
+    if ambient_default is not None:
+        return ambient_default
+    # Launch-only last resort: no default anywhere, but a credential that serves
+    # this family is configured (e.g. a workspace the user added but never set
+    # as the default). The runner is the one chokepoint every head (CLI, web
+    # UI, or a remote host) funnels through, so this credentials the head on
+    # every surface, for any agent. Resolved per spawn — nothing is persisted;
+    # the startup creds line names the same provider via
+    # :func:`first_available_provider`, so the readout cannot disagree.
+    if for_launch:
+        family = harness_family(harness)
+        if family is not None:
+            return first_available_provider(effective, family)
+    return None
 
 
 def _resolve_spec_model(spec: AgentSpec) -> str | None:
@@ -864,7 +883,7 @@ def _build_claude_sdk_spawn_env(
     # 2. Global config ~/.goalrail/config.yaml auth: — only when spec has
     #    no auth at all (same guard as openai-agents to prevent global defaults
     #    from silently overriding YAML-declared auth).
-    provider = _resolve_provider_for_build(spec, harness_type="claude-sdk")
+    provider = _resolve_provider_for_build(spec, harness_type="claude-sdk", for_launch=True)
     if provider is not None:
         configure_agent_harness_with_provider(env, provider, harness_type="claude-sdk")
     else:
@@ -975,20 +994,19 @@ def _build_codex_spawn_env(
 
     # Generic-provider branch: a ProviderAuth on the spec, or — when the spec
     # declares no auth — the per-family global default. See
-    # :func:`_resolve_provider_for_build`.
-    provider = _resolve_provider_for_build(spec, harness_type="codex")
+    # :func:`_resolve_provider_for_build`. Otherwise the existing path is
+    # unchanged.
+    provider = _resolve_provider_for_build(spec, harness_type="codex", for_launch=True)
     if provider is not None:
         configure_agent_harness_with_provider(env, provider, harness_type="codex")
-    else:
-        if "HARNESS_CODEX_GATEWAY" not in env and codex_config_provider_dismissed(load_config()):
-            # No provider resolved and no gateway transport configured — the
-            # executor's bridged ~/.codex/config.toml would still route this
-            # launch through its custom default model_provider, which the
-            # user explicitly Removed (dismissed). Pin codex's built-in
-            # provider so the dismissal holds at run time, not just in the
-            # configure listing. (Gateway mode is exempt: it pins its own
-            # generated provider, and the executor rejects a double pin.)
-            env["HARNESS_CODEX_MODEL_PROVIDER"] = "openai"
+    elif codex_config_provider_dismissed(load_config()):
+        # No credential resolved. If the user Removed codex's custom
+        # ~/.codex/config.toml provider (dismissed), pin the built-in ``openai``
+        # provider so the dismissal holds at run time — the executor's bridged
+        # config.toml would otherwise still route this launch through that removed
+        # default model_provider. (Gateway mode never reaches here: it resolves a
+        # provider above, and the executor rejects a double pin.)
+        env["HARNESS_CODEX_MODEL_PROVIDER"] = "openai"
     # Skills bridge — same shape as the claude-sdk variant. Always
     # set so the harness wrap doesn't fall back to its ``"all"``
     # default and override an explicit ``skills: none`` spec.
@@ -1041,8 +1059,9 @@ def _build_pi_spawn_env(
 
     # Generic-provider branch: a ProviderAuth on the spec, or — when the spec
     # declares no auth — the per-family global default. pi consumes both
-    # families (see :func:`_apply_provider_to_pi`).
-    provider = _resolve_provider_for_build(spec, harness_type="pi")
+    # families (see :func:`_apply_provider_to_pi`). Otherwise the existing
+    # path is unchanged.
+    provider = _resolve_provider_for_build(spec, harness_type="pi", for_launch=True)
     if provider is not None:
         configure_agent_harness_with_provider(env, provider, harness_type="pi")
     # Skills bridge — same shape as the claude-sdk + codex variants.
@@ -1090,7 +1109,7 @@ def _build_qwen_spawn_env(
     # Generic-provider branch: a ProviderAuth on the spec, or — when the spec
     # declares no auth — the per-family global default. qwen routes through
     # OpenAI-compatible providers.
-    provider = _resolve_provider_for_build(spec, harness_type="qwen")
+    provider = _resolve_provider_for_build(spec, harness_type="qwen", for_launch=True)
     if provider is not None:
         configure_agent_harness_with_provider(env, provider, harness_type="qwen")
     # NB: no skills bridge for qwen yet. Unlike the claude-sdk / codex
@@ -1224,7 +1243,7 @@ def _build_openai_agents_sdk_spawn_env(spec: AgentSpec) -> dict[str, str]:
     #    base URL / model and maps the openai family's wire_api to
     #    USE_RESPONSES. A spec's explicit ``use_responses`` still
     #    wins over the provider's wire_api.
-    provider = _resolve_provider_for_build(spec, harness_type="openai-agents-sdk")
+    provider = _resolve_provider_for_build(spec, harness_type="openai-agents-sdk", for_launch=True)
     if provider is not None:
         configure_agent_harness_with_provider(env, provider, harness_type="openai-agents-sdk")
         use_responses = spec.executor.config.get("use_responses")
@@ -2147,21 +2166,76 @@ def _find_spec_by_name(
     name: str,
 ) -> AgentSpec | None:
     """
-    Recursively search the spec tree for a sub-agent by name.
+    Resolve a sub-agent spec by name within the parent spec tree.
 
-    Sub-agent names are validated to be unique across the entire
-    spec tree, so this always finds at most one match.
+    Recursively searches ``spec.sub_agents`` (names are validated unique
+    across the tree, so at most one matches).
+
+    The one exception is the built-in ``__web_researcher`` sub-agent that
+    backs the ``web_fetch`` tool: ``WebFetchTool`` synthesizes its spec in
+    memory and appends it to the parent's live ``sub_agents`` list, but
+    that spec is never serialized into the parent's persisted bundle. A
+    child ``__web_researcher`` session boots by re-parsing the bundle
+    fresh (``runner/_entry.py`` spec resolver), so the researcher is
+    absent from the re-parsed tree and a plain search returns ``None``.
+    Every caller swaps to the resolved sub-spec only ``if ... is not
+    None`` and otherwise keeps the parent spec, which boots the child as
+    a full clone of the parent (runaway recursion via ``sys_session_send``
+    when the parent is a coordinator). To keep that fallback safe, the
+    researcher is reconstructed deterministically from the parent (the
+    same pure builder ``WebFetchTool`` uses) instead of returning ``None``,
+    but only when the parent actually declares the ``web_fetch`` builtin.
+    That builtin is the sole reason the researcher ever exists, so a parent
+    without it has no such child and the name falls through to normal
+    resolution (``None``). Reconstructing unconditionally would let a
+    caller-controlled ``sub_agent_name`` coerce any parent into a
+    shell-capable researcher (``build_researcher_spec`` synthesizes an
+    ``OSEnvSpec``), widening the parent's tool boundary.
 
     :param spec: The root agent spec to search.
     :param name: The sub-agent name to find,
         e.g. ``"researcher"``.
-    :returns: The matching sub-agent spec, or ``None`` if not
-        found.
+    :returns: The matching sub-agent spec, the reconstructed
+        ``__web_researcher`` spec when the parent declares ``web_fetch``
+        and the name matches, or ``None`` otherwise.
+    """
+    found = _search_sub_agent_tree(spec, name)
+    if found is not None:
+        return found
+    # Built-in web_fetch researcher: derived from the parent, never
+    # persisted in the bundle, so reconstruct it on a resolve-miss rather
+    # than letting callers fall back to the parent spec. Gated on the parent
+    # declaring the ``web_fetch`` builtin, the only reason the researcher
+    # exists (``WebFetchTool.__init__`` appends it). Imported lazily to keep
+    # the tools layer off this module's import path.
+    from goalrail.tools.builtins.web_fetch import RESEARCHER_NAME
+
+    if name == RESEARCHER_NAME and any(entry.name == "web_fetch" for entry in spec.tools.builtins):
+        from goalrail.tools.builtins.web_fetch import build_researcher_spec
+
+        return build_researcher_spec(spec)
+    return None
+
+
+def _search_sub_agent_tree(
+    spec: AgentSpec,
+    name: str,
+) -> AgentSpec | None:
+    """
+    Recursively search ``spec.sub_agents`` for a sub-agent named ``name``.
+
+    The pure tree search backing :func:`_find_spec_by_name`; kept separate
+    so the ``__web_researcher`` reconstruction in that function fires once
+    at the root rather than on every recursive frame.
+
+    :param spec: The agent spec whose sub-tree to search.
+    :param name: The sub-agent name to find.
+    :returns: The matching sub-agent spec, or ``None`` if not found.
     """
     for sa in spec.sub_agents:
         if sa.name == name:
             return sa
-        found = _find_spec_by_name(sa, name)
+        found = _search_sub_agent_tree(sa, name)
         if found is not None:
             return found
     return None

@@ -1448,11 +1448,17 @@ class TestBuildEnvAndDir(unittest.TestCase):
         config = executor._build_env_and_dir([], None, None, "openai/gpt-5-4")
         try:
             self.assertIn("PI_CODING_AGENT_DIR", config.env)
-            models_path = os.path.join(config.env["PI_CODING_AGENT_DIR"], "models.json")
-            self.assertTrue(os.path.exists(models_path))
+            managed_dir = Path(config.env["PI_CODING_AGENT_DIR"])
+            models_path = managed_dir / "models.json"
+            self.assertTrue(models_path.is_file())
             with open(models_path) as f:
                 data = json.load(f)
             self.assertIn("providers", data)
+            settings_path = managed_dir / "settings.json"
+            self.assertTrue(settings_path.is_file())
+            with open(settings_path) as f:
+                settings = json.load(f)
+            self.assertIn("retry", settings)
         finally:
             import shutil
 
@@ -1485,6 +1491,47 @@ class TestBuildEnvAndDir(unittest.TestCase):
             import shutil
 
             shutil.rmtree(config.tmp_dir, ignore_errors=True)
+
+
+def test_gateway_seeds_managed_settings_from_global_agent(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Gateway mode copies global Pi settings into the managed agent dir."""
+    global_agent = tmp_path / "pi-agent"
+    global_agent.mkdir()
+    (global_agent / "settings.json").write_text(
+        json.dumps({"extensions": ["/ext/demo.ts"], "packages": ["npm:@x/y"]}),
+        encoding="utf-8",
+    )
+    (global_agent / "npm").mkdir()
+    monkeypatch.setattr(
+        "goalrail.inner.pi_settings.DEFAULT_PI_AGENT_DIR",
+        global_agent,
+    )
+    with (
+        patch("goalrail.inner.pi_executor._find_pi_cli", return_value="/usr/bin/pi"),
+        patch(
+            "goalrail.inner.pi_executor._fetch_shell_command_token",
+            return_value="tok",
+        ),
+    ):
+        executor = PiExecutor(
+            gateway=True,
+            gateway_auth_command="printf token",
+            base_url_override="https://h.example.com/v1",
+            model="openai/gpt-5-4",
+        )
+
+    config = executor._build_env_and_dir([], None, None, "openai/gpt-5-4")
+    try:
+        managed_dir = Path(config.env["PI_CODING_AGENT_DIR"])
+        settings = json.loads((managed_dir / "settings.json").read_text(encoding="utf-8"))
+        assert settings["extensions"] == ["/ext/demo.ts"]
+        assert settings["packages"] == ["npm:@x/y"]
+        assert (managed_dir / "npm").is_symlink()
+    finally:
+        shutil.rmtree(config.tmp_dir, ignore_errors=True)
 
 
 # ---------------------------------------------------------------------------
