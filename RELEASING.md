@@ -5,7 +5,7 @@ version-lock together**:
 
 | Package | What it is |
 | --- | --- |
-| `goalrail` | core wheel (bundles the `ap-web` web UI) |
+| `goalrail` | core wheel (bundles the `web` web UI) |
 | `goalrail-client` | Python client SDK |
 | `goalrail-ui-sdk` | terminal UI SDK |
 

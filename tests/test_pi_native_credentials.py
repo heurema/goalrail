@@ -257,3 +257,27 @@ def test_anthropic_family_ignores_wire_api() -> None:
     assert provider.base_url == "https://api.anthropic.com"
     assert provider.model == "claude-4"
     assert provider.api_key == "sk-test"
+
+
+def test_model_override_beats_inline_family_default() -> None:
+    """A session model override wins over an inline family's default model."""
+    config = {
+        "providers": {
+            "anthropic": {
+                "kind": "key",
+                "default": True,
+                "anthropic": {
+                    "base_url": "https://api.anthropic.com",
+                    "api_key": "sk-test",
+                    "models": {"default": "claude-sonnet-4-6"},
+                },
+            }
+        }
+    }
+    provider = creds.resolve_pi_native_provider(
+        model="claude-opus-4-7", config_loader=lambda: config
+    )
+    assert provider is not None
+    assert provider.model == "claude-opus-4-7"
+    cfg = provider.to_models_config()
+    assert cfg["providers"]["goalrail"]["models"] == [{"id": "claude-opus-4-7"}]

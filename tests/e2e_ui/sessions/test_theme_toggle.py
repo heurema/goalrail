@@ -19,7 +19,7 @@ def _html_has_dark(page: Page) -> bool:
 
 def _stored_theme(page: Page) -> str | None:
     """The persisted legacy theme preference, if one exists."""
-    return page.evaluate("() => window.localStorage.getItem('ap-web-theme')")
+    return page.evaluate("() => window.localStorage.getItem('web-theme')")
 
 
 def _open_appearance(page: Page, base_url: str) -> None:
@@ -54,7 +54,7 @@ def test_forced_dracula_theme_overrides_stored_light_preference(
 ) -> None:
     """A stale stored light preference does not change the forced theme."""
     page.emulate_media(color_scheme="dark")
-    page.add_init_script("window.localStorage.setItem('ap-web-theme', 'light')")
+    page.add_init_script("window.localStorage.setItem('web-theme', 'light')")
 
     base_url, _session_id = seeded_session
     _open_appearance(page, base_url)

@@ -13,6 +13,7 @@ import json
 import logging
 import os
 import pathlib
+import re
 import sys
 from collections.abc import AsyncGenerator, Awaitable, Callable, Iterable
 from dataclasses import dataclass, field
@@ -193,7 +194,7 @@ WELCOME_HINTS = ["/help help", "Ctrl+O debug", "Ctrl+T show tools", "Esc cancel"
 # position 99.
 _LIST_ITEMS_PAGE_SIZE = 100
 
-# Sub-agent tree (state badge + ``↓`` menu). The depth cap mirrors ap-web's
+# Sub-agent tree (state badge + ``↓`` menu). The depth cap mirrors web's
 # ``MAX_TREE_DEPTH`` so the CLI tree matches the web Agents rail; the poll
 # cadence refreshes deeper levels (the SSE stream only carries the active
 # session's direct children) while sub-agents are active.
@@ -371,6 +372,7 @@ def _build_startup_header(
     from goalrail.onboarding.detected import effective_config_with_detected
     from goalrail.onboarding.provider_config import (
         describe_active_credential,
+        first_available_provider,
         load_config,
         surface_default_provider,
     )
@@ -396,7 +398,24 @@ def _build_startup_header(
             # pi scope, else the cross-family fallback).
             entry = surface_default_provider(config, fam)
             if entry is None:
-                label = "not configured"
+                # No default for this surface — but a launch falls back to the
+                # first credential that can serve it (the same
+                # first_available_provider the runtime spawn-env builders use).
+                # Name it so the header tells the truth: no default was chosen,
+                # yet the head WILL launch through this one.
+                fallback = first_available_provider(config, fam)
+                if fallback is None:
+                    label = "not configured"
+                else:
+                    cred_text = credential_label(
+                        fallback.kind,
+                        fallback.name,
+                        profile=fallback.profile,
+                        display_name=fallback.display_name,
+                    )
+                    label = (
+                        f"no default → will use {_header_glyph(fallback.kind)} {cred_text}"
+                    ).strip()
             else:
                 cred_text = credential_label(
                     entry.kind,
@@ -421,6 +440,7 @@ def _render_startup_banner_ansi(
     ui_name: str,
     *,
     server_url: str | None = None,
+    server_version: str | None = None,
     header: _StartupHeader | None = None,
 ) -> str:
     """
@@ -432,16 +452,25 @@ def _render_startup_banner_ansi(
 
     When *header* is supplied, the box becomes a Claude-Code-style header:
     the agent name (bold) plus dim rows for the one-line summary, the
-    model + credential, the working folder, and (for a remote server) the
-    server URL; a per-family creds line is appended beneath the box for
-    multi-vendor agents. When *header* is ``None`` the box keeps its
-    minimal form — just the name, with the server URL taking the single
-    info row when the host is non-loopback (keybinding hints live in the
-    bottom toolbar, so the hint row is omitted).
+    model + credential, the working folder, and the server URL (shown for
+    any target, loopback included) with the installed version appended
+    inline as ``"<url>  ·  server <ver>"``; a per-family creds line is
+    appended beneath the box for multi-vendor agents. When *header* is
+    ``None`` the box keeps its minimal form — just the name, with the
+    server URL taking the single info row when the host is non-loopback
+    (keybinding hints live in the bottom toolbar, so the hint row is
+    omitted).
 
     :param ui_name: Humanized agent label shown bold at the top of the box.
-    :param server_url: Base URL the REPL is connected to. Surfaced only
-        when the host is non-loopback. ``None`` skips it.
+    :param server_url: Base URL the REPL is connected to. In the header
+        box it's shown for any target (including a local
+        ``http://127.0.0.1:<port>`` dev server); the minimal banner still
+        surfaces it only when the host is non-loopback. ``None`` skips it.
+    :param server_version: Installed server version (e.g. ``"0.3.0.dev0"``)
+        from a best-effort ``GET /v1/info`` probe, rendered inline on the
+        server-URL row (or its own row if there's no URL). ``None`` (probe
+        failed /
+        not attempted) skips the row. Only consulted on the *header* path.
     :param header: Resolved header data (folder / model / credential /
         summary / creds line) from :func:`_build_startup_header`, or
         ``None`` for the minimal banner.
@@ -473,8 +502,20 @@ def _render_startup_banner_ansi(
     elif header.model_label:
         info_lines.append(BannerLine(header.model_label, dim=True))
     info_lines.append(BannerLine(header.folder, dim=True))
-    if remote and server_url is not None:
-        info_lines.append(BannerLine(server_url, dim=True))
+    # Server URL + installed version on one row: "<url>  ·  server <ver>".
+    # The URL is shown for ANY server target, loopback included — a local
+    # dev server (``http://127.0.0.1:<port>``) is meaningful context here,
+    # so "which server am I on / what version is it" reads as one line. The
+    # version comes from a best-effort ``GET /v1/info`` probe; when it's
+    # unresolved (slow / old server) only the URL shows, and when there's no
+    # URL at all the version stands on its own row.
+    if server_url is not None:
+        url_row = server_url
+        if server_version:
+            url_row = f"{server_url}  ·  server {server_version}"
+        info_lines.append(BannerLine(url_row, dim=True))
+    elif server_version:
+        info_lines.append(BannerLine(f"server {server_version}", dim=True))
 
     banner = startup_banner_strings(ui_name, info_lines=info_lines, art_color="#F43BA6")
     if header.creds_line:
@@ -489,6 +530,60 @@ def _render_startup_banner_ansi(
             f"  {_ANSI_DIM}{header.creds_line}{_ANSI_RESET}"
         )
     return banner.ansi
+
+
+async def _fetch_server_version(client: GoalrailClient) -> str | None:
+    """Best-effort server version for the header row, with a legacy fallback.
+
+    Tries ``GET /v1/info`` → ``server_version`` first, then falls back to
+    the long-standing ``GET /api/version`` → ``version`` endpoint. The
+    fallback matters for older servers (e.g. a staging deployment that
+    predates ``server_version`` landing in ``/v1/info``): ``/api/version``
+    has reported the same installed version for far longer, so the row
+    still fills in instead of waiting for that server to redeploy. Both
+    return the identical ``importlib.metadata`` version, so the fallback is
+    not a different value, just an older surface.
+
+    Routed through the REPL's already-connected :class:`GoalrailClient` so
+    the probe carries the SAME auth (bearer / cookie), base URL, and TLS /
+    custom-CA configuration the REPL is already using. These endpoints are
+    NOT universally unauthed — a hosted deployment (behind OIDC / accounts /
+    a Databricks front door) gates them like any other route, so a bare
+    credential-less GET would 401 and the version would silently never show
+    on exactly the remote servers where the URL row is displayed. Reusing
+    the authenticated client makes the probe answer there.
+
+    Because the client's ``httpx.AsyncClient`` is awaited directly (not run
+    on a thread), this never blocks the event loop. Each request is bounded
+    *per phase* (connect / read / write each 1.0s) so the worst case a
+    healthy-but-slow or unreachable server can add to the previously-instant
+    banner stays small — the connect phase, the dominant cost for an
+    unreachable host, fails within a second (and a dead host fails the first
+    request, so the fallback adds no latency there). Any failure —
+    unreachable, slow, 401/4xx/5xx, non-JSON, or a server too old to report
+    either field — returns ``None`` and the banner simply omits the version
+    row. A welcome-banner detail must never block or fail REPL boot, so this
+    swallows every error.
+
+    :param client: The connected client the REPL drives; its authenticated
+        ``_http`` and ``_base_url`` are reused for the probe.
+    :returns: The installed server version string (e.g. ``"0.3.0.dev0"``),
+        or ``None`` when it can't be resolved.
+    """
+    import httpx
+
+    timeout = httpx.Timeout(1.0)
+    # (endpoint, response key) pairs tried in order: the richer capabilities
+    # probe first, then the legacy version endpoint older servers still have.
+    for path, key in (("/v1/info", "server_version"), ("/api/version", "version")):
+        try:
+            resp = await client._http.get(f"{client._base_url}{path}", timeout=timeout)
+            version = resp.json().get(key)
+        except Exception:  # noqa: BLE001 — startup-UI boundary: never block boot on a banner detail
+            return None
+        if isinstance(version, str) and version:
+            return version
+    return None
 
 
 def _is_remote_server_url(url: str | None) -> bool:
@@ -1401,7 +1496,7 @@ class _SessionsChatReplAdapter:
         event's workflow already sees ``conv.model_override`` via the
         server-side fallback. After the session exists, persists
         through ``PATCH /v1/sessions/{id}`` (matching
-        :meth:`set_reasoning_effort`) so the ap-web picker and the
+        :meth:`set_reasoning_effort`) so the web picker and the
         REPL stay in sync on the next snapshot read.
 
         :param model: New model identifier, e.g. ``"claude-opus-4-7"``,
@@ -4203,8 +4298,20 @@ async def run_repl(
                 _header = _build_startup_header(harness, agent_description, used_families)
             except Exception:  # noqa: BLE001 — startup-UI boundary: a config read must never block REPL boot
                 _log.exception("Failed to build startup header; falling back to plain banner")
+        # Installed server version for the header's "server <ver>" row.
+        # Probed via the connected (authenticated) client so a short, bounded
+        # GET /v1/info never stalls boot and answers even on auth-gated hosted
+        # servers; None on any failure simply omits the row. Skipped entirely
+        # when there's no header — the minimal banner never renders the
+        # version, so there's no point paying even bounded probe latency.
+        server_version = await _fetch_server_version(client) if _header is not None else None
         _sys.stdout.write(
-            _render_startup_banner_ansi(ui_name, server_url=server_url, header=_header)
+            _render_startup_banner_ansi(
+                ui_name,
+                server_url=server_url,
+                server_version=server_version,
+                header=_header,
+            )
         )
         _sys.stdout.flush()
 
@@ -5656,8 +5763,12 @@ def _render_context_tree(
         + _CONTEXT_COIN_BUF * buf_coins
     )
 
-    free_tokens = max(context_window - message_tokens, 0)
     buf_tokens = int(context_window * buf_frac)
+    # Free space excludes the compaction buffer so the three rows partition the
+    # window (Messages + Free + Buffer = window) and each row's token count
+    # agrees with its own percentage. (Previously free omitted the buffer, so it
+    # read e.g. "920,150 tokens (72%)" — a count that is 92% of the window.)
+    free_tokens = max(context_window - message_tokens - buf_tokens, 0)
     used_pct = used_frac * 100.0
 
     tree.add(
@@ -7967,6 +8078,13 @@ def _render_history_item(
 _SLASH_COMMAND_ALIASES: frozenset[str] = frozenset({"/?", "/exit"})
 
 
+# A skill name must read as a slash-command token: an alphanumeric start then
+# word chars, ``:`` (Claude ``plugin:skill``), or ``-`` (Cursor ``plugin--skill``).
+# Rejects whitespace, ``/``, and control characters. Mirrors the web composer's
+# SLASH_COMMAND_RE so the terminal and the menu agree on what is a command.
+_SKILL_COMMAND_NAME_RE = re.compile(r"^[A-Za-z0-9][\w:-]*$")
+
+
 def register_skill_commands(skills: list[SkillSpec]) -> list[str]:
     """
     Auto-register each discovered skill as a REPL slash command.
@@ -7976,6 +8094,12 @@ def register_skill_commands(skills: list[SkillSpec]) -> list[str]:
     global :data:`COMMANDS` registry. Collisions are skipped with a
     warning log so built-in commands always win.
 
+    Skills marked ``user-invocable: false`` are skipped — they are
+    internal orchestration skills, not user-typeable slash commands, so
+    they must not appear in the REPL's slash-command/autocomplete surface
+    (the same contract the web composer menu honors). The skill stays
+    loadable by the agent itself; only the user-facing command is hidden.
+
     :param skills: The agent's parsed skill list.
     :returns: List of registered command names (e.g. ``["/code-review"]``).
         Callers should pass this to :func:`unregister_skill_commands`
@@ -7983,6 +8107,17 @@ def register_skill_commands(skills: list[SkillSpec]) -> list[str]:
     """
     registered: list[str] = []
     for skill in skills:
+        if not skill.user_invocable:
+            continue
+        if not _SKILL_COMMAND_NAME_RE.match(skill.name):
+            # A name with whitespace, ``/``, or control chars yields an
+            # uninvocable or colliding command — skip + warn rather than
+            # register garbage. Mirrors the web composer's SLASH_COMMAND_RE.
+            _log.warning(
+                "Skill %r skipped: name is not a valid slash-command token",
+                skill.name,
+            )
+            continue
         cmd_name = f"/{skill.name}"
         if cmd_name in COMMANDS:
             _log.warning(

@@ -962,6 +962,89 @@ class TestSystemMessages(unittest.TestCase):
             self.assertIsInstance(events[0], ExecutorError)
             self.assertIn("authentication failed", events[0].message)
             self.assertIn("401", events[0].message)
+            # Non-gateway executor should suggest checking CLI login, not databrickscfg
+            self.assertIn("claude /status", events[0].message)
+            self.assertNotIn("databrickscfg", events[0].message)
+
+        _run(_t())
+
+    def test_auth_retry_gateway_mentions_base_url(self):
+        """Generic gateway auth errors should mention ANTHROPIC_BASE_URL / gateway auth."""
+        from claude_agent_sdk.types import (
+            ClaudeAgentOptions as SDKClaudeAgentOptions,
+        )
+        from claude_agent_sdk.types import (
+            StreamEvent as SDKStreamEvent,
+        )
+        from claude_agent_sdk.types import (
+            SystemMessage as SDKSystemMessage,
+        )
+
+        from goalrail.inner.claude_sdk_executor import ClaudeSDKExecutor
+
+        class _Sentinel:
+            pass
+
+        class _FakeSDK:
+            AssistantMessage = _Sentinel
+            ResultMessage = _Sentinel
+            UserMessage = _Sentinel
+            SystemMessage = SDKSystemMessage
+            StreamEvent = SDKStreamEvent
+            ClaudeAgentOptions = SDKClaudeAgentOptions
+            messages = [
+                SDKSystemMessage(
+                    subtype="api_retry",
+                    data={
+                        "type": "system",
+                        "subtype": "api_retry",
+                        "attempt": 1,
+                        "max_retries": 10,
+                        "retry_delay_ms": 500,
+                        "error_status": 401,
+                        "error": "authentication_failed",
+                    },
+                )
+            ]
+
+            class ClaudeSDKClient:
+                def __init__(self, options):
+                    self.options = options
+
+                async def connect(self):
+                    return None
+
+                async def query(self, prompt, session_id="default"):
+                    return None
+
+                async def receive_response(self):
+                    for message in _FakeSDK.messages:
+                        yield message
+
+                async def disconnect(self):
+                    return None
+
+        async def _t():
+            executor = ClaudeSDKExecutor(
+                gateway=True,
+                base_url_override="https://gateway.example/anthropic",
+                gateway_auth_command="printf %s sk-...",
+            )
+            with patch("goalrail.inner.claude_sdk_executor._ensure_sdk", return_value=_FakeSDK):
+                events = [
+                    e
+                    async for e in executor.run_turn(
+                        [{"role": "user", "content": "hello"}],
+                        [],
+                        "",
+                    )
+                ]
+            self.assertEqual(len(events), 1)
+            self.assertIsInstance(events[0], ExecutorError)
+            self.assertIn("authentication failed", events[0].message)
+            # Gateway executor should mention base URL / gateway auth, not databrickscfg
+            self.assertIn("ANTHROPIC_BASE_URL", events[0].message)
+            self.assertNotIn("databrickscfg", events[0].message)
 
         _run(_t())
 
