@@ -138,6 +138,6 @@ function assert(name, cond, detail) {
   assert("non-fork PR is skipped", r.added.length === 0 && r.removed.length === 0, JSON.stringify(r));
 
   // 9. scope guard: fork PR authored by a maintainer -> nothing assigned.
-  r = await run({ files: ["goalrail/inner/foo.py"], author: "dhruv0811" });
+  r = await run({ files: ["goalrail/inner/foo.py"], author: "t3chn" });
   assert("maintainer-authored fork PR is skipped", r.added.length === 0 && r.removed.length === 0, JSON.stringify(r));
 })();

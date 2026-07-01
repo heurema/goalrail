@@ -916,13 +916,11 @@ function startInboxPoller(pi, config, handleInterrupt, handleCompact) {
         // status edge and the unavailable-context error item, so its returned
         // promise is intentionally discarded: there is nothing for the poller
         // to retry or clean up.
-        if (typeof handleCompact === "function") {
-          handleCompact(
-            typeof payload.custom_instructions === "string"
-              ? payload.custom_instructions
-              : undefined,
-          );
-        }
+        handleCompact(
+          typeof payload.custom_instructions === "string"
+            ? payload.custom_instructions
+            : undefined,
+        );
       }
       if (id !== null) rememberSeen(id);
       try {
