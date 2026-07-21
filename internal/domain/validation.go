@@ -284,6 +284,7 @@ func ValidateIntentAmendment(previous, next IntentSnapshot, kind AmendmentKind) 
 			v.add("amendment.wording.confirmation_changed", "confirmation", "wording-only edit must preserve confirmation")
 		}
 		validateSameIntentItemIDs(v, previous, next)
+		validateWordingOnlyProvenance(v, previous, next)
 	default:
 		v.add("amendment.kind.invalid", "kind", "amendment kind must be wording_only or material")
 	}
@@ -337,6 +338,63 @@ func validateSameIntentItemIDs(v *validator, previous, next IntentSnapshot) {
 			}
 		}
 	}
+}
+
+func validateWordingOnlyProvenance(v *validator, previous, next IntentSnapshot) {
+	previousEvidence := make(map[SourceEvidenceID]SourceEvidence, len(previous.SourceEvidence))
+	for _, evidence := range previous.SourceEvidence {
+		previousEvidence[evidence.ID] = evidence
+	}
+	if len(previous.SourceEvidence) != len(next.SourceEvidence) {
+		v.add("amendment.wording.source_evidence_changed", "source_evidence", "wording-only edit must preserve source evidence")
+	} else {
+		for index, evidence := range next.SourceEvidence {
+			previousValue, exists := previousEvidence[evidence.ID]
+			if !exists || previousValue != evidence {
+				v.add(
+					"amendment.wording.source_evidence_changed",
+					fmt.Sprintf("source_evidence[%d]", index),
+					"wording-only edit must preserve source evidence",
+				)
+			}
+		}
+	}
+
+	previousItems := make(map[IntentItemID]IntentItem)
+	for _, group := range intentGroups(previous) {
+		for _, item := range group.items {
+			previousItems[item.ID] = item
+		}
+	}
+	for _, group := range intentGroups(next) {
+		for index, item := range group.items {
+			previousItem, exists := previousItems[item.ID]
+			if exists && !sameEvidenceReferenceSet(previousItem.EvidenceRefs, item.EvidenceRefs) {
+				v.add(
+					"amendment.wording.evidence_refs_changed",
+					fmt.Sprintf("%s[%d].evidence_refs", group.name, index),
+					"wording-only edit must preserve each intent item's evidence references",
+				)
+			}
+		}
+	}
+}
+
+func sameEvidenceReferenceSet(left, right []SourceEvidenceID) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	references := make(map[SourceEvidenceID]uint32, len(left))
+	for _, reference := range left {
+		references[reference]++
+	}
+	for _, reference := range right {
+		if references[reference] == 0 {
+			return false
+		}
+		references[reference]--
+	}
+	return true
 }
 
 func validateStableIntentItemIDs(v *validator, previous, next IntentSnapshot) {

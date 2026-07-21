@@ -29,11 +29,12 @@ const (
 )
 
 var (
-	ErrIntegrity         = errors.New("evidence record integrity violation")
-	ErrSensitivePayload  = errors.New("evidence event contains disallowed payload")
-	ErrDuplicateEventID  = errors.New("duplicate evidence event ID")
-	ErrInvalidCorrection = errors.New("invalid evidence correction")
-	ErrInvalidEvent      = errors.New("invalid evidence event")
+	ErrIntegrity                   = errors.New("evidence record integrity violation")
+	ErrSensitivePayload            = errors.New("evidence event contains disallowed payload")
+	ErrDuplicateEventID            = errors.New("duplicate evidence event ID")
+	ErrInvalidCorrection           = errors.New("invalid evidence correction")
+	ErrInvalidEvent                = errors.New("invalid evidence event")
+	ErrInterprocessLockUnsupported = errors.New("evidence interprocess locking is unsupported")
 
 	digestPattern  = regexp.MustCompile(`^[0-9a-f]{64}$`)
 	traceIDPattern = regexp.MustCompile(`^[0-9a-f]{32}$`)
@@ -78,8 +79,8 @@ var sensitiveFragments = []string{
 }
 
 // Store owns one append-only JSONL file. Store instances for the same cleaned
-// path share an in-process lock. Cross-process races fail closed through the
-// sequence and digest-chain verification on the next operation.
+// path share an in-process lock. A sibling coordination file carries an OS
+// lock so cooperating processes serialize complete transactions.
 type Store struct {
 	path string
 	mu   *sync.Mutex
@@ -119,6 +120,18 @@ func (s *Store) Append(event domain.EvidenceEvent) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	if err := os.MkdirAll(filepath.Dir(s.path), 0o750); err != nil {
+		return fmt.Errorf("create evidence directory: %w", err)
+	}
+	lockFile, err := s.openProcessLock(true)
+	if err != nil {
+		return err
+	}
+	defer closeLockedFile(lockFile)
+	if _, err := s.inspectEvidencePath(); err != nil {
+		return err
+	}
+
 	records, err := s.readRecords()
 	if err != nil {
 		return err
@@ -150,28 +163,11 @@ func (s *Store) Append(event domain.EvidenceEvent) error {
 	}
 	line = append(line, '\n')
 
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o750); err != nil {
-		return fmt.Errorf("create evidence directory: %w", err)
-	}
-	if info, err := os.Lstat(s.path); err == nil {
-		if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
-			return fmt.Errorf("%w: evidence path is not a regular file", ErrIntegrity)
-		}
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("inspect evidence path: %w", err)
-	}
-
-	file, err := os.OpenFile(s.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	file, err := s.openEvidenceForAppend()
 	if err != nil {
-		return fmt.Errorf("open evidence record: %w", err)
+		return err
 	}
 	defer file.Close()
-	if info, statErr := file.Stat(); statErr != nil {
-		return fmt.Errorf("inspect open evidence record: %w", statErr)
-	} else if !info.Mode().IsRegular() {
-		return fmt.Errorf("%w: open evidence path is not a regular file", ErrIntegrity)
-	}
-
 	written, err := file.Write(line)
 	if err != nil {
 		return fmt.Errorf("append evidence record: %w", err)
@@ -190,6 +186,22 @@ func (s *Store) ReadAll() ([]domain.EvidenceEvent, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	if err := os.MkdirAll(filepath.Dir(s.path), 0o750); err != nil {
+		return nil, fmt.Errorf("create evidence directory: %w", err)
+	}
+	lockFile, err := s.openProcessLock(false)
+	if err != nil {
+		return nil, err
+	}
+	defer closeLockedFile(lockFile)
+	exists, err := s.inspectEvidencePath()
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, nil
+	}
+
 	records, err := s.readRecords()
 	if err != nil {
 		return nil, err
@@ -206,8 +218,88 @@ func (s *Store) ReadAll() ([]domain.EvidenceEvent, error) {
 func (s *Store) Verify() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	_, err := s.readRecords()
+	if err := os.MkdirAll(filepath.Dir(s.path), 0o750); err != nil {
+		return fmt.Errorf("create evidence directory: %w", err)
+	}
+	lockFile, err := s.openProcessLock(false)
+	if err != nil {
+		return err
+	}
+	defer closeLockedFile(lockFile)
+	exists, err := s.inspectEvidencePath()
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return nil
+	}
+	_, err = s.readRecords()
 	return err
+}
+
+func (s *Store) inspectEvidencePath() (bool, error) {
+	info, err := os.Lstat(s.path)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("inspect evidence path: %w", err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+		return false, fmt.Errorf("%w: evidence path is not a regular file", ErrIntegrity)
+	}
+	return true, nil
+}
+
+func (s *Store) openProcessLock(exclusive bool) (*os.File, error) {
+	lockPath := s.path + ".lock"
+	if info, err := os.Lstat(lockPath); err == nil {
+		if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+			return nil, fmt.Errorf("%w: evidence lock path is not a regular file", ErrIntegrity)
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return nil, fmt.Errorf("inspect evidence lock path: %w", err)
+	}
+
+	file, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, fmt.Errorf("open evidence lock: %w", err)
+	}
+	if info, statErr := file.Stat(); statErr != nil {
+		file.Close()
+		return nil, fmt.Errorf("inspect open evidence lock: %w", statErr)
+	} else if !info.Mode().IsRegular() {
+		file.Close()
+		return nil, fmt.Errorf("%w: open evidence lock path is not a regular file", ErrIntegrity)
+	}
+	if err := lockEvidenceFile(file, exclusive); err != nil {
+		file.Close()
+		return nil, err
+	}
+	return file, nil
+}
+
+func (s *Store) openEvidenceForAppend() (*os.File, error) {
+	if _, err := s.inspectEvidencePath(); err != nil {
+		return nil, err
+	}
+	file, err := os.OpenFile(s.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		return nil, fmt.Errorf("open evidence record: %w", err)
+	}
+	if info, statErr := file.Stat(); statErr != nil {
+		file.Close()
+		return nil, fmt.Errorf("inspect open evidence record: %w", statErr)
+	} else if !info.Mode().IsRegular() {
+		file.Close()
+		return nil, fmt.Errorf("%w: open evidence path is not a regular file", ErrIntegrity)
+	}
+	return file, nil
+}
+
+func closeLockedFile(file *os.File) {
+	_ = unlockEvidenceFile(file)
+	_ = file.Close()
 }
 
 func (s *Store) readRecords() ([]diskRecord, error) {
@@ -219,6 +311,9 @@ func (s *Store) readRecords() ([]diskRecord, error) {
 		return nil, fmt.Errorf("open evidence record: %w", err)
 	}
 	defer file.Close()
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		return nil, fmt.Errorf("seek evidence record: %w", err)
+	}
 	if info, statErr := file.Stat(); statErr != nil {
 		return nil, fmt.Errorf("inspect evidence record: %w", statErr)
 	} else if !info.Mode().IsRegular() {

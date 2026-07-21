@@ -2,9 +2,13 @@ package evidence
 
 import (
 	"bytes"
+	"context"
 	"errors"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +17,233 @@ import (
 )
 
 var testTime = time.Date(2026, time.July, 21, 12, 0, 0, 0, time.UTC)
+
+const crossProcessHelperEnv = "GOALRAIL_TEST_EVIDENCE_HELPER"
+
+func TestStoreSerializesConcurrentProcesses(t *testing.T) {
+	const processCount = 8
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	dir := t.TempDir()
+	evidencePath := filepath.Join(dir, "events.jsonl")
+	gatePath := filepath.Join(dir, "start")
+	type childProcess struct {
+		command *exec.Cmd
+		output  *bytes.Buffer
+	}
+	children := make([]childProcess, 0, processCount)
+	readyPaths := make([]string, 0, processCount)
+	for index := 1; index <= processCount; index++ {
+		suffix := strconv.Itoa(index)
+		readyPath := filepath.Join(dir, "ready-"+suffix)
+		output := &bytes.Buffer{}
+		command := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestStoreConcurrentAppendHelper$")
+		command.Env = append(os.Environ(),
+			crossProcessHelperEnv+"=1",
+			"GOALRAIL_TEST_EVIDENCE_PATH="+evidencePath,
+			"GOALRAIL_TEST_EVIDENCE_GATE="+gatePath,
+			"GOALRAIL_TEST_EVIDENCE_READY="+readyPath,
+			"GOALRAIL_TEST_EVIDENCE_INDEX="+suffix,
+		)
+		command.Stdout = output
+		command.Stderr = output
+		if err := command.Start(); err != nil {
+			t.Fatalf("start helper %d: %v", index, err)
+		}
+		children = append(children, childProcess{command: command, output: output})
+		readyPaths = append(readyPaths, readyPath)
+	}
+
+	waitForReadyFiles(t, ctx, readyPaths)
+	if err := os.WriteFile(gatePath, []byte("start\n"), 0o600); err != nil {
+		t.Fatalf("release helpers: %v", err)
+	}
+	for index, child := range children {
+		if err := child.command.Wait(); err != nil {
+			t.Fatalf("helper %d: %v\n%s", index+1, err, child.output.String())
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		t.Fatalf("concurrent append deadline: %v", err)
+	}
+
+	store, err := NewStore(evidencePath)
+	if err != nil {
+		t.Fatalf("open concurrent store: %v", err)
+	}
+	if err := store.Verify(); err != nil {
+		t.Fatalf("verify concurrent store: %v", err)
+	}
+	events, err := store.ReadAll()
+	if err != nil {
+		t.Fatalf("read concurrent store: %v", err)
+	}
+	if len(events) != processCount {
+		t.Fatalf("event count = %d, want %d", len(events), processCount)
+	}
+	seen := make(map[domain.EvidenceEventID]struct{}, processCount)
+	for _, event := range events {
+		if _, duplicate := seen[event.ID]; duplicate {
+			t.Fatalf("duplicate event %q", event.ID)
+		}
+		seen[event.ID] = struct{}{}
+	}
+	for index := 1; index <= processCount; index++ {
+		id := domain.EvidenceEventID("event-" + strconv.Itoa(index))
+		if _, exists := seen[id]; !exists {
+			t.Fatalf("missing event %q", id)
+		}
+	}
+}
+
+func TestStoreReadersWaitForInProgressFirstAppend(t *testing.T) {
+	templateStore := newTestStore(t)
+	event := validLineageEvent("event-committed")
+	if err := templateStore.Append(event); err != nil {
+		t.Fatalf("append template event: %v", err)
+	}
+	templateBytes := readStoreFile(t, templateStore)
+
+	operations := []struct {
+		name string
+		run  func(*Store) error
+	}{
+		{
+			name: "read all",
+			run: func(store *Store) error {
+				events, err := store.ReadAll()
+				if err != nil {
+					return err
+				}
+				if len(events) != 1 || events[0].ID != event.ID {
+					return fmt.Errorf("events = %#v, want committed event %q", events, event.ID)
+				}
+				return nil
+			},
+		},
+		{name: "verify", run: func(store *Store) error { return store.Verify() }},
+	}
+	for _, operation := range operations {
+		t.Run(operation.name, func(t *testing.T) {
+			dir := t.TempDir()
+			evidencePath := filepath.Join(dir, "events.jsonl")
+			store, err := NewStore(evidencePath)
+			if err != nil {
+				t.Fatalf("open target store: %v", err)
+			}
+			writerLock, err := store.openProcessLock(true)
+			if err != nil {
+				t.Fatalf("acquire writer lock: %v", err)
+			}
+			lockReleased := false
+			t.Cleanup(func() {
+				if !lockReleased {
+					closeLockedFile(writerLock)
+				}
+			})
+
+			started := make(chan struct{})
+			done := make(chan error, 1)
+			go func() {
+				close(started)
+				done <- operation.run(store)
+			}()
+			<-started
+			select {
+			case err := <-done:
+				t.Fatalf("reader returned before first append committed: %v", err)
+			case <-time.After(100 * time.Millisecond):
+			}
+
+			if err := os.WriteFile(evidencePath, templateBytes, 0o600); err != nil {
+				t.Fatalf("commit first append: %v", err)
+			}
+			closeLockedFile(writerLock)
+			lockReleased = true
+			select {
+			case err := <-done:
+				if err != nil {
+					t.Fatalf("reader after first append: %v", err)
+				}
+			case <-time.After(2 * time.Second):
+				t.Fatal("reader did not resume after first append committed")
+			}
+		})
+	}
+}
+
+func TestStoreConcurrentAppendHelper(t *testing.T) {
+	if os.Getenv(crossProcessHelperEnv) != "1" {
+		return
+	}
+	index, err := strconv.Atoi(os.Getenv("GOALRAIL_TEST_EVIDENCE_INDEX"))
+	if err != nil || index < 1 {
+		t.Fatalf("invalid helper index: %q", os.Getenv("GOALRAIL_TEST_EVIDENCE_INDEX"))
+	}
+	readyPath := os.Getenv("GOALRAIL_TEST_EVIDENCE_READY")
+	if err := os.WriteFile(readyPath, []byte("ready\n"), 0o600); err != nil {
+		t.Fatalf("write ready marker: %v", err)
+	}
+	gatePath := os.Getenv("GOALRAIL_TEST_EVIDENCE_GATE")
+	deadline := time.NewTimer(10 * time.Second)
+	defer deadline.Stop()
+	ticker := time.NewTicker(time.Millisecond)
+	defer ticker.Stop()
+	for {
+		if _, err := os.Stat(gatePath); err == nil {
+			break
+		} else if !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("inspect start marker: %v", err)
+		}
+		select {
+		case <-deadline.C:
+			t.Fatal("start marker deadline exceeded")
+		case <-ticker.C:
+		}
+	}
+
+	suffix := strconv.Itoa(index)
+	store, err := NewStore(os.Getenv("GOALRAIL_TEST_EVIDENCE_PATH"))
+	if err != nil {
+		t.Fatalf("open helper store: %v", err)
+	}
+	event := validAssignmentEvent(
+		domain.EvidenceEventID("event-"+suffix),
+		domain.ChangeID("change-"+suffix),
+		domain.RunID("run-"+suffix),
+		1,
+	)
+	event.CanaryID = domain.CanaryID("canary-" + suffix)
+	if err := store.Append(event); err != nil {
+		t.Fatalf("append helper event: %v", err)
+	}
+}
+
+func waitForReadyFiles(t *testing.T, ctx context.Context, paths []string) {
+	t.Helper()
+	ticker := time.NewTicker(time.Millisecond)
+	defer ticker.Stop()
+	for {
+		allReady := true
+		for _, path := range paths {
+			if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+				allReady = false
+				break
+			} else if err != nil {
+				t.Fatalf("inspect ready marker: %v", err)
+			}
+		}
+		if allReady {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			t.Fatalf("ready marker deadline: %v", ctx.Err())
+		case <-ticker.C:
+		}
+	}
+}
 
 func TestStoreAppendsAndReadsVerifiedEvents(t *testing.T) {
 	store := newTestStore(t)
@@ -41,6 +272,37 @@ func TestStoreAppendsAndReadsVerifiedEvents(t *testing.T) {
 	}
 	if err := store.Verify(); err != nil {
 		t.Fatalf("verify store: %v", err)
+	}
+}
+
+func TestStoreRejectsSymlinkEvidencePathForEveryOperation(t *testing.T) {
+	dir := t.TempDir()
+	targetPath := filepath.Join(dir, "target.jsonl")
+	if err := os.WriteFile(targetPath, nil, 0o600); err != nil {
+		t.Fatalf("write symlink target: %v", err)
+	}
+	linkPath := filepath.Join(dir, "events.jsonl")
+	if err := os.Symlink(targetPath, linkPath); err != nil {
+		t.Fatalf("create evidence symlink: %v", err)
+	}
+	store, err := NewStore(linkPath)
+	if err != nil {
+		t.Fatalf("new symlink store: %v", err)
+	}
+	operations := []struct {
+		name string
+		run  func() error
+	}{
+		{name: "append", run: func() error { return store.Append(validAssignmentEvent("event-1", "change-1", "run-1", 1)) }},
+		{name: "read", run: func() error { _, err := store.ReadAll(); return err }},
+		{name: "verify", run: store.Verify},
+	}
+	for _, operation := range operations {
+		t.Run(operation.name, func(t *testing.T) {
+			if err := operation.run(); !errors.Is(err, ErrIntegrity) {
+				t.Fatalf("error = %v, want ErrIntegrity", err)
+			}
+		})
 	}
 }
 
