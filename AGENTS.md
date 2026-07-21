@@ -1,0 +1,33 @@
+# Goalrail Agent Instructions
+
+## Intent First
+
+- Treat owner statements and verified repository facts as evidence, not as an automatically correct interpretation.
+- For every significant change, create or update a versioned Intent Snapshot before compiling a proposal.
+- Treat OpenSpec exploration as evidence gathering and ambiguity reduction. It may propose candidate intent items, but it cannot confirm them on the owner's behalf.
+- When exploration changes the understood outcome or boundary, update `intent.md` before proposal, specs, design, or tasks.
+- Keep semantic intent to three groups: desired outcomes, non-goals, and observable success signals.
+- A model-produced snapshot is `candidate` until the owner actively verifies it. Silence, continuation, or lack of objection is not confirmation.
+- If a material ambiguity remains, stop before proposal or implementation and ask the smallest question that resolves it.
+- A material intent amendment creates a new version. Do not repair history by rewriting prior evidence.
+- Confirmed intent describes the requested result; it never grants permission for tools, credentials, writes, deployments, publications, or other effects.
+
+## OpenSpec
+
+- Use the project-local `goalrail-intent` schema for Goalrail changes.
+- OpenSpec 1.6.0 currently resolves the repository default as `spec-driven` in `new change`, even though `openspec/config.yaml` names the custom schema. Always create changes explicitly with:
+
+  ```sh
+  OPENSPEC_TELEMETRY=0 npx --yes @fission-ai/openspec@1.6.0 new change <name> --schema goalrail-intent
+  ```
+
+- Use the same pinned, telemetry-disabled CLI prefix for status, instructions, validation, and schema commands until the project adopts a different verified installation contract.
+- Follow the artifact dependency order reported by `openspec status`; do not bypass `intent.md` or generate a proposal from candidate intent.
+- OpenSpec is a replaceable development-time compiler/provider. Do not leak OpenSpec types into Goalrail's canonical domain.
+- Planning completion is not permission to apply, commit, push, publish, deploy, or start a real canary. Each action keeps its normal owner gate.
+
+## Scope Discipline
+
+- Prefer the smallest reversible vertical slice and stop at its owner gate.
+- Do not silently remove retained target architecture layers merely because the current slice does not implement them.
+- Do not introduce workflow engines, authorization systems, sandboxes, dashboards, databases, or provider-specific abstractions before a current requirement and measured need justify them.

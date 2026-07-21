@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "change_id": "intent-canary-v0",
+  "run_id": "run-probe-001",
+  "repo_root": "/workspace/goalrail"
+}

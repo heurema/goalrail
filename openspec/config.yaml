@@ -1,0 +1,43 @@
+# OpenSpec 1.6.0 `new change` currently requires an explicit
+# `--schema goalrail-intent`; see AGENTS.md.
+schema: goalrail-intent
+
+context: |
+  Goalrail helps small product teams operate coding agents through maintained
+  context, workflows, permissions, verification, evidence, and repair loops.
+  The team retains ownership of priorities, product decisions, and review.
+
+  Intent is the primary upstream artifact. Owner statements and repository facts
+  are evidence; model interpretations are candidates until actively confirmed by
+  the owner. Only confirmed intent may compile into a change proposal.
+
+  Keep canonical Goalrail semantics independent of OpenSpec, model vendors,
+  Temporal, authorization engines, and sandbox products. OpenSpec is a replaceable
+  development-time compiler/provider. Preserve the target architecture hypotheses
+  (Go control plane, durable execution, authorization and task grants, effect
+  enforcement, sandboxing, coarse-grained providers, evidence, repair, and team
+  collaboration) without pulling them into a slice that does not need them.
+
+  Prefer the smallest reversible vertical slice. Do not add infrastructure,
+  dependencies, dashboards, or abstractions before a measured need exists.
+
+rules:
+  intent:
+    - Preserve source evidence separately from interpreted intent.
+    - Use only desired outcomes, non-goals, and observable success signals as semantic intent groups.
+    - Mark the snapshot confirmed only after active owner verification.
+    - Record ambiguities instead of filling gaps by inference.
+  proposal:
+    - Compile only confirmed intent and trace every proposed change to intent IDs.
+    - Include explicit non-goals and do not introduce new intent.
+    - Keep the proposal concise and bounded to one useful vertical slice.
+  specs:
+    - Trace every requirement to one or more confirmed intent IDs.
+    - Make scenarios observable and suitable for verification.
+  design:
+    - Prefer replaceable boundaries and the least architecture needed for this slice.
+    - Separate current-slice decisions from retained target architecture hypotheses.
+    - Include rollback or stop conditions for costly or risky behavior.
+  tasks:
+    - Keep each task independently verifiable and small enough for one bounded session.
+    - Do not include work excluded by the confirmed non-goals.

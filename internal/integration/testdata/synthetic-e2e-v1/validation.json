@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "fixture_id": "synthetic-e2e-v1",
+  "synthetic": true,
+  "manifest_id": "intent-canary-v0",
+  "manifest_version": 1,
+  "change_id": "change-synthetic-e2e-v1",
+  "run_id": "run-synthetic-e2e-v1",
+  "check_refs": [
+    "test:synthetic-e2e-v1"
+  ],
+  "checks_green": true,
+  "flow_overhead_input": {
+    "agent_turns": [
+      {
+        "reference": "langfuse-trace:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "started_at": "2026-07-21T14:10:10Z",
+        "ended_at": "2026-07-21T14:10:20Z"
+      }
+    ],
+    "owner_review": {
+      "reference": "owner-review:synthetic-e2e-v1",
+      "started_at": "2026-07-21T14:10:20Z",
+      "ended_at": "2026-07-21T14:10:25Z"
+    },
+    "owner_review_required": true
+  },
+  "flow_overhead": {
+    "agent_turn_count": 1,
+    "agent_seconds": 10,
+    "owner_review_seconds": 5,
+    "total_minutes": 0.25,
+    "available": true
+  },
+  "event_chain_verified": true,
+  "lineage_status": "verified",
+  "root_session_id": "session-synthetic-e2e-v1",
+  "assessment_outcome": "match",
+  "report_verdict": "PENDING",
+  "real_canary_started": false
+}
