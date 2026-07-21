@@ -1,10 +1,12 @@
 <div align="center">
 
-# Goalrail
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/goalrail-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="assets/goalrail-light.svg">
+  <img src="assets/goalrail-dark.svg" width="100%" alt="Goalrail keeps agent delivery on track from product-team intent through controlled work, checks, repair, evidence, and human review">
+</picture>
 
-**Agent harness engineering for small product teams.**
-
-`real repositories` · `controlled workflows` · `evidence before trust` · `human-owned outcomes`
+[Pilot conversation](https://t.me/vitnm)
 
 </div>
 
