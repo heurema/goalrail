@@ -150,15 +150,78 @@ func TestValidateWordingOnlyAmendmentPreservesVersionAndStableIDs(t *testing.T) 
 	requireViolation(t, err, "amendment.wording.intent_ids_changed")
 }
 
+func TestValidateWordingOnlyAmendmentRejectsSourceEvidenceChanges(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(previous, next *IntentSnapshot)
+	}{
+		{
+			name: "replace evidence content",
+			mutate: func(_, next *IntentSnapshot) {
+				next.SourceEvidence[0].Statement = "Rewritten owner statement"
+			},
+		},
+		{
+			name: "add evidence",
+			mutate: func(_, next *IntentSnapshot) {
+				next.SourceEvidence = append(next.SourceEvidence, SourceEvidence{
+					ID: "SE-2", Kind: EvidenceRepositoryFact, Reference: "git:review-fact",
+				})
+			},
+		},
+		{
+			name: "remove unused evidence",
+			mutate: func(previous, _ *IntentSnapshot) {
+				previous.SourceEvidence = append(previous.SourceEvidence, SourceEvidence{
+					ID: "SE-2", Kind: EvidenceRepositoryFact, Reference: "git:review-fact",
+				})
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			previous := validConfirmedIntent()
+			next := validConfirmedIntent()
+			test.mutate(&previous, &next)
+
+			err := ValidateIntentAmendment(previous, next, AmendmentWordingOnly)
+			requireViolation(t, err, "amendment.wording.source_evidence_changed")
+		})
+	}
+}
+
+func TestValidateWordingOnlyAmendmentRejectsEvidenceReferenceChanges(t *testing.T) {
+	previous := validConfirmedIntent()
+	next := validConfirmedIntent()
+	additionalEvidence := SourceEvidence{
+		ID: "SE-2", Kind: EvidenceRepositoryFact, Reference: "git:review-fact",
+	}
+	previous.SourceEvidence = append(previous.SourceEvidence, additionalEvidence)
+	next.SourceEvidence = append(next.SourceEvidence, additionalEvidence)
+	next.DesiredOutcomes[0].EvidenceRefs = []SourceEvidenceID{"SE-2"}
+
+	err := ValidateIntentAmendment(previous, next, AmendmentWordingOnly)
+	requireViolation(t, err, "amendment.wording.evidence_refs_changed")
+}
+
 func TestValidateWordingOnlyAmendmentAllowsReorderingStableItems(t *testing.T) {
 	previous := validConfirmedIntent()
+	additionalEvidence := SourceEvidence{
+		ID: "SE-2", Kind: EvidenceRepositoryFact, Reference: "git:review-fact",
+	}
+	previous.SourceEvidence = append(previous.SourceEvidence, additionalEvidence)
+	previous.DesiredOutcomes[0].EvidenceRefs = []SourceEvidenceID{"SE-1", "SE-2"}
 	previous.DesiredOutcomes = append(previous.DesiredOutcomes,
 		IntentItem{ID: "OUT-2", Statement: "Keep the result reviewable.", EvidenceRefs: []SourceEvidenceID{"SE-1"}},
 	)
 	next := validConfirmedIntent()
+	next.SourceEvidence = []SourceEvidence{additionalEvidence, next.SourceEvidence[0]}
+	firstOutcome := previous.DesiredOutcomes[0]
+	firstOutcome.Statement = "Deliver the intended outcome."
+	firstOutcome.EvidenceRefs = []SourceEvidenceID{"SE-2", "SE-1"}
 	next.DesiredOutcomes = []IntentItem{
 		previous.DesiredOutcomes[1],
-		previous.DesiredOutcomes[0],
+		firstOutcome,
 	}
 
 	if err := ValidateIntentAmendment(previous, next, AmendmentWordingOnly); err != nil {

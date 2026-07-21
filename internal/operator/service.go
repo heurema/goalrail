@@ -625,6 +625,9 @@ func lineageOutcome(view ChangeView) domain.CanaryLineageOutcome {
 		return domain.CanaryLineageVerified
 	}
 	if view.Lineage.Status == domain.LineageUnlinked && view.LineageResolutionAttempts >= 1 {
+		if view.Lineage.UnlinkedReasonCode == codex.ReasonSessionConflict {
+			return domain.CanaryLineageWrong
+		}
 		return domain.CanaryLineageUnresolvedAfterResolution
 	}
 	return domain.CanaryLineagePending

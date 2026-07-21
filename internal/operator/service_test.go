@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/heurema/goalrail/internal/adapters/codex"
 	"github.com/heurema/goalrail/internal/domain"
 	"github.com/heurema/goalrail/internal/evidence"
 )
@@ -430,6 +431,57 @@ func TestDisableStopsNewAssignmentsAndPreservesExistingEvidence(t *testing.T) {
 	}
 	if err := store.Verify(); err != nil {
 		t.Fatalf("verify stopped evidence chain: %v", err)
+	}
+}
+
+func TestSessionConflictProjectionStopsImmediately(t *testing.T) {
+	conflictOutcome := lineageOutcome(ChangeView{
+		Lineage: &domain.ExecutionLineage{
+			Status:             domain.LineageUnlinked,
+			UnlinkedReasonCode: codex.ReasonSessionConflict,
+		},
+		LineageResolutionAttempts: 1,
+	})
+	report, err := domain.CalculateCanaryReport(domain.CanaryReportInput{
+		Observations: []domain.CanaryObservation{{
+			Ordinal:        1,
+			ChangeID:       "change-session-conflict",
+			Variant:        domain.VariantFlow,
+			TerminalState:  domain.CanaryStatePending,
+			LineageOutcome: conflictOutcome,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("calculate conflict report: %v", err)
+	}
+	if conflictOutcome != domain.CanaryLineageWrong || report.WrongJoins != 1 ||
+		!report.HardStopSignals.WrongJoin || report.Verdict != domain.CanaryVerdictStop {
+		t.Fatalf("session conflict did not stop: outcome=%q report=%#v", conflictOutcome, report)
+	}
+
+	unresolvedOutcome := lineageOutcome(ChangeView{
+		Lineage: &domain.ExecutionLineage{
+			Status:             domain.LineageUnlinked,
+			UnlinkedReasonCode: codex.ReasonResolutionExhausted,
+		},
+		LineageResolutionAttempts: 1,
+	})
+	report, err = domain.CalculateCanaryReport(domain.CanaryReportInput{
+		Observations: []domain.CanaryObservation{{
+			Ordinal:        1,
+			ChangeID:       "change-unresolved",
+			Variant:        domain.VariantFlow,
+			TerminalState:  domain.CanaryStatePending,
+			LineageOutcome: unresolvedOutcome,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("calculate unresolved report: %v", err)
+	}
+	if unresolvedOutcome != domain.CanaryLineageUnresolvedAfterResolution ||
+		report.LineageUnresolved != 1 || report.WrongJoins != 0 ||
+		report.HardStopSignals.UnresolvedLinks || report.Verdict == domain.CanaryVerdictStop {
+		t.Fatalf("ordinary unresolved lineage changed threshold: outcome=%q report=%#v", unresolvedOutcome, report)
 	}
 }
 
