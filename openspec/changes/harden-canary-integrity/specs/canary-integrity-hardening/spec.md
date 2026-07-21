@@ -9,6 +9,10 @@ For cooperating Goalrail processes that target the same absolute evidence path, 
 - **WHEN** two synchronized Goalrail processes append distinct valid events to the same evidence path
 - **THEN** both events are retained exactly once with unique consecutive sequences, the digest links are canonical, and complete-chain verification succeeds
 
+#### Scenario: Reader overlaps the first append
+- **WHEN** a reader starts after the first writer has acquired the process-shared lock but before the evidence file exists
+- **THEN** the reader waits for the writer transaction and observes the committed event instead of returning an empty store
+
 #### Scenario: Required process lock is unavailable
 - **WHEN** the current platform cannot provide the required process-shared evidence lock
 - **THEN** the store fails the operation before appending an event instead of falling back to process-local locking
@@ -21,6 +25,10 @@ When immutable run context has already been bound to a provider-authoritative ro
 #### Scenario: Verified root session changes
 - **WHEN** a verified change/run binding receives a terminal `SESSION_CONFLICT` after its bounded resolution attempt
 - **THEN** the operator report records one wrong join and stops the canary without waiting for the unresolved-link threshold
+
+#### Scenario: Later retry cannot erase a wrong join
+- **WHEN** a terminal `SESSION_CONFLICT` is followed by a later lineage event such as `RESOLUTION_ATTEMPT_EXHAUSTED`
+- **THEN** the operator report retains the earlier wrong join and continues to produce `STOP`
 
 #### Scenario: Lineage remains unresolved without a conflicting identity
 - **WHEN** lineage is still unlinked after its bounded attempt because an authoritative identity is absent rather than conflicting

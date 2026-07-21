@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -93,6 +94,82 @@ func TestStoreSerializesConcurrentProcesses(t *testing.T) {
 		if _, exists := seen[id]; !exists {
 			t.Fatalf("missing event %q", id)
 		}
+	}
+}
+
+func TestStoreReadersWaitForInProgressFirstAppend(t *testing.T) {
+	templateStore := newTestStore(t)
+	event := validLineageEvent("event-committed")
+	if err := templateStore.Append(event); err != nil {
+		t.Fatalf("append template event: %v", err)
+	}
+	templateBytes := readStoreFile(t, templateStore)
+
+	operations := []struct {
+		name string
+		run  func(*Store) error
+	}{
+		{
+			name: "read all",
+			run: func(store *Store) error {
+				events, err := store.ReadAll()
+				if err != nil {
+					return err
+				}
+				if len(events) != 1 || events[0].ID != event.ID {
+					return fmt.Errorf("events = %#v, want committed event %q", events, event.ID)
+				}
+				return nil
+			},
+		},
+		{name: "verify", run: func(store *Store) error { return store.Verify() }},
+	}
+	for _, operation := range operations {
+		t.Run(operation.name, func(t *testing.T) {
+			dir := t.TempDir()
+			evidencePath := filepath.Join(dir, "events.jsonl")
+			store, err := NewStore(evidencePath)
+			if err != nil {
+				t.Fatalf("open target store: %v", err)
+			}
+			writerLock, err := store.openProcessLock(true)
+			if err != nil {
+				t.Fatalf("acquire writer lock: %v", err)
+			}
+			lockReleased := false
+			t.Cleanup(func() {
+				if !lockReleased {
+					closeLockedFile(writerLock)
+				}
+			})
+
+			started := make(chan struct{})
+			done := make(chan error, 1)
+			go func() {
+				close(started)
+				done <- operation.run(store)
+			}()
+			<-started
+			select {
+			case err := <-done:
+				t.Fatalf("reader returned before first append committed: %v", err)
+			case <-time.After(100 * time.Millisecond):
+			}
+
+			if err := os.WriteFile(evidencePath, templateBytes, 0o600); err != nil {
+				t.Fatalf("commit first append: %v", err)
+			}
+			closeLockedFile(writerLock)
+			lockReleased = true
+			select {
+			case err := <-done:
+				if err != nil {
+					t.Fatalf("reader after first append: %v", err)
+				}
+			case <-time.After(2 * time.Second):
+				t.Fatal("reader did not resume after first append committed")
+			}
+		})
 	}
 }
 

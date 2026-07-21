@@ -186,19 +186,15 @@ func (s *Store) ReadAll() ([]domain.EvidenceEvent, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	exists, err := s.inspectEvidencePath()
-	if err != nil {
-		return nil, err
-	}
-	if !exists {
-		return nil, nil
+	if err := os.MkdirAll(filepath.Dir(s.path), 0o750); err != nil {
+		return nil, fmt.Errorf("create evidence directory: %w", err)
 	}
 	lockFile, err := s.openProcessLock(false)
 	if err != nil {
 		return nil, err
 	}
 	defer closeLockedFile(lockFile)
-	exists, err = s.inspectEvidencePath()
+	exists, err := s.inspectEvidencePath()
 	if err != nil {
 		return nil, err
 	}
@@ -222,19 +218,15 @@ func (s *Store) ReadAll() ([]domain.EvidenceEvent, error) {
 func (s *Store) Verify() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	exists, err := s.inspectEvidencePath()
-	if err != nil {
-		return err
-	}
-	if !exists {
-		return nil
+	if err := os.MkdirAll(filepath.Dir(s.path), 0o750); err != nil {
+		return fmt.Errorf("create evidence directory: %w", err)
 	}
 	lockFile, err := s.openProcessLock(false)
 	if err != nil {
 		return err
 	}
 	defer closeLockedFile(lockFile)
-	exists, err = s.inspectEvidencePath()
+	exists, err := s.inspectEvidencePath()
 	if err != nil {
 		return err
 	}

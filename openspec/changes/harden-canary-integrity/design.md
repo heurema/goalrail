@@ -1,6 +1,6 @@
 ## Context
 
-The foundation merged in `e1c9684` keeps real assignments blocked, but PR #3 review found three pre-activation defects. `Store.Append` protects a read/validate/append transaction only with a process-local mutex; `lineageOutcome` does not distinguish a terminal `SESSION_CONFLICT` from an ordinary unresolved link; and wording-only amendment validation preserves stable item IDs without preserving their source provenance.
+The foundation merged in `e1c9684` keeps real assignments blocked, but PR #3 review found three pre-activation defects. `Store.Append` protects a read/validate/append transaction only with a process-local mutex; `lineageOutcome` does not distinguish a terminal `SESSION_CONFLICT` from an ordinary unresolved link; and wording-only amendment validation preserves stable item IDs without preserving their source provenance. PR #4 review then found two incomplete edge cases in the initial fixes: a reader can check for the first evidence file before acquiring the shared lock, and a later resolution-exhaustion event can hide an earlier session conflict in the latest-event projection.
 
 The slice affects one local storage adapter, one operator projection, and canonical validation. It must add no durable service or third-party dependency and must leave the real canary at `NO-GO_NOW`.
 
@@ -30,7 +30,7 @@ The slice affects one local storage adapter, one operator projection, and canoni
 
 **Material unknown:** Remote filesystems can implement advisory locking differently. Remote or multi-host evidence storage is not part of this slice.
 
-The evidence adapter will open a stable empty `<evidence>.lock` sidecar, validate that it is regular, and acquire an exclusive OS lock for `Append` or a shared lock for `ReadAll` and `Verify`. `Append` holds the lock from the chain read through the evidence-file `Sync`. The data file is created only after event validation succeeds, preserving the existing rejection contract. The existing in-process mutex remains as a cheap first layer. Process exit releases lock ownership, so the ignored empty sidecar needs no stale-owner or cleanup protocol.
+The evidence adapter will open a stable empty `<evidence>.lock` sidecar, validate that it is regular, and acquire an exclusive OS lock for `Append` or a shared lock for `ReadAll` and `Verify`. Readers acquire the shared sidecar lock before checking whether the evidence file exists, so a first append cannot be observed as an empty store while its exclusive transaction is in progress. `Append` holds the lock from the chain read through the evidence-file `Sync`. The data file is created only after event validation succeeds, preserving the existing rejection contract. The existing in-process mutex remains as a cheap first layer. Process exit releases lock ownership, so the ignored empty sidecar needs no stale-owner or cleanup protocol.
 
 The OS primitive lives behind two small build-tagged files. macOS and Linux use blocking `flock`; other platforms return an explicit unsupported-lock error and never fall back to process-local safety. A later platform adapter can replace this boundary without changing canonical events or file format.
 
@@ -44,7 +44,7 @@ This decision is reversible by replacing only the lock adapter and locked-file h
 
 ### 2. Classify only terminal `SESSION_CONFLICT` as a wrong join
 
-`ExecutionLineage.UnlinkedReasonCode` already preserves `SESSION_CONFLICT`. `lineageOutcome` will return `CanaryLineageWrong` when that reason is present after the bounded resolution attempt, before the generic unresolved branch. Missing identity, unsupported input, context conflicts, and resolution exhaustion retain their current unresolved or pending behavior.
+`ExecutionLineage.UnlinkedReasonCode` already preserves `SESSION_CONFLICT`. The change projection will retain an internal sticky signal when any bounded lineage event for the change records that conflict. `lineageOutcome` will return `CanaryLineageWrong` from that signal before interpreting the latest lineage event, so a later retry or `RESOLUTION_ATTEMPT_EXHAUSTED` event cannot erase the wrong join. Missing identity, unsupported input, context conflicts, and resolution exhaustion without an earlier session conflict retain their current unresolved or pending behavior.
 
 This keeps the change tied to the reviewed defect and does not invent new semantics for other reason codes.
 
@@ -64,7 +64,8 @@ Semantic statement text and item order remain editable. Material changes continu
 ## Measurement and Stop Conditions
 
 - A synchronized subprocess test is the canary for the storage decision: both valid events must be retained once and `Verify` must pass.
-- One `SESSION_CONFLICT` must yield `WrongJoins == 1`, set `HardStopSignals.WrongJoin`, and return `STOP`.
+- A reader started while the first writer owns the sidecar lock must wait and then observe the committed event.
+- One `SESSION_CONFLICT` must yield `WrongJoins == 1`, set `HardStopSignals.WrongJoin`, and return `STOP`, including after a later resolution-exhaustion event.
 - One ordinary unresolved lineage remains below the existing two-link hard-stop threshold.
 - Source-evidence or item-reference mutation must fail; statement-only edits and reordering must pass.
 - Stop implementation if process locking cannot be verified on both macOS compilation/runtime and Linux cross-compilation without adding an unapproved subsystem.

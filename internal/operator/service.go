@@ -508,6 +508,7 @@ type ChangeView struct {
 	AssessmentEventID         domain.EvidenceEventID   `json:"assessment_event_id,omitempty"`
 	MaterialCorrections       uint32                   `json:"material_corrections"`
 	EventCount                uint32                   `json:"event_count"`
+	sessionConflictObserved   bool
 }
 
 func (s *Service) Inspect(changeID domain.ChangeID) (ChangeView, error) {
@@ -593,6 +594,11 @@ func projectChange(events []domain.EvidenceEvent, changeID domain.ChangeID) Chan
 			lineage := *event.Lineage
 			view.Lineage = &lineage
 			view.LineageResolutionAttempts = event.LineageResolutionAttempts
+			if lineage.Status == domain.LineageUnlinked &&
+				lineage.UnlinkedReasonCode == codex.ReasonSessionConflict &&
+				event.LineageResolutionAttempts >= 1 {
+				view.sessionConflictObserved = true
+			}
 		}
 		if event.Terminal != nil {
 			terminal := *event.Terminal
@@ -618,6 +624,9 @@ func projectChange(events []domain.EvidenceEvent, changeID domain.ChangeID) Chan
 }
 
 func lineageOutcome(view ChangeView) domain.CanaryLineageOutcome {
+	if view.sessionConflictObserved {
+		return domain.CanaryLineageWrong
+	}
 	if view.Lineage == nil {
 		return domain.CanaryLineagePending
 	}

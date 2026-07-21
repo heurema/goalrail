@@ -485,6 +485,60 @@ func TestSessionConflictProjectionStopsImmediately(t *testing.T) {
 	}
 }
 
+func TestSessionConflictProjectionSurvivesResolutionExhaustion(t *testing.T) {
+	service, _, repoRoot := newTestService(t)
+	receipt := startSynthetic(t, service, "change-session-conflict-history", "run-session-conflict-history", operatorTestTime)
+	bind := func(eventID domain.EvidenceEventID, sessionID string, occurredAt time.Time) codex.CorrelationResult {
+		t.Helper()
+		hook := []byte(fmt.Sprintf(
+			`{"session_id":%q,"cwd":%q,"hook_event_name":"SessionStart","source":"startup"}`,
+			sessionID,
+			repoRoot,
+		))
+		result, err := service.BindLifecycleHook(HookInput{
+			EventID:        eventID,
+			OccurredAt:     occurredAt,
+			Actor:          "goalrail-hook",
+			SourceRef:      "codex-hook:lifecycle",
+			EncodedContext: receipt.RunContextEnv,
+			RawHook:        hook,
+		})
+		if err != nil {
+			t.Fatalf("bind lifecycle hook %s: %v", eventID, err)
+		}
+		return result
+	}
+
+	verified := bind("event-lineage-verified", "session-original", operatorTestTime.Add(time.Minute))
+	if !verified.Verified() {
+		t.Fatalf("initial lineage was not verified: %#v", verified)
+	}
+	conflict := bind("event-lineage-conflict", "session-replaced", operatorTestTime.Add(2*time.Minute))
+	if conflict.Lineage.UnlinkedReasonCode != codex.ReasonSessionConflict {
+		t.Fatalf("conflicting lineage reason = %q", conflict.Lineage.UnlinkedReasonCode)
+	}
+	exhausted := bind("event-lineage-exhausted", "session-replaced", operatorTestTime.Add(3*time.Minute))
+	if exhausted.Lineage.UnlinkedReasonCode != codex.ReasonResolutionExhausted {
+		t.Fatalf("retry lineage reason = %q", exhausted.Lineage.UnlinkedReasonCode)
+	}
+
+	view, err := service.Inspect(receipt.ChangeID)
+	if err != nil {
+		t.Fatalf("inspect conflict history: %v", err)
+	}
+	if view.Lineage == nil || view.Lineage.UnlinkedReasonCode != codex.ReasonResolutionExhausted ||
+		lineageOutcome(view) != domain.CanaryLineageWrong {
+		t.Fatalf("wrong join was not retained across retry: %#v", view)
+	}
+	report, err := service.Report()
+	if err != nil {
+		t.Fatalf("report conflict history: %v", err)
+	}
+	if report.WrongJoins != 1 || !report.HardStopSignals.WrongJoin || report.Verdict != domain.CanaryVerdictStop {
+		t.Fatalf("session conflict history did not stop: %#v", report)
+	}
+}
+
 func newTestService(t *testing.T) (*Service, *evidence.Store, string) {
 	t.Helper()
 	repoRoot := t.TempDir()
