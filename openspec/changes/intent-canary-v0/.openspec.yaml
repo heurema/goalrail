@@ -1,0 +1,4 @@
+schema: goalrail-intent
+created: 2026-07-21
+goal: Prove that an owner-confirmed intent artifact plus automatic execution
+  correlation can reduce intent misses without excessive process overhead.

@@ -1,0 +1,76 @@
+{
+  "verdict": "PENDING",
+  "completion_ready": false,
+  "assigned": 1,
+  "terminal": 1,
+  "flow": {
+    "assigned": 1,
+    "pending": 0,
+    "delivered": 1,
+    "assessed": 1,
+    "missing_assessments": 0,
+    "abandoned": 0,
+    "non_matches": 0,
+    "wrong_but_green": 0,
+    "material_preventions": 0,
+    "repeat_opt_in_yes": 1,
+    "repeat_opt_in_no": 0,
+    "missing_repeat_opt_in": 0,
+    "overhead_measurements": 1,
+    "missing_overhead_measurements": 0,
+    "non_match_rate": {
+      "numerator": 0,
+      "denominator": 1,
+      "value": 0,
+      "available": true
+    }
+  },
+  "baseline": {
+    "assigned": 0,
+    "pending": 0,
+    "delivered": 0,
+    "assessed": 0,
+    "missing_assessments": 0,
+    "abandoned": 0,
+    "non_matches": 0,
+    "wrong_but_green": 0,
+    "material_preventions": 0,
+    "repeat_opt_in_yes": 0,
+    "repeat_opt_in_no": 0,
+    "missing_repeat_opt_in": 0,
+    "overhead_measurements": 0,
+    "missing_overhead_measurements": 0,
+    "non_match_rate": {
+      "numerator": 0,
+      "denominator": 0,
+      "value": 0,
+      "available": false
+    }
+  },
+  "lineage_verified": 1,
+  "lineage_pending": 0,
+  "lineage_unresolved": 0,
+  "wrong_joins": 0,
+  "process_caused_flow_abandonments": 0,
+  "evidence_integrity_violations": 0,
+  "median_flow_overhead": {
+    "count": 1,
+    "value": 0.25,
+    "available": true
+  },
+  "pass_signals": {
+    "lineage_reliable": false,
+    "non_match_rate_lower": false,
+    "prevention_observed": false,
+    "overhead_tolerable": true,
+    "repeat_opt_in_accepted": true
+  },
+  "hard_stop_signals": {
+    "wrong_join": false,
+    "unresolved_links": false,
+    "evidence_integrity_violation": false,
+    "excessive_overhead": false,
+    "process_caused_abandonments": false
+  },
+  "no_useful_movement": false
+}
