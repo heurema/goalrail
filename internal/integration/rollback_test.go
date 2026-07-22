@@ -44,6 +44,7 @@ func TestDisableIsRepositoryLocalAndLeavesUnrelatedAdaptersUsable(t *testing.T) 
 		OccurredAt:    syntheticE2ETime,
 		Actor:         "synthetic-operator",
 		SourceRef:     "request:synthetic-rollback-v1",
+		Reason:        "eligibility-confirmed",
 		Synthetic:     true,
 	}); err != nil {
 		t.Fatalf("start rollback fixture: %v", err)
@@ -76,6 +77,7 @@ func TestDisableIsRepositoryLocalAndLeavesUnrelatedAdaptersUsable(t *testing.T) 
 		OccurredAt:    syntheticE2ETime.Add(2 * time.Minute),
 		Actor:         "synthetic-operator",
 		SourceRef:     "request:synthetic-rollback-rejected-v1",
+		Reason:        "eligibility-confirmed",
 		Synthetic:     true,
 	}); !errors.Is(err, operator.ErrCanaryStopped) {
 		t.Fatalf("new assignment after rollback error = %v, want ErrCanaryStopped", err)

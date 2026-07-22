@@ -23,3 +23,10 @@ func TestCanonicalSessionIdentitySourceConstants(t *testing.T) {
 		t.Fatalf("unexpected identity sources: %v", sources)
 	}
 }
+
+func TestCanonicalAdmissionDecisionConstants(t *testing.T) {
+	decisions := []AdmissionDecision{AdmissionEligible, AdmissionExcluded}
+	if decisions[0] != "eligible" || decisions[1] != "excluded" {
+		t.Fatalf("unexpected admission decisions: %v", decisions)
+	}
+}

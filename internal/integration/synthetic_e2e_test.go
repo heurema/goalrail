@@ -24,6 +24,8 @@ type syntheticValidationEvidence struct {
 	ManifestVersion    uint32                         `json:"manifest_version"`
 	ChangeID           domain.ChangeID                `json:"change_id"`
 	RunID              domain.RunID                   `json:"run_id"`
+	AdmissionDecision  domain.AdmissionDecision       `json:"admission_decision"`
+	FrozenCheckRefs    []domain.EvidenceReference     `json:"frozen_check_refs"`
 	CheckRefs          []domain.EvidenceReference     `json:"check_refs"`
 	ChecksGreen        bool                           `json:"checks_green"`
 	FlowOverheadInput  domain.CanaryFlowOverheadInput `json:"flow_overhead_input"`
@@ -60,6 +62,7 @@ func TestSyntheticEndToEndEvidenceMatchesPreservedArtifacts(t *testing.T) {
 		OccurredAt:    syntheticE2ETime,
 		Actor:         "synthetic-operator",
 		SourceRef:     "request:synthetic-e2e-v1",
+		Reason:        "eligibility-confirmed",
 		Synthetic:     true,
 	})
 	if err != nil {
@@ -105,6 +108,16 @@ func TestSyntheticEndToEndEvidenceMatchesPreservedArtifacts(t *testing.T) {
 	}
 	overhead := overheadMeasurement.TotalMinutes
 	checkRefs := []domain.EvidenceReference{"test:synthetic-e2e-v1"}
+	if _, err := service.FreezeChecks(operator.FreezeChecksInput{
+		EventID:    "event-synthetic-checks-v1",
+		ChangeID:   fixtureChangeID,
+		OccurredAt: syntheticE2ETime.Add(90 * time.Second),
+		Actor:      "synthetic-operator",
+		SourceRef:  "request:synthetic-checks-v1",
+		CheckRefs:  checkRefs,
+	}); err != nil {
+		t.Fatalf("freeze synthetic checks: %v", err)
+	}
 	if err := service.Deliver(operator.DeliverInput{
 		EventID:             "event-synthetic-delivery-v1",
 		ChangeID:            fixtureChangeID,
@@ -141,7 +154,8 @@ func TestSyntheticEndToEndEvidenceMatchesPreservedArtifacts(t *testing.T) {
 		t.Fatalf("report synthetic change: %v", err)
 	}
 	if report.Verdict != domain.CanaryVerdictPending || report.Assigned != 1 ||
-		report.LineageVerified != 1 || view.Assessment == nil {
+		report.LineageVerified != 1 || view.Assessment == nil || view.Admission == nil ||
+		view.Admission.Decision != domain.AdmissionEligible || view.CheckSet == nil {
 		t.Fatalf("unexpected synthetic projection: view=%#v report=%#v", view, report)
 	}
 
@@ -158,6 +172,8 @@ func TestSyntheticEndToEndEvidenceMatchesPreservedArtifacts(t *testing.T) {
 		ManifestVersion:    view.Assignment.ManifestVersion,
 		ChangeID:           receipt.ChangeID,
 		RunID:              receipt.RunID,
+		AdmissionDecision:  view.Admission.Decision,
+		FrozenCheckRefs:    append([]domain.EvidenceReference(nil), view.CheckSet.CheckRefs...),
 		CheckRefs:          append([]domain.EvidenceReference(nil), view.Terminal.CheckRefs...),
 		ChecksGreen:        view.Terminal.ChecksGreen,
 		FlowOverheadInput:  overheadInput,
