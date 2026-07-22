@@ -4,6 +4,7 @@
 - **Version:** <!-- integer version -->
 - **Status:** <!-- candidate | confirmed -->
 - **Owner:** <!-- confirming decision owner -->
+- **Context Pack:** <!-- context.md ID and version -->
 - **Run references:** <!-- known run/session references, or pending -->
 
 ## Source Evidence
@@ -14,19 +15,19 @@
 
 | ID | Confirmed wording | Verification action | Evidence |
 |---|---|---|---|
-| OUT-1 | <!-- desired outcome --> | <!-- how the owner will verify it --> | <!-- source reference --> |
+| OUT-1 | <!-- desired outcome --> | <!-- how the owner will verify it --> | <!-- SE-* and CTX-* references --> |
 
 ## Non-Goals
 
 | ID | Confirmed boundary | Evidence |
 |---|---|---|
-| NG-1 | <!-- explicitly excluded result or approach --> | <!-- source reference --> |
+| NG-1 | <!-- explicitly excluded result or approach --> | <!-- SE-* and CTX-* references --> |
 
 ## Observable Success Signals
 
 | ID | Signal | Measurement | Evidence |
 |---|---|---|---|
-| SIG-1 | <!-- observable signal --> | <!-- threshold or comparison --> | <!-- source reference --> |
+| SIG-1 | <!-- observable signal --> | <!-- threshold or comparison --> | <!-- SE-* and CTX-* references --> |
 
 ## Ambiguities and Unknowns
 

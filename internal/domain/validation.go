@@ -2,6 +2,7 @@ package domain
 
 import (
 	"fmt"
+	"reflect"
 	"regexp"
 	"strings"
 )
@@ -129,10 +130,17 @@ func ValidateIntentSnapshot(snapshot IntentSnapshot) error {
 		v.add("intent.success_signals.required", "success_signals", "at least one observable success signal is required")
 	}
 
+	contextIDs := make(map[ContextItemID]struct{})
+	if snapshot.ContextPack != nil {
+		v.absorb(ValidateContextPack(*snapshot.ContextPack))
+		for _, item := range snapshot.ContextPack.Items {
+			contextIDs[item.ID] = struct{}{}
+		}
+	}
 	semanticIDs := make(map[IntentItemID]string)
-	validateIntentGroup(v, "desired_outcomes", snapshot.DesiredOutcomes, evidenceIDs, semanticIDs)
-	validateIntentGroup(v, "non_goals", snapshot.NonGoals, evidenceIDs, semanticIDs)
-	validateIntentGroup(v, "success_signals", snapshot.SuccessSignals, evidenceIDs, semanticIDs)
+	validateIntentGroup(v, "desired_outcomes", snapshot.DesiredOutcomes, evidenceIDs, contextIDs, semanticIDs)
+	validateIntentGroup(v, "non_goals", snapshot.NonGoals, evidenceIDs, contextIDs, semanticIDs)
+	validateIntentGroup(v, "success_signals", snapshot.SuccessSignals, evidenceIDs, contextIDs, semanticIDs)
 
 	ambiguityIDs := make(map[AmbiguityID]struct{}, len(snapshot.Ambiguities))
 	for index, ambiguity := range snapshot.Ambiguities {
@@ -167,11 +175,32 @@ func ValidateIntentSnapshot(snapshot IntentSnapshot) error {
 	return v.result()
 }
 
+// ValidateFlowIntentSnapshot applies the context gate required by the v2 flow
+// while leaving legacy and baseline Intent Snapshot validation compatible.
+func ValidateFlowIntentSnapshot(snapshot IntentSnapshot) error {
+	v := &validator{}
+	v.absorb(ValidateIntentSnapshot(snapshot))
+	if snapshot.ContextPack == nil {
+		v.add("intent.context.required", "context_pack", "flow intent requires a Context Pack")
+		return v.result()
+	}
+	pack := snapshot.ContextPack
+	if pack.Outcome != ContextSufficient {
+		v.add("intent.context.not_sufficient", "context_pack.outcome", "flow intent requires sufficient context")
+	}
+	if snapshot.Status == IntentConfirmed && snapshot.Confirmation != nil &&
+		!pack.CompletedAt.Before(snapshot.Confirmation.ConfirmedAt) {
+		v.add("intent.context.completed_after_confirmation", "context_pack.completed_at", "context must complete before intent confirmation")
+	}
+	return v.result()
+}
+
 func validateIntentGroup(
 	v *validator,
 	group string,
 	items []IntentItem,
 	evidenceIDs map[SourceEvidenceID]struct{},
+	contextIDs map[ContextItemID]struct{},
 	semanticIDs map[IntentItemID]string,
 ) {
 	for index, item := range items {
@@ -187,6 +216,27 @@ func validateIntentGroup(
 			v.add("intent.item.statement_required", path+".statement", "intent item requires a statement")
 		}
 		validateEvidenceRefs(v, path+".evidence_refs", item.EvidenceRefs, evidenceIDs)
+		validateContextRefs(v, path+".context_refs", item.ContextRefs, contextIDs)
+	}
+}
+
+func validateContextRefs(
+	v *validator,
+	path string,
+	references []ContextItemID,
+	contextIDs map[ContextItemID]struct{},
+) {
+	seen := make(map[ContextItemID]struct{}, len(references))
+	for index, reference := range references {
+		itemPath := fmt.Sprintf("%s[%d]", path, index)
+		if _, duplicate := seen[reference]; duplicate {
+			v.add("intent.context_refs.duplicate", itemPath, "context item reference is duplicated")
+			continue
+		}
+		seen[reference] = struct{}{}
+		if _, exists := contextIDs[reference]; !exists {
+			v.add("intent.context_refs.unknown", itemPath, "context item reference does not exist in the bound pack")
+		}
 	}
 }
 
@@ -341,6 +391,9 @@ func validateSameIntentItemIDs(v *validator, previous, next IntentSnapshot) {
 }
 
 func validateWordingOnlyProvenance(v *validator, previous, next IntentSnapshot) {
+	if !reflect.DeepEqual(previous.ContextPack, next.ContextPack) {
+		v.add("amendment.wording.context_pack_changed", "context_pack", "wording-only edit must preserve the Context Pack")
+	}
 	previousEvidence := make(map[SourceEvidenceID]SourceEvidence, len(previous.SourceEvidence))
 	for _, evidence := range previous.SourceEvidence {
 		previousEvidence[evidence.ID] = evidence
@@ -369,12 +422,21 @@ func validateWordingOnlyProvenance(v *validator, previous, next IntentSnapshot) 
 	for _, group := range intentGroups(next) {
 		for index, item := range group.items {
 			previousItem, exists := previousItems[item.ID]
-			if exists && !sameEvidenceReferenceSet(previousItem.EvidenceRefs, item.EvidenceRefs) {
-				v.add(
-					"amendment.wording.evidence_refs_changed",
-					fmt.Sprintf("%s[%d].evidence_refs", group.name, index),
-					"wording-only edit must preserve each intent item's evidence references",
-				)
+			if exists {
+				if !sameEvidenceReferenceSet(previousItem.EvidenceRefs, item.EvidenceRefs) {
+					v.add(
+						"amendment.wording.evidence_refs_changed",
+						fmt.Sprintf("%s[%d].evidence_refs", group.name, index),
+						"wording-only edit must preserve each intent item's evidence references",
+					)
+				}
+				if !sameContextReferenceSet(previousItem.ContextRefs, item.ContextRefs) {
+					v.add(
+						"amendment.wording.context_refs_changed",
+						fmt.Sprintf("%s[%d].context_refs", group.name, index),
+						"wording-only edit must preserve each intent item's context references",
+					)
+				}
 			}
 		}
 	}
@@ -385,6 +447,23 @@ func sameEvidenceReferenceSet(left, right []SourceEvidenceID) bool {
 		return false
 	}
 	references := make(map[SourceEvidenceID]uint32, len(left))
+	for _, reference := range left {
+		references[reference]++
+	}
+	for _, reference := range right {
+		if references[reference] == 0 {
+			return false
+		}
+		references[reference]--
+	}
+	return true
+}
+
+func sameContextReferenceSet(left, right []ContextItemID) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	references := make(map[ContextItemID]uint32, len(left))
 	for _, reference := range left {
 		references[reference]++
 	}

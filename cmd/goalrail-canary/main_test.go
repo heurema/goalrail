@@ -5,11 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/heurema/goalrail/internal/domain"
 	"github.com/heurema/goalrail/internal/evidence"
@@ -334,6 +337,248 @@ func TestCommandDefaultStoreIsIndependentOfOpenSpecChangeLifecycle(t *testing.T)
 	}
 	if _, err := os.Stat(filepath.Join(repoRoot, "openspec")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("default store recreated OpenSpec lifecycle path: %v", err)
+	}
+}
+
+func TestCommandManifestV2UsesExplicitVersionAndSeparateDefaultStore(t *testing.T) {
+	repoRoot := t.TempDir()
+	var output bytes.Buffer
+	if err := run([]string{
+		"--repo", repoRoot,
+		"--manifest-version", "2",
+		"start",
+		"--change", "change-v2-store-1",
+		"--intent-version", "1",
+		"--actor", "operator",
+		"--source", "request:v2-store",
+		"--reason", "eligibility-confirmed",
+		"--synthetic",
+	}, bytes.NewReader(nil), &output, &bytes.Buffer{}); err != nil {
+		t.Fatalf("start v2 with default store: %v", err)
+	}
+	var receipt operator.StartReceipt
+	if err := json.Unmarshal(output.Bytes(), &receipt); err != nil {
+		t.Fatalf("decode v2 receipt: %v", err)
+	}
+	if receipt.ManifestVersion != 2 {
+		t.Fatalf("v2 receipt manifest version = %d", receipt.ManifestVersion)
+	}
+
+	v2Path := filepath.Join(repoRoot, filepath.FromSlash(defaultEvidenceV2RelativePath))
+	store, err := evidence.NewStoreForManifest(v2Path, 2)
+	if err != nil {
+		t.Fatalf("open v2 store: %v", err)
+	}
+	events, err := store.ReadAll()
+	if err != nil {
+		t.Fatalf("read v2 store: %v", err)
+	}
+	if len(events) != 1 || events[0].ManifestVersion != 2 ||
+		events[0].Assignment == nil || events[0].Assignment.ManifestVersion != 2 {
+		t.Fatalf("unexpected v2 evidence: %#v", events)
+	}
+	if _, err := os.Stat(filepath.Join(repoRoot, filepath.FromSlash(defaultEvidenceRelativePath))); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("v2 command touched v1 evidence path: %v", err)
+	}
+}
+
+func TestCommandRecordsV2ContextBasisAndPhase(t *testing.T) {
+	repoRoot := t.TempDir()
+	storePath := filepath.Join(repoRoot, "events-v2.jsonl")
+	store, err := evidence.NewStoreForManifest(storePath, 2)
+	if err != nil {
+		t.Fatalf("create v2 store: %v", err)
+	}
+	service, err := operator.NewServiceForManifest(store, repoRoot, 2)
+	if err != nil {
+		t.Fatalf("create v2 service: %v", err)
+	}
+	receipt, err := service.Start(operator.StartInput{
+		EventID: "event-cli-v2-setup-start", ChangeID: "change-cli-v2-setup", RunID: "run-cli-v2-setup",
+		IntentVersion: 1, OccurredAt: time.Now().UTC().Add(-time.Minute), Actor: "operator",
+		SourceRef: "request:cli-v2-setup", Reason: "eligibility-confirmed", Synthetic: true,
+	})
+	if err != nil {
+		t.Fatalf("start v2 setup: %v", err)
+	}
+	global := []string{"--repo", repoRoot, "--store", storePath, "--manifest-version", "2"}
+	if err := run(append(global,
+		"bind-context", "--change", string(receipt.ChangeID), "--actor", "operator",
+		"--source", "openspec:cli-v2-setup", "--context-pack", "context-cli-v2-setup", "--context-version", "1",
+	), bytes.NewReader(nil), &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("bind v2 context: %v", err)
+	}
+	if err := run(append(global,
+		"record-basis", "--change", string(receipt.ChangeID), "--actor", "owner",
+		"--source", "owner-review:cli-v2-basis", "--intent-ref", "openspec:cli-v2-setup",
+		"--intent-id", "intent-cli-v2-setup", "--intent-version", "1", "--timing", "pre_execution",
+		"--desired-outcome-id", "OUT-1", "--non-goal-id", "NG-1", "--success-signal-id", "SIG-1",
+	), bytes.NewReader(nil), &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("record v2 basis: %v", err)
+	}
+	events, err := store.ReadAll()
+	if err != nil {
+		t.Fatalf("read setup events: %v", err)
+	}
+	var basisAt time.Time
+	for _, event := range events {
+		if event.AssessmentBasis != nil {
+			basisAt = event.OccurredAt
+		}
+	}
+	if basisAt.IsZero() {
+		t.Fatal("basis command did not append evidence")
+	}
+	phaseStart, phaseEnd := basisAt.Add(time.Nanosecond), basisAt.Add(2*time.Nanosecond)
+	if err := run(append(global,
+		"record-phase", "--change", string(receipt.ChangeID), "--actor", "operator",
+		"--source", "review:cli-v2-phase", "--started-at", phaseStart.Format(time.RFC3339Nano),
+		"--completed-at", phaseEnd.Format(time.RFC3339Nano),
+	), bytes.NewReader(nil), &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("record v2 phase: %v", err)
+	}
+	var inspect bytes.Buffer
+	if err := run(append(global, "inspect", "--change", string(receipt.ChangeID)), bytes.NewReader(nil), &inspect, &bytes.Buffer{}); err != nil {
+		t.Fatalf("inspect v2 setup: %v", err)
+	}
+	var view operator.ChangeView
+	if err := json.Unmarshal(inspect.Bytes(), &view); err != nil {
+		t.Fatalf("decode v2 setup: %v", err)
+	}
+	if view.Context == nil || view.AssessmentBasis == nil || view.FlowPhase == nil ||
+		view.AssessmentBasis.Timing != domain.BasisPreExecution {
+		t.Fatalf("v2 setup commands did not project artifacts: %#v", view)
+	}
+}
+
+func TestCommandReconcilesV2TelemetryWithoutPersistingCredentials(t *testing.T) {
+	repoRoot := t.TempDir()
+	storePath := filepath.Join(repoRoot, "events-v2.jsonl")
+	store, err := evidence.NewStoreForManifest(storePath, 2)
+	if err != nil {
+		t.Fatalf("create v2 store: %v", err)
+	}
+	service, err := operator.NewServiceForManifest(store, repoRoot, 2)
+	if err != nil {
+		t.Fatalf("create v2 service: %v", err)
+	}
+	baseTime := time.Now().UTC().Add(-10 * time.Minute).Truncate(time.Second)
+	receipt, err := service.Start(operator.StartInput{
+		EventID: "event-cli-reconcile-start", ChangeID: "change-cli-reconcile", RunID: "run-cli-reconcile",
+		IntentVersion: 1, OccurredAt: baseTime, Actor: "operator", SourceRef: "request:cli-reconcile",
+		Reason: "eligibility-confirmed", Synthetic: true,
+	})
+	if err != nil {
+		t.Fatalf("start v2 flow: %v", err)
+	}
+	if err := service.RecordContextBinding(operator.ContextBindingInput{
+		EventID: "event-cli-reconcile-context", ChangeID: receipt.ChangeID, OccurredAt: baseTime.Add(time.Minute),
+		Actor: "operator", SourceRef: "openspec:cli-reconcile", ContextPackID: "context-cli-reconcile", ContextPackVersion: 1,
+	}); err != nil {
+		t.Fatalf("record context: %v", err)
+	}
+	if err := service.RecordAssessmentBasis(operator.AssessmentBasisInput{
+		EventID: "event-cli-reconcile-basis", ChangeID: receipt.ChangeID, OccurredAt: baseTime.Add(2 * time.Minute),
+		Actor: "owner", SourceRef: "owner-review:cli-reconcile-basis",
+		Basis: domain.CanaryAssessmentBasis{
+			IntentRef: "openspec:cli-reconcile", IntentID: "intent-cli-reconcile", IntentVersion: 1,
+			Timing: domain.BasisPreExecution, DesiredOutcomeIDs: []domain.IntentItemID{"OUT-1"},
+			NonGoalIDs: []domain.IntentItemID{"NG-1"}, SuccessSignalIDs: []domain.IntentItemID{"SIG-1"},
+		},
+	}); err != nil {
+		t.Fatalf("record basis: %v", err)
+	}
+	phaseStart, phaseEnd := baseTime.Add(3*time.Minute), baseTime.Add(5*time.Minute)
+	if err := service.RecordFlowPhase(operator.FlowPhaseInput{
+		EventID: "event-cli-reconcile-phase", ChangeID: receipt.ChangeID, OccurredAt: phaseEnd,
+		Actor: "operator", SourceRef: "review:cli-reconcile-phase", StartedAt: phaseStart, CompletedAt: phaseEnd,
+	}); err != nil {
+		t.Fatalf("record phase: %v", err)
+	}
+	lineage := domain.ExecutionLineage{
+		Status: domain.LineageVerified, ChangeID: receipt.ChangeID, RunID: receipt.RunID,
+		RootSessionID: "session-cli-reconcile", IdentitySource: domain.SessionIdentityLifecycleHook,
+		ContextDigest: strings.Repeat("c", 64),
+	}
+	if err := store.Append(domain.EvidenceEvent{
+		ID: "event-cli-reconcile-lineage", CanaryID: domain.IntentCanaryV0ManifestID, ManifestVersion: 2,
+		ChangeID: receipt.ChangeID, Kind: domain.EventLineageRecorded, OccurredAt: baseTime.Add(6 * time.Minute),
+		Actor: "goalrail-hook", SourceRef: "codex-hook:lifecycle",
+		ObservationRefs: []domain.EvidenceReference{"langfuse-session:session-cli-reconcile"},
+		Lineage:         &lineage, LineageResolutionAttempts: 1,
+	}); err != nil {
+		t.Fatalf("append lineage: %v", err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		username, password, ok := request.BasicAuth()
+		if !ok || username != "public-cli-test" || password != "secret-cli-test" {
+			t.Errorf("unexpected Langfuse authentication")
+		}
+		fmt.Fprintf(writer, `{"data":[{"id":"observation-cli-1","traceId":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","startTime":%q,"endTime":%q,"projectId":"project-cli","parentObservationId":null,"type":"SPAN","name":"Codex Turn","level":"DEFAULT","statusMessage":null,"version":null,"environment":"development","bookmarked":false,"public":false,"userId":null,"sessionId":"session-cli-reconcile"}],"meta":{"cursor":null}}`, phaseStart.Add(10*time.Second).Format(time.RFC3339Nano), phaseStart.Add(70*time.Second).Format(time.RFC3339Nano))
+	}))
+	defer server.Close()
+	t.Setenv(langfuseBaseURLEnvironment, server.URL)
+	t.Setenv(langfusePublicKeyEnvironment, "public-cli-test")
+	t.Setenv(langfuseSecretKeyEnvironment, "secret-cli-test")
+	ownerStart, ownerEnd := phaseEnd, phaseEnd.Add(30*time.Second)
+	var output bytes.Buffer
+	if err := run([]string{
+		"--repo", repoRoot, "--store", storePath, "--manifest-version", "2", "reconcile",
+		"--change", string(receipt.ChangeID), "--actor", "operator", "--source", "langfuse-api:observations-v2",
+		"--owner-review-ref", "review:cli-owner-review",
+		"--owner-review-start", ownerStart.Format(time.RFC3339Nano),
+		"--owner-review-end", ownerEnd.Format(time.RFC3339Nano),
+	}, bytes.NewReader(nil), &output, &bytes.Buffer{}); err != nil {
+		t.Fatalf("reconcile command: %v", err)
+	}
+	var reconciled operator.ReconcileTelemetryReceipt
+	if err := json.Unmarshal(output.Bytes(), &reconciled); err != nil {
+		t.Fatalf("decode reconcile receipt: %v", err)
+	}
+	if reconciled.Telemetry.FlowOverhead == nil || reconciled.Telemetry.FlowOverhead.TotalMinutes != 1.5 {
+		t.Fatalf("unexpected CLI reconciliation: %#v", reconciled)
+	}
+	global := []string{"--repo", repoRoot, "--store", storePath, "--manifest-version", "2"}
+	if err := run(append(global,
+		"freeze-checks", "--change", string(receipt.ChangeID), "--actor", "operator",
+		"--source", "review:cli-v2-checks", "--check-ref", "test:go-test",
+	), bytes.NewReader(nil), &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("freeze v2 checks: %v", err)
+	}
+	if err := run(append(global,
+		"deliver", "--change", string(receipt.ChangeID), "--actor", "operator",
+		"--source", "review:cli-v2-delivery", "--check-ref", "test:go-test", "--green",
+	), bytes.NewReader(nil), &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("deliver v2 flow: %v", err)
+	}
+	if err := run(append(global,
+		"assess", "--change", string(receipt.ChangeID), "--owner", "owner",
+		"--source", "owner-review:cli-v2-assessment", "--outcome", "match", "--repeat-opt-in", "yes",
+		"--desired-outcome", "OUT-1=achieved", "--non-goal", "NG-1=preserved",
+		"--success-signal", "SIG-1=observed",
+	), bytes.NewReader(nil), &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("assess v2 flow: %v", err)
+	}
+	var inspect bytes.Buffer
+	if err := run(append(global, "inspect", "--change", string(receipt.ChangeID)), bytes.NewReader(nil), &inspect, &bytes.Buffer{}); err != nil {
+		t.Fatalf("inspect v2 flow: %v", err)
+	}
+	var view operator.ChangeView
+	if err := json.Unmarshal(inspect.Bytes(), &view); err != nil {
+		t.Fatalf("decode v2 view: %v", err)
+	}
+	if view.Assessment == nil || len(view.Assessment.ItemJudgments) != 3 || view.Assessment.Outcome != domain.IntentMatch {
+		t.Fatalf("CLI did not project structured assessment: %#v", view.Assessment)
+	}
+	serialized, err := os.ReadFile(storePath)
+	if err != nil {
+		t.Fatalf("read v2 evidence: %v", err)
+	}
+	for _, secret := range []string{"public-cli-test", "secret-cli-test"} {
+		if bytes.Contains(serialized, []byte(secret)) {
+			t.Fatalf("evidence persisted credential %q", secret)
+		}
 	}
 }
 

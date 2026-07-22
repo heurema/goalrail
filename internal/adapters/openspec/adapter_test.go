@@ -11,6 +11,126 @@ import (
 	"github.com/heurema/goalrail/internal/domain"
 )
 
+func TestReadContextParsesBoundedPack(t *testing.T) {
+	pack, err := ReadContext(strings.NewReader(minimalContext("sufficient", "None.")))
+	if err != nil {
+		t.Fatalf("read context: %v", err)
+	}
+	if pack.ID != "CONTEXT-TEST" || len(pack.Items) != 1 || pack.Items[0].SourceRef != "repo:README.md" {
+		t.Fatalf("unexpected context pack: %#v", pack)
+	}
+}
+
+func TestReadContextRejectsSensitiveClaim(t *testing.T) {
+	artifact := strings.Replace(
+		minimalContext("sufficient", "None."),
+		"The repository defines a bounded flow.",
+		"authorization: Bearer example",
+		1,
+	)
+	_, err := ReadContext(strings.NewReader(artifact))
+	if err == nil || !strings.Contains(err.Error(), "context.text.sensitive") {
+		t.Fatalf("sensitive context error = %v", err)
+	}
+}
+
+func TestLoadChangeBindsContextBeforeFlowIntent(t *testing.T) {
+	changeDir := t.TempDir()
+	writeArtifact(t, changeDir, "context.md", minimalContext("sufficient", "None."))
+	writeArtifact(t, changeDir, "intent.md", minimalFlowIntent("confirmed", "None.", true))
+	writeArtifact(t, changeDir, "proposal.md", minimalProposal("OUT-1", "NG-1"))
+
+	change, err := LoadChange(changeDir)
+	if err != nil {
+		t.Fatalf("load context-backed change: %v", err)
+	}
+	if change.Intent.ContextPack == nil || len(change.Intent.DesiredOutcomes[0].ContextRefs) != 1 ||
+		change.Intent.DesiredOutcomes[0].ContextRefs[0] != "CTX-1" {
+		t.Fatalf("context provenance was not bound: %#v", change.Intent)
+	}
+}
+
+func TestLoadChangeRequiresMatchingContextPackDeclaration(t *testing.T) {
+	tests := []struct {
+		name   string
+		intent func(string) string
+	}{
+		{
+			name: "missing declaration",
+			intent: func(value string) string {
+				return strings.Replace(value, "- **Context Pack:** `CONTEXT-TEST` version 1\n", "", 1)
+			},
+		},
+		{
+			name: "wrong ID",
+			intent: func(value string) string {
+				return strings.Replace(value, "`CONTEXT-TEST` version 1", "`CONTEXT-OTHER` version 1", 1)
+			},
+		},
+		{
+			name: "wrong version",
+			intent: func(value string) string {
+				return strings.Replace(value, "`CONTEXT-TEST` version 1", "`CONTEXT-TEST` version 2", 1)
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			changeDir := t.TempDir()
+			writeArtifact(t, changeDir, "context.md", minimalContext("sufficient", "None."))
+			writeArtifact(t, changeDir, "intent.md", test.intent(minimalFlowIntent("confirmed", "None.", true)))
+			writeArtifact(t, changeDir, "proposal.md", minimalProposal("OUT-1", "NG-1"))
+
+			_, err := LoadChange(changeDir)
+			if !errors.Is(err, ErrMalformedArtifact) || !strings.Contains(err.Error(), "Context Pack") {
+				t.Fatalf("Context Pack declaration error = %v, want ErrMalformedArtifact", err)
+			}
+		})
+	}
+}
+
+func TestLoadChangeBlocksConfirmedIntentWithMaterialContextUnknown(t *testing.T) {
+	changeDir := t.TempDir()
+	unknowns := `| ID | Question | Sources |
+|---|---|---|
+| CTXQ-1 | Does the provider preserve a stable session join? | url:example.com/traces |`
+	writeArtifact(t, changeDir, "context.md", minimalContext("material_unknown", unknowns))
+	writeArtifact(t, changeDir, "intent.md", minimalFlowIntent("confirmed", "None.", true))
+
+	_, err := LoadChange(changeDir)
+	if err == nil || !strings.Contains(err.Error(), "intent.context.not_sufficient") {
+		t.Fatalf("material context unknown error = %v", err)
+	}
+}
+
+func TestLoadChangeRequiresContextForActiveGoalrailIntentChange(t *testing.T) {
+	changeDir := t.TempDir()
+	writeArtifact(t, changeDir, ".openspec.yaml", "schema: goalrail-intent\n")
+	writeArtifact(t, changeDir, "intent.md", minimalFlowIntent("confirmed", "None.", true))
+	writeArtifact(t, changeDir, "proposal.md", minimalProposal("OUT-1", "NG-1"))
+
+	_, err := LoadChange(changeDir)
+	if !errors.Is(err, ErrContextRequired) {
+		t.Fatalf("missing context error = %v, want ErrContextRequired", err)
+	}
+}
+
+func TestLoadChangeRequiresContextForArchivedV2IntentMetadata(t *testing.T) {
+	repositoryRoot := t.TempDir()
+	changeDir := filepath.Join(repositoryRoot, "openspec", "changes", "archive", "2026-07-22-v2-change")
+	if err := os.MkdirAll(changeDir, 0o700); err != nil {
+		t.Fatalf("create archived change: %v", err)
+	}
+	writeArtifact(t, changeDir, ".openspec.yaml", "schema: goalrail-intent\n")
+	writeArtifact(t, changeDir, "intent.md", minimalFlowIntent("confirmed", "None.", true))
+	writeArtifact(t, changeDir, "proposal.md", minimalProposal("OUT-1", "NG-1"))
+
+	_, err := LoadChange(changeDir)
+	if !errors.Is(err, ErrContextRequired) {
+		t.Fatalf("missing archived v2 context error = %v, want ErrContextRequired", err)
+	}
+}
+
 func TestLoadChangeReadsArchivedConfirmedArtifacts(t *testing.T) {
 	_, filename, _, ok := runtime.Caller(0)
 	if !ok {
@@ -43,6 +163,30 @@ func TestLoadChangeReadsArchivedConfirmedArtifacts(t *testing.T) {
 	}
 	if len(change.Proposal.Changes) != 4 || len(change.Proposal.PreservedNonGoalRefs) != 5 {
 		t.Fatalf("unexpected proposal coverage: %#v", change.Proposal)
+	}
+}
+
+func TestLoadChangeReadsActiveContextEvaluationArtifacts(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("locate adapter test file")
+	}
+	repositoryRoot := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", "..", ".."))
+	change, err := LoadChange(filepath.Join(
+		repositoryRoot,
+		"openspec",
+		"changes",
+		"intent-context-evaluation-v0",
+	))
+	if err != nil {
+		t.Fatalf("load active context evaluation change: %v", err)
+	}
+	if change.Intent.ContextPack == nil || change.Intent.ContextPack.ID != "context-intent-context-evaluation-v0" {
+		t.Fatalf("unexpected context pack: %#v", change.Intent.ContextPack)
+	}
+	if change.Intent.Status != domain.IntentConfirmed || len(change.Intent.DesiredOutcomes) != 7 ||
+		len(change.Intent.NonGoals) != 6 || len(change.Intent.SuccessSignals) != 10 {
+		t.Fatalf("unexpected active intent: %#v", change.Intent)
 	}
 }
 
@@ -201,6 +345,42 @@ func minimalIntent(status, ambiguities string, confirmed bool) string {
 ## Confirmation
 
 ` + confirmation + `
+`
+}
+
+func minimalFlowIntent(status, ambiguities string, confirmed bool) string {
+	intent := strings.ReplaceAll(
+		minimalIntent(status, ambiguities, confirmed),
+		"| SE-1 |",
+		"| SE-1, CTX-1 |",
+	)
+	return strings.Replace(
+		intent,
+		"- **Owner:** owner",
+		"- **Owner:** owner\n- **Context Pack:** `CONTEXT-TEST` version 1",
+		1,
+	)
+}
+
+func minimalContext(outcome, unknowns string) string {
+	return `# Context Pack
+
+- **Context Pack ID:** CONTEXT-TEST
+- **Version:** 1
+- **Previous version:** pending
+- **Started at:** 2026-07-20T08:00:00Z
+- **Completed at:** 2026-07-20T08:02:00Z
+- **Outcome:** ` + outcome + `
+
+## Context Items
+
+| ID | Kind | Claim | Source | Observed at | Relevance |
+|---|---|---|---|---|---|
+| CTX-1 | repository | The repository defines a bounded flow. | repo:README.md | 2026-07-20T08:01:00Z | This constrains the intended implementation. |
+
+## Material Unknowns
+
+` + unknowns + `
 `
 }
 

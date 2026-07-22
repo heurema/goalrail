@@ -50,6 +50,7 @@ var approvedSourceReferenceSchemes = map[string]struct{}{
 	"github":         {},
 	"hook":           {},
 	"launch-receipt": {},
+	"langfuse-api":   {},
 	"openspec":       {},
 	"owner-review":   {},
 	"request":        {},
@@ -83,8 +84,9 @@ var sensitiveFragments = []string{
 // path share an in-process lock. A sibling coordination file carries an OS
 // lock so cooperating processes serialize complete transactions.
 type Store struct {
-	path string
-	mu   *sync.Mutex
+	path            string
+	manifestVersion uint32
+	mu              *sync.Mutex
 }
 
 type diskRecord struct {
@@ -104,16 +106,28 @@ type digestBody struct {
 
 // NewStore returns a repository-local evidence store for path.
 func NewStore(path string) (*Store, error) {
+	return NewStoreForManifest(path, domain.IntentCanaryV0ManifestVersion)
+}
+
+// NewStoreForManifest binds one physical append-only chain to one immutable
+// manifest version. Different versions must use different paths.
+func NewStoreForManifest(path string, manifestVersion uint32) (*Store, error) {
 	if strings.TrimSpace(path) == "" {
 		return nil, fmt.Errorf("%w: path is empty", ErrInvalidEvent)
+	}
+	if _, err := domain.NewIntentCanaryV0ManifestForVersion(manifestVersion); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrInvalidEvent, err)
 	}
 	absPath, err := filepath.Abs(filepath.Clean(path))
 	if err != nil {
 		return nil, fmt.Errorf("resolve evidence path: %w", err)
 	}
 	lock, _ := pathLocks.LoadOrStore(absPath, &sync.Mutex{})
-	return &Store{path: absPath, mu: lock.(*sync.Mutex)}, nil
+	return &Store{path: absPath, manifestVersion: manifestVersion, mu: lock.(*sync.Mutex)}, nil
 }
+
+// ManifestVersion reports the immutable version expected by this chain.
+func (s *Store) ManifestVersion() uint32 { return s.manifestVersion }
 
 // Append verifies the complete existing chain and appends exactly one event.
 // Corrections must point to an existing event; no mutation API is provided.
@@ -137,7 +151,7 @@ func (s *Store) Append(event domain.EvidenceEvent) error {
 	if err != nil {
 		return err
 	}
-	if err := validateEvent(event, records, false); err != nil {
+	if err := validateEvent(event, records, false, s.manifestVersion); err != nil {
 		return err
 	}
 
@@ -354,7 +368,7 @@ func (s *Store) readRecords() ([]diskRecord, error) {
 		if !bytes.Equal(line, canonicalLine) {
 			return nil, fmt.Errorf("%w: line %d is not canonical JSON", ErrIntegrity, lineNumber)
 		}
-		if err := validateRecord(record, records); err != nil {
+		if err := validateRecord(record, records, s.manifestVersion); err != nil {
 			return nil, fmt.Errorf("line %d: %w", lineNumber, err)
 		}
 		records = append(records, record)
@@ -376,7 +390,7 @@ func requireJSONEOF(decoder *json.Decoder) error {
 	return nil
 }
 
-func validateRecord(record diskRecord, prior []diskRecord) error {
+func validateRecord(record diskRecord, prior []diskRecord, manifestVersion uint32) error {
 	expectedSequence := uint64(len(prior) + 1)
 	if record.SchemaVersion != recordSchemaVersion {
 		return fmt.Errorf("%w: unsupported schema version %d", ErrIntegrity, record.SchemaVersion)
@@ -401,7 +415,7 @@ func validateRecord(record diskRecord, prior []diskRecord) error {
 	if record.Digest != expectedDigest {
 		return fmt.Errorf("%w: digest mismatch", ErrIntegrity)
 	}
-	if err := validateEvent(record.Event, prior, true); err != nil {
+	if err := validateEvent(record.Event, prior, true, manifestVersion); err != nil {
 		return fmt.Errorf("%w: stored event invalid: %v", ErrIntegrity, err)
 	}
 	return nil
@@ -421,7 +435,7 @@ func calculateDigest(record diskRecord) (string, error) {
 	return hex.EncodeToString(digest[:]), nil
 }
 
-func validateEvent(event domain.EvidenceEvent, prior []diskRecord, allowLegacyStart bool) error {
+func validateEvent(event domain.EvidenceEvent, prior []diskRecord, allowLegacyStart bool, manifestVersion uint32) error {
 	for _, record := range prior {
 		if record.Event.ID == event.ID {
 			return fmt.Errorf("%w: %s", ErrDuplicateEventID, event.ID)
@@ -432,6 +446,17 @@ func validateEvent(event domain.EvidenceEvent, prior []diskRecord, allowLegacySt
 	}
 	if err := validateCanonicalID("canary_id", string(event.CanaryID)); err != nil {
 		return err
+	}
+	if effectiveManifestVersion(event) != manifestVersion {
+		return fmt.Errorf(
+			"%w: event manifest version %d does not match store version %d",
+			ErrInvalidEvent,
+			effectiveManifestVersion(event),
+			manifestVersion,
+		)
+	}
+	if manifestVersion == domain.IntentCanaryV0ManifestVersion2 && event.ManifestVersion == 0 {
+		return fmt.Errorf("%w: manifest v2 event must state its version", ErrInvalidEvent)
 	}
 	if event.Kind == domain.EventCanaryStopped {
 		if event.ChangeID != "" {
@@ -492,7 +517,22 @@ func validateEvent(event domain.EvidenceEvent, prior []diskRecord, allowLegacySt
 		}
 	}
 	if event.Assignment != nil {
-		if err := validateAssignment(*event.Assignment); err != nil {
+		if err := validateAssignment(*event.Assignment, manifestVersion); err != nil {
+			return err
+		}
+	}
+	if event.Context != nil {
+		if err := validateContextBinding(*event.Context); err != nil {
+			return err
+		}
+	}
+	if event.AssessmentBasis != nil {
+		if err := validateAssessmentBasis(*event.AssessmentBasis); err != nil {
+			return err
+		}
+	}
+	if event.FlowPhase != nil {
+		if err := validateFlowPhase(event, *event.FlowPhase); err != nil {
 			return err
 		}
 	}
@@ -503,6 +543,11 @@ func validateEvent(event domain.EvidenceEvent, prior []diskRecord, allowLegacySt
 	}
 	if event.Terminal != nil {
 		if err := validateTerminal(*event.Terminal); err != nil {
+			return err
+		}
+	}
+	if event.Telemetry != nil {
+		if err := validateTelemetry(event, *event.Telemetry); err != nil {
 			return err
 		}
 	}
@@ -536,6 +581,27 @@ func validateEvent(event domain.EvidenceEvent, prior []diskRecord, allowLegacySt
 		if err := validateAssignmentTransition(event, *event.Assignment, prior); err != nil {
 			return err
 		}
+	case domain.EventContextBound:
+		if manifestVersion != domain.IntentCanaryV0ManifestVersion2 || event.Context == nil || payloadCount(event) != 1 {
+			return fmt.Errorf("%w: context event is valid only for manifest v2 and requires one context payload", ErrInvalidEvent)
+		}
+		if err := validateContextTransition(event, prior); err != nil {
+			return err
+		}
+	case domain.EventAssessmentBasisRecorded:
+		if manifestVersion != domain.IntentCanaryV0ManifestVersion2 || event.AssessmentBasis == nil || payloadCount(event) != 1 {
+			return fmt.Errorf("%w: assessment-basis event is valid only for manifest v2 and requires one basis payload", ErrInvalidEvent)
+		}
+		if err := validateAssessmentBasisTransition(event, prior); err != nil {
+			return err
+		}
+	case domain.EventFlowPhaseRecorded:
+		if manifestVersion != domain.IntentCanaryV0ManifestVersion2 || event.FlowPhase == nil || payloadCount(event) != 1 {
+			return fmt.Errorf("%w: flow-phase event is valid only for manifest v2 and requires one phase payload", ErrInvalidEvent)
+		}
+		if err := validateFlowPhaseTransition(event, prior); err != nil {
+			return err
+		}
 	case domain.EventCheckSetFrozen:
 		if event.CheckSet == nil || payloadCount(event) != 1 {
 			return fmt.Errorf("%w: check-set event requires only a check-set payload", ErrInvalidEvent)
@@ -548,6 +614,13 @@ func validateEvent(event domain.EvidenceEvent, prior []diskRecord, allowLegacySt
 			return fmt.Errorf("%w: lineage event requires only lineage payload", ErrInvalidEvent)
 		}
 		if err := validateLineageTransition(event, *event.Lineage, prior); err != nil {
+			return err
+		}
+	case domain.EventTelemetryRecorded:
+		if manifestVersion != domain.IntentCanaryV0ManifestVersion2 || event.Telemetry == nil || payloadCount(event) != 1 {
+			return fmt.Errorf("%w: telemetry event is valid only for manifest v2 and requires one telemetry payload", ErrInvalidEvent)
+		}
+		if err := validateTelemetryTransition(event, prior); err != nil {
 			return err
 		}
 	case domain.EventTerminalStateChanged:
@@ -593,8 +666,12 @@ func validateEventKind(kind domain.EvidenceEventKind) error {
 	switch kind {
 	case domain.EventAdmissionDecided,
 		domain.EventChangeStarted,
+		domain.EventContextBound,
+		domain.EventAssessmentBasisRecorded,
+		domain.EventFlowPhaseRecorded,
 		domain.EventCheckSetFrozen,
 		domain.EventLineageRecorded,
+		domain.EventTelemetryRecorded,
 		domain.EventTerminalStateChanged,
 		domain.EventAssessmentRecorded,
 		domain.EventMaterialCorrection,
@@ -611,9 +688,13 @@ func payloadCount(event domain.EvidenceEvent) int {
 	for _, present := range []bool{
 		event.Admission != nil,
 		event.Assignment != nil,
+		event.Context != nil,
+		event.AssessmentBasis != nil,
+		event.FlowPhase != nil,
 		event.CheckSet != nil,
 		event.Lineage != nil,
 		event.Terminal != nil,
+		event.Telemetry != nil,
 		event.Assessment != nil,
 	} {
 		if present {
@@ -635,7 +716,7 @@ func validateAdmission(admission domain.CanaryAdmission) error {
 	return nil
 }
 
-func validateAssignment(assignment domain.CanaryAssignment) error {
+func validateAssignment(assignment domain.CanaryAssignment, manifestVersion uint32) error {
 	if !assignment.Synthetic {
 		return ErrRealCanaryNotActivated
 	}
@@ -646,10 +727,299 @@ func validateAssignment(assignment domain.CanaryAssignment) error {
 	if err != nil || assignment.Variant != expectedVariant {
 		return fmt.Errorf("%w: assignment variant must match immutable ordinal", ErrInvalidEvent)
 	}
-	if assignment.ManifestVersion != domain.IntentCanaryV0ManifestVersion || assignment.IntentVersion == 0 {
-		return fmt.Errorf("%w: assignment requires frozen manifest v1 and a non-zero intent version", ErrInvalidEvent)
+	if assignment.ManifestVersion != manifestVersion || assignment.IntentVersion == 0 {
+		return fmt.Errorf("%w: assignment requires the store manifest version and a non-zero intent version", ErrInvalidEvent)
 	}
 	return validateCanonicalID("assignment.run_id", string(assignment.RunID))
+}
+
+func effectiveManifestVersion(event domain.EvidenceEvent) uint32 {
+	if event.ManifestVersion == 0 {
+		return domain.IntentCanaryV0ManifestVersion
+	}
+	return event.ManifestVersion
+}
+
+func validateContextBinding(binding domain.CanaryContextBinding) error {
+	if err := validateCanonicalID("context.context_pack_id", string(binding.ContextPackID)); err != nil {
+		return err
+	}
+	if binding.ContextPackVersion == 0 {
+		return fmt.Errorf("%w: context pack version must be non-zero", ErrInvalidEvent)
+	}
+	return nil
+}
+
+func validateAssessmentBasis(basis domain.CanaryAssessmentBasis) error {
+	if err := domain.ValidateCanaryAssessmentBasis(basis); err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidEvent, err)
+	}
+	if err := validateReference("assessment_basis.intent_ref", string(basis.IntentRef)); err != nil {
+		return err
+	}
+	if err := validateCanonicalID("assessment_basis.intent_id", string(basis.IntentID)); err != nil {
+		return err
+	}
+	if basis.IntentVersion == 0 {
+		return fmt.Errorf("%w: assessment basis intent version must be non-zero", ErrInvalidEvent)
+	}
+	if basis.Timing != domain.BasisPreExecution && basis.Timing != domain.BasisPostDelivery {
+		return fmt.Errorf("%w: assessment basis timing is invalid", ErrInvalidEvent)
+	}
+	if len(basis.DesiredOutcomeIDs) == 0 || len(basis.SuccessSignalIDs) == 0 {
+		return fmt.Errorf("%w: assessment basis requires desired outcomes and success signals", ErrInvalidEvent)
+	}
+	seen := make(map[domain.IntentItemID]struct{})
+	for group, ids := range map[string][]domain.IntentItemID{
+		"desired_outcome_ids": basis.DesiredOutcomeIDs,
+		"non_goal_ids":        basis.NonGoalIDs,
+		"success_signal_ids":  basis.SuccessSignalIDs,
+	} {
+		for index, id := range ids {
+			if err := validateCanonicalID(fmt.Sprintf("assessment_basis.%s[%d]", group, index), string(id)); err != nil {
+				return err
+			}
+			if _, duplicate := seen[id]; duplicate {
+				return fmt.Errorf("%w: assessment basis item %q is duplicated", ErrInvalidEvent, id)
+			}
+			seen[id] = struct{}{}
+		}
+	}
+	return nil
+}
+
+func validateFlowPhase(event domain.EvidenceEvent, phase domain.CanaryFlowPhase) error {
+	if err := validateTimestamp("flow_phase.started_at", phase.StartedAt); err != nil {
+		return err
+	}
+	if err := validateTimestamp("flow_phase.completed_at", phase.CompletedAt); err != nil {
+		return err
+	}
+	if !phase.StartedAt.Before(phase.CompletedAt) {
+		return fmt.Errorf("%w: flow phase completion must follow start", ErrInvalidEvent)
+	}
+	if phase.CompletedAt.After(event.OccurredAt) {
+		return fmt.Errorf("%w: flow phase cannot complete after its evidence event", ErrInvalidEvent)
+	}
+	return nil
+}
+
+func validateTelemetry(event domain.EvidenceEvent, telemetry domain.CanaryTelemetry) error {
+	if err := validateObservationReference("telemetry.session_lookup", string(telemetry.SessionLookup)); err != nil {
+		return err
+	}
+	if !strings.HasPrefix(string(telemetry.SessionLookup), "langfuse-session:") {
+		return fmt.Errorf("%w: telemetry session lookup must use langfuse-session", ErrInvalidEvent)
+	}
+	seen := make(map[domain.EvidenceReference]struct{}, len(telemetry.TraceIntervals))
+	for index, interval := range telemetry.TraceIntervals {
+		path := fmt.Sprintf("telemetry.trace_intervals[%d]", index)
+		if err := validateObservationReference(path+".reference", string(interval.Reference)); err != nil {
+			return err
+		}
+		if !strings.HasPrefix(string(interval.Reference), "langfuse-trace:") {
+			return fmt.Errorf("%w: telemetry interval must use langfuse-trace", ErrInvalidEvent)
+		}
+		if err := validateTimestamp(path+".started_at", interval.StartedAt); err != nil {
+			return err
+		}
+		if err := validateTimestamp(path+".ended_at", interval.EndedAt); err != nil {
+			return err
+		}
+		if interval.EndedAt.Before(interval.StartedAt) {
+			return fmt.Errorf("%w: telemetry interval is reversed", ErrInvalidEvent)
+		}
+		if interval.EndedAt.After(event.OccurredAt) {
+			return fmt.Errorf("%w: telemetry interval cannot end after its evidence event", ErrInvalidEvent)
+		}
+		if _, duplicate := seen[interval.Reference]; duplicate {
+			return fmt.Errorf("%w: telemetry trace is duplicated", ErrInvalidEvent)
+		}
+		seen[interval.Reference] = struct{}{}
+	}
+	if telemetry.OwnerReview != nil {
+		if err := validateReference("telemetry.owner_review.reference", string(telemetry.OwnerReview.Reference)); err != nil {
+			return err
+		}
+		if err := validateTimestamp("telemetry.owner_review.started_at", telemetry.OwnerReview.StartedAt); err != nil {
+			return err
+		}
+		if err := validateTimestamp("telemetry.owner_review.ended_at", telemetry.OwnerReview.EndedAt); err != nil {
+			return err
+		}
+		if telemetry.OwnerReview.EndedAt.Before(telemetry.OwnerReview.StartedAt) {
+			return fmt.Errorf("%w: owner-review interval is reversed", ErrInvalidEvent)
+		}
+		if telemetry.OwnerReview.EndedAt.After(event.OccurredAt) {
+			return fmt.Errorf("%w: owner-review interval cannot end after its evidence event", ErrInvalidEvent)
+		}
+	}
+
+	wantRefs := make([]domain.EvidenceReference, 0, len(telemetry.TraceIntervals)+1)
+	wantRefs = append(wantRefs, telemetry.SessionLookup)
+	for _, interval := range telemetry.TraceIntervals {
+		wantRefs = append(wantRefs, interval.Reference)
+	}
+	if !sameReferenceSet(event.ObservationRefs, wantRefs) {
+		return fmt.Errorf("%w: telemetry observation references must match its bounded payload", ErrInvalidEvent)
+	}
+	switch telemetry.Status {
+	case domain.TelemetryAvailable:
+		if len(telemetry.TraceIntervals) == 0 ||
+			(event.ReasonCode != "" && event.Kind != domain.EventEvidenceCorrected) {
+			return fmt.Errorf("%w: available telemetry requires traces and no failure reason", ErrInvalidEvent)
+		}
+	case domain.TelemetryUnavailable, domain.TelemetryConflict:
+		if len(telemetry.TraceIntervals) != 0 || event.ReasonCode == "" {
+			return fmt.Errorf("%w: non-available telemetry requires a reason and no trace intervals", ErrInvalidEvent)
+		}
+	default:
+		return fmt.Errorf("%w: unknown telemetry status %q", ErrInvalidEvent, telemetry.Status)
+	}
+	return nil
+}
+
+func validateContextTransition(event domain.EvidenceEvent, prior []diskRecord) error {
+	assignment, assignedAt := assignedChange(event, prior)
+	if assignment == nil || assignment.Variant != domain.VariantFlow {
+		return fmt.Errorf("%w: context binding requires an assigned flow change", ErrInvalidEvent)
+	}
+	if event.OccurredAt.Before(assignedAt) || terminalExists(event, prior) {
+		return fmt.Errorf("%w: context binding must occur after assignment and before terminal evidence", ErrInvalidEvent)
+	}
+	if latestPayloadEvent(event, prior, func(previous domain.EvidenceEvent) bool { return previous.Context != nil }) != nil {
+		return fmt.Errorf("%w: flow change already has a context binding", ErrInvalidEvent)
+	}
+	return nil
+}
+
+func validateAssessmentBasisTransition(event domain.EvidenceEvent, prior []diskRecord) error {
+	assignment, assignedAt := assignedChange(event, prior)
+	if assignment == nil || event.OccurredAt.Before(assignedAt) {
+		return fmt.Errorf("%w: assessment basis requires an assigned change", ErrInvalidEvent)
+	}
+	if event.AssessmentBasis.IntentVersion != assignment.IntentVersion {
+		return fmt.Errorf("%w: assessment basis intent version must match the immutable assignment", ErrInvalidEvent)
+	}
+	if latestPayloadEvent(event, prior, func(previous domain.EvidenceEvent) bool { return previous.AssessmentBasis != nil }) != nil {
+		return fmt.Errorf("%w: assessment basis already exists", ErrInvalidEvent)
+	}
+	terminal, terminalAt := terminalChange(event, prior)
+	switch assignment.Variant {
+	case domain.VariantFlow:
+		if event.AssessmentBasis.Timing != domain.BasisPreExecution || terminal != nil ||
+			latestPayloadEvent(event, prior, func(previous domain.EvidenceEvent) bool { return previous.Context != nil }) == nil {
+			return fmt.Errorf("%w: flow basis must be pre-execution after context and before terminal evidence", ErrInvalidEvent)
+		}
+	case domain.VariantBaseline:
+		if event.AssessmentBasis.Timing != domain.BasisPostDelivery || terminal == nil ||
+			terminal.State != domain.CanaryStateDelivered || event.OccurredAt.Before(terminalAt) {
+			return fmt.Errorf("%w: baseline basis must be visibly post-delivery", ErrInvalidEvent)
+		}
+	}
+	return nil
+}
+
+func validateFlowPhaseTransition(event domain.EvidenceEvent, prior []diskRecord) error {
+	assignment, assignedAt := assignedChange(event, prior)
+	if assignment == nil || assignment.Variant != domain.VariantFlow || terminalExists(event, prior) {
+		return fmt.Errorf("%w: flow phase requires an open assigned flow change", ErrInvalidEvent)
+	}
+	if event.FlowPhase.StartedAt.Before(assignedAt) {
+		return fmt.Errorf("%w: flow phase predates assignment", ErrInvalidEvent)
+	}
+	contextEvent := latestPayloadEvent(event, prior, func(previous domain.EvidenceEvent) bool { return previous.Context != nil })
+	basisEvent := latestPayloadEvent(event, prior, func(previous domain.EvidenceEvent) bool { return previous.AssessmentBasis != nil })
+	if contextEvent == nil || basisEvent == nil {
+		return fmt.Errorf("%w: flow phase requires context and assessment basis", ErrInvalidEvent)
+	}
+	if event.FlowPhase.StartedAt.Before(contextEvent.OccurredAt) || event.FlowPhase.StartedAt.Before(basisEvent.OccurredAt) {
+		return fmt.Errorf("%w: flow phase must start after context and assessment basis", ErrInvalidEvent)
+	}
+	if latestPayloadEvent(event, prior, func(previous domain.EvidenceEvent) bool { return previous.FlowPhase != nil }) != nil ||
+		checkSetEvent(event, prior) != nil {
+		return fmt.Errorf("%w: flow phase must be recorded once before checks", ErrInvalidEvent)
+	}
+	return nil
+}
+
+func validateTelemetryTransition(event domain.EvidenceEvent, prior []diskRecord) error {
+	assignment, _ := assignedChange(event, prior)
+	if assignment == nil {
+		return fmt.Errorf("%w: telemetry requires an assigned change", ErrInvalidEvent)
+	}
+	lineageEvent := latestPayloadEvent(event, prior, func(previous domain.EvidenceEvent) bool {
+		return previous.Lineage != nil && previous.Lineage.Status == domain.LineageVerified
+	})
+	if lineageEvent == nil {
+		return fmt.Errorf("%w: telemetry requires verified lineage", ErrInvalidEvent)
+	}
+	wantLookup := domain.EvidenceReference("langfuse-session:" + string(lineageEvent.Lineage.RootSessionID))
+	if event.Telemetry.SessionLookup != wantLookup {
+		return fmt.Errorf("%w: telemetry lookup must match verified lineage", ErrInvalidEvent)
+	}
+	if latestPayloadEvent(event, prior, func(previous domain.EvidenceEvent) bool { return previous.Telemetry != nil }) != nil {
+		return fmt.Errorf("%w: telemetry already exists; append a correction", ErrInvalidEvent)
+	}
+	if assignment.Variant == domain.VariantFlow {
+		phaseEvent := latestPayloadEvent(event, prior, func(previous domain.EvidenceEvent) bool { return previous.FlowPhase != nil })
+		if phaseEvent == nil {
+			if event.Telemetry.Status != domain.TelemetryUnavailable || event.ReasonCode != "flow-phase-missing" {
+				return fmt.Errorf("%w: flow telemetry without a phase must record flow-phase-missing as unavailable", ErrInvalidEvent)
+			}
+			return validateTelemetryMeasurement(*event.Telemetry, *assignment)
+		}
+		for _, interval := range event.Telemetry.TraceIntervals {
+			if interval.StartedAt.Before(phaseEvent.FlowPhase.StartedAt) || interval.StartedAt.After(phaseEvent.FlowPhase.CompletedAt) ||
+				interval.EndedAt.After(phaseEvent.FlowPhase.CompletedAt) {
+				return fmt.Errorf("%w: flow trace starts outside the recorded phase", ErrInvalidEvent)
+			}
+		}
+		return validateTelemetryMeasurement(*event.Telemetry, *assignment)
+	}
+	return validateTelemetryMeasurement(*event.Telemetry, *assignment)
+}
+
+func validateTelemetryMeasurement(telemetry domain.CanaryTelemetry, assignment domain.CanaryAssignment) error {
+	switch assignment.Variant {
+	case domain.VariantFlow:
+		measurement, err := domain.CalculateCanaryFlowOverhead(domain.CanaryFlowOverheadInput{
+			AgentTurns: telemetry.TraceIntervals, OwnerReview: telemetry.OwnerReview, OwnerReviewRequired: true,
+		})
+		if err != nil || telemetry.FlowOverhead == nil || *telemetry.FlowOverhead != measurement {
+			return fmt.Errorf("%w: flow overhead must match the derived timing evidence", ErrInvalidEvent)
+		}
+		if telemetry.Status == domain.TelemetryAvailable && !measurement.Available {
+			return fmt.Errorf("%w: available flow telemetry requires machine and owner-review timing", ErrInvalidEvent)
+		}
+	case domain.VariantBaseline:
+		if telemetry.OwnerReview != nil || telemetry.FlowOverhead != nil {
+			return fmt.Errorf("%w: baseline telemetry cannot record flow overhead", ErrInvalidEvent)
+		}
+	default:
+		return fmt.Errorf("%w: unknown telemetry assignment variant", ErrInvalidEvent)
+	}
+	return nil
+}
+
+func terminalExists(event domain.EvidenceEvent, prior []diskRecord) bool {
+	terminal, _ := terminalChange(event, prior)
+	return terminal != nil
+}
+
+func latestPayloadEvent(
+	event domain.EvidenceEvent,
+	prior []diskRecord,
+	matches func(domain.EvidenceEvent) bool,
+) *domain.EvidenceEvent {
+	var latest *domain.EvidenceEvent
+	for index := range prior {
+		previous := &prior[index].Event
+		if previous.CanaryID == event.CanaryID && previous.ChangeID == event.ChangeID && matches(*previous) {
+			latest = previous
+		}
+	}
+	return latest
 }
 
 func validateAdmissionTransition(
@@ -749,6 +1119,11 @@ func validateCheckSetTransition(event domain.EvidenceEvent, prior []diskRecord) 
 	}
 	if event.OccurredAt.Before(assignedAt) {
 		return fmt.Errorf("%w: check-set event predates assignment", ErrInvalidEvent)
+	}
+	if assignment.ManifestVersion == domain.IntentCanaryV0ManifestVersion2 &&
+		assignment.Variant == domain.VariantFlow &&
+		latestPayloadEvent(event, prior, func(previous domain.EvidenceEvent) bool { return previous.FlowPhase != nil }) == nil {
+		return fmt.Errorf("%w: manifest v2 flow checks require a completed flow phase", ErrInvalidEvent)
 	}
 	if checkSetEvent(event, prior) != nil {
 		return fmt.Errorf("%w: canary change already has a frozen check set", ErrInvalidEvent)
@@ -950,6 +1325,17 @@ func validateAssessmentTransition(
 	if event.OccurredAt.Before(terminalAt) || assessment.AssessedAt.Before(terminalAt) {
 		return fmt.Errorf("%w: assessment predates delivery", ErrInvalidEvent)
 	}
+	if assignment.ManifestVersion == domain.IntentCanaryV0ManifestVersion2 {
+		basisEvent := latestPayloadEvent(event, prior, func(previous domain.EvidenceEvent) bool { return previous.AssessmentBasis != nil })
+		if basisEvent == nil {
+			return fmt.Errorf("%w: manifest v2 assessment requires a frozen basis", ErrInvalidEvent)
+		}
+		if err := domain.ValidateAssessmentAgainstBasis(assessment, *basisEvent.AssessmentBasis); err != nil {
+			return fmt.Errorf("%w: %v", ErrInvalidEvent, err)
+		}
+	} else if len(assessment.ItemJudgments) != 0 {
+		return fmt.Errorf("%w: manifest v1 assessment cannot record v2 item judgments", ErrInvalidEvent)
+	}
 	for _, record := range prior {
 		previous := record.Event
 		if previous.CanaryID == event.CanaryID && previous.ChangeID == event.ChangeID &&
@@ -1092,9 +1478,47 @@ func validateCorrection(event domain.EvidenceEvent, prior []diskRecord) error {
 		return validateAssessmentCorrection(event, prior)
 	case target.CheckSet != nil && event.CheckSet != nil:
 		return validateCheckSetCorrection(event, *target, prior)
+	case target.Telemetry != nil && event.Telemetry != nil:
+		return validateTelemetryCorrection(event, prior)
 	default:
-		return fmt.Errorf("%w: correction payload must match assessment or check set", ErrInvalidCorrection)
+		return fmt.Errorf("%w: correction payload must match assessment, check set, or telemetry", ErrInvalidCorrection)
 	}
+}
+
+func validateTelemetryCorrection(event domain.EvidenceEvent, prior []diskRecord) error {
+	latest := latestPayloadEvent(event, prior, func(previous domain.EvidenceEvent) bool {
+		return previous.Telemetry != nil
+	})
+	if latest == nil || latest.ID != event.SupersedesEventID {
+		return fmt.Errorf("%w: correction must supersede the latest telemetry event", ErrInvalidCorrection)
+	}
+	assignment, _ := assignedChange(event, prior)
+	lineage := latestPayloadEvent(event, prior, func(previous domain.EvidenceEvent) bool {
+		return previous.Lineage != nil && previous.Lineage.Status == domain.LineageVerified
+	})
+	if assignment == nil || lineage == nil {
+		return fmt.Errorf("%w: telemetry correction requires assignment and verified lineage", ErrInvalidCorrection)
+	}
+	wantLookup := domain.EvidenceReference("langfuse-session:" + string(lineage.Lineage.RootSessionID))
+	if event.Telemetry.SessionLookup != wantLookup {
+		return fmt.Errorf("%w: corrected telemetry lookup must match verified lineage", ErrInvalidCorrection)
+	}
+	if assignment.Variant == domain.VariantFlow {
+		phase := latestPayloadEvent(event, prior, func(previous domain.EvidenceEvent) bool { return previous.FlowPhase != nil })
+		if phase == nil {
+			return fmt.Errorf("%w: flow telemetry correction requires a phase", ErrInvalidCorrection)
+		}
+		for _, interval := range event.Telemetry.TraceIntervals {
+			if interval.StartedAt.Before(phase.FlowPhase.StartedAt) || interval.StartedAt.After(phase.FlowPhase.CompletedAt) ||
+				interval.EndedAt.After(phase.FlowPhase.CompletedAt) {
+				return fmt.Errorf("%w: corrected flow trace starts outside the recorded phase", ErrInvalidCorrection)
+			}
+		}
+	}
+	if err := validateTelemetryMeasurement(*event.Telemetry, *assignment); err != nil {
+		return fmt.Errorf("%w: corrected telemetry measurement is invalid", ErrInvalidCorrection)
+	}
+	return nil
 }
 
 func validateAssessmentCorrection(event domain.EvidenceEvent, prior []diskRecord) error {
@@ -1120,6 +1544,17 @@ func validateAssessmentCorrection(event domain.EvidenceEvent, prior []diskRecord
 		}
 		if err := validateAssessmentAgainstChange(*event.Assessment, *assignment, *terminal); err != nil {
 			return err
+		}
+		if assignment.ManifestVersion == domain.IntentCanaryV0ManifestVersion2 {
+			basisEvent := latestPayloadEvent(event, prior, func(previous domain.EvidenceEvent) bool { return previous.AssessmentBasis != nil })
+			if basisEvent == nil {
+				return fmt.Errorf("%w: corrected v2 assessment requires a frozen basis", ErrInvalidCorrection)
+			}
+			if err := domain.ValidateAssessmentAgainstBasis(*event.Assessment, *basisEvent.AssessmentBasis); err != nil {
+				return fmt.Errorf("%w: corrected item judgments are invalid: %v", ErrInvalidCorrection, err)
+			}
+		} else if len(event.Assessment.ItemJudgments) != 0 {
+			return fmt.Errorf("%w: manifest v1 assessment cannot record v2 item judgments", ErrInvalidCorrection)
 		}
 		if event.Assessment.MaterialCorrectionBeforeDelivery != hasMaterialCorrection(event, prior) {
 			return fmt.Errorf("%w: corrected material-correction value must match append-only events", ErrInvalidCorrection)

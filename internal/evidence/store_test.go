@@ -275,6 +275,82 @@ func TestStoreAppendsAndReadsVerifiedEvents(t *testing.T) {
 	}
 }
 
+func TestStoreKeepsManifestVersionsInSeparateChains(t *testing.T) {
+	v1, err := NewStoreForManifest(filepath.Join(t.TempDir(), "events.jsonl"), 1)
+	if err != nil {
+		t.Fatalf("create v1 store: %v", err)
+	}
+	v2, err := NewStoreForManifest(filepath.Join(t.TempDir(), "events-v2.jsonl"), 2)
+	if err != nil {
+		t.Fatalf("create v2 store: %v", err)
+	}
+
+	v1Event := validAssignmentEvent("event-v1", "change-v1", "run-v1", 1)
+	if err := v1.Append(v1Event); err != nil {
+		t.Fatalf("append legacy v1 event: %v", err)
+	}
+	v2Event := validAssignmentEvent("event-v2", "change-v2", "run-v2", 1)
+	v2Event.ManifestVersion = 2
+	v2Event.Assignment.ManifestVersion = 2
+	if err := v2.Append(v2Event); err != nil {
+		t.Fatalf("append v2 event: %v", err)
+	}
+
+	wrongForV2 := validAssignmentEvent("event-wrong-v1", "change-wrong-v1", "run-wrong-v1", 2)
+	if err := v2.Append(wrongForV2); err == nil || !strings.Contains(err.Error(), "does not match store version") {
+		t.Fatalf("v2 store accepted v1 event: %v", err)
+	}
+	wrongForV1 := validAssignmentEvent("event-wrong-v2", "change-wrong-v2", "run-wrong-v2", 2)
+	wrongForV1.ManifestVersion = 2
+	wrongForV1.Assignment.ManifestVersion = 2
+	if err := v1.Append(wrongForV1); err == nil || !strings.Contains(err.Error(), "does not match store version") {
+		t.Fatalf("v1 store accepted v2 event: %v", err)
+	}
+}
+
+func TestStoreV2RequiresExplicitTopLevelManifestVersion(t *testing.T) {
+	store, err := NewStoreForManifest(filepath.Join(t.TempDir(), "events-v2.jsonl"), 2)
+	if err != nil {
+		t.Fatalf("create v2 store: %v", err)
+	}
+	event := validAssignmentEvent("event-v2", "change-v2", "run-v2", 1)
+	event.Assignment.ManifestVersion = 2
+	if err := store.Append(event); err == nil || !strings.Contains(err.Error(), "does not match store version") {
+		t.Fatalf("implicit v2 event was accepted: %v", err)
+	}
+}
+
+func TestStoreV2RejectsSensitiveAssessmentBasisBeforeAppend(t *testing.T) {
+	store, err := NewStoreForManifest(filepath.Join(t.TempDir(), "events-v2.jsonl"), 2)
+	if err != nil {
+		t.Fatalf("create v2 store: %v", err)
+	}
+	event := domain.EvidenceEvent{
+		ID:              "event-sensitive-basis",
+		CanaryID:        domain.IntentCanaryV0ManifestID,
+		ManifestVersion: 2,
+		ChangeID:        "change-sensitive-basis",
+		Kind:            domain.EventAssessmentBasisRecorded,
+		OccurredAt:      testTime,
+		Actor:           "owner",
+		SourceRef:       "owner-review:basis",
+		AssessmentBasis: &domain.CanaryAssessmentBasis{
+			IntentRef:         "authorization:BearerCredential",
+			IntentID:          "intent-sensitive-basis",
+			IntentVersion:     1,
+			Timing:            domain.BasisPreExecution,
+			DesiredOutcomeIDs: []domain.IntentItemID{"OUT-1"},
+			SuccessSignalIDs:  []domain.IntentItemID{"SIG-1"},
+		},
+	}
+	if err := store.Append(event); !errors.Is(err, ErrSensitivePayload) {
+		t.Fatalf("sensitive v2 basis error = %v, want ErrSensitivePayload", err)
+	}
+	if _, err := os.Stat(store.path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("sensitive v2 basis created evidence: %v", err)
+	}
+}
+
 func TestStoreRejectsSymlinkEvidencePathForEveryOperation(t *testing.T) {
 	dir := t.TempDir()
 	targetPath := filepath.Join(dir, "target.jsonl")
@@ -358,6 +434,60 @@ func TestCorrectionAppendsLinkAndPreservesOriginalBytes(t *testing.T) {
 	}
 	if events[1].SupersedesEventID != events[0].ID || events[1].Assessment.Outcome != domain.IntentPartial {
 		t.Fatalf("correction link or payload missing: %#v", events[1])
+	}
+}
+
+func TestValidateTelemetryRejectsIntervalsAfterEvidenceEvent(t *testing.T) {
+	traceRef := domain.EvidenceReference("langfuse-trace:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+	event := domain.EvidenceEvent{
+		OccurredAt:      testTime,
+		ObservationRefs: []domain.EvidenceReference{"langfuse-session:session-1", traceRef},
+	}
+	validTrace := domain.CanaryTimingInterval{
+		Reference: traceRef,
+		StartedAt: testTime.Add(-time.Minute),
+		EndedAt:   testTime.Add(-30 * time.Second),
+	}
+	tests := []struct {
+		name      string
+		telemetry domain.CanaryTelemetry
+		want      string
+	}{
+		{
+			name: "trace end",
+			telemetry: domain.CanaryTelemetry{
+				Status:        domain.TelemetryAvailable,
+				SessionLookup: "langfuse-session:session-1",
+				TraceIntervals: []domain.CanaryTimingInterval{{
+					Reference: traceRef,
+					StartedAt: validTrace.StartedAt,
+					EndedAt:   testTime.Add(time.Second),
+				}},
+			},
+			want: "telemetry interval cannot end after its evidence event",
+		},
+		{
+			name: "owner-review end",
+			telemetry: domain.CanaryTelemetry{
+				Status:         domain.TelemetryAvailable,
+				SessionLookup:  "langfuse-session:session-1",
+				TraceIntervals: []domain.CanaryTimingInterval{validTrace},
+				OwnerReview: &domain.CanaryTimingInterval{
+					Reference: "owner-review:change-1",
+					StartedAt: testTime.Add(-20 * time.Second),
+					EndedAt:   testTime.Add(time.Second),
+				},
+			},
+			want: "owner-review interval cannot end after its evidence event",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := validateTelemetry(event, test.telemetry)
+			if !errors.Is(err, ErrInvalidEvent) || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("future interval error = %v, want %q", err, test.want)
+			}
+		})
 	}
 }
 

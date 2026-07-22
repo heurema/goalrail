@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "manifest_version": 2,
+  "evidence_records": 24,
+  "completed_flow_change": "change-synthetic-v2-flow",
+  "completed_baseline_change": "change-synthetic-v2-baseline",
+  "rotation_spacer_change": "change-synthetic-v2-spacer",
+  "evidence_verified": true,
+  "report_derived": true,
+  "real_activation_performed": false,
+  "rejected_real_admission_proved": true,
+  "external_langfuse_read": false,
+  "external_langfuse_write": false,
+  "synthetic_trace_source_only": true,
+  "rollback_prefix_preserved": true,
+  "stop_event_appended": true
+}

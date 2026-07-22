@@ -30,16 +30,30 @@ var (
 type Service struct {
 	store    *evidence.Store
 	repoRoot string
+	manifest domain.CanaryManifest
 }
 
 func NewService(store *evidence.Store, repoRoot string) (*Service, error) {
+	return NewServiceForManifest(store, repoRoot, domain.IntentCanaryV0ManifestVersion)
+}
+
+// NewServiceForManifest binds every operator action and projection to one
+// immutable manifest version and its matching evidence chain.
+func NewServiceForManifest(store *evidence.Store, repoRoot string, manifestVersion uint32) (*Service, error) {
 	if store == nil {
 		return nil, errors.New("operator service requires an evidence store")
+	}
+	if store.ManifestVersion() != manifestVersion {
+		return nil, errors.New("operator manifest version must match the evidence store")
 	}
 	if _, err := codex.NewRunContext("validation-change", "validation-run", repoRoot); err != nil {
 		return nil, fmt.Errorf("validate operator repository root: %w", err)
 	}
-	return &Service{store: store, repoRoot: repoRoot}, nil
+	manifest, err := domain.NewIntentCanaryV0ManifestForVersion(manifestVersion)
+	if err != nil {
+		return nil, fmt.Errorf("load frozen manifest: %w", err)
+	}
+	return &Service{store: store, repoRoot: repoRoot, manifest: manifest}, nil
 }
 
 type StartInput struct {
@@ -56,6 +70,7 @@ type StartInput struct {
 
 type StartReceipt struct {
 	CanaryID        domain.CanaryID          `json:"canary_id"`
+	ManifestVersion uint32                   `json:"manifest_version"`
 	ChangeID        domain.ChangeID          `json:"change_id"`
 	RunID           domain.RunID             `json:"run_id"`
 	Ordinal         uint32                   `json:"ordinal"`
@@ -66,10 +81,7 @@ type StartReceipt struct {
 }
 
 func (s *Service) Start(input StartInput) (StartReceipt, error) {
-	manifest, err := domain.NewIntentCanaryV0Manifest()
-	if err != nil {
-		return StartReceipt{}, fmt.Errorf("load frozen manifest: %w", err)
-	}
+	manifest := s.manifest
 	events, err := s.store.ReadAll()
 	if err != nil {
 		return StartReceipt{}, err
@@ -106,14 +118,15 @@ func (s *Service) Start(input StartInput) (StartReceipt, error) {
 		return StartReceipt{}, err
 	}
 	event := domain.EvidenceEvent{
-		ID:         input.EventID,
-		CanaryID:   manifest.ID,
-		ChangeID:   input.ChangeID,
-		Kind:       domain.EventAdmissionDecided,
-		OccurredAt: input.OccurredAt,
-		Actor:      input.Actor,
-		SourceRef:  input.SourceRef,
-		ReasonCode: input.Reason,
+		ID:              input.EventID,
+		CanaryID:        manifest.ID,
+		ManifestVersion: s.eventManifestVersion(),
+		ChangeID:        input.ChangeID,
+		Kind:            domain.EventAdmissionDecided,
+		OccurredAt:      input.OccurredAt,
+		Actor:           input.Actor,
+		SourceRef:       input.SourceRef,
+		ReasonCode:      input.Reason,
 		Admission: &domain.CanaryAdmission{
 			Decision:  domain.AdmissionEligible,
 			Synthetic: true,
@@ -132,6 +145,7 @@ func (s *Service) Start(input StartInput) (StartReceipt, error) {
 	}
 	return StartReceipt{
 		CanaryID:        manifest.ID,
+		ManifestVersion: manifest.Version,
 		ChangeID:        input.ChangeID,
 		RunID:           input.RunID,
 		Ordinal:         ordinal,
@@ -154,6 +168,7 @@ type ExcludeInput struct {
 
 type ExcludeReceipt struct {
 	CanaryID        domain.CanaryID           `json:"canary_id"`
+	ManifestVersion uint32                    `json:"manifest_version"`
 	ChangeID        domain.ChangeID           `json:"change_id"`
 	Decision        domain.AdmissionDecision  `json:"decision"`
 	Reason          domain.EvidenceReasonCode `json:"reason"`
@@ -163,10 +178,7 @@ type ExcludeReceipt struct {
 // Exclude records a candidate decision without calculating or returning the
 // next ordinal or variant.
 func (s *Service) Exclude(input ExcludeInput) (ExcludeReceipt, error) {
-	manifest, err := domain.NewIntentCanaryV0Manifest()
-	if err != nil {
-		return ExcludeReceipt{}, fmt.Errorf("load frozen manifest: %w", err)
-	}
+	manifest := s.manifest
 	events, err := s.store.ReadAll()
 	if err != nil {
 		return ExcludeReceipt{}, err
@@ -184,14 +196,15 @@ func (s *Service) Exclude(input ExcludeInput) (ExcludeReceipt, error) {
 		return ExcludeReceipt{}, ErrRealCanaryNotActivated
 	}
 	event := domain.EvidenceEvent{
-		ID:         input.EventID,
-		CanaryID:   manifest.ID,
-		ChangeID:   input.ChangeID,
-		Kind:       domain.EventAdmissionDecided,
-		OccurredAt: input.OccurredAt,
-		Actor:      input.Actor,
-		SourceRef:  input.SourceRef,
-		ReasonCode: input.Reason,
+		ID:              input.EventID,
+		CanaryID:        manifest.ID,
+		ManifestVersion: s.eventManifestVersion(),
+		ChangeID:        input.ChangeID,
+		Kind:            domain.EventAdmissionDecided,
+		OccurredAt:      input.OccurredAt,
+		Actor:           input.Actor,
+		SourceRef:       input.SourceRef,
+		ReasonCode:      input.Reason,
 		Admission: &domain.CanaryAdmission{
 			Decision:  domain.AdmissionExcluded,
 			Synthetic: true,
@@ -202,6 +215,7 @@ func (s *Service) Exclude(input ExcludeInput) (ExcludeReceipt, error) {
 	}
 	return ExcludeReceipt{
 		CanaryID:        manifest.ID,
+		ManifestVersion: manifest.Version,
 		ChangeID:        input.ChangeID,
 		Decision:        domain.AdmissionExcluded,
 		Reason:          input.Reason,
@@ -229,10 +243,7 @@ type DisableReceipt struct {
 // Disable appends a canary-level stop marker. Existing change evidence remains
 // readable and may receive terminal evidence; only new assignments are barred.
 func (s *Service) Disable(input DisableInput) (DisableReceipt, error) {
-	manifest, err := domain.NewIntentCanaryV0Manifest()
-	if err != nil {
-		return DisableReceipt{}, fmt.Errorf("load frozen manifest: %w", err)
-	}
+	manifest := s.manifest
 	events, err := s.store.ReadAll()
 	if err != nil {
 		return DisableReceipt{}, err
@@ -243,13 +254,14 @@ func (s *Service) Disable(input DisableInput) (DisableReceipt, error) {
 		}
 	}
 	event := domain.EvidenceEvent{
-		ID:         input.EventID,
-		CanaryID:   manifest.ID,
-		Kind:       domain.EventCanaryStopped,
-		OccurredAt: input.OccurredAt,
-		Actor:      input.Actor,
-		SourceRef:  input.SourceRef,
-		ReasonCode: input.Reason,
+		ID:              input.EventID,
+		CanaryID:        manifest.ID,
+		ManifestVersion: s.eventManifestVersion(),
+		Kind:            domain.EventCanaryStopped,
+		OccurredAt:      input.OccurredAt,
+		Actor:           input.Actor,
+		SourceRef:       input.SourceRef,
+		ReasonCode:      input.Reason,
 	}
 	if err := s.store.Append(event); err != nil {
 		return DisableReceipt{}, err
@@ -373,7 +385,8 @@ func (s *Service) appendCorrelation(
 	lineage := result.Lineage
 	return s.store.Append(domain.EvidenceEvent{
 		ID:                        eventID,
-		CanaryID:                  domain.IntentCanaryV0ManifestID,
+		CanaryID:                  s.manifest.ID,
+		ManifestVersion:           s.eventManifestVersion(),
 		ChangeID:                  runContext.ChangeID(),
 		Kind:                      domain.EventLineageRecorded,
 		OccurredAt:                occurredAt,
@@ -383,6 +396,143 @@ func (s *Service) appendCorrelation(
 		Lineage:                   &lineage,
 		LineageResolutionAttempts: result.ResolutionAttempts,
 	})
+}
+
+type ContextBindingInput struct {
+	EventID            domain.EvidenceEventID
+	ChangeID           domain.ChangeID
+	OccurredAt         time.Time
+	Actor              domain.ActorID
+	SourceRef          domain.EvidenceReference
+	ContextPackID      domain.ContextPackID
+	ContextPackVersion uint32
+}
+
+func (s *Service) RecordContextBinding(input ContextBindingInput) error {
+	if _, err := s.requireOpenChange(input.ChangeID); err != nil {
+		return err
+	}
+	return s.store.Append(domain.EvidenceEvent{
+		ID:              input.EventID,
+		CanaryID:        s.manifest.ID,
+		ManifestVersion: s.eventManifestVersion(),
+		ChangeID:        input.ChangeID,
+		Kind:            domain.EventContextBound,
+		OccurredAt:      input.OccurredAt,
+		Actor:           input.Actor,
+		SourceRef:       input.SourceRef,
+		Context: &domain.CanaryContextBinding{
+			ContextPackID:      input.ContextPackID,
+			ContextPackVersion: input.ContextPackVersion,
+		},
+	})
+}
+
+type AssessmentBasisInput struct {
+	EventID    domain.EvidenceEventID
+	ChangeID   domain.ChangeID
+	OccurredAt time.Time
+	Actor      domain.ActorID
+	SourceRef  domain.EvidenceReference
+	Basis      domain.CanaryAssessmentBasis
+}
+
+func (s *Service) RecordAssessmentBasis(input AssessmentBasisInput) error {
+	view, err := s.Inspect(input.ChangeID)
+	if err != nil {
+		return err
+	}
+	if view.Assignment == nil {
+		return ErrChangeNotStarted
+	}
+	basis := copyAssessmentBasis(input.Basis)
+	return s.store.Append(domain.EvidenceEvent{
+		ID:              input.EventID,
+		CanaryID:        s.manifest.ID,
+		ManifestVersion: s.eventManifestVersion(),
+		ChangeID:        input.ChangeID,
+		Kind:            domain.EventAssessmentBasisRecorded,
+		OccurredAt:      input.OccurredAt,
+		Actor:           input.Actor,
+		SourceRef:       input.SourceRef,
+		AssessmentBasis: &basis,
+	})
+}
+
+type FlowPhaseInput struct {
+	EventID     domain.EvidenceEventID
+	ChangeID    domain.ChangeID
+	OccurredAt  time.Time
+	Actor       domain.ActorID
+	SourceRef   domain.EvidenceReference
+	StartedAt   time.Time
+	CompletedAt time.Time
+}
+
+func (s *Service) RecordFlowPhase(input FlowPhaseInput) error {
+	if _, err := s.requireOpenChange(input.ChangeID); err != nil {
+		return err
+	}
+	return s.store.Append(domain.EvidenceEvent{
+		ID:              input.EventID,
+		CanaryID:        s.manifest.ID,
+		ManifestVersion: s.eventManifestVersion(),
+		ChangeID:        input.ChangeID,
+		Kind:            domain.EventFlowPhaseRecorded,
+		OccurredAt:      input.OccurredAt,
+		Actor:           input.Actor,
+		SourceRef:       input.SourceRef,
+		FlowPhase: &domain.CanaryFlowPhase{
+			StartedAt:   input.StartedAt,
+			CompletedAt: input.CompletedAt,
+		},
+	})
+}
+
+type TelemetryEvidenceInput struct {
+	EventID          domain.EvidenceEventID
+	ChangeID         domain.ChangeID
+	OccurredAt       time.Time
+	Actor            domain.ActorID
+	SourceRef        domain.EvidenceReference
+	Reason           domain.EvidenceReasonCode
+	Telemetry        domain.CanaryTelemetry
+	CorrectionReason domain.EvidenceReasonCode
+}
+
+func (s *Service) RecordTelemetryEvidence(input TelemetryEvidenceInput) error {
+	view, err := s.Inspect(input.ChangeID)
+	if err != nil {
+		return err
+	}
+	if view.Assignment == nil {
+		return ErrChangeNotStarted
+	}
+	telemetry := copyTelemetry(input.Telemetry)
+	event := domain.EvidenceEvent{
+		ID:              input.EventID,
+		CanaryID:        s.manifest.ID,
+		ManifestVersion: s.eventManifestVersion(),
+		ChangeID:        input.ChangeID,
+		Kind:            domain.EventTelemetryRecorded,
+		OccurredAt:      input.OccurredAt,
+		Actor:           input.Actor,
+		SourceRef:       input.SourceRef,
+		ReasonCode:      input.Reason,
+		ObservationRefs: telemetryObservationRefs(telemetry),
+		Telemetry:       &telemetry,
+	}
+	if view.Telemetry != nil {
+		if input.CorrectionReason == "" || view.TelemetryEventID == "" {
+			return ErrCorrectionState
+		}
+		event.Kind = domain.EventEvidenceCorrected
+		if input.Reason == "" {
+			event.ReasonCode = input.CorrectionReason
+		}
+		event.SupersedesEventID = view.TelemetryEventID
+	}
+	return s.store.Append(event)
 }
 
 type FreezeChecksInput struct {
@@ -410,14 +560,15 @@ func (s *Service) FreezeChecks(input FreezeChecksInput) (FreezeChecksReceipt, er
 	}
 	checkRefs := append([]domain.EvidenceReference(nil), input.CheckRefs...)
 	if err := s.store.Append(domain.EvidenceEvent{
-		ID:         input.EventID,
-		CanaryID:   domain.IntentCanaryV0ManifestID,
-		ChangeID:   input.ChangeID,
-		Kind:       domain.EventCheckSetFrozen,
-		OccurredAt: input.OccurredAt,
-		Actor:      input.Actor,
-		SourceRef:  input.SourceRef,
-		CheckSet:   &domain.CanaryCheckSet{CheckRefs: checkRefs},
+		ID:              input.EventID,
+		CanaryID:        s.manifest.ID,
+		ManifestVersion: s.eventManifestVersion(),
+		ChangeID:        input.ChangeID,
+		Kind:            domain.EventCheckSetFrozen,
+		OccurredAt:      input.OccurredAt,
+		Actor:           input.Actor,
+		SourceRef:       input.SourceRef,
+		CheckSet:        &domain.CanaryCheckSet{CheckRefs: checkRefs},
 	}); err != nil {
 		return FreezeChecksReceipt{}, err
 	}
@@ -449,7 +600,8 @@ func (s *Service) CorrectChecks(input CorrectChecksInput) (FreezeChecksReceipt, 
 	checkRefs := append([]domain.EvidenceReference(nil), input.CheckRefs...)
 	if err := s.store.Append(domain.EvidenceEvent{
 		ID:                input.EventID,
-		CanaryID:          domain.IntentCanaryV0ManifestID,
+		CanaryID:          s.manifest.ID,
+		ManifestVersion:   s.eventManifestVersion(),
 		ChangeID:          input.ChangeID,
 		Kind:              domain.EventEvidenceCorrected,
 		OccurredAt:        input.OccurredAt,
@@ -484,24 +636,35 @@ func (s *Service) Deliver(input DeliverInput) error {
 	if err != nil {
 		return err
 	}
+	if s.manifest.Version == domain.IntentCanaryV0ManifestVersion2 && input.FlowOverheadMinutes != nil {
+		return errors.New("manifest v2 derives flow overhead from telemetry evidence")
+	}
 	if view.Assignment.Variant == domain.VariantBaseline && input.FlowOverheadMinutes != nil {
 		return errors.New("baseline change cannot record flow overhead")
+	}
+	flowOverhead := input.FlowOverheadMinutes
+	if s.manifest.Version == domain.IntentCanaryV0ManifestVersion2 && view.Assignment.Variant == domain.VariantFlow {
+		flowOverhead = nil
+		if view.Telemetry != nil && view.Telemetry.FlowOverhead != nil && view.Telemetry.FlowOverhead.Available {
+			flowOverhead = copyFloat(&view.Telemetry.FlowOverhead.TotalMinutes)
+		}
 	}
 	terminal := &domain.CanaryTerminal{
 		State:               domain.CanaryStateDelivered,
 		CheckRefs:           append([]domain.EvidenceReference(nil), input.CheckRefs...),
 		ChecksGreen:         input.ChecksGreen,
-		FlowOverheadMinutes: input.FlowOverheadMinutes,
+		FlowOverheadMinutes: flowOverhead,
 	}
 	return s.store.Append(domain.EvidenceEvent{
-		ID:         input.EventID,
-		CanaryID:   domain.IntentCanaryV0ManifestID,
-		ChangeID:   input.ChangeID,
-		Kind:       domain.EventTerminalStateChanged,
-		OccurredAt: input.OccurredAt,
-		Actor:      input.Actor,
-		SourceRef:  input.SourceRef,
-		Terminal:   terminal,
+		ID:              input.EventID,
+		CanaryID:        s.manifest.ID,
+		ManifestVersion: s.eventManifestVersion(),
+		ChangeID:        input.ChangeID,
+		Kind:            domain.EventTerminalStateChanged,
+		OccurredAt:      input.OccurredAt,
+		Actor:           input.Actor,
+		SourceRef:       input.SourceRef,
+		Terminal:        terminal,
 	})
 }
 
@@ -521,21 +684,32 @@ func (s *Service) Abandon(input AbandonInput) error {
 	if err != nil {
 		return err
 	}
+	if s.manifest.Version == domain.IntentCanaryV0ManifestVersion2 && input.FlowOverheadMinutes != nil {
+		return errors.New("manifest v2 derives flow overhead from telemetry evidence")
+	}
 	if view.Assignment.Variant == domain.VariantBaseline &&
 		(input.ProcessCaused || input.FlowOverheadMinutes != nil) {
 		return errors.New("baseline change cannot record flow-only abandonment data")
 	}
+	flowOverhead := input.FlowOverheadMinutes
+	if s.manifest.Version == domain.IntentCanaryV0ManifestVersion2 && view.Assignment.Variant == domain.VariantFlow {
+		flowOverhead = nil
+		if view.Telemetry != nil && view.Telemetry.FlowOverhead != nil && view.Telemetry.FlowOverhead.Available {
+			flowOverhead = copyFloat(&view.Telemetry.FlowOverhead.TotalMinutes)
+		}
+	}
 	return s.store.Append(domain.EvidenceEvent{
-		ID:         input.EventID,
-		CanaryID:   domain.IntentCanaryV0ManifestID,
-		ChangeID:   input.ChangeID,
-		Kind:       domain.EventTerminalStateChanged,
-		OccurredAt: input.OccurredAt,
-		Actor:      input.Actor,
-		SourceRef:  input.SourceRef,
+		ID:              input.EventID,
+		CanaryID:        s.manifest.ID,
+		ManifestVersion: s.eventManifestVersion(),
+		ChangeID:        input.ChangeID,
+		Kind:            domain.EventTerminalStateChanged,
+		OccurredAt:      input.OccurredAt,
+		Actor:           input.Actor,
+		SourceRef:       input.SourceRef,
 		Terminal: &domain.CanaryTerminal{
 			State:                    domain.CanaryStateAbandoned,
-			FlowOverheadMinutes:      input.FlowOverheadMinutes,
+			FlowOverheadMinutes:      flowOverhead,
 			AbandonmentReason:        input.Reason,
 			ProcessCausedAbandonment: input.ProcessCaused,
 		},
@@ -543,13 +717,14 @@ func (s *Service) Abandon(input AbandonInput) error {
 }
 
 type AssessInput struct {
-	EventID     domain.EvidenceEventID
-	ChangeID    domain.ChangeID
-	OccurredAt  time.Time
-	Owner       domain.ActorID
-	SourceRef   domain.EvidenceReference
-	Outcome     domain.IntentOutcome
-	RepeatOptIn *bool
+	EventID       domain.EvidenceEventID
+	ChangeID      domain.ChangeID
+	OccurredAt    time.Time
+	Owner         domain.ActorID
+	SourceRef     domain.EvidenceReference
+	Outcome       domain.IntentOutcome
+	RepeatOptIn   *bool
+	ItemJudgments []domain.IntentItemJudgment
 }
 
 func (s *Service) Assess(input AssessInput) error {
@@ -572,28 +747,31 @@ func (s *Service) Assess(input AssessInput) error {
 		ChecksGreen:                      view.Terminal.ChecksGreen,
 		MaterialCorrectionBeforeDelivery: view.MaterialCorrections > 0,
 		RepeatOptIn:                      input.RepeatOptIn,
+		ItemJudgments:                    append([]domain.IntentItemJudgment(nil), input.ItemJudgments...),
 	}
 	return s.store.Append(domain.EvidenceEvent{
-		ID:         input.EventID,
-		CanaryID:   domain.IntentCanaryV0ManifestID,
-		ChangeID:   input.ChangeID,
-		Kind:       domain.EventAssessmentRecorded,
-		OccurredAt: input.OccurredAt,
-		Actor:      input.Owner,
-		SourceRef:  input.SourceRef,
-		Assessment: assessment,
+		ID:              input.EventID,
+		CanaryID:        s.manifest.ID,
+		ManifestVersion: s.eventManifestVersion(),
+		ChangeID:        input.ChangeID,
+		Kind:            domain.EventAssessmentRecorded,
+		OccurredAt:      input.OccurredAt,
+		Actor:           input.Owner,
+		SourceRef:       input.SourceRef,
+		Assessment:      assessment,
 	})
 }
 
 type CorrectAssessmentInput struct {
-	EventID     domain.EvidenceEventID
-	ChangeID    domain.ChangeID
-	OccurredAt  time.Time
-	Owner       domain.ActorID
-	SourceRef   domain.EvidenceReference
-	Reason      domain.EvidenceReasonCode
-	Outcome     domain.IntentOutcome
-	RepeatOptIn *bool
+	EventID       domain.EvidenceEventID
+	ChangeID      domain.ChangeID
+	OccurredAt    time.Time
+	Owner         domain.ActorID
+	SourceRef     domain.EvidenceReference
+	Reason        domain.EvidenceReasonCode
+	Outcome       domain.IntentOutcome
+	RepeatOptIn   *bool
+	ItemJudgments []domain.IntentItemJudgment
 }
 
 func (s *Service) CorrectAssessment(input CorrectAssessmentInput) error {
@@ -611,7 +789,8 @@ func (s *Service) CorrectAssessment(input CorrectAssessmentInput) error {
 	}
 	return s.store.Append(domain.EvidenceEvent{
 		ID:                input.EventID,
-		CanaryID:          domain.IntentCanaryV0ManifestID,
+		CanaryID:          s.manifest.ID,
+		ManifestVersion:   s.eventManifestVersion(),
 		ChangeID:          input.ChangeID,
 		Kind:              domain.EventEvidenceCorrected,
 		OccurredAt:        input.OccurredAt,
@@ -626,6 +805,7 @@ func (s *Service) CorrectAssessment(input CorrectAssessmentInput) error {
 			ChecksGreen:                      view.Terminal.ChecksGreen,
 			MaterialCorrectionBeforeDelivery: view.MaterialCorrections > 0,
 			RepeatOptIn:                      input.RepeatOptIn,
+			ItemJudgments:                    append([]domain.IntentItemJudgment(nil), input.ItemJudgments...),
 		},
 	})
 }
@@ -647,32 +827,44 @@ func (s *Service) RecordMaterialCorrection(input MaterialCorrectionInput) error 
 		return err
 	}
 	return s.store.Append(domain.EvidenceEvent{
-		ID:         input.EventID,
-		CanaryID:   domain.IntentCanaryV0ManifestID,
-		ChangeID:   input.ChangeID,
-		Kind:       domain.EventMaterialCorrection,
-		OccurredAt: input.OccurredAt,
-		Actor:      input.Owner,
-		SourceRef:  input.SourceRef,
-		ReasonCode: input.Reason,
+		ID:              input.EventID,
+		CanaryID:        s.manifest.ID,
+		ManifestVersion: s.eventManifestVersion(),
+		ChangeID:        input.ChangeID,
+		Kind:            domain.EventMaterialCorrection,
+		OccurredAt:      input.OccurredAt,
+		Actor:           input.Owner,
+		SourceRef:       input.SourceRef,
+		ReasonCode:      input.Reason,
 	})
 }
 
 type ChangeView struct {
-	ChangeID                  domain.ChangeID           `json:"change_id"`
-	Admission                 *domain.CanaryAdmission   `json:"admission,omitempty"`
-	AdmissionReason           domain.EvidenceReasonCode `json:"admission_reason,omitempty"`
-	AdmissionEventID          domain.EvidenceEventID    `json:"admission_event_id,omitempty"`
-	Assignment                *domain.CanaryAssignment  `json:"assignment,omitempty"`
-	CheckSet                  *domain.CanaryCheckSet    `json:"check_set,omitempty"`
-	CheckSetEventID           domain.EvidenceEventID    `json:"check_set_event_id,omitempty"`
-	Lineage                   *domain.ExecutionLineage  `json:"lineage,omitempty"`
-	LineageResolutionAttempts uint8                     `json:"lineage_resolution_attempts,omitempty"`
-	Terminal                  *domain.CanaryTerminal    `json:"terminal,omitempty"`
-	Assessment                *domain.Assessment        `json:"assessment,omitempty"`
-	AssessmentEventID         domain.EvidenceEventID    `json:"assessment_event_id,omitempty"`
-	MaterialCorrections       uint32                    `json:"material_corrections"`
-	EventCount                uint32                    `json:"event_count"`
+	ChangeID                  domain.ChangeID               `json:"change_id"`
+	ManifestVersion           uint32                        `json:"manifest_version"`
+	Admission                 *domain.CanaryAdmission       `json:"admission,omitempty"`
+	AdmissionReason           domain.EvidenceReasonCode     `json:"admission_reason,omitempty"`
+	AdmissionEventID          domain.EvidenceEventID        `json:"admission_event_id,omitempty"`
+	Assignment                *domain.CanaryAssignment      `json:"assignment,omitempty"`
+	AssignedAt                time.Time                     `json:"assigned_at,omitempty"`
+	Context                   *domain.CanaryContextBinding  `json:"context,omitempty"`
+	ContextEventID            domain.EvidenceEventID        `json:"context_event_id,omitempty"`
+	AssessmentBasis           *domain.CanaryAssessmentBasis `json:"assessment_basis,omitempty"`
+	AssessmentBasisEventID    domain.EvidenceEventID        `json:"assessment_basis_event_id,omitempty"`
+	FlowPhase                 *domain.CanaryFlowPhase       `json:"flow_phase,omitempty"`
+	FlowPhaseEventID          domain.EvidenceEventID        `json:"flow_phase_event_id,omitempty"`
+	CheckSet                  *domain.CanaryCheckSet        `json:"check_set,omitempty"`
+	CheckSetEventID           domain.EvidenceEventID        `json:"check_set_event_id,omitempty"`
+	Lineage                   *domain.ExecutionLineage      `json:"lineage,omitempty"`
+	LineageResolutionAttempts uint8                         `json:"lineage_resolution_attempts,omitempty"`
+	Telemetry                 *domain.CanaryTelemetry       `json:"telemetry,omitempty"`
+	TelemetryEventID          domain.EvidenceEventID        `json:"telemetry_event_id,omitempty"`
+	Terminal                  *domain.CanaryTerminal        `json:"terminal,omitempty"`
+	TerminalAt                time.Time                     `json:"terminal_at,omitempty"`
+	Assessment                *domain.Assessment            `json:"assessment,omitempty"`
+	AssessmentEventID         domain.EvidenceEventID        `json:"assessment_event_id,omitempty"`
+	MaterialCorrections       uint32                        `json:"material_corrections"`
+	EventCount                uint32                        `json:"event_count"`
 	sessionConflictObserved   bool
 }
 
@@ -681,7 +873,7 @@ func (s *Service) Inspect(changeID domain.ChangeID) (ChangeView, error) {
 	if err != nil {
 		return ChangeView{}, err
 	}
-	return projectChange(events, changeID), nil
+	return projectChange(events, changeID, s.manifest.Version), nil
 }
 
 // Report deterministically reduces the verified append-only event record into
@@ -698,11 +890,11 @@ func (s *Service) Report() (domain.CanaryReport, error) {
 	var excluded uint32
 	assignmentsStopped := false
 	for _, event := range events {
-		if event.CanaryID == domain.IntentCanaryV0ManifestID && event.Kind == domain.EventCanaryStopped {
+		if eventMatchesManifest(event, s.manifest.Version) && event.Kind == domain.EventCanaryStopped {
 			assignmentsStopped = true
 		}
-		if event.CanaryID != domain.IntentCanaryV0ManifestID || event.Assignment == nil {
-			if event.CanaryID == domain.IntentCanaryV0ManifestID && event.Admission != nil &&
+		if !eventMatchesManifest(event, s.manifest.Version) || event.Assignment == nil {
+			if eventMatchesManifest(event, s.manifest.Version) && event.Admission != nil &&
 				event.Admission.Decision == domain.AdmissionExcluded {
 				excluded++
 				exclusionReasons[event.ReasonCode]++
@@ -717,21 +909,32 @@ func (s *Service) Report() (domain.CanaryReport, error) {
 	}
 	observations := make([]domain.CanaryObservation, 0, len(changeIDs))
 	for _, changeID := range changeIDs {
-		view := projectChange(events, changeID)
+		view := projectChange(events, changeID, s.manifest.Version)
 		if view.Assignment == nil {
 			continue
 		}
 		observation := domain.CanaryObservation{
-			Ordinal:        view.Assignment.Ordinal,
-			ChangeID:       changeID,
-			Variant:        view.Assignment.Variant,
-			TerminalState:  domain.CanaryStatePending,
-			LineageOutcome: lineageOutcome(view),
+			Ordinal:           view.Assignment.Ordinal,
+			ChangeID:          changeID,
+			Variant:           view.Assignment.Variant,
+			TerminalState:     domain.CanaryStatePending,
+			LineageOutcome:    lineageOutcome(view),
+			TelemetryRequired: view.Assignment.ManifestVersion == domain.IntentCanaryV0ManifestVersion2,
+		}
+		if view.Telemetry != nil {
+			observation.TelemetryStatus = view.Telemetry.Status
 		}
 		if view.Terminal != nil {
 			observation.TerminalState = view.Terminal.State
 			observation.FlowOverheadMinutes = copyFloat(view.Terminal.FlowOverheadMinutes)
 			observation.ProcessCausedAbandonment = view.Terminal.ProcessCausedAbandonment
+		}
+		if view.Assignment.ManifestVersion == domain.IntentCanaryV0ManifestVersion2 &&
+			view.Assignment.Variant == domain.VariantFlow {
+			observation.FlowOverheadMinutes = nil
+			if view.Telemetry != nil && view.Telemetry.FlowOverhead != nil && view.Telemetry.FlowOverhead.Available {
+				observation.FlowOverheadMinutes = copyFloat(&view.Telemetry.FlowOverhead.TotalMinutes)
+			}
 		}
 		if view.Assessment != nil {
 			assessment := copyAssessment(*view.Assessment)
@@ -753,10 +956,10 @@ func (s *Service) Report() (domain.CanaryReport, error) {
 	})
 }
 
-func projectChange(events []domain.EvidenceEvent, changeID domain.ChangeID) ChangeView {
-	view := ChangeView{ChangeID: changeID}
+func projectChange(events []domain.EvidenceEvent, changeID domain.ChangeID, manifestVersion uint32) ChangeView {
+	view := ChangeView{ChangeID: changeID, ManifestVersion: manifestVersion}
 	for _, event := range events {
-		if event.CanaryID != domain.IntentCanaryV0ManifestID || event.ChangeID != changeID {
+		if !eventMatchesManifest(event, manifestVersion) || event.ChangeID != changeID {
 			continue
 		}
 		view.EventCount++
@@ -769,6 +972,22 @@ func projectChange(events []domain.EvidenceEvent, changeID domain.ChangeID) Chan
 		if event.Assignment != nil {
 			assignment := *event.Assignment
 			view.Assignment = &assignment
+			view.AssignedAt = event.OccurredAt
+		}
+		if event.Context != nil {
+			contextBinding := *event.Context
+			view.Context = &contextBinding
+			view.ContextEventID = event.ID
+		}
+		if event.AssessmentBasis != nil {
+			basis := copyAssessmentBasis(*event.AssessmentBasis)
+			view.AssessmentBasis = &basis
+			view.AssessmentBasisEventID = event.ID
+		}
+		if event.FlowPhase != nil {
+			phase := *event.FlowPhase
+			view.FlowPhase = &phase
+			view.FlowPhaseEventID = event.ID
 		}
 		if event.Kind == domain.EventCheckSetFrozen && event.CheckSet != nil {
 			checkSet := copyCheckSet(*event.CheckSet)
@@ -791,10 +1010,22 @@ func projectChange(events []domain.EvidenceEvent, changeID domain.ChangeID) Chan
 				view.sessionConflictObserved = true
 			}
 		}
+		if event.Kind == domain.EventTelemetryRecorded && event.Telemetry != nil {
+			telemetry := copyTelemetry(*event.Telemetry)
+			view.Telemetry = &telemetry
+			view.TelemetryEventID = event.ID
+		}
+		if event.Kind == domain.EventEvidenceCorrected && event.Telemetry != nil &&
+			event.SupersedesEventID == view.TelemetryEventID {
+			telemetry := copyTelemetry(*event.Telemetry)
+			view.Telemetry = &telemetry
+			view.TelemetryEventID = event.ID
+		}
 		if event.Terminal != nil {
 			terminal := *event.Terminal
 			terminal.CheckRefs = append([]domain.EvidenceReference(nil), event.Terminal.CheckRefs...)
 			view.Terminal = &terminal
+			view.TerminalAt = event.OccurredAt
 		}
 		if event.Kind == domain.EventAssessmentRecorded && event.Assessment != nil {
 			assessment := copyAssessment(*event.Assessment)
@@ -812,6 +1043,25 @@ func projectChange(events []domain.EvidenceEvent, changeID domain.ChangeID) Chan
 		}
 	}
 	return view
+}
+
+func eventMatchesManifest(event domain.EvidenceEvent, manifestVersion uint32) bool {
+	return event.CanaryID == domain.IntentCanaryV0ManifestID &&
+		effectiveEventManifestVersion(event) == manifestVersion
+}
+
+func effectiveEventManifestVersion(event domain.EvidenceEvent) uint32 {
+	if event.ManifestVersion == 0 {
+		return domain.IntentCanaryV0ManifestVersion
+	}
+	return event.ManifestVersion
+}
+
+func (s *Service) eventManifestVersion() uint32 {
+	if s.manifest.Version == domain.IntentCanaryV0ManifestVersion {
+		return 0
+	}
+	return s.manifest.Version
 }
 
 func lineageOutcome(view ChangeView) domain.CanaryLineageOutcome {
@@ -846,12 +1096,42 @@ func copyAssessment(assessment domain.Assessment) domain.Assessment {
 		repeat := *assessment.RepeatOptIn
 		assessment.RepeatOptIn = &repeat
 	}
+	assessment.ItemJudgments = append([]domain.IntentItemJudgment(nil), assessment.ItemJudgments...)
 	return assessment
 }
 
 func copyCheckSet(checkSet domain.CanaryCheckSet) domain.CanaryCheckSet {
 	checkSet.CheckRefs = append([]domain.EvidenceReference(nil), checkSet.CheckRefs...)
 	return checkSet
+}
+
+func copyAssessmentBasis(basis domain.CanaryAssessmentBasis) domain.CanaryAssessmentBasis {
+	basis.DesiredOutcomeIDs = append([]domain.IntentItemID(nil), basis.DesiredOutcomeIDs...)
+	basis.NonGoalIDs = append([]domain.IntentItemID(nil), basis.NonGoalIDs...)
+	basis.SuccessSignalIDs = append([]domain.IntentItemID(nil), basis.SuccessSignalIDs...)
+	return basis
+}
+
+func copyTelemetry(telemetry domain.CanaryTelemetry) domain.CanaryTelemetry {
+	telemetry.TraceIntervals = append([]domain.CanaryTimingInterval(nil), telemetry.TraceIntervals...)
+	if telemetry.OwnerReview != nil {
+		ownerReview := *telemetry.OwnerReview
+		telemetry.OwnerReview = &ownerReview
+	}
+	if telemetry.FlowOverhead != nil {
+		overhead := *telemetry.FlowOverhead
+		telemetry.FlowOverhead = &overhead
+	}
+	return telemetry
+}
+
+func telemetryObservationRefs(telemetry domain.CanaryTelemetry) []domain.EvidenceReference {
+	refs := make([]domain.EvidenceReference, 0, len(telemetry.TraceIntervals)+1)
+	refs = append(refs, telemetry.SessionLookup)
+	for _, interval := range telemetry.TraceIntervals {
+		refs = append(refs, interval.Reference)
+	}
+	return refs
 }
 
 func (s *Service) requireOpenChange(changeID domain.ChangeID) (ChangeView, error) {

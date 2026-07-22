@@ -22,22 +22,111 @@ import (
 var (
 	ErrMalformedArtifact  = errors.New("malformed OpenSpec artifact")
 	ErrIntentNotConfirmed = errors.New("OpenSpec intent is not confirmed")
+	ErrContextRequired    = errors.New("OpenSpec context is required")
 )
+
+const goalrailIntentSchema = "goalrail-intent"
 
 type CompiledChange struct {
 	Intent   domain.IntentSnapshot
 	Proposal domain.Proposal
 }
 
-// LoadChange reads intent.md first, stops before proposal.md when intent is not
-// confirmed, then validates the proposal exclusively through canonical domain
-// rules.
+// ReadContext parses the bounded evidence artifact introduced by schema v2.
+// It retains claims and source references, never raw source bodies.
+func ReadContext(reader io.Reader) (domain.ContextPack, error) {
+	document, err := readMarkdownDocument(reader)
+	if err != nil {
+		return domain.ContextPack{}, err
+	}
+	metadata, err := parseBoldMetadata(document.preamble)
+	if err != nil {
+		return domain.ContextPack{}, err
+	}
+	version, err := parseUint32Metadata(metadata, "version")
+	if err != nil {
+		return domain.ContextPack{}, err
+	}
+	previousVersion, err := parseOptionalUint32Metadata(metadata, "previous version")
+	if err != nil {
+		return domain.ContextPack{}, err
+	}
+	startedAt, err := parseArtifactTime(cleanInline(metadata["started at"]))
+	if err != nil {
+		return domain.ContextPack{}, err
+	}
+	completedAt, err := parseArtifactTime(cleanInline(metadata["completed at"]))
+	if err != nil {
+		return domain.ContextPack{}, err
+	}
+
+	itemLines, err := document.requiredSection("Context Items")
+	if err != nil {
+		return domain.ContextPack{}, err
+	}
+	unknownLines, err := document.requiredSection("Material Unknowns")
+	if err != nil {
+		return domain.ContextPack{}, err
+	}
+	items, err := parseContextItems(itemLines)
+	if err != nil {
+		return domain.ContextPack{}, err
+	}
+	unknowns, err := parseContextUnknowns(unknownLines)
+	if err != nil {
+		return domain.ContextPack{}, err
+	}
+
+	pack := domain.ContextPack{
+		ID:              domain.ContextPackID(cleanInline(metadata["context pack id"])),
+		Version:         version,
+		PreviousVersion: previousVersion,
+		StartedAt:       startedAt,
+		CompletedAt:     completedAt,
+		Outcome:         domain.ContextCollectionOutcome(strings.ToLower(cleanInline(metadata["outcome"]))),
+		Items:           items,
+		Unknowns:        unknowns,
+	}
+	if err := domain.ValidateContextPack(pack); err != nil {
+		return domain.ContextPack{}, fmt.Errorf("validate OpenSpec context: %w", err)
+	}
+	return pack, nil
+}
+
+// LoadChange reads the optional v2 context.md before intent.md, stops before
+// proposal.md when intent is not confirmed, then validates the proposal
+// exclusively through canonical domain rules. A missing context.md is accepted
+// only for legacy schema-v1 changes.
 func LoadChange(changeDir string) (CompiledChange, error) {
+	var contextPack *domain.ContextPack
+	contextFile, err := os.Open(filepath.Join(changeDir, "context.md"))
+	if err == nil {
+		parsed, readErr := ReadContext(contextFile)
+		closeErr := contextFile.Close()
+		if readErr != nil {
+			return CompiledChange{}, readErr
+		}
+		if closeErr != nil {
+			return CompiledChange{}, fmt.Errorf("close OpenSpec context: %w", closeErr)
+		}
+		contextPack = &parsed
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return CompiledChange{}, fmt.Errorf("open OpenSpec context: %w", err)
+	} else {
+		required, requirementErr := changeRequiresContext(changeDir)
+		if requirementErr != nil {
+			return CompiledChange{}, requirementErr
+		}
+		if required {
+			return CompiledChange{}, fmt.Errorf("%w: goalrail-intent change has no context.md", ErrContextRequired)
+		}
+	}
+
 	intentFile, err := os.Open(filepath.Join(changeDir, "intent.md"))
 	if err != nil {
 		return CompiledChange{}, fmt.Errorf("open OpenSpec intent: %w", err)
 	}
-	intent, readErr := ReadIntent(intentFile)
+	intent, readErr := readIntent(intentFile, contextPack)
 	closeErr := intentFile.Close()
 	if readErr != nil {
 		return CompiledChange{}, readErr
@@ -47,6 +136,11 @@ func LoadChange(changeDir string) (CompiledChange, error) {
 	}
 	if intent.Status != domain.IntentConfirmed {
 		return CompiledChange{}, fmt.Errorf("%w: status is %q", ErrIntentNotConfirmed, intent.Status)
+	}
+	if contextPack != nil {
+		if err := domain.ValidateFlowIntentSnapshot(intent); err != nil {
+			return CompiledChange{}, fmt.Errorf("validate OpenSpec flow intent: %w", err)
+		}
 	}
 
 	proposalFile, err := os.Open(filepath.Join(changeDir, "proposal.md"))
@@ -67,8 +161,84 @@ func LoadChange(changeDir string) (CompiledChange, error) {
 	return CompiledChange{Intent: intent, Proposal: proposal}, nil
 }
 
+func changeRequiresContext(changeDir string) (bool, error) {
+	schema, err := readChangeSchema(filepath.Join(changeDir, ".openspec.yaml"))
+	if err != nil || schema != goalrailIntentSchema {
+		return false, err
+	}
+	if !isArchivedChange(changeDir) {
+		return true, nil
+	}
+
+	intentFile, err := os.Open(filepath.Join(changeDir, "intent.md"))
+	if err != nil {
+		return false, fmt.Errorf("open archived OpenSpec intent metadata: %w", err)
+	}
+	document, readErr := readMarkdownDocument(intentFile)
+	closeErr := intentFile.Close()
+	if readErr != nil {
+		return false, readErr
+	}
+	if closeErr != nil {
+		return false, fmt.Errorf("close archived OpenSpec intent metadata: %w", closeErr)
+	}
+	metadata, err := parseBoldMetadata(document.preamble)
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(metadata["context pack"]) != "", nil
+}
+
+func readChangeSchema(path string) (string, error) {
+	file, err := os.Open(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("open OpenSpec change metadata: %w", err)
+	}
+	defer file.Close()
+
+	var schema string
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		key, value, found := strings.Cut(line, ":")
+		if !found || strings.TrimSpace(key) != "schema" {
+			continue
+		}
+		if schema != "" {
+			return "", fmt.Errorf("%w: duplicate schema in .openspec.yaml", ErrMalformedArtifact)
+		}
+		schema = strings.Trim(strings.TrimSpace(value), "'\"")
+	}
+	if err := scanner.Err(); err != nil {
+		return "", fmt.Errorf("read OpenSpec change metadata: %w", err)
+	}
+	if schema == "" {
+		return "", fmt.Errorf("%w: .openspec.yaml has no schema", ErrMalformedArtifact)
+	}
+	return schema, nil
+}
+
+func isArchivedChange(changeDir string) bool {
+	archiveDir := filepath.Dir(filepath.Clean(changeDir))
+	changesDir := filepath.Dir(archiveDir)
+	openspecDir := filepath.Dir(changesDir)
+	return filepath.Base(archiveDir) == "archive" &&
+		filepath.Base(changesDir) == "changes" &&
+		filepath.Base(openspecDir) == "openspec"
+}
+
 // ReadIntent parses only the structured fields owned by the custom schema.
 func ReadIntent(reader io.Reader) (domain.IntentSnapshot, error) {
+	return readIntent(reader, nil)
+}
+
+func readIntent(reader io.Reader, contextPack *domain.ContextPack) (domain.IntentSnapshot, error) {
 	document, err := readMarkdownDocument(reader)
 	if err != nil {
 		return domain.IntentSnapshot{}, err
@@ -86,6 +256,22 @@ func ReadIntent(reader io.Reader) (domain.IntentSnapshot, error) {
 		return domain.IntentSnapshot{}, err
 	}
 	status := domain.IntentStatus(strings.ToLower(cleanInline(metadata["status"])))
+	if contextPack != nil {
+		declaredID, declaredVersion, declarationErr := parseContextPackDeclaration(metadata["context pack"])
+		if declarationErr != nil {
+			return domain.IntentSnapshot{}, declarationErr
+		}
+		if declaredID != contextPack.ID || declaredVersion != contextPack.Version {
+			return domain.IntentSnapshot{}, fmt.Errorf(
+				"%w: intent Context Pack %q version %d does not match context.md %q version %d",
+				ErrMalformedArtifact,
+				declaredID,
+				declaredVersion,
+				contextPack.ID,
+				contextPack.Version,
+			)
+		}
+	}
 
 	sourceLines, err := document.requiredSection("Source Evidence")
 	if err != nil {
@@ -117,6 +303,7 @@ func ReadIntent(reader io.Reader) (domain.IntentSnapshot, error) {
 		Version:         version,
 		PreviousVersion: previousVersion,
 		Status:          status,
+		ContextPack:     contextPack,
 	}
 	if snapshot.SourceEvidence, err = parseSourceEvidence(sourceLines); err != nil {
 		return domain.IntentSnapshot{}, err
@@ -158,6 +345,19 @@ func ReadIntent(reader io.Reader) (domain.IntentSnapshot, error) {
 		return domain.IntentSnapshot{}, fmt.Errorf("validate OpenSpec intent: %w", err)
 	}
 	return snapshot, nil
+}
+
+func parseContextPackDeclaration(value string) (domain.ContextPackID, uint32, error) {
+	fields := strings.Fields(cleanInline(value))
+	if len(fields) != 3 || !strings.EqualFold(fields[1], "version") {
+		return "", 0, fmt.Errorf("%w: Context Pack metadata must be '<id> version <number>'", ErrMalformedArtifact)
+	}
+	id := domain.ContextPackID(strings.Trim(fields[0], "`"))
+	version, err := strconv.ParseUint(strings.Trim(fields[2], "`"), 10, 32)
+	if err != nil || version == 0 || !domain.IsCanonicalID(string(id)) {
+		return "", 0, fmt.Errorf("%w: Context Pack metadata has an invalid ID or version", ErrMalformedArtifact)
+	}
+	return id, uint32(version), nil
 }
 
 // ReadProposal treats Intent Coverage rows as the compiled change list. Other
@@ -282,7 +482,7 @@ func parseUint32Metadata(metadata map[string]string, key string) (uint32, error)
 }
 
 func parseOptionalUint32Metadata(metadata map[string]string, key string) (uint32, error) {
-	value := cleanInline(metadata[key])
+	value := cleanPending(metadata[key])
 	if value == "" {
 		return 0, nil
 	}
@@ -321,6 +521,60 @@ func parseSourceEvidence(lines []string) ([]domain.SourceEvidence, error) {
 	return result, nil
 }
 
+func parseContextItems(lines []string) ([]domain.ContextItem, error) {
+	rows, err := parseMarkdownTable(
+		lines,
+		[]string{"ID", "Kind", "Claim", "Source", "Observed at", "Relevance"},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("parse context items: %w", err)
+	}
+	items := make([]domain.ContextItem, 0, len(rows))
+	for _, row := range rows {
+		observedAt, parseErr := parseArtifactTime(cleanInline(row[4]))
+		if parseErr != nil {
+			return nil, parseErr
+		}
+		items = append(items, domain.ContextItem{
+			ID:         domain.ContextItemID(cleanInline(row[0])),
+			Kind:       domain.ContextItemKind(strings.ToLower(cleanInline(row[1]))),
+			Claim:      cleanInline(row[2]),
+			SourceRef:  domain.EvidenceReference(cleanInline(row[3])),
+			ObservedAt: observedAt,
+			Relevance:  cleanInline(row[5]),
+		})
+	}
+	return items, nil
+}
+
+func parseContextUnknowns(lines []string) ([]domain.ContextUnknown, error) {
+	meaningful := meaningfulArtifactLines(lines)
+	if len(meaningful) == 1 && strings.EqualFold(strings.TrimSuffix(meaningful[0], "."), "none") {
+		return nil, nil
+	}
+	if len(meaningful) == 0 {
+		return nil, fmt.Errorf("%w: material unknowns must explicitly state None or list rows", ErrMalformedArtifact)
+	}
+	for _, line := range meaningful {
+		if !strings.HasPrefix(line, "|") {
+			return nil, fmt.Errorf("%w: material unknowns must be a structured table or explicit None", ErrMalformedArtifact)
+		}
+	}
+	rows, err := parseMarkdownTable(meaningful, []string{"ID", "Question", "Sources"})
+	if err != nil {
+		return nil, fmt.Errorf("parse material unknowns: %w", err)
+	}
+	unknowns := make([]domain.ContextUnknown, 0, len(rows))
+	for _, row := range rows {
+		unknowns = append(unknowns, domain.ContextUnknown{
+			ID:         domain.ContextUnknownID(cleanInline(row[0])),
+			Question:   cleanInline(row[1]),
+			SourceRefs: parseSourceRefs(row[2]),
+		})
+	}
+	return unknowns, nil
+}
+
 func sourceEvidenceKind(label string) (domain.SourceEvidenceKind, error) {
 	normalized := strings.ToLower(strings.TrimSpace(label))
 	if strings.HasPrefix(normalized, "owner ") || normalized == "owner" {
@@ -339,24 +593,19 @@ func parseIntentItems(lines, headers []string, statementColumn, evidenceColumn i
 	}
 	items := make([]domain.IntentItem, 0, len(rows))
 	for _, row := range rows {
+		evidenceRefs, contextRefs := parseProvenanceRefs(row[evidenceColumn])
 		items = append(items, domain.IntentItem{
 			ID:           domain.IntentItemID(cleanInline(row[0])),
 			Statement:    cleanInline(row[statementColumn]),
-			EvidenceRefs: parseEvidenceRefs(row[evidenceColumn]),
+			EvidenceRefs: evidenceRefs,
+			ContextRefs:  contextRefs,
 		})
 	}
 	return items, nil
 }
 
 func parseAmbiguities(lines []string) ([]domain.IntentAmbiguity, error) {
-	meaningful := make([]string, 0, len(lines))
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || strings.HasPrefix(trimmed, "<!--") {
-			continue
-		}
-		meaningful = append(meaningful, trimmed)
-	}
+	meaningful := meaningfulArtifactLines(lines)
 	if len(meaningful) == 1 && strings.EqualFold(strings.TrimSuffix(meaningful[0], "."), "none") {
 		return nil, nil
 	}
@@ -381,6 +630,18 @@ func parseAmbiguities(lines []string) ([]domain.IntentAmbiguity, error) {
 		})
 	}
 	return ambiguities, nil
+}
+
+func meaningfulArtifactLines(lines []string) []string {
+	meaningful := make([]string, 0, len(lines))
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "<!--") {
+			continue
+		}
+		meaningful = append(meaningful, trimmed)
+	}
+	return meaningful
 }
 
 func parseConfirmation(lines []string) (*domain.IntentConfirmation, error) {
@@ -415,7 +676,7 @@ func parseArtifactTime(value string) (time.Time, error) {
 	if parsed, err := time.Parse("2006-01-02", value); err == nil {
 		return parsed, nil
 	}
-	return time.Time{}, fmt.Errorf("%w: confirmation timestamp %q is not ISO-8601", ErrMalformedArtifact, value)
+	return time.Time{}, fmt.Errorf("%w: artifact timestamp %q is not ISO-8601", ErrMalformedArtifact, value)
 }
 
 func parseMarkdownTable(lines, expectedHeaders []string) ([][]string, error) {
@@ -521,6 +782,32 @@ func parseEvidenceRefs(value string) []domain.SourceEvidenceID {
 		result = append(result, domain.SourceEvidenceID(token))
 	}
 	return result
+}
+
+func parseSourceRefs(value string) []domain.EvidenceReference {
+	tokens := splitReferenceTokens(value)
+	result := make([]domain.EvidenceReference, 0, len(tokens))
+	for _, token := range tokens {
+		result = append(result, domain.EvidenceReference(token))
+	}
+	return result
+}
+
+func parseProvenanceRefs(value string) ([]domain.SourceEvidenceID, []domain.ContextItemID) {
+	tokens := splitReferenceTokens(value)
+	evidenceRefs := make([]domain.SourceEvidenceID, 0, len(tokens))
+	contextRefs := make([]domain.ContextItemID, 0, len(tokens))
+	for _, token := range tokens {
+		switch {
+		case strings.HasPrefix(strings.ToUpper(token), "SE-"):
+			evidenceRefs = append(evidenceRefs, domain.SourceEvidenceID(token))
+		case strings.HasPrefix(strings.ToUpper(token), "CTX-"):
+			contextRefs = append(contextRefs, domain.ContextItemID(token))
+		default:
+			evidenceRefs = append(evidenceRefs, domain.SourceEvidenceID(token))
+		}
+	}
+	return evidenceRefs, contextRefs
 }
 
 func parseIntentRefs(value string) []domain.IntentItemID {
