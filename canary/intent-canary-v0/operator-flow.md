@@ -1,11 +1,6 @@
 # Intent Canary v0 Operator Flow
 
-> **Historical planning artifact.** This copy is retained with the archived
-> OpenSpec change and is not the current operator surface. Use
-> [`canary/intent-canary-v0/operator-flow.md`](../../../../../canary/intent-canary-v0/operator-flow.md),
-> which owns the executable default evidence path.
-
-This was the complete local operator surface captured by this change. It is a
+This is the current local operator surface for one canary change. It is a
 command plus an append-only JSONL record, not a daemon, dashboard, or workflow
 engine.
 
@@ -25,7 +20,7 @@ go build -o /tmp/goalrail-canary ./cmd/goalrail-canary
 The default evidence path is:
 
 ```text
-openspec/changes/intent-canary-v0/canary/events.jsonl
+canary/intent-canary-v0/events.jsonl
 ```
 
 Global `--repo` and `--store` flags, when needed, go before the command. Values

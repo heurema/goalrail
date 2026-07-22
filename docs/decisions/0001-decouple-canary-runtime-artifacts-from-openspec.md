@@ -1,8 +1,9 @@
 # Decouple Canary Runtime Artifacts from OpenSpec
 
-- **Status:** proposed for owner approval through pull-request merge
+- **Status:** accepted by owner; implementation remains gated by pull-request merge
 - **Date:** 2026-07-22
-- **Decision owner:** Goalrail owner
+- **Decision owner:** t3chn
+- **Confirmed intent:** `STABILIZE-CANARY-RUNTIME-BOUNDARY` version 1 in OpenSpec change `stabilize-canary-runtime-boundary`
 
 ## Context
 
@@ -19,12 +20,13 @@ Archiving `intent-canary-v0` exposed two dependencies on its active OpenSpec cha
 - `go test ./...` failed after the archive because the default manifest fixture and adapter test still addressed `openspec/changes/intent-canary-v0`.
 - The confirmed design requires canonical runtime semantics to remain provider-neutral and describes OpenSpec as replaceable.
 - The real canary is still `frozen_not_activated`, so no production evidence needs migration.
+- PR #5 review identified both the stale archived operator path and the missing separate Intent Snapshot; the owner actively confirmed the bounded intent on 2026-07-22.
 
 ## Decision
 
-Use `canary/intent-canary-v0` as the stable location for the frozen manifest and default append-only evidence path. Keep `intent.md` and `proposal.md` in the dated OpenSpec archive and use them only as a historical OpenSpec adapter fixture. Do not resolve runtime paths by scanning archive directories.
+Use `canary/intent-canary-v0` as the stable location for the frozen manifest, current operator guidance, and default append-only evidence path. Keep archived OpenSpec artifacts only as historical planning and adapter fixtures, clearly label archived guidance as historical, and do not resolve runtime paths by scanning archive directories.
 
-The pull request implementing this record is the reversible canary. The decision becomes accepted when the owner merges it.
+The owner confirmed the semantic decision through Intent Snapshot version 1. PR #5 remains the reversible implementation and review gate; confirmation does not authorize merge or real canary activation.
 
 ## Rejected Objections
 

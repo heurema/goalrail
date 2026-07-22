@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -220,7 +221,7 @@ func TestCommandDefaultStoreIsIndependentOfOpenSpecChangeLifecycle(t *testing.T)
 		t.Fatalf("start with default store: %v", err)
 	}
 
-	storePath := filepath.Join(repoRoot, "canary", "intent-canary-v0", "events.jsonl")
+	storePath := filepath.Join(repoRoot, filepath.FromSlash(defaultEvidenceRelativePath))
 	store, err := evidence.NewStore(storePath)
 	if err != nil {
 		t.Fatalf("open default store: %v", err)
@@ -234,6 +235,64 @@ func TestCommandDefaultStoreIsIndependentOfOpenSpecChangeLifecycle(t *testing.T)
 	}
 	if _, err := os.Stat(filepath.Join(repoRoot, "openspec")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("default store recreated OpenSpec lifecycle path: %v", err)
+	}
+}
+
+func TestCurrentOperatorGuidanceMatchesDefaultStore(t *testing.T) {
+	_, sourceFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("resolve test source path")
+	}
+	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(sourceFile), "..", ".."))
+	guidancePath := filepath.Join(repoRoot, "canary", "intent-canary-v0", "operator-flow.md")
+	contents, err := os.ReadFile(guidancePath)
+	if err != nil {
+		t.Fatalf("read current operator guidance: %v", err)
+	}
+	guidance := string(contents)
+	if !strings.Contains(guidance, defaultEvidenceRelativePath) {
+		t.Fatalf("current operator guidance is missing default path %q", defaultEvidenceRelativePath)
+	}
+	retiredPath := "openspec/changes/intent-canary-v0/canary/events.jsonl"
+	if strings.Contains(guidance, retiredPath) {
+		t.Fatalf("current operator guidance retains retired path %q", retiredPath)
+	}
+
+	archivedPath := filepath.Join(
+		repoRoot,
+		"openspec",
+		"changes",
+		"archive",
+		"2026-07-22-intent-canary-v0",
+		"canary",
+		"operator-flow.md",
+	)
+	archived, err := os.ReadFile(archivedPath)
+	if err != nil {
+		t.Fatalf("read archived operator guidance: %v", err)
+	}
+	if !strings.Contains(string(archived), "Historical planning artifact") ||
+		!strings.Contains(string(archived), "canary/intent-canary-v0/operator-flow.md") {
+		t.Fatal("archived operator guidance is not clearly linked to the current surface")
+	}
+}
+
+func TestCommandDefaultStoreRejectsRealAssignmentWithoutEvidence(t *testing.T) {
+	repoRoot := t.TempDir()
+	err := run([]string{
+		"--repo", repoRoot,
+		"start",
+		"--change", "change-real-default-store-1",
+		"--intent-version", "1",
+		"--actor", "operator",
+		"--source", "request:real-default-store",
+	}, bytes.NewReader(nil), &bytes.Buffer{}, &bytes.Buffer{})
+	if !errors.Is(err, operator.ErrRealCanaryNotActivated) {
+		t.Fatalf("real start error = %v, want ErrRealCanaryNotActivated", err)
+	}
+	storePath := filepath.Join(repoRoot, filepath.FromSlash(defaultEvidenceRelativePath))
+	if _, statErr := os.Stat(storePath); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("rejected real start created repository evidence: %v", statErr)
 	}
 }
 

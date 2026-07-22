@@ -46,6 +46,38 @@ func TestLoadChangeReadsArchivedConfirmedArtifacts(t *testing.T) {
 	}
 }
 
+func TestLoadChangeReadsConfirmedRuntimeBoundaryArtifacts(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("locate adapter test file")
+	}
+	repositoryRoot := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", "..", ".."))
+	change, err := LoadChange(filepath.Join(
+		repositoryRoot,
+		"openspec",
+		"changes",
+		"stabilize-canary-runtime-boundary",
+	))
+	if err != nil {
+		t.Fatalf("load runtime-boundary change: %v", err)
+	}
+	if change.Intent.Status != domain.IntentConfirmed || change.Intent.ID != "STABILIZE-CANARY-RUNTIME-BOUNDARY" {
+		t.Fatalf("unexpected intent identity: %#v", change.Intent)
+	}
+	if len(change.Intent.SourceEvidence) != 5 || len(change.Intent.DesiredOutcomes) != 3 ||
+		len(change.Intent.NonGoals) != 4 || len(change.Intent.SuccessSignals) != 5 {
+		t.Fatalf("unexpected intent group counts: evidence=%d outcomes=%d non_goals=%d signals=%d",
+			len(change.Intent.SourceEvidence),
+			len(change.Intent.DesiredOutcomes),
+			len(change.Intent.NonGoals),
+			len(change.Intent.SuccessSignals),
+		)
+	}
+	if len(change.Proposal.Changes) != 4 || len(change.Proposal.PreservedNonGoalRefs) != 4 {
+		t.Fatalf("unexpected proposal coverage: %#v", change.Proposal)
+	}
+}
+
 func TestLoadChangeBlocksCandidateBeforeReadingProposal(t *testing.T) {
 	changeDir := t.TempDir()
 	writeArtifact(t, changeDir, "intent.md", minimalIntent("candidate", "None.", false))
