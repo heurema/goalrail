@@ -166,27 +166,37 @@ func TestLoadChangeReadsArchivedConfirmedArtifacts(t *testing.T) {
 	}
 }
 
-func TestLoadChangeReadsActiveContextEvaluationArtifacts(t *testing.T) {
+func TestLoadChangeReadsArchivedContextEvaluationArtifacts(t *testing.T) {
 	_, filename, _, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatal("locate adapter test file")
 	}
 	repositoryRoot := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", "..", ".."))
-	change, err := LoadChange(filepath.Join(
+	activeChangePath := filepath.Join(
 		repositoryRoot,
 		"openspec",
 		"changes",
 		"intent-context-evaluation-v0",
+	)
+	if _, err := os.Stat(activeChangePath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("context-evaluation change remains active after archive: %v", err)
+	}
+	change, err := LoadChange(filepath.Join(
+		repositoryRoot,
+		"openspec",
+		"changes",
+		"archive",
+		"2026-07-22-intent-context-evaluation-v0",
 	))
 	if err != nil {
-		t.Fatalf("load active context evaluation change: %v", err)
+		t.Fatalf("load archived context evaluation change: %v", err)
 	}
 	if change.Intent.ContextPack == nil || change.Intent.ContextPack.ID != "context-intent-context-evaluation-v0" {
 		t.Fatalf("unexpected context pack: %#v", change.Intent.ContextPack)
 	}
 	if change.Intent.Status != domain.IntentConfirmed || len(change.Intent.DesiredOutcomes) != 7 ||
 		len(change.Intent.NonGoals) != 6 || len(change.Intent.SuccessSignals) != 10 {
-		t.Fatalf("unexpected active intent: %#v", change.Intent)
+		t.Fatalf("unexpected archived intent: %#v", change.Intent)
 	}
 }
 
