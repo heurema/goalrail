@@ -710,6 +710,18 @@ func TestManifestV2ProjectsContextBasisPhaseAndTelemetryAppendOnly(t *testing.T)
 		NonGoalIDs:        []domain.IntentItemID{"NG-1"},
 		SuccessSignalIDs:  []domain.IntentItemID{"SIG-1"},
 	}
+	wrongBasis := basis
+	wrongBasis.IntentVersion = 2
+	if err := service.RecordAssessmentBasis(AssessmentBasisInput{
+		EventID:    "event-basis-v2-wrong-intent-version",
+		ChangeID:   receipt.ChangeID,
+		OccurredAt: operatorTestTime.Add(90 * time.Second),
+		Actor:      "owner",
+		SourceRef:  "owner-review:basis-v2-wrong-version",
+		Basis:      wrongBasis,
+	}); err == nil || !strings.Contains(err.Error(), "intent version must match") {
+		t.Fatalf("mismatched assessment-basis intent version error = %v", err)
+	}
 	if err := service.RecordAssessmentBasis(AssessmentBasisInput{
 		EventID:    "event-basis-v2-flow",
 		ChangeID:   receipt.ChangeID,

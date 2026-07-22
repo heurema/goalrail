@@ -256,6 +256,22 @@ func readIntent(reader io.Reader, contextPack *domain.ContextPack) (domain.Inten
 		return domain.IntentSnapshot{}, err
 	}
 	status := domain.IntentStatus(strings.ToLower(cleanInline(metadata["status"])))
+	if contextPack != nil {
+		declaredID, declaredVersion, declarationErr := parseContextPackDeclaration(metadata["context pack"])
+		if declarationErr != nil {
+			return domain.IntentSnapshot{}, declarationErr
+		}
+		if declaredID != contextPack.ID || declaredVersion != contextPack.Version {
+			return domain.IntentSnapshot{}, fmt.Errorf(
+				"%w: intent Context Pack %q version %d does not match context.md %q version %d",
+				ErrMalformedArtifact,
+				declaredID,
+				declaredVersion,
+				contextPack.ID,
+				contextPack.Version,
+			)
+		}
+	}
 
 	sourceLines, err := document.requiredSection("Source Evidence")
 	if err != nil {
@@ -329,6 +345,19 @@ func readIntent(reader io.Reader, contextPack *domain.ContextPack) (domain.Inten
 		return domain.IntentSnapshot{}, fmt.Errorf("validate OpenSpec intent: %w", err)
 	}
 	return snapshot, nil
+}
+
+func parseContextPackDeclaration(value string) (domain.ContextPackID, uint32, error) {
+	fields := strings.Fields(cleanInline(value))
+	if len(fields) != 3 || !strings.EqualFold(fields[1], "version") {
+		return "", 0, fmt.Errorf("%w: Context Pack metadata must be '<id> version <number>'", ErrMalformedArtifact)
+	}
+	id := domain.ContextPackID(strings.Trim(fields[0], "`"))
+	version, err := strconv.ParseUint(strings.Trim(fields[2], "`"), 10, 32)
+	if err != nil || version == 0 || !domain.IsCanonicalID(string(id)) {
+		return "", 0, fmt.Errorf("%w: Context Pack metadata has an invalid ID or version", ErrMalformedArtifact)
+	}
+	return id, uint32(version), nil
 }
 
 // ReadProposal treats Intent Coverage rows as the compiled change list. Other

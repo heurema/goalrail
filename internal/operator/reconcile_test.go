@@ -54,6 +54,10 @@ func TestReconcileTraceObservationsKeepsMissingConflictAndMixedExplicit(t *testi
 			name: "mixed trace", phase: phase, status: domain.TelemetryUnavailable, reason: ReasonFlowTraceMixed,
 			observations: []domain.TraceObservation{{TraceReference: trace, SessionID: "session-1", StartedAt: reconcileTestTime.Add(4 * time.Minute), EndedAt: reconcileTestTime.Add(6 * time.Minute)}},
 		},
+		{
+			name: "pre-phase overlap", phase: phase, status: domain.TelemetryUnavailable, reason: ReasonFlowTraceMixed,
+			observations: []domain.TraceObservation{{TraceReference: trace, SessionID: "session-1", StartedAt: reconcileTestTime.Add(-time.Minute), EndedAt: reconcileTestTime.Add(time.Minute)}},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

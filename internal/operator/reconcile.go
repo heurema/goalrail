@@ -205,7 +205,14 @@ func ReconcileTraceObservations(
 	for _, reference := range traceRefs {
 		envelope := grouped[reference]
 		if variant == domain.VariantFlow {
-			if envelope.startedAt.Before(phase.StartedAt) || envelope.startedAt.After(phase.CompletedAt) {
+			if envelope.startedAt.Before(phase.StartedAt) {
+				if envelope.endedAt.After(phase.StartedAt) {
+					base.Status = domain.TelemetryUnavailable
+					return TelemetryReconciliation{Telemetry: base, Reason: ReasonFlowTraceMixed}, nil
+				}
+				continue
+			}
+			if envelope.startedAt.After(phase.CompletedAt) {
 				continue
 			}
 			if envelope.endedAt.After(phase.CompletedAt) {

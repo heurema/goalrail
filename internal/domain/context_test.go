@@ -94,6 +94,23 @@ func TestValidateContextPackRejectsRawOrSensitivePayloads(t *testing.T) {
 	}
 }
 
+func TestValidateContextPackRejectsSecretShapedSourceReferences(t *testing.T) {
+	itemPack := validContextPack()
+	itemPack.Items[0].SourceRef = "url:ghp_example"
+	if err := ValidateContextPack(itemPack); err == nil || !strings.Contains(err.Error(), "context.source_ref.sensitive") {
+		t.Fatalf("sensitive item source reference error = %v", err)
+	}
+
+	unknownPack := validContextPack()
+	unknownPack.Outcome = ContextMaterialUnknown
+	unknownPack.Unknowns = []ContextUnknown{{
+		ID: "CTXQ-1", Question: "Does the provider expose a stable join?", SourceRefs: []EvidenceReference{"url:sk-lf-example"},
+	}}
+	if err := ValidateContextPack(unknownPack); err == nil || !strings.Contains(err.Error(), "context.source_ref.sensitive") {
+		t.Fatalf("sensitive unknown source reference error = %v", err)
+	}
+}
+
 func TestValidateFlowIntentSnapshotRequiresSufficientPriorContext(t *testing.T) {
 	snapshot := validConfirmedIntent()
 	if err := ValidateFlowIntentSnapshot(snapshot); err == nil || !strings.Contains(err.Error(), "intent.context.required") {

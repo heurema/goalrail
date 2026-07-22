@@ -50,6 +50,45 @@ func TestLoadChangeBindsContextBeforeFlowIntent(t *testing.T) {
 	}
 }
 
+func TestLoadChangeRequiresMatchingContextPackDeclaration(t *testing.T) {
+	tests := []struct {
+		name   string
+		intent func(string) string
+	}{
+		{
+			name: "missing declaration",
+			intent: func(value string) string {
+				return strings.Replace(value, "- **Context Pack:** `CONTEXT-TEST` version 1\n", "", 1)
+			},
+		},
+		{
+			name: "wrong ID",
+			intent: func(value string) string {
+				return strings.Replace(value, "`CONTEXT-TEST` version 1", "`CONTEXT-OTHER` version 1", 1)
+			},
+		},
+		{
+			name: "wrong version",
+			intent: func(value string) string {
+				return strings.Replace(value, "`CONTEXT-TEST` version 1", "`CONTEXT-TEST` version 2", 1)
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			changeDir := t.TempDir()
+			writeArtifact(t, changeDir, "context.md", minimalContext("sufficient", "None."))
+			writeArtifact(t, changeDir, "intent.md", test.intent(minimalFlowIntent("confirmed", "None.", true)))
+			writeArtifact(t, changeDir, "proposal.md", minimalProposal("OUT-1", "NG-1"))
+
+			_, err := LoadChange(changeDir)
+			if !errors.Is(err, ErrMalformedArtifact) || !strings.Contains(err.Error(), "Context Pack") {
+				t.Fatalf("Context Pack declaration error = %v, want ErrMalformedArtifact", err)
+			}
+		})
+	}
+}
+
 func TestLoadChangeBlocksConfirmedIntentWithMaterialContextUnknown(t *testing.T) {
 	changeDir := t.TempDir()
 	unknowns := `| ID | Question | Sources |
@@ -83,13 +122,7 @@ func TestLoadChangeRequiresContextForArchivedV2IntentMetadata(t *testing.T) {
 		t.Fatalf("create archived change: %v", err)
 	}
 	writeArtifact(t, changeDir, ".openspec.yaml", "schema: goalrail-intent\n")
-	intent := strings.Replace(
-		minimalFlowIntent("confirmed", "None.", true),
-		"- **Owner:** owner",
-		"- **Owner:** owner\n- **Context Pack:** CONTEXT-TEST version 1",
-		1,
-	)
-	writeArtifact(t, changeDir, "intent.md", intent)
+	writeArtifact(t, changeDir, "intent.md", minimalFlowIntent("confirmed", "None.", true))
 	writeArtifact(t, changeDir, "proposal.md", minimalProposal("OUT-1", "NG-1"))
 
 	_, err := LoadChange(changeDir)
@@ -316,10 +349,16 @@ func minimalIntent(status, ambiguities string, confirmed bool) string {
 }
 
 func minimalFlowIntent(status, ambiguities string, confirmed bool) string {
-	return strings.ReplaceAll(
+	intent := strings.ReplaceAll(
 		minimalIntent(status, ambiguities, confirmed),
 		"| SE-1 |",
 		"| SE-1, CTX-1 |",
+	)
+	return strings.Replace(
+		intent,
+		"- **Owner:** owner",
+		"- **Owner:** owner\n- **Context Pack:** `CONTEXT-TEST` version 1",
+		1,
 	)
 }
 

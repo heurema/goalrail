@@ -22,6 +22,8 @@ var forbiddenContextFragments = []string{
 	"api_key=",
 	"-----begin private key-----",
 	"-----begin rsa private key-----",
+	"github_pat_",
+	"ghp_",
 	"sk-lf-",
 }
 
@@ -65,9 +67,7 @@ func ValidateContextPack(pack ContextPack) error {
 		}
 		validateContextText(v, path+".claim", item.Claim, maxContextClaimRunes)
 		validateContextText(v, path+".relevance", item.Relevance, maxContextRelevanceRunes)
-		if !IsEvidenceReference(string(item.SourceRef)) {
-			v.add("context.item.source_ref_invalid", path+".source_ref", "context item requires a bounded source reference")
-		}
+		validateContextSourceRef(v, path+".source_ref", item.SourceRef)
 		validateUTCTimestamp(v, path+".observed_at", item.ObservedAt)
 		if !item.ObservedAt.IsZero() && !pack.CompletedAt.IsZero() && item.ObservedAt.After(pack.CompletedAt) {
 			v.add("context.item.observed_after_completion", path+".observed_at", "context item cannot be observed after pack completion")
@@ -136,14 +136,30 @@ func validateContextText(v *validator, path, value string, maxRunes int) {
 	}
 }
 
+func validateContextSourceRef(v *validator, path string, ref EvidenceReference) {
+	value := string(ref)
+	if !IsEvidenceReference(value) {
+		v.add("context.source_ref.invalid", path, "source reference must be bounded")
+		return
+	}
+	lower := strings.ToLower(value)
+	for _, fragment := range forbiddenContextFragments {
+		if strings.Contains(lower, fragment) {
+			v.add("context.source_ref.sensitive", path, "source reference contains credential or secret-shaped content")
+			return
+		}
+	}
+}
+
 func validateContextSourceRefs(v *validator, path string, refs []EvidenceReference) {
 	seen := make(map[EvidenceReference]struct{}, len(refs))
 	for index, ref := range refs {
 		itemPath := fmt.Sprintf("%s[%d]", path, index)
 		if !IsEvidenceReference(string(ref)) {
-			v.add("context.source_ref.invalid", itemPath, "source reference must be bounded")
+			validateContextSourceRef(v, itemPath, ref)
 			continue
 		}
+		validateContextSourceRef(v, itemPath, ref)
 		if _, duplicate := seen[ref]; duplicate {
 			v.add("context.source_ref.duplicate", itemPath, "source reference is duplicated")
 		}

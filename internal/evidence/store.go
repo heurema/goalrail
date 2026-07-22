@@ -892,6 +892,9 @@ func validateAssessmentBasisTransition(event domain.EvidenceEvent, prior []diskR
 	if assignment == nil || event.OccurredAt.Before(assignedAt) {
 		return fmt.Errorf("%w: assessment basis requires an assigned change", ErrInvalidEvent)
 	}
+	if event.AssessmentBasis.IntentVersion != assignment.IntentVersion {
+		return fmt.Errorf("%w: assessment basis intent version must match the immutable assignment", ErrInvalidEvent)
+	}
 	if latestPayloadEvent(event, prior, func(previous domain.EvidenceEvent) bool { return previous.AssessmentBasis != nil }) != nil {
 		return fmt.Errorf("%w: assessment basis already exists", ErrInvalidEvent)
 	}
