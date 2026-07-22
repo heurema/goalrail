@@ -46,17 +46,27 @@ func TestLoadChangeReadsArchivedConfirmedArtifacts(t *testing.T) {
 	}
 }
 
-func TestLoadChangeReadsConfirmedRuntimeBoundaryArtifacts(t *testing.T) {
+func TestLoadChangeReadsArchivedConfirmedRuntimeBoundaryArtifacts(t *testing.T) {
 	_, filename, _, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatal("locate adapter test file")
 	}
 	repositoryRoot := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", "..", ".."))
-	change, err := LoadChange(filepath.Join(
+	activeChangePath := filepath.Join(
 		repositoryRoot,
 		"openspec",
 		"changes",
 		"stabilize-canary-runtime-boundary",
+	)
+	if _, err := os.Stat(activeChangePath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("runtime-boundary change remains active after archive: %v", err)
+	}
+	change, err := LoadChange(filepath.Join(
+		repositoryRoot,
+		"openspec",
+		"changes",
+		"archive",
+		"2026-07-22-stabilize-canary-runtime-boundary",
 	))
 	if err != nil {
 		t.Fatalf("load runtime-boundary change: %v", err)
