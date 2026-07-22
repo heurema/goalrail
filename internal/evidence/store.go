@@ -829,6 +829,9 @@ func validateTelemetry(event domain.EvidenceEvent, telemetry domain.CanaryTeleme
 		if interval.EndedAt.Before(interval.StartedAt) {
 			return fmt.Errorf("%w: telemetry interval is reversed", ErrInvalidEvent)
 		}
+		if interval.EndedAt.After(event.OccurredAt) {
+			return fmt.Errorf("%w: telemetry interval cannot end after its evidence event", ErrInvalidEvent)
+		}
 		if _, duplicate := seen[interval.Reference]; duplicate {
 			return fmt.Errorf("%w: telemetry trace is duplicated", ErrInvalidEvent)
 		}
@@ -846,6 +849,9 @@ func validateTelemetry(event domain.EvidenceEvent, telemetry domain.CanaryTeleme
 		}
 		if telemetry.OwnerReview.EndedAt.Before(telemetry.OwnerReview.StartedAt) {
 			return fmt.Errorf("%w: owner-review interval is reversed", ErrInvalidEvent)
+		}
+		if telemetry.OwnerReview.EndedAt.After(event.OccurredAt) {
+			return fmt.Errorf("%w: owner-review interval cannot end after its evidence event", ErrInvalidEvent)
 		}
 	}
 

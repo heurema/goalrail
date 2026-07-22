@@ -84,7 +84,6 @@ func (s *Service) ReconcileTelemetry(
 			to = view.TerminalAt
 		}
 		if view.Assignment.Variant == domain.VariantFlow {
-			from = view.FlowPhase.StartedAt
 			to = view.FlowPhase.CompletedAt.Add(time.Nanosecond)
 		}
 		if from.IsZero() || !from.Before(to) {

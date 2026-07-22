@@ -437,6 +437,60 @@ func TestCorrectionAppendsLinkAndPreservesOriginalBytes(t *testing.T) {
 	}
 }
 
+func TestValidateTelemetryRejectsIntervalsAfterEvidenceEvent(t *testing.T) {
+	traceRef := domain.EvidenceReference("langfuse-trace:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+	event := domain.EvidenceEvent{
+		OccurredAt:      testTime,
+		ObservationRefs: []domain.EvidenceReference{"langfuse-session:session-1", traceRef},
+	}
+	validTrace := domain.CanaryTimingInterval{
+		Reference: traceRef,
+		StartedAt: testTime.Add(-time.Minute),
+		EndedAt:   testTime.Add(-30 * time.Second),
+	}
+	tests := []struct {
+		name      string
+		telemetry domain.CanaryTelemetry
+		want      string
+	}{
+		{
+			name: "trace end",
+			telemetry: domain.CanaryTelemetry{
+				Status:        domain.TelemetryAvailable,
+				SessionLookup: "langfuse-session:session-1",
+				TraceIntervals: []domain.CanaryTimingInterval{{
+					Reference: traceRef,
+					StartedAt: validTrace.StartedAt,
+					EndedAt:   testTime.Add(time.Second),
+				}},
+			},
+			want: "telemetry interval cannot end after its evidence event",
+		},
+		{
+			name: "owner-review end",
+			telemetry: domain.CanaryTelemetry{
+				Status:         domain.TelemetryAvailable,
+				SessionLookup:  "langfuse-session:session-1",
+				TraceIntervals: []domain.CanaryTimingInterval{validTrace},
+				OwnerReview: &domain.CanaryTimingInterval{
+					Reference: "owner-review:change-1",
+					StartedAt: testTime.Add(-20 * time.Second),
+					EndedAt:   testTime.Add(time.Second),
+				},
+			},
+			want: "owner-review interval cannot end after its evidence event",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := validateTelemetry(event, test.telemetry)
+			if !errors.Is(err, ErrInvalidEvent) || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("future interval error = %v, want %q", err, test.want)
+			}
+		})
+	}
+}
+
 func TestStoreRejectsInvalidCorrectionLinks(t *testing.T) {
 	store := newTestStore(t)
 	original := validAssessmentEvent("event-1")

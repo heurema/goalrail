@@ -176,7 +176,7 @@ func TestServiceReconcilesFlowAndDerivesTerminalOverhead(t *testing.T) {
 		telemetryReceipt.Telemetry.FlowOverhead.TotalMinutes != 1.5 {
 		t.Fatalf("unexpected derived overhead: %#v", telemetryReceipt.Telemetry.FlowOverhead)
 	}
-	if !source.query.FromStartTime.Equal(phase.StartedAt) ||
+	if !source.query.FromStartTime.Equal(reconcileTestTime) ||
 		!source.query.ToStartTime.Equal(phase.CompletedAt.Add(time.Nanosecond)) ||
 		source.query.SessionID != lineage.RootSessionID {
 		t.Fatalf("unexpected trace query: %#v", source.query)
