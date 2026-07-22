@@ -62,7 +62,7 @@ func TestValidateCanaryManifestRejectsIncompleteOrChangedRules(t *testing.T) {
 			mutate: func(manifest *CanaryManifest) {
 				manifest.Version = 2
 			},
-			code: "canary.manifest.version_changed",
+			code: "canary.manifest.frozen_at_changed",
 		},
 		{
 			name: "not frozen",
@@ -148,6 +148,71 @@ func TestValidateCanaryManifestRejectsIncompleteOrChangedRules(t *testing.T) {
 				t.Fatalf("validate changed manifest error = %v, want code %s", err, test.code)
 			}
 		})
+	}
+}
+
+func TestIntentCanaryV0ManifestV2FreezesContextAndTelemetryRules(t *testing.T) {
+	manifest, err := NewIntentCanaryV0ManifestV2()
+	if err != nil {
+		t.Fatalf("create v2 manifest: %v", err)
+	}
+	if manifest.Version != IntentCanaryV0ManifestVersion2 ||
+		manifest.ContextRuleRef != CanaryContextRuleV2 ||
+		manifest.TelemetryRuleRef != CanaryTelemetryRuleV2 ||
+		manifest.AssessmentBasisRuleRef != CanaryAssessmentBasisRuleV2 {
+		t.Fatalf("unexpected v2 manifest: %#v", manifest)
+	}
+	if err := ValidateCanaryManifest(manifest); err != nil {
+		t.Fatalf("validate v2 manifest: %v", err)
+	}
+
+	manifest.ContextRuleRef = ""
+	if err := ValidateCanaryManifest(manifest); err == nil ||
+		!strings.Contains(err.Error(), "canary.manifest.rule_ref_invalid") {
+		t.Fatalf("missing v2 context rule error = %v", err)
+	}
+}
+
+func TestManifestVersionSelectionRejectsUnknownVersion(t *testing.T) {
+	for _, version := range []uint32{1, 2} {
+		manifest, err := NewIntentCanaryV0ManifestForVersion(version)
+		if err != nil || manifest.Version != version {
+			t.Fatalf("select manifest %d: manifest=%#v err=%v", version, manifest, err)
+		}
+	}
+	if _, err := NewIntentCanaryV0ManifestForVersion(3); err == nil {
+		t.Fatal("unknown manifest version was accepted")
+	}
+}
+
+func TestManifestArtifactMatchesCanonicalV2ReferencesAndRotation(t *testing.T) {
+	_, sourceFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("resolve test source path")
+	}
+	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(sourceFile), "..", ".."))
+	contents, err := os.ReadFile(filepath.Join(repoRoot, "canary", "intent-canary-v0", "manifest-v2.md"))
+	if err != nil {
+		t.Fatalf("read v2 manifest artifact: %v", err)
+	}
+	text := string(contents)
+	for _, required := range []string{
+		"**Version:** 2",
+		"**State:** `frozen_not_activated`",
+		string(CanaryContextRuleV2),
+		string(CanaryTelemetryRuleV2),
+		string(CanaryAssessmentBasisRuleV2),
+		"`canary/intent-canary-v0/events-v2.jsonl`",
+	} {
+		if !strings.Contains(text, required) {
+			t.Fatalf("v2 manifest artifact is missing %q", required)
+		}
+	}
+	for ordinal, variant := range intentCanaryV0Rotation() {
+		row := fmt.Sprintf("| %d | `%s` |", ordinal+1, variant)
+		if !strings.Contains(text, row) {
+			t.Fatalf("v2 manifest artifact is missing rotation row %q", row)
+		}
 	}
 }
 

@@ -114,6 +114,31 @@ func TestCalculateCanaryReportKeepsMissingAssessmentOutOfRate(t *testing.T) {
 	}
 }
 
+func TestCalculateCanaryReportKeepsV2TelemetryMissingAndConflictExplicit(t *testing.T) {
+	observations := passingCanaryObservations(t)
+	for index := range observations {
+		observations[index].TelemetryRequired = true
+		observations[index].TelemetryStatus = TelemetryAvailable
+	}
+	observations[0].TelemetryStatus = TelemetryUnavailable
+	report, err := CalculateCanaryReport(CanaryReportInput{Observations: observations})
+	if err != nil {
+		t.Fatalf("calculate unavailable telemetry report: %v", err)
+	}
+	if report.CompletionReady || report.Verdict != CanaryVerdictPending || report.TelemetryUnavailable != 1 || report.TelemetryAvailable != 14 {
+		t.Fatalf("unavailable telemetry was hidden: %#v", report)
+	}
+
+	observations[0].TelemetryStatus = TelemetryConflict
+	report, err = CalculateCanaryReport(CanaryReportInput{Observations: observations})
+	if err != nil {
+		t.Fatalf("calculate conflicting telemetry report: %v", err)
+	}
+	if report.Verdict != CanaryVerdictStop || !report.HardStopSignals.TelemetryConflict || report.TelemetryConflict != 1 {
+		t.Fatalf("telemetry conflict did not stop: %#v", report)
+	}
+}
+
 func TestCalculateCanaryReportCountsWrongButGreenIndependently(t *testing.T) {
 	observations := passingCanaryObservations(t)
 	observations[0].Assessment.Outcome = IntentMiss

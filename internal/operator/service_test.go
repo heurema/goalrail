@@ -676,6 +676,160 @@ func TestSessionConflictProjectionSurvivesResolutionExhaustion(t *testing.T) {
 	}
 }
 
+func TestManifestV2ProjectsContextBasisPhaseAndTelemetryAppendOnly(t *testing.T) {
+	service, store, _ := newTestServiceV2(t)
+	receipt := startSynthetic(t, service, "change-v2-flow", "run-v2-flow", operatorTestTime)
+	if receipt.ManifestVersion != 2 || receipt.Variant != domain.VariantFlow {
+		t.Fatalf("unexpected v2 assignment: %#v", receipt)
+	}
+
+	contextInput := ContextBindingInput{
+		EventID:            "event-context-v2-flow",
+		ChangeID:           receipt.ChangeID,
+		OccurredAt:         operatorTestTime.Add(time.Minute),
+		Actor:              "operator",
+		SourceRef:          "openspec:intent-context-evaluation-v0",
+		ContextPackID:      "context-v2-flow",
+		ContextPackVersion: 1,
+	}
+	if err := service.RecordContextBinding(contextInput); err != nil {
+		t.Fatalf("record v2 context: %v", err)
+	}
+	contextInput.EventID = "event-context-v2-duplicate"
+	contextInput.OccurredAt = contextInput.OccurredAt.Add(time.Second)
+	if err := service.RecordContextBinding(contextInput); err == nil || !strings.Contains(err.Error(), "already has a context binding") {
+		t.Fatalf("duplicate context error = %v", err)
+	}
+
+	basis := domain.CanaryAssessmentBasis{
+		IntentRef:         "openspec:intent-context-evaluation-v0",
+		IntentID:          "intent-context-evaluation-v0",
+		IntentVersion:     1,
+		Timing:            domain.BasisPreExecution,
+		DesiredOutcomeIDs: []domain.IntentItemID{"OUT-1"},
+		NonGoalIDs:        []domain.IntentItemID{"NG-1"},
+		SuccessSignalIDs:  []domain.IntentItemID{"SIG-1"},
+	}
+	if err := service.RecordAssessmentBasis(AssessmentBasisInput{
+		EventID:    "event-basis-v2-flow",
+		ChangeID:   receipt.ChangeID,
+		OccurredAt: operatorTestTime.Add(2 * time.Minute),
+		Actor:      "owner",
+		SourceRef:  "owner-review:basis-v2-flow",
+		Basis:      basis,
+	}); err != nil {
+		t.Fatalf("record v2 basis: %v", err)
+	}
+	phaseStart := operatorTestTime.Add(3 * time.Minute)
+	phaseEnd := operatorTestTime.Add(5 * time.Minute)
+	if err := service.RecordFlowPhase(FlowPhaseInput{
+		EventID:     "event-phase-v2-flow",
+		ChangeID:    receipt.ChangeID,
+		OccurredAt:  phaseEnd,
+		Actor:       "operator",
+		SourceRef:   "review:flow-phase-v2",
+		StartedAt:   phaseStart,
+		CompletedAt: phaseEnd,
+	}); err != nil {
+		t.Fatalf("record v2 flow phase: %v", err)
+	}
+
+	lineage := domain.ExecutionLineage{
+		Status:         domain.LineageVerified,
+		ChangeID:       receipt.ChangeID,
+		RunID:          receipt.RunID,
+		RootSessionID:  "session-v2-flow",
+		IdentitySource: domain.SessionIdentityLifecycleHook,
+		ContextDigest:  strings.Repeat("a", 64),
+	}
+	if err := store.Append(domain.EvidenceEvent{
+		ID:                        "event-lineage-v2-flow",
+		CanaryID:                  domain.IntentCanaryV0ManifestID,
+		ManifestVersion:           2,
+		ChangeID:                  receipt.ChangeID,
+		Kind:                      domain.EventLineageRecorded,
+		OccurredAt:                operatorTestTime.Add(6 * time.Minute),
+		Actor:                     "goalrail-hook",
+		SourceRef:                 "codex-hook:lifecycle",
+		ObservationRefs:           []domain.EvidenceReference{"langfuse-session:session-v2-flow"},
+		Lineage:                   &lineage,
+		LineageResolutionAttempts: 1,
+	}); err != nil {
+		t.Fatalf("append v2 lineage: %v", err)
+	}
+
+	traceA := domain.CanaryTimingInterval{
+		Reference: "langfuse-trace:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		StartedAt: phaseStart.Add(10 * time.Second),
+		EndedAt:   phaseStart.Add(40 * time.Second),
+	}
+	ownerReview := domain.CanaryTimingInterval{
+		Reference: "owner-review:change-v2-flow",
+		StartedAt: phaseEnd,
+		EndedAt:   phaseEnd.Add(30 * time.Second),
+	}
+	firstOverhead, err := domain.CalculateCanaryFlowOverhead(domain.CanaryFlowOverheadInput{
+		AgentTurns: []domain.CanaryTimingInterval{traceA}, OwnerReview: &ownerReview, OwnerReviewRequired: true,
+	})
+	if err != nil {
+		t.Fatalf("calculate first v2 overhead: %v", err)
+	}
+	if err := service.RecordTelemetryEvidence(TelemetryEvidenceInput{
+		EventID:    "event-telemetry-v2-flow",
+		ChangeID:   receipt.ChangeID,
+		OccurredAt: operatorTestTime.Add(7 * time.Minute),
+		Actor:      "operator",
+		SourceRef:  "review:telemetry-v2-flow",
+		Telemetry: domain.CanaryTelemetry{
+			Status:         domain.TelemetryAvailable,
+			SessionLookup:  "langfuse-session:session-v2-flow",
+			TraceIntervals: []domain.CanaryTimingInterval{traceA},
+			OwnerReview:    &ownerReview,
+			FlowOverhead:   &firstOverhead,
+		},
+	}); err != nil {
+		t.Fatalf("record v2 telemetry: %v", err)
+	}
+	traceB := domain.CanaryTimingInterval{
+		Reference: "langfuse-trace:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		StartedAt: phaseStart.Add(50 * time.Second),
+		EndedAt:   phaseStart.Add(80 * time.Second),
+	}
+	correctedOverhead, err := domain.CalculateCanaryFlowOverhead(domain.CanaryFlowOverheadInput{
+		AgentTurns: []domain.CanaryTimingInterval{traceA, traceB}, OwnerReview: &ownerReview, OwnerReviewRequired: true,
+	})
+	if err != nil {
+		t.Fatalf("calculate corrected v2 overhead: %v", err)
+	}
+	if err := service.RecordTelemetryEvidence(TelemetryEvidenceInput{
+		EventID:          "event-telemetry-v2-correction",
+		ChangeID:         receipt.ChangeID,
+		OccurredAt:       operatorTestTime.Add(8 * time.Minute),
+		Actor:            "operator",
+		SourceRef:        "review:telemetry-v2-correction",
+		CorrectionReason: "delayed-provider-data",
+		Telemetry: domain.CanaryTelemetry{
+			Status:         domain.TelemetryAvailable,
+			SessionLookup:  "langfuse-session:session-v2-flow",
+			TraceIntervals: []domain.CanaryTimingInterval{traceA, traceB},
+			OwnerReview:    &ownerReview,
+			FlowOverhead:   &correctedOverhead,
+		},
+	}); err != nil {
+		t.Fatalf("correct v2 telemetry: %v", err)
+	}
+
+	view, err := service.Inspect(receipt.ChangeID)
+	if err != nil {
+		t.Fatalf("inspect v2 flow: %v", err)
+	}
+	if view.ManifestVersion != 2 || view.Context == nil || view.AssessmentBasis == nil ||
+		view.FlowPhase == nil || view.Telemetry == nil || len(view.Telemetry.TraceIntervals) != 2 ||
+		view.EventCount != 7 {
+		t.Fatalf("unexpected v2 projection: %#v", view)
+	}
+}
+
 func newTestService(t *testing.T) (*Service, *evidence.Store, string) {
 	t.Helper()
 	repoRoot := t.TempDir()
@@ -686,6 +840,20 @@ func newTestService(t *testing.T) (*Service, *evidence.Store, string) {
 	service, err := NewService(store, repoRoot)
 	if err != nil {
 		t.Fatalf("create operator service: %v", err)
+	}
+	return service, store, repoRoot
+}
+
+func newTestServiceV2(t *testing.T) (*Service, *evidence.Store, string) {
+	t.Helper()
+	repoRoot := t.TempDir()
+	store, err := evidence.NewStoreForManifest(filepath.Join(repoRoot, "events-v2.jsonl"), 2)
+	if err != nil {
+		t.Fatalf("create v2 evidence store: %v", err)
+	}
+	service, err := NewServiceForManifest(store, repoRoot, 2)
+	if err != nil {
+		t.Fatalf("create v2 operator service: %v", err)
 	}
 	return service, store, repoRoot
 }

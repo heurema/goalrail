@@ -56,6 +56,8 @@ type CanaryObservation struct {
 	MaterialMisunderstandingPrevented bool
 	FlowOverheadMinutes               *float64
 	ProcessCausedAbandonment          bool
+	TelemetryRequired                 bool
+	TelemetryStatus                   TelemetryStatus
 }
 
 type CanaryReportInput struct {
@@ -113,6 +115,7 @@ type CanaryHardStopSignals struct {
 	EvidenceIntegrityViolation bool `json:"evidence_integrity_violation"`
 	ExcessiveOverhead          bool `json:"excessive_overhead"`
 	ProcessCausedAbandonments  bool `json:"process_caused_abandonments"`
+	TelemetryConflict          bool `json:"telemetry_conflict,omitempty"`
 }
 
 type CanaryReport struct {
@@ -129,6 +132,11 @@ type CanaryReport struct {
 	LineagePending                uint32                        `json:"lineage_pending"`
 	LineageUnresolved             uint32                        `json:"lineage_unresolved"`
 	WrongJoins                    uint32                        `json:"wrong_joins"`
+	TelemetryRequired             uint32                        `json:"telemetry_required,omitempty"`
+	TelemetryAvailable            uint32                        `json:"telemetry_available,omitempty"`
+	TelemetryUnavailable          uint32                        `json:"telemetry_unavailable,omitempty"`
+	TelemetryConflict             uint32                        `json:"telemetry_conflict,omitempty"`
+	TelemetryMissing              uint32                        `json:"telemetry_missing,omitempty"`
 	ProcessCausedFlowAbandonments uint32                        `json:"process_caused_flow_abandonments"`
 	EvidenceIntegrityViolations   uint32                        `json:"evidence_integrity_violations"`
 	MedianFlowOverhead            CanaryMeasurement             `json:"median_flow_overhead"`
@@ -230,6 +238,19 @@ func CalculateCanaryReport(input CanaryReportInput) (CanaryReport, error) {
 			variantReport.OverheadMeasurements++
 			flowOverheads = append(flowOverheads, *observation.FlowOverheadMinutes)
 		}
+		if observation.TelemetryRequired {
+			report.TelemetryRequired++
+			switch observation.TelemetryStatus {
+			case TelemetryAvailable:
+				report.TelemetryAvailable++
+			case TelemetryUnavailable:
+				report.TelemetryUnavailable++
+			case TelemetryConflict:
+				report.TelemetryConflict++
+			default:
+				report.TelemetryMissing++
+			}
+		}
 	}
 
 	report.Flow.MissingRepeatOptIn = report.Flow.Assigned - report.Flow.RepeatOptInYes - report.Flow.RepeatOptInNo
@@ -246,6 +267,7 @@ func CalculateCanaryReport(input CanaryReportInput) (CanaryReport, error) {
 		ExcessiveOverhead: report.MedianFlowOverhead.Available &&
 			report.MedianFlowOverhead.Value > CanaryMaximumMedianOverheadMinutes,
 		ProcessCausedAbandonments: report.ProcessCausedFlowAbandonments >= CanaryProcessAbandonmentStopCount,
+		TelemetryConflict:         report.TelemetryConflict > 0,
 	}
 	if report.AssignmentsStopped || report.HardStopSignals.any() {
 		report.Verdict = CanaryVerdictStop
@@ -257,7 +279,10 @@ func CalculateCanaryReport(input CanaryReportInput) (CanaryReport, error) {
 		report.Flow.MissingAssessments == 0 &&
 		report.Baseline.MissingAssessments == 0 &&
 		report.LineagePending == 0 &&
-		report.Flow.MissingOverheadMeasurements == 0
+		report.Flow.MissingOverheadMeasurements == 0 &&
+		report.TelemetryMissing == 0 &&
+		report.TelemetryUnavailable == 0 &&
+		report.TelemetryConflict == 0
 
 	report.PassSignals = CanaryPassSignals{
 		LineageReliable:    report.LineageVerified >= CanaryMinimumVerifiedLineage && report.WrongJoins == 0,
@@ -363,6 +388,15 @@ func validateCanaryObservation(v *validator, path string, observation CanaryObse
 		(observation.Variant != VariantFlow || observation.TerminalState != CanaryStateAbandoned) {
 		v.add("canary.abandonment.process_mismatch", path+".process_caused_abandonment", "process-caused abandonment requires an abandoned flow change")
 	}
+	if observation.TelemetryRequired {
+		switch observation.TelemetryStatus {
+		case "", TelemetryAvailable, TelemetryUnavailable, TelemetryConflict:
+		default:
+			v.add("canary.telemetry.status_invalid", path+".telemetry_status", "telemetry status is unknown")
+		}
+	} else if observation.TelemetryStatus != "" {
+		v.add("canary.telemetry.unexpected", path+".telemetry_status", "telemetry status requires the v2 telemetry rule")
+	}
 }
 
 func addAssessment(report *CanaryVariantReport, assessment Assessment) {
@@ -428,5 +462,6 @@ func (signals CanaryHardStopSignals) any() bool {
 		signals.UnresolvedLinks ||
 		signals.EvidenceIntegrityViolation ||
 		signals.ExcessiveOverhead ||
-		signals.ProcessCausedAbandonments
+		signals.ProcessCausedAbandonments ||
+		signals.TelemetryConflict
 }

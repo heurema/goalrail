@@ -1,18 +1,40 @@
 name: goalrail-intent
-version: 1
-description: Intent-first Goalrail workflow - confirmed intent → proposal → specs → design → tasks
+version: 2
+description: Intent-first Goalrail workflow - bounded context → confirmed intent → proposal → specs → design → tasks
 artifacts:
+  - id: context
+    generates: context.md
+    description: Bounded local and external evidence gathered before intent confirmation
+    template: context.md
+    instruction: >
+      Assemble a concise Context Pack before interpreting the request as intent.
+
+
+      Read the repository anchors that can materially constrain the change.
+      Gather external evidence only for a concrete unknown that could change
+      the intended outcome or a current decision. Store concise claims, stable
+      source references, observation times, and relevance; never store raw
+      source pages, transcripts, prompts, credentials, or secret-shaped data.
+
+
+      End collection with exactly one outcome: `sufficient`,
+      `material_unknown`, or `budget_exhausted`. A material unknown blocks flow
+      intent confirmation. Context is evidence, not owner intent and not effect
+      authority.
+    requires: []
   - id: intent
     generates: intent.md
     description: Versioned owner-confirmed statement of desired outcomes, non-goals, and success signals
     template: intent.md
     instruction: >
-      Create the Intent Snapshot before proposing a solution.
+      Create the Intent Snapshot after the Context Pack and before proposing a
+      solution.
 
 
-      Keep source evidence distinct from interpretation. Evidence may include
-      owner statements and verified repository facts. Do not silently turn an
-      inference into owner intent.
+      Keep source evidence and Context Pack references distinct from
+      interpretation. Evidence may include owner statements and verified
+      repository facts. Do not silently turn context or an inference into owner
+      intent.
 
 
       Give every desired outcome, non-goal, and observable success signal a
@@ -25,7 +47,8 @@ artifacts:
       Intent contains only three semantic groups: desired outcomes, non-goals,
       and observable success signals. Source evidence, unknowns, and confirmation
       are provenance and lifecycle metadata, not extra intent categories.
-    requires: []
+    requires:
+      - context
   - id: proposal
     generates: proposal.md
     description: Change proposal compiled from confirmed intent

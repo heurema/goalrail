@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -11,6 +12,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,17 +20,23 @@ import (
 	"strings"
 	"time"
 
+	"github.com/heurema/goalrail/internal/adapters/langfuse"
 	"github.com/heurema/goalrail/internal/domain"
 	"github.com/heurema/goalrail/internal/evidence"
 	"github.com/heurema/goalrail/internal/operator"
 )
 
 const (
-	runContextEnvironment       = "GOALRAIL_RUN_CONTEXT"
-	evidencePathEnvironment     = "GOALRAIL_EVIDENCE_PATH"
-	repoRootEnvironment         = "GOALRAIL_REPO_ROOT"
-	defaultEvidenceRelativePath = "canary/intent-canary-v0/events.jsonl"
-	maxProviderInputBytes       = 64 * 1024
+	runContextEnvironment         = "GOALRAIL_RUN_CONTEXT"
+	evidencePathEnvironment       = "GOALRAIL_EVIDENCE_PATH"
+	repoRootEnvironment           = "GOALRAIL_REPO_ROOT"
+	defaultEvidenceRelativePath   = "canary/intent-canary-v0/events.jsonl"
+	defaultEvidenceV2RelativePath = "canary/intent-canary-v0/events-v2.jsonl"
+	maxProviderInputBytes         = 64 * 1024
+	langfuseBaseURLEnvironment    = "LANGFUSE_BASE_URL"
+	langfuseHostEnvironment       = "LANGFUSE_HOST"
+	langfusePublicKeyEnvironment  = "LANGFUSE_PUBLIC_KEY"
+	langfuseSecretKeyEnvironment  = "LANGFUSE_SECRET_KEY"
 )
 
 func main() {
@@ -48,12 +56,13 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	global.SetOutput(stderr)
 	repoRoot := global.String("repo", repoDefault, "repository root")
 	storePath := global.String("store", os.Getenv(evidencePathEnvironment), "append-only evidence JSONL path")
+	manifestVersion := global.Uint("manifest-version", uint(domain.IntentCanaryV0ManifestVersion), "immutable canary manifest version: 1 or 2")
 	if err := global.Parse(args); err != nil {
 		return err
 	}
 	remaining := global.Args()
 	if len(remaining) == 0 {
-		return errors.New("command is required: start, exclude, freeze-checks, inspect, deliver, abandon, assess, correct, report, or disable")
+		return errors.New("command is required: start, exclude, bind-context, record-basis, record-phase, freeze-checks, reconcile, inspect, deliver, abandon, assess, correct, report, or disable")
 	}
 
 	absRepo, err := filepath.Abs(filepath.Clean(*repoRoot))
@@ -62,15 +71,19 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	}
 	resolvedStore := strings.TrimSpace(*storePath)
 	if resolvedStore == "" {
-		resolvedStore = filepath.Join(absRepo, filepath.FromSlash(defaultEvidenceRelativePath))
+		defaultPath, pathErr := defaultEvidencePath(uint32(*manifestVersion))
+		if pathErr != nil {
+			return pathErr
+		}
+		resolvedStore = filepath.Join(absRepo, filepath.FromSlash(defaultPath))
 	} else if !filepath.IsAbs(resolvedStore) {
 		resolvedStore = filepath.Join(absRepo, resolvedStore)
 	}
-	store, err := evidence.NewStore(resolvedStore)
+	store, err := evidence.NewStoreForManifest(resolvedStore, uint32(*manifestVersion))
 	if err != nil {
 		return err
 	}
-	service, err := operator.NewService(store, absRepo)
+	service, err := operator.NewServiceForManifest(store, absRepo, uint32(*manifestVersion))
 	if err != nil {
 		return err
 	}
@@ -81,8 +94,16 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 		return runStart(service, resolvedStore, absRepo, commandArgs, stdin, stdout, stderr)
 	case "exclude":
 		return runExclude(service, commandArgs, stdout, stderr)
+	case "bind-context":
+		return runBindContext(service, commandArgs, stderr)
+	case "record-basis":
+		return runRecordBasis(service, commandArgs, stderr)
+	case "record-phase":
+		return runRecordPhase(service, commandArgs, stderr)
 	case "freeze-checks":
 		return runFreezeChecks(service, commandArgs, stdout, stderr)
+	case "reconcile":
+		return runReconcile(service, commandArgs, stdout, stderr)
 	case "inspect":
 		return runInspect(service, commandArgs, stdout, stderr)
 	case "deliver":
@@ -103,6 +124,183 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 		return runBindLaunch(service, commandArgs, stdin, stderr)
 	default:
 		return fmt.Errorf("unknown command %q", command)
+	}
+}
+
+func runBindContext(service *operator.Service, args []string, stderr io.Writer) error {
+	set := flag.NewFlagSet("bind-context", flag.ContinueOnError)
+	set.SetOutput(stderr)
+	changeID := set.String("change", "", "stable change ID")
+	actor := set.String("actor", "", "operator actor ID")
+	source := set.String("source", "", "bounded Context Pack source reference")
+	contextPackID := set.String("context-pack", "", "stable Context Pack ID")
+	contextVersion := set.Uint("context-version", 0, "Context Pack version")
+	if err := set.Parse(args); err != nil {
+		return err
+	}
+	if err := requireNoArgs(set); err != nil {
+		return err
+	}
+	eventID, err := generatedEventID()
+	if err != nil {
+		return err
+	}
+	return service.RecordContextBinding(operator.ContextBindingInput{
+		EventID: eventID, ChangeID: domain.ChangeID(*changeID), OccurredAt: time.Now().UTC(),
+		Actor: domain.ActorID(*actor), SourceRef: domain.EvidenceReference(*source),
+		ContextPackID: domain.ContextPackID(*contextPackID), ContextPackVersion: uint32(*contextVersion),
+	})
+}
+
+func runRecordBasis(service *operator.Service, args []string, stderr io.Writer) error {
+	set := flag.NewFlagSet("record-basis", flag.ContinueOnError)
+	set.SetOutput(stderr)
+	changeID := set.String("change", "", "stable change ID")
+	actor := set.String("actor", "", "owner or operator actor ID")
+	source := set.String("source", "", "bounded assessment-basis source reference")
+	intentRef := set.String("intent-ref", "", "bounded confirmed-intent reference")
+	intentID := set.String("intent-id", "", "stable intent ID")
+	intentVersion := set.Uint("intent-version", 0, "confirmed intent version")
+	timing := set.String("timing", "", "pre_execution for flow or post_delivery for baseline")
+	var desiredOutcomes, nonGoals, successSignals stringList
+	set.Var(&desiredOutcomes, "desired-outcome-id", "stable desired-outcome ID; repeat for every item")
+	set.Var(&nonGoals, "non-goal-id", "stable non-goal ID; repeat for every item")
+	set.Var(&successSignals, "success-signal-id", "stable success-signal ID; repeat for every item")
+	if err := set.Parse(args); err != nil {
+		return err
+	}
+	if err := requireNoArgs(set); err != nil {
+		return err
+	}
+	eventID, err := generatedEventID()
+	if err != nil {
+		return err
+	}
+	return service.RecordAssessmentBasis(operator.AssessmentBasisInput{
+		EventID: eventID, ChangeID: domain.ChangeID(*changeID), OccurredAt: time.Now().UTC(),
+		Actor: domain.ActorID(*actor), SourceRef: domain.EvidenceReference(*source),
+		Basis: domain.CanaryAssessmentBasis{
+			IntentRef: domain.EvidenceReference(*intentRef), IntentID: domain.IntentID(*intentID),
+			IntentVersion: uint32(*intentVersion), Timing: domain.AssessmentBasisTiming(*timing),
+			DesiredOutcomeIDs: desiredOutcomes.intentItemIDs(), NonGoalIDs: nonGoals.intentItemIDs(),
+			SuccessSignalIDs: successSignals.intentItemIDs(),
+		},
+	})
+}
+
+func runRecordPhase(service *operator.Service, args []string, stderr io.Writer) error {
+	set := flag.NewFlagSet("record-phase", flag.ContinueOnError)
+	set.SetOutput(stderr)
+	changeID := set.String("change", "", "stable change ID")
+	actor := set.String("actor", "", "operator actor ID")
+	source := set.String("source", "", "bounded flow-phase source reference")
+	started := set.String("started-at", "", "flow phase start, RFC3339")
+	completed := set.String("completed-at", "", "flow phase completion, RFC3339")
+	if err := set.Parse(args); err != nil {
+		return err
+	}
+	if err := requireNoArgs(set); err != nil {
+		return err
+	}
+	startedAt, err := time.Parse(time.RFC3339Nano, *started)
+	if err != nil {
+		return fmt.Errorf("parse started-at: %w", err)
+	}
+	completedAt, err := time.Parse(time.RFC3339Nano, *completed)
+	if err != nil {
+		return fmt.Errorf("parse completed-at: %w", err)
+	}
+	eventID, err := generatedEventID()
+	if err != nil {
+		return err
+	}
+	return service.RecordFlowPhase(operator.FlowPhaseInput{
+		EventID: eventID, ChangeID: domain.ChangeID(*changeID), OccurredAt: time.Now().UTC(),
+		Actor: domain.ActorID(*actor), SourceRef: domain.EvidenceReference(*source),
+		StartedAt: startedAt.UTC(), CompletedAt: completedAt.UTC(),
+	})
+}
+
+func runReconcile(service *operator.Service, args []string, stdout, stderr io.Writer) error {
+	set := flag.NewFlagSet("reconcile", flag.ContinueOnError)
+	set.SetOutput(stderr)
+	changeID := set.String("change", "", "stable change ID")
+	actor := set.String("actor", "", "operator actor ID")
+	sourceRef := set.String("source", "", "bounded reconciliation source reference")
+	ownerReviewRef := set.String("owner-review-ref", "", "flow-only owner-review evidence reference")
+	ownerReviewStart := set.String("owner-review-start", "", "flow-only owner-review start, RFC3339")
+	ownerReviewEnd := set.String("owner-review-end", "", "flow-only owner-review end, RFC3339")
+	correctionReason := set.String("correction-reason", "", "reason for explicitly superseding prior telemetry")
+	if err := set.Parse(args); err != nil {
+		return err
+	}
+	if err := requireNoArgs(set); err != nil {
+		return err
+	}
+	if err := requireCanonical("change", *changeID); err != nil {
+		return err
+	}
+
+	var ownerReview *domain.CanaryTimingInterval
+	ownerFields := 0
+	for _, value := range []string{*ownerReviewRef, *ownerReviewStart, *ownerReviewEnd} {
+		if strings.TrimSpace(value) != "" {
+			ownerFields++
+		}
+	}
+	if ownerFields != 0 && ownerFields != 3 {
+		return errors.New("owner-review-ref, owner-review-start, and owner-review-end must be supplied together")
+	}
+	if ownerFields == 3 {
+		startedAt, err := time.Parse(time.RFC3339Nano, *ownerReviewStart)
+		if err != nil {
+			return fmt.Errorf("parse owner-review-start: %w", err)
+		}
+		endedAt, err := time.Parse(time.RFC3339Nano, *ownerReviewEnd)
+		if err != nil {
+			return fmt.Errorf("parse owner-review-end: %w", err)
+		}
+		ownerReview = &domain.CanaryTimingInterval{
+			Reference: domain.EvidenceReference(*ownerReviewRef),
+			StartedAt: startedAt.UTC(), EndedAt: endedAt.UTC(),
+		}
+	}
+
+	baseURL := firstNonempty(os.Getenv(langfuseBaseURLEnvironment), os.Getenv(langfuseHostEnvironment))
+	publicKey, secretKey := os.Getenv(langfusePublicKeyEnvironment), os.Getenv(langfuseSecretKeyEnvironment)
+	if baseURL == "" || publicKey == "" || secretKey == "" {
+		return errors.New("reconcile requires LANGFUSE_BASE_URL or LANGFUSE_HOST plus LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY")
+	}
+	client, err := langfuse.NewClient(langfuse.ClientConfig{
+		BaseURL: baseURL, PublicKey: publicKey, SecretKey: secretKey,
+		HTTPClient: &http.Client{Timeout: 15 * time.Second},
+	})
+	if err != nil {
+		return err
+	}
+	eventID, err := generatedEventID()
+	if err != nil {
+		return err
+	}
+	receipt, err := service.ReconcileTelemetry(context.Background(), client, operator.ReconcileTelemetryInput{
+		EventID: eventID, ChangeID: domain.ChangeID(*changeID), OccurredAt: time.Now().UTC(),
+		Actor: domain.ActorID(*actor), SourceRef: domain.EvidenceReference(*sourceRef),
+		OwnerReview: ownerReview, CorrectionReason: domain.EvidenceReasonCode(*correctionReason),
+	})
+	if err != nil {
+		return err
+	}
+	return writeJSON(stdout, receipt)
+}
+
+func defaultEvidencePath(manifestVersion uint32) (string, error) {
+	switch manifestVersion {
+	case domain.IntentCanaryV0ManifestVersion:
+		return defaultEvidenceRelativePath, nil
+	case domain.IntentCanaryV0ManifestVersion2:
+		return defaultEvidenceV2RelativePath, nil
+	default:
+		return "", fmt.Errorf("unsupported manifest version %d", manifestVersion)
 	}
 }
 
@@ -379,7 +577,11 @@ func runAssess(service *operator.Service, args []string, stderr io.Writer) error
 	source := set.String("source", "", "bounded assessment source reference")
 	outcome := set.String("outcome", "", "owner outcome: match, partial, or miss")
 	var repeat optionalBool
+	var desiredOutcomes, nonGoals, successSignals stringList
 	set.Var(&repeat, "repeat-opt-in", "flow owner choice: yes or no")
+	set.Var(&desiredOutcomes, "desired-outcome", "item judgment as ITEM_ID=achieved|partial|missed; repeat for every outcome")
+	set.Var(&nonGoals, "non-goal", "item judgment as ITEM_ID=preserved|violated; repeat for every non-goal")
+	set.Var(&successSignals, "success-signal", "item judgment as ITEM_ID=observed|missing; repeat for every signal")
 	if err := set.Parse(args); err != nil {
 		return err
 	}
@@ -390,14 +592,19 @@ func runAssess(service *operator.Service, args []string, stderr io.Writer) error
 	if err != nil {
 		return err
 	}
+	judgments, err := parseItemJudgments(desiredOutcomes, nonGoals, successSignals)
+	if err != nil {
+		return err
+	}
 	return service.Assess(operator.AssessInput{
-		EventID:     eventID,
-		ChangeID:    domain.ChangeID(*changeID),
-		OccurredAt:  time.Now().UTC(),
-		Owner:       domain.ActorID(*owner),
-		SourceRef:   domain.EvidenceReference(*source),
-		Outcome:     domain.IntentOutcome(*outcome),
-		RepeatOptIn: repeat.pointer(),
+		EventID:       eventID,
+		ChangeID:      domain.ChangeID(*changeID),
+		OccurredAt:    time.Now().UTC(),
+		Owner:         domain.ActorID(*owner),
+		SourceRef:     domain.EvidenceReference(*source),
+		Outcome:       domain.IntentOutcome(*outcome),
+		RepeatOptIn:   repeat.pointer(),
+		ItemJudgments: judgments,
 	})
 }
 
@@ -413,8 +620,12 @@ func runCorrect(service *operator.Service, args []string, stderr io.Writer) erro
 	outcome := set.String("outcome", "", "corrected outcome for assessment correction")
 	var repeat optionalBool
 	var checks stringList
+	var desiredOutcomes, nonGoals, successSignals stringList
 	set.Var(&repeat, "repeat-opt-in", "corrected flow owner choice: yes or no")
 	set.Var(&checks, "check-ref", "corrected bounded check reference; repeat for the effective set")
+	set.Var(&desiredOutcomes, "desired-outcome", "corrected ITEM_ID=achieved|partial|missed judgment")
+	set.Var(&nonGoals, "non-goal", "corrected ITEM_ID=preserved|violated judgment")
+	set.Var(&successSignals, "success-signal", "corrected ITEM_ID=observed|missing judgment")
 	if err := set.Parse(args); err != nil {
 		return err
 	}
@@ -426,9 +637,13 @@ func runCorrect(service *operator.Service, args []string, stderr io.Writer) erro
 		return err
 	}
 	commonTime := time.Now().UTC()
+	judgments, err := parseItemJudgments(desiredOutcomes, nonGoals, successSignals)
+	if err != nil {
+		return err
+	}
 	switch *kind {
 	case "material":
-		if *actor != "" || *outcome != "" || repeat.set || len(checks) != 0 {
+		if *actor != "" || *outcome != "" || repeat.set || len(checks) != 0 || len(judgments) != 0 {
 			return errors.New("material correction does not accept assessment fields")
 		}
 		return service.RecordMaterialCorrection(operator.MaterialCorrectionInput{
@@ -444,17 +659,18 @@ func runCorrect(service *operator.Service, args []string, stderr io.Writer) erro
 			return errors.New("assessment correction does not accept check fields")
 		}
 		return service.CorrectAssessment(operator.CorrectAssessmentInput{
-			EventID:     eventID,
-			ChangeID:    domain.ChangeID(*changeID),
-			OccurredAt:  commonTime,
-			Owner:       domain.ActorID(*owner),
-			SourceRef:   domain.EvidenceReference(*source),
-			Reason:      domain.EvidenceReasonCode(*reason),
-			Outcome:     domain.IntentOutcome(*outcome),
-			RepeatOptIn: repeat.pointer(),
+			EventID:       eventID,
+			ChangeID:      domain.ChangeID(*changeID),
+			OccurredAt:    commonTime,
+			Owner:         domain.ActorID(*owner),
+			SourceRef:     domain.EvidenceReference(*source),
+			Reason:        domain.EvidenceReasonCode(*reason),
+			Outcome:       domain.IntentOutcome(*outcome),
+			RepeatOptIn:   repeat.pointer(),
+			ItemJudgments: judgments,
 		})
 	case "checks":
-		if *owner != "" || *outcome != "" || repeat.set {
+		if *owner != "" || *outcome != "" || repeat.set || len(judgments) != 0 {
 			return errors.New("check correction does not accept owner-assessment fields")
 		}
 		_, err := service.CorrectChecks(operator.CorrectChecksInput{
@@ -470,6 +686,35 @@ func runCorrect(service *operator.Service, args []string, stderr io.Writer) erro
 	default:
 		return errors.New("correct --kind must be material, checks, or assessment")
 	}
+}
+
+func parseItemJudgments(
+	desiredOutcomes stringList,
+	nonGoals stringList,
+	successSignals stringList,
+) ([]domain.IntentItemJudgment, error) {
+	groups := []struct {
+		category domain.IntentItemCategory
+		values   stringList
+	}{
+		{category: domain.IntentCategoryDesiredOutcome, values: desiredOutcomes},
+		{category: domain.IntentCategoryNonGoal, values: nonGoals},
+		{category: domain.IntentCategorySuccessSignal, values: successSignals},
+	}
+	judgments := make([]domain.IntentItemJudgment, 0, len(desiredOutcomes)+len(nonGoals)+len(successSignals))
+	for _, group := range groups {
+		for _, value := range group.values {
+			itemID, judgment, found := strings.Cut(value, "=")
+			if !found || strings.TrimSpace(itemID) == "" || strings.TrimSpace(judgment) == "" {
+				return nil, fmt.Errorf("%s judgment must use ITEM_ID=value", group.category)
+			}
+			judgments = append(judgments, domain.IntentItemJudgment{
+				ItemID: domain.IntentItemID(itemID), Category: group.category,
+				Judgment: domain.IntentItemJudgmentValue(judgment),
+			})
+		}
+	}
+	return judgments, nil
 }
 
 func runBindHook(service *operator.Service, args []string, stdin io.Reader, stderr io.Writer) error {
@@ -595,6 +840,14 @@ func (list stringList) references() []domain.EvidenceReference {
 		references[index] = domain.EvidenceReference(value)
 	}
 	return references
+}
+
+func (list stringList) intentItemIDs() []domain.IntentItemID {
+	ids := make([]domain.IntentItemID, len(list))
+	for index, value := range list {
+		ids[index] = domain.IntentItemID(value)
+	}
+	return ids
 }
 
 type optionalFloat struct {
