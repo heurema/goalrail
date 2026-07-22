@@ -34,6 +34,7 @@ var (
 	ErrDuplicateEventID            = errors.New("duplicate evidence event ID")
 	ErrInvalidCorrection           = errors.New("invalid evidence correction")
 	ErrInvalidEvent                = errors.New("invalid evidence event")
+	ErrRealCanaryNotActivated      = errors.New("real-change canary is not activated")
 	ErrInterprocessLockUnsupported = errors.New("evidence interprocess locking is unsupported")
 
 	digestPattern  = regexp.MustCompile(`^[0-9a-f]{64}$`)
@@ -136,7 +137,7 @@ func (s *Store) Append(event domain.EvidenceEvent) error {
 	if err != nil {
 		return err
 	}
-	if err := validateEvent(event, records); err != nil {
+	if err := validateEvent(event, records, false); err != nil {
 		return err
 	}
 
@@ -400,7 +401,7 @@ func validateRecord(record diskRecord, prior []diskRecord) error {
 	if record.Digest != expectedDigest {
 		return fmt.Errorf("%w: digest mismatch", ErrIntegrity)
 	}
-	if err := validateEvent(record.Event, prior); err != nil {
+	if err := validateEvent(record.Event, prior, true); err != nil {
 		return fmt.Errorf("%w: stored event invalid: %v", ErrIntegrity, err)
 	}
 	return nil
@@ -420,7 +421,7 @@ func calculateDigest(record diskRecord) (string, error) {
 	return hex.EncodeToString(digest[:]), nil
 }
 
-func validateEvent(event domain.EvidenceEvent, prior []diskRecord) error {
+func validateEvent(event domain.EvidenceEvent, prior []diskRecord, allowLegacyStart bool) error {
 	for _, record := range prior {
 		if record.Event.ID == event.ID {
 			return fmt.Errorf("%w: %s", ErrDuplicateEventID, event.ID)
@@ -485,8 +486,18 @@ func validateEvent(event domain.EvidenceEvent, prior []diskRecord) error {
 			return err
 		}
 	}
+	if event.Admission != nil {
+		if err := validateAdmission(*event.Admission); err != nil {
+			return err
+		}
+	}
 	if event.Assignment != nil {
 		if err := validateAssignment(*event.Assignment); err != nil {
+			return err
+		}
+	}
+	if event.CheckSet != nil {
+		if err := validateCheckSet(*event.CheckSet); err != nil {
 			return err
 		}
 	}
@@ -501,11 +512,35 @@ func validateEvent(event domain.EvidenceEvent, prior []diskRecord) error {
 	}
 
 	switch event.Kind {
+	case domain.EventAdmissionDecided:
+		if event.Admission == nil || event.ReasonCode == "" {
+			return fmt.Errorf("%w: admission event requires a decision and reason", ErrInvalidEvent)
+		}
+		expectedPayloads := 1
+		if event.Admission.Decision == domain.AdmissionEligible {
+			expectedPayloads = 2
+		}
+		if payloadCount(event) != expectedPayloads {
+			return fmt.Errorf("%w: admission payload does not match its decision", ErrInvalidEvent)
+		}
+		if err := validateAdmissionTransition(event, *event.Admission, prior); err != nil {
+			return err
+		}
 	case domain.EventChangeStarted:
+		if !allowLegacyStart {
+			return fmt.Errorf("%w: new change-start events are replaced by admission decisions", ErrInvalidEvent)
+		}
 		if event.Assignment == nil || payloadCount(event) != 1 {
 			return fmt.Errorf("%w: change-start event requires only assignment payload", ErrInvalidEvent)
 		}
 		if err := validateAssignmentTransition(event, *event.Assignment, prior); err != nil {
+			return err
+		}
+	case domain.EventCheckSetFrozen:
+		if event.CheckSet == nil || payloadCount(event) != 1 {
+			return fmt.Errorf("%w: check-set event requires only a check-set payload", ErrInvalidEvent)
+		}
+		if err := validateCheckSetTransition(event, prior); err != nil {
 			return err
 		}
 	case domain.EventLineageRecorded:
@@ -556,7 +591,9 @@ func validateEvent(event domain.EvidenceEvent, prior []diskRecord) error {
 
 func validateEventKind(kind domain.EvidenceEventKind) error {
 	switch kind {
-	case domain.EventChangeStarted,
+	case domain.EventAdmissionDecided,
+		domain.EventChangeStarted,
+		domain.EventCheckSetFrozen,
 		domain.EventLineageRecorded,
 		domain.EventTerminalStateChanged,
 		domain.EventAssessmentRecorded,
@@ -572,7 +609,9 @@ func validateEventKind(kind domain.EvidenceEventKind) error {
 func payloadCount(event domain.EvidenceEvent) int {
 	count := 0
 	for _, present := range []bool{
+		event.Admission != nil,
 		event.Assignment != nil,
+		event.CheckSet != nil,
 		event.Lineage != nil,
 		event.Terminal != nil,
 		event.Assessment != nil,
@@ -584,7 +623,22 @@ func payloadCount(event domain.EvidenceEvent) int {
 	return count
 }
 
+func validateAdmission(admission domain.CanaryAdmission) error {
+	switch admission.Decision {
+	case domain.AdmissionEligible, domain.AdmissionExcluded:
+	default:
+		return fmt.Errorf("%w: unknown admission decision %q", ErrInvalidEvent, admission.Decision)
+	}
+	if !admission.Synthetic {
+		return ErrRealCanaryNotActivated
+	}
+	return nil
+}
+
 func validateAssignment(assignment domain.CanaryAssignment) error {
+	if !assignment.Synthetic {
+		return ErrRealCanaryNotActivated
+	}
 	if assignment.Ordinal == 0 || assignment.Ordinal > domain.CanaryAssignmentCount {
 		return fmt.Errorf("%w: assignment ordinal must be within 1..15", ErrInvalidEvent)
 	}
@@ -598,6 +652,41 @@ func validateAssignment(assignment domain.CanaryAssignment) error {
 	return validateCanonicalID("assignment.run_id", string(assignment.RunID))
 }
 
+func validateAdmissionTransition(
+	event domain.EvidenceEvent,
+	admission domain.CanaryAdmission,
+	prior []diskRecord,
+) error {
+	for _, record := range prior {
+		previous := record.Event
+		if previous.CanaryID != event.CanaryID {
+			continue
+		}
+		if previous.Kind == domain.EventCanaryStopped {
+			return fmt.Errorf("%w: canary admissions are stopped", ErrInvalidEvent)
+		}
+		if previous.ChangeID == event.ChangeID &&
+			(previous.Admission != nil || previous.Assignment != nil) {
+			return fmt.Errorf("%w: canary change already has an admission or assignment", ErrInvalidEvent)
+		}
+	}
+
+	switch admission.Decision {
+	case domain.AdmissionEligible:
+		if event.Assignment == nil {
+			return fmt.Errorf("%w: eligible admission requires assignment", ErrInvalidEvent)
+		}
+		return validateAssignmentTransition(event, *event.Assignment, prior)
+	case domain.AdmissionExcluded:
+		if event.Assignment != nil {
+			return fmt.Errorf("%w: excluded admission cannot carry assignment", ErrInvalidEvent)
+		}
+		return nil
+	default:
+		return fmt.Errorf("%w: unknown admission decision %q", ErrInvalidEvent, admission.Decision)
+	}
+}
+
 func validateAssignmentTransition(
 	event domain.EvidenceEvent,
 	assignment domain.CanaryAssignment,
@@ -609,11 +698,15 @@ func validateAssignmentTransition(
 		if previous.CanaryID == event.CanaryID && previous.Kind == domain.EventCanaryStopped {
 			return fmt.Errorf("%w: canary assignments are stopped", ErrInvalidEvent)
 		}
-		if previous.CanaryID != event.CanaryID || previous.Assignment == nil {
+		if previous.CanaryID != event.CanaryID {
 			continue
 		}
-		if previous.ChangeID == event.ChangeID {
-			return fmt.Errorf("%w: canary change is already assigned", ErrInvalidEvent)
+		if previous.ChangeID == event.ChangeID &&
+			(previous.Admission != nil || previous.Assignment != nil) {
+			return fmt.Errorf("%w: canary change already has an admission or assignment", ErrInvalidEvent)
+		}
+		if previous.Assignment == nil {
+			continue
 		}
 		if previous.Assignment.RunID == assignment.RunID {
 			return fmt.Errorf("%w: run ID is already assigned", ErrInvalidEvent)
@@ -627,6 +720,42 @@ func validateAssignmentTransition(
 			assignment.Ordinal,
 			expectedOrdinal,
 		)
+	}
+	return nil
+}
+
+func validateCheckSet(checkSet domain.CanaryCheckSet) error {
+	if len(checkSet.CheckRefs) == 0 {
+		return fmt.Errorf("%w: frozen check set must not be empty", ErrInvalidEvent)
+	}
+	seen := make(map[domain.EvidenceReference]struct{}, len(checkSet.CheckRefs))
+	for index, reference := range checkSet.CheckRefs {
+		field := fmt.Sprintf("check_set.check_refs[%d]", index)
+		if err := validateCheckReference(field, string(reference)); err != nil {
+			return err
+		}
+		if _, duplicate := seen[reference]; duplicate {
+			return fmt.Errorf("%w: duplicate %s", ErrInvalidEvent, field)
+		}
+		seen[reference] = struct{}{}
+	}
+	return nil
+}
+
+func validateCheckSetTransition(event domain.EvidenceEvent, prior []diskRecord) error {
+	assignment, assignedAt := assignedChange(event, prior)
+	if assignment == nil {
+		return fmt.Errorf("%w: check-set freeze requires an assigned change", ErrInvalidEvent)
+	}
+	if event.OccurredAt.Before(assignedAt) {
+		return fmt.Errorf("%w: check-set event predates assignment", ErrInvalidEvent)
+	}
+	if checkSetEvent(event, prior) != nil {
+		return fmt.Errorf("%w: canary change already has a frozen check set", ErrInvalidEvent)
+	}
+	terminal, _ := terminalChange(event, prior)
+	if terminal != nil {
+		return fmt.Errorf("%w: check set must be frozen before terminal evidence", ErrInvalidEvent)
 	}
 	return nil
 }
@@ -773,7 +902,7 @@ func validateTerminalTransition(
 ) error {
 	assignment, assignedAt := assignedChange(event, prior)
 	if assignment == nil {
-		return nil
+		return fmt.Errorf("%w: terminal evidence requires an assigned change", ErrInvalidEvent)
 	}
 	if event.OccurredAt.Before(assignedAt) {
 		return fmt.Errorf("%w: terminal event predates assignment", ErrInvalidEvent)
@@ -787,6 +916,20 @@ func validateTerminalTransition(
 	if assignment.Variant == domain.VariantBaseline &&
 		(terminal.FlowOverheadMinutes != nil || terminal.ProcessCausedAbandonment) {
 		return fmt.Errorf("%w: baseline change cannot record flow-only terminal data", ErrInvalidEvent)
+	}
+	if terminal.State == domain.CanaryStateDelivered {
+		frozen := checkSetEvent(event, prior)
+		assignedEvent := assignmentEvent(event, prior)
+		legacyAssignment := assignedEvent != nil && assignedEvent.Kind == domain.EventChangeStarted
+		if (frozen == nil || frozen.CheckSet == nil) && !legacyAssignment {
+			return fmt.Errorf("%w: delivery requires a prior frozen check set", ErrInvalidEvent)
+		}
+		if frozen != nil && event.OccurredAt.Before(frozen.OccurredAt) {
+			return fmt.Errorf("%w: terminal evidence predates the effective check set", ErrInvalidEvent)
+		}
+		if frozen != nil && !sameReferenceSet(terminal.CheckRefs, frozen.CheckSet.CheckRefs) {
+			return fmt.Errorf("%w: delivery checks must match the effective frozen set", ErrInvalidEvent)
+		}
 	}
 	return nil
 }
@@ -853,13 +996,21 @@ func validateAssessmentAgainstChange(
 }
 
 func assignedChange(event domain.EvidenceEvent, prior []diskRecord) (*domain.CanaryAssignment, time.Time) {
-	for _, record := range prior {
-		previous := record.Event
-		if previous.CanaryID == event.CanaryID && previous.ChangeID == event.ChangeID && previous.Assignment != nil {
-			return previous.Assignment, previous.OccurredAt
-		}
+	assigned := assignmentEvent(event, prior)
+	if assigned != nil {
+		return assigned.Assignment, assigned.OccurredAt
 	}
 	return nil, time.Time{}
+}
+
+func assignmentEvent(event domain.EvidenceEvent, prior []diskRecord) *domain.EvidenceEvent {
+	for index := range prior {
+		previous := &prior[index].Event
+		if previous.CanaryID == event.CanaryID && previous.ChangeID == event.ChangeID && previous.Assignment != nil {
+			return previous
+		}
+	}
+	return nil
 }
 
 func terminalChange(event domain.EvidenceEvent, prior []diskRecord) (*domain.CanaryTerminal, time.Time) {
@@ -870,6 +1021,36 @@ func terminalChange(event domain.EvidenceEvent, prior []diskRecord) (*domain.Can
 		}
 	}
 	return nil, time.Time{}
+}
+
+func checkSetEvent(event domain.EvidenceEvent, prior []diskRecord) *domain.EvidenceEvent {
+	var latest *domain.EvidenceEvent
+	for index := range prior {
+		previous := &prior[index].Event
+		if previous.CanaryID != event.CanaryID || previous.ChangeID != event.ChangeID || previous.CheckSet == nil {
+			continue
+		}
+		if previous.Kind == domain.EventCheckSetFrozen || previous.Kind == domain.EventEvidenceCorrected {
+			latest = previous
+		}
+	}
+	return latest
+}
+
+func sameReferenceSet(left, right []domain.EvidenceReference) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	seen := make(map[domain.EvidenceReference]struct{}, len(left))
+	for _, reference := range left {
+		seen[reference] = struct{}{}
+	}
+	for _, reference := range right {
+		if _, ok := seen[reference]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 func hasMaterialCorrection(event domain.EvidenceEvent, prior []diskRecord) bool {
@@ -903,9 +1084,20 @@ func validateCorrection(event domain.EvidenceEvent, prior []diskRecord) error {
 	if event.OccurredAt.Before(target.OccurredAt) {
 		return fmt.Errorf("%w: correction predates superseded event", ErrInvalidCorrection)
 	}
-	if target.Assessment == nil || event.Assessment == nil || payloadCount(event) != 1 {
-		return fmt.Errorf("%w: v0 corrections may replace only assessment payloads", ErrInvalidCorrection)
+	if payloadCount(event) != 1 {
+		return fmt.Errorf("%w: correction requires exactly one replacement payload", ErrInvalidCorrection)
 	}
+	switch {
+	case target.Assessment != nil && event.Assessment != nil:
+		return validateAssessmentCorrection(event, prior)
+	case target.CheckSet != nil && event.CheckSet != nil:
+		return validateCheckSetCorrection(event, *target, prior)
+	default:
+		return fmt.Errorf("%w: correction payload must match assessment or check set", ErrInvalidCorrection)
+	}
+}
+
+func validateAssessmentCorrection(event domain.EvidenceEvent, prior []diskRecord) error {
 	latestAssessmentID := domain.EvidenceEventID("")
 	for _, record := range prior {
 		previous := record.Event
@@ -931,6 +1123,34 @@ func validateCorrection(event domain.EvidenceEvent, prior []diskRecord) error {
 		}
 		if event.Assessment.MaterialCorrectionBeforeDelivery != hasMaterialCorrection(event, prior) {
 			return fmt.Errorf("%w: corrected material-correction value must match append-only events", ErrInvalidCorrection)
+		}
+	}
+	return nil
+}
+
+func validateCheckSetCorrection(
+	event domain.EvidenceEvent,
+	target domain.EvidenceEvent,
+	prior []diskRecord,
+) error {
+	latest := checkSetEvent(event, prior)
+	if latest == nil || latest.ID != event.SupersedesEventID {
+		return fmt.Errorf("%w: correction must supersede the latest check set", ErrInvalidCorrection)
+	}
+	if event.OccurredAt.Before(latest.OccurredAt) {
+		return fmt.Errorf("%w: check-set correction predates the effective set", ErrInvalidCorrection)
+	}
+	terminal, _ := terminalChange(event, prior)
+	if terminal != nil {
+		return fmt.Errorf("%w: check-set correction must precede terminal evidence", ErrInvalidCorrection)
+	}
+	retained := make(map[domain.EvidenceReference]struct{}, len(event.CheckSet.CheckRefs))
+	for _, reference := range event.CheckSet.CheckRefs {
+		retained[reference] = struct{}{}
+	}
+	for _, reference := range target.CheckSet.CheckRefs {
+		if _, ok := retained[reference]; !ok {
+			return fmt.Errorf("%w: check-set correction cannot remove %q", ErrInvalidCorrection, reference)
 		}
 	}
 	return nil

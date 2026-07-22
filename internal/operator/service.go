@@ -16,12 +16,13 @@ import (
 )
 
 var (
-	ErrRealCanaryNotActivated = errors.New("real-change canary is not activated")
+	ErrRealCanaryNotActivated = evidence.ErrRealCanaryNotActivated
 	ErrCanaryStopped          = errors.New("canary assignments are stopped")
 	ErrCanaryAlreadyStopped   = errors.New("canary assignments are already stopped")
-	ErrChangeAlreadyStarted   = errors.New("canary change already started")
+	ErrChangeAlreadyStarted   = errors.New("canary change already has an admission or assignment")
 	ErrChangeNotStarted       = errors.New("canary change is not started")
 	ErrChangeAlreadyTerminal  = errors.New("canary change already has a terminal state")
+	ErrCheckSetState          = errors.New("check-set action requires an assigned non-terminal change with the expected frozen set")
 	ErrAssessmentState        = errors.New("owner assessment requires one delivered unassessed change")
 	ErrCorrectionState        = errors.New("assessment correction requires an existing latest assessment")
 )
@@ -49,17 +50,19 @@ type StartInput struct {
 	OccurredAt    time.Time
 	Actor         domain.ActorID
 	SourceRef     domain.EvidenceReference
+	Reason        domain.EvidenceReasonCode
 	Synthetic     bool
 }
 
 type StartReceipt struct {
-	CanaryID        domain.CanaryID        `json:"canary_id"`
-	ChangeID        domain.ChangeID        `json:"change_id"`
-	RunID           domain.RunID           `json:"run_id"`
-	Ordinal         uint32                 `json:"ordinal"`
-	Variant         domain.CanaryVariant   `json:"variant"`
-	RunContextEnv   string                 `json:"run_context_env"`
-	EvidenceEventID domain.EvidenceEventID `json:"evidence_event_id"`
+	CanaryID        domain.CanaryID          `json:"canary_id"`
+	ChangeID        domain.ChangeID          `json:"change_id"`
+	RunID           domain.RunID             `json:"run_id"`
+	Ordinal         uint32                   `json:"ordinal"`
+	Variant         domain.CanaryVariant     `json:"variant"`
+	Decision        domain.AdmissionDecision `json:"decision"`
+	RunContextEnv   string                   `json:"run_context_env"`
+	EvidenceEventID domain.EvidenceEventID   `json:"evidence_event_id"`
 }
 
 func (s *Service) Start(input StartInput) (StartReceipt, error) {
@@ -75,6 +78,10 @@ func (s *Service) Start(input StartInput) (StartReceipt, error) {
 		if event.CanaryID == manifest.ID && event.Kind == domain.EventCanaryStopped {
 			return StartReceipt{}, ErrCanaryStopped
 		}
+		if event.CanaryID == manifest.ID && event.ChangeID == input.ChangeID &&
+			(event.Admission != nil || event.Assignment != nil) {
+			return StartReceipt{}, ErrChangeAlreadyStarted
+		}
 	}
 	if !input.Synthetic {
 		return StartReceipt{}, ErrRealCanaryNotActivated
@@ -83,9 +90,6 @@ func (s *Service) Start(input StartInput) (StartReceipt, error) {
 	for _, event := range events {
 		if event.CanaryID != manifest.ID || event.Assignment == nil {
 			continue
-		}
-		if event.ChangeID == input.ChangeID {
-			return StartReceipt{}, ErrChangeAlreadyStarted
 		}
 		ordinal++
 	}
@@ -105,10 +109,15 @@ func (s *Service) Start(input StartInput) (StartReceipt, error) {
 		ID:         input.EventID,
 		CanaryID:   manifest.ID,
 		ChangeID:   input.ChangeID,
-		Kind:       domain.EventChangeStarted,
+		Kind:       domain.EventAdmissionDecided,
 		OccurredAt: input.OccurredAt,
 		Actor:      input.Actor,
 		SourceRef:  input.SourceRef,
+		ReasonCode: input.Reason,
+		Admission: &domain.CanaryAdmission{
+			Decision:  domain.AdmissionEligible,
+			Synthetic: true,
+		},
 		Assignment: &domain.CanaryAssignment{
 			Ordinal:         ordinal,
 			Variant:         variant,
@@ -127,7 +136,75 @@ func (s *Service) Start(input StartInput) (StartReceipt, error) {
 		RunID:           input.RunID,
 		Ordinal:         ordinal,
 		Variant:         variant,
+		Decision:        domain.AdmissionEligible,
 		RunContextEnv:   encodedContext,
+		EvidenceEventID: input.EventID,
+	}, nil
+}
+
+type ExcludeInput struct {
+	EventID    domain.EvidenceEventID
+	ChangeID   domain.ChangeID
+	OccurredAt time.Time
+	Actor      domain.ActorID
+	SourceRef  domain.EvidenceReference
+	Reason     domain.EvidenceReasonCode
+	Synthetic  bool
+}
+
+type ExcludeReceipt struct {
+	CanaryID        domain.CanaryID           `json:"canary_id"`
+	ChangeID        domain.ChangeID           `json:"change_id"`
+	Decision        domain.AdmissionDecision  `json:"decision"`
+	Reason          domain.EvidenceReasonCode `json:"reason"`
+	EvidenceEventID domain.EvidenceEventID    `json:"evidence_event_id"`
+}
+
+// Exclude records a candidate decision without calculating or returning the
+// next ordinal or variant.
+func (s *Service) Exclude(input ExcludeInput) (ExcludeReceipt, error) {
+	manifest, err := domain.NewIntentCanaryV0Manifest()
+	if err != nil {
+		return ExcludeReceipt{}, fmt.Errorf("load frozen manifest: %w", err)
+	}
+	events, err := s.store.ReadAll()
+	if err != nil {
+		return ExcludeReceipt{}, err
+	}
+	for _, event := range events {
+		if event.CanaryID == manifest.ID && event.Kind == domain.EventCanaryStopped {
+			return ExcludeReceipt{}, ErrCanaryStopped
+		}
+		if event.CanaryID == manifest.ID && event.ChangeID == input.ChangeID &&
+			(event.Admission != nil || event.Assignment != nil) {
+			return ExcludeReceipt{}, ErrChangeAlreadyStarted
+		}
+	}
+	if !input.Synthetic {
+		return ExcludeReceipt{}, ErrRealCanaryNotActivated
+	}
+	event := domain.EvidenceEvent{
+		ID:         input.EventID,
+		CanaryID:   manifest.ID,
+		ChangeID:   input.ChangeID,
+		Kind:       domain.EventAdmissionDecided,
+		OccurredAt: input.OccurredAt,
+		Actor:      input.Actor,
+		SourceRef:  input.SourceRef,
+		ReasonCode: input.Reason,
+		Admission: &domain.CanaryAdmission{
+			Decision:  domain.AdmissionExcluded,
+			Synthetic: true,
+		},
+	}
+	if err := s.store.Append(event); err != nil {
+		return ExcludeReceipt{}, err
+	}
+	return ExcludeReceipt{
+		CanaryID:        manifest.ID,
+		ChangeID:        input.ChangeID,
+		Decision:        domain.AdmissionExcluded,
+		Reason:          input.Reason,
 		EvidenceEventID: input.EventID,
 	}, nil
 }
@@ -306,6 +383,89 @@ func (s *Service) appendCorrelation(
 		Lineage:                   &lineage,
 		LineageResolutionAttempts: result.ResolutionAttempts,
 	})
+}
+
+type FreezeChecksInput struct {
+	EventID    domain.EvidenceEventID
+	ChangeID   domain.ChangeID
+	OccurredAt time.Time
+	Actor      domain.ActorID
+	SourceRef  domain.EvidenceReference
+	CheckRefs  []domain.EvidenceReference
+}
+
+type FreezeChecksReceipt struct {
+	ChangeID        domain.ChangeID            `json:"change_id"`
+	CheckRefs       []domain.EvidenceReference `json:"check_refs"`
+	EvidenceEventID domain.EvidenceEventID     `json:"evidence_event_id"`
+}
+
+func (s *Service) FreezeChecks(input FreezeChecksInput) (FreezeChecksReceipt, error) {
+	view, err := s.requireOpenChange(input.ChangeID)
+	if err != nil {
+		return FreezeChecksReceipt{}, err
+	}
+	if view.CheckSet != nil {
+		return FreezeChecksReceipt{}, ErrCheckSetState
+	}
+	checkRefs := append([]domain.EvidenceReference(nil), input.CheckRefs...)
+	if err := s.store.Append(domain.EvidenceEvent{
+		ID:         input.EventID,
+		CanaryID:   domain.IntentCanaryV0ManifestID,
+		ChangeID:   input.ChangeID,
+		Kind:       domain.EventCheckSetFrozen,
+		OccurredAt: input.OccurredAt,
+		Actor:      input.Actor,
+		SourceRef:  input.SourceRef,
+		CheckSet:   &domain.CanaryCheckSet{CheckRefs: checkRefs},
+	}); err != nil {
+		return FreezeChecksReceipt{}, err
+	}
+	return FreezeChecksReceipt{
+		ChangeID:        input.ChangeID,
+		CheckRefs:       append([]domain.EvidenceReference(nil), checkRefs...),
+		EvidenceEventID: input.EventID,
+	}, nil
+}
+
+type CorrectChecksInput struct {
+	EventID    domain.EvidenceEventID
+	ChangeID   domain.ChangeID
+	OccurredAt time.Time
+	Actor      domain.ActorID
+	SourceRef  domain.EvidenceReference
+	Reason     domain.EvidenceReasonCode
+	CheckRefs  []domain.EvidenceReference
+}
+
+func (s *Service) CorrectChecks(input CorrectChecksInput) (FreezeChecksReceipt, error) {
+	view, err := s.requireOpenChange(input.ChangeID)
+	if err != nil {
+		return FreezeChecksReceipt{}, err
+	}
+	if view.CheckSet == nil || view.CheckSetEventID == "" {
+		return FreezeChecksReceipt{}, ErrCheckSetState
+	}
+	checkRefs := append([]domain.EvidenceReference(nil), input.CheckRefs...)
+	if err := s.store.Append(domain.EvidenceEvent{
+		ID:                input.EventID,
+		CanaryID:          domain.IntentCanaryV0ManifestID,
+		ChangeID:          input.ChangeID,
+		Kind:              domain.EventEvidenceCorrected,
+		OccurredAt:        input.OccurredAt,
+		Actor:             input.Actor,
+		SourceRef:         input.SourceRef,
+		ReasonCode:        input.Reason,
+		SupersedesEventID: view.CheckSetEventID,
+		CheckSet:          &domain.CanaryCheckSet{CheckRefs: checkRefs},
+	}); err != nil {
+		return FreezeChecksReceipt{}, err
+	}
+	return FreezeChecksReceipt{
+		ChangeID:        input.ChangeID,
+		CheckRefs:       append([]domain.EvidenceReference(nil), checkRefs...),
+		EvidenceEventID: input.EventID,
+	}, nil
 }
 
 type DeliverInput struct {
@@ -499,15 +659,20 @@ func (s *Service) RecordMaterialCorrection(input MaterialCorrectionInput) error 
 }
 
 type ChangeView struct {
-	ChangeID                  domain.ChangeID          `json:"change_id"`
-	Assignment                *domain.CanaryAssignment `json:"assignment,omitempty"`
-	Lineage                   *domain.ExecutionLineage `json:"lineage,omitempty"`
-	LineageResolutionAttempts uint8                    `json:"lineage_resolution_attempts,omitempty"`
-	Terminal                  *domain.CanaryTerminal   `json:"terminal,omitempty"`
-	Assessment                *domain.Assessment       `json:"assessment,omitempty"`
-	AssessmentEventID         domain.EvidenceEventID   `json:"assessment_event_id,omitempty"`
-	MaterialCorrections       uint32                   `json:"material_corrections"`
-	EventCount                uint32                   `json:"event_count"`
+	ChangeID                  domain.ChangeID           `json:"change_id"`
+	Admission                 *domain.CanaryAdmission   `json:"admission,omitempty"`
+	AdmissionReason           domain.EvidenceReasonCode `json:"admission_reason,omitempty"`
+	AdmissionEventID          domain.EvidenceEventID    `json:"admission_event_id,omitempty"`
+	Assignment                *domain.CanaryAssignment  `json:"assignment,omitempty"`
+	CheckSet                  *domain.CanaryCheckSet    `json:"check_set,omitempty"`
+	CheckSetEventID           domain.EvidenceEventID    `json:"check_set_event_id,omitempty"`
+	Lineage                   *domain.ExecutionLineage  `json:"lineage,omitempty"`
+	LineageResolutionAttempts uint8                     `json:"lineage_resolution_attempts,omitempty"`
+	Terminal                  *domain.CanaryTerminal    `json:"terminal,omitempty"`
+	Assessment                *domain.Assessment        `json:"assessment,omitempty"`
+	AssessmentEventID         domain.EvidenceEventID    `json:"assessment_event_id,omitempty"`
+	MaterialCorrections       uint32                    `json:"material_corrections"`
+	EventCount                uint32                    `json:"event_count"`
 	sessionConflictObserved   bool
 }
 
@@ -529,12 +694,19 @@ func (s *Service) Report() (domain.CanaryReport, error) {
 	}
 	changeIDs := make([]domain.ChangeID, 0, domain.CanaryAssignmentCount)
 	seen := make(map[domain.ChangeID]struct{}, domain.CanaryAssignmentCount)
+	exclusionReasons := make(map[domain.EvidenceReasonCode]uint32)
+	var excluded uint32
 	assignmentsStopped := false
 	for _, event := range events {
 		if event.CanaryID == domain.IntentCanaryV0ManifestID && event.Kind == domain.EventCanaryStopped {
 			assignmentsStopped = true
 		}
 		if event.CanaryID != domain.IntentCanaryV0ManifestID || event.Assignment == nil {
+			if event.CanaryID == domain.IntentCanaryV0ManifestID && event.Admission != nil &&
+				event.Admission.Decision == domain.AdmissionExcluded {
+				excluded++
+				exclusionReasons[event.ReasonCode]++
+			}
 			continue
 		}
 		if _, duplicate := seen[event.ChangeID]; duplicate {
@@ -575,6 +747,8 @@ func (s *Service) Report() (domain.CanaryReport, error) {
 	})
 	return domain.CalculateCanaryReport(domain.CanaryReportInput{
 		Observations:       observations,
+		Excluded:           excluded,
+		ExclusionReasons:   exclusionReasons,
 		AssignmentsStopped: assignmentsStopped,
 	})
 }
@@ -586,9 +760,26 @@ func projectChange(events []domain.EvidenceEvent, changeID domain.ChangeID) Chan
 			continue
 		}
 		view.EventCount++
+		if event.Admission != nil {
+			admission := *event.Admission
+			view.Admission = &admission
+			view.AdmissionReason = event.ReasonCode
+			view.AdmissionEventID = event.ID
+		}
 		if event.Assignment != nil {
 			assignment := *event.Assignment
 			view.Assignment = &assignment
+		}
+		if event.Kind == domain.EventCheckSetFrozen && event.CheckSet != nil {
+			checkSet := copyCheckSet(*event.CheckSet)
+			view.CheckSet = &checkSet
+			view.CheckSetEventID = event.ID
+		}
+		if event.Kind == domain.EventEvidenceCorrected && event.CheckSet != nil &&
+			event.SupersedesEventID == view.CheckSetEventID {
+			checkSet := copyCheckSet(*event.CheckSet)
+			view.CheckSet = &checkSet
+			view.CheckSetEventID = event.ID
 		}
 		if event.Lineage != nil {
 			lineage := *event.Lineage
@@ -656,6 +847,11 @@ func copyAssessment(assessment domain.Assessment) domain.Assessment {
 		assessment.RepeatOptIn = &repeat
 	}
 	return assessment
+}
+
+func copyCheckSet(checkSet domain.CanaryCheckSet) domain.CanaryCheckSet {
+	checkSet.CheckRefs = append([]domain.EvidenceReference(nil), checkSet.CheckRefs...)
+	return checkSet
 }
 
 func (s *Service) requireOpenChange(changeID domain.ChangeID) (ChangeView, error) {

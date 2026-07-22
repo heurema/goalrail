@@ -60,6 +60,8 @@ type CanaryObservation struct {
 
 type CanaryReportInput struct {
 	Observations                []CanaryObservation
+	Excluded                    uint32
+	ExclusionReasons            map[EvidenceReasonCode]uint32
 	EvidenceIntegrityViolations uint32
 	AssignmentsStopped          bool
 }
@@ -114,23 +116,25 @@ type CanaryHardStopSignals struct {
 }
 
 type CanaryReport struct {
-	Verdict                       CanaryVerdict         `json:"verdict"`
-	AssignmentsStopped            bool                  `json:"assignments_stopped,omitempty"`
-	CompletionReady               bool                  `json:"completion_ready"`
-	Assigned                      uint32                `json:"assigned"`
-	Terminal                      uint32                `json:"terminal"`
-	Flow                          CanaryVariantReport   `json:"flow"`
-	Baseline                      CanaryVariantReport   `json:"baseline"`
-	LineageVerified               uint32                `json:"lineage_verified"`
-	LineagePending                uint32                `json:"lineage_pending"`
-	LineageUnresolved             uint32                `json:"lineage_unresolved"`
-	WrongJoins                    uint32                `json:"wrong_joins"`
-	ProcessCausedFlowAbandonments uint32                `json:"process_caused_flow_abandonments"`
-	EvidenceIntegrityViolations   uint32                `json:"evidence_integrity_violations"`
-	MedianFlowOverhead            CanaryMeasurement     `json:"median_flow_overhead"`
-	PassSignals                   CanaryPassSignals     `json:"pass_signals"`
-	HardStopSignals               CanaryHardStopSignals `json:"hard_stop_signals"`
-	NoUsefulMovement              bool                  `json:"no_useful_movement"`
+	Verdict                       CanaryVerdict                 `json:"verdict"`
+	AssignmentsStopped            bool                          `json:"assignments_stopped,omitempty"`
+	CompletionReady               bool                          `json:"completion_ready"`
+	Assigned                      uint32                        `json:"assigned"`
+	Excluded                      uint32                        `json:"excluded,omitempty"`
+	ExclusionReasons              map[EvidenceReasonCode]uint32 `json:"exclusion_reasons,omitempty"`
+	Terminal                      uint32                        `json:"terminal"`
+	Flow                          CanaryVariantReport           `json:"flow"`
+	Baseline                      CanaryVariantReport           `json:"baseline"`
+	LineageVerified               uint32                        `json:"lineage_verified"`
+	LineagePending                uint32                        `json:"lineage_pending"`
+	LineageUnresolved             uint32                        `json:"lineage_unresolved"`
+	WrongJoins                    uint32                        `json:"wrong_joins"`
+	ProcessCausedFlowAbandonments uint32                        `json:"process_caused_flow_abandonments"`
+	EvidenceIntegrityViolations   uint32                        `json:"evidence_integrity_violations"`
+	MedianFlowOverhead            CanaryMeasurement             `json:"median_flow_overhead"`
+	PassSignals                   CanaryPassSignals             `json:"pass_signals"`
+	HardStopSignals               CanaryHardStopSignals         `json:"hard_stop_signals"`
+	NoUsefulMovement              bool                          `json:"no_useful_movement"`
 }
 
 // CanaryVariantForOrdinal deterministically assigns flow, flow, baseline for
@@ -155,11 +159,29 @@ func CalculateCanaryReport(input CanaryReportInput) (CanaryReport, error) {
 	if err != nil {
 		return CanaryReport{}, err
 	}
+	exclusionReasons := make(map[EvidenceReasonCode]uint32, len(input.ExclusionReasons))
+	var excludedByReason uint32
+	for reason, count := range input.ExclusionReasons {
+		if reason == "" || count == 0 {
+			return CanaryReport{}, fmt.Errorf("invalid exclusion reason count for %q", reason)
+		}
+		exclusionReasons[reason] = count
+		excludedByReason += count
+	}
+	if excludedByReason != input.Excluded {
+		return CanaryReport{}, fmt.Errorf(
+			"exclusion reason count %d does not match excluded count %d",
+			excludedByReason,
+			input.Excluded,
+		)
+	}
 
 	report := CanaryReport{
 		Verdict:                     CanaryVerdictPending,
 		AssignmentsStopped:          input.AssignmentsStopped,
 		Assigned:                    uint32(len(observations)),
+		Excluded:                    input.Excluded,
+		ExclusionReasons:            exclusionReasons,
 		EvidenceIntegrityViolations: input.EvidenceIntegrityViolations,
 	}
 	flowOverheads := make([]float64, 0, 10)

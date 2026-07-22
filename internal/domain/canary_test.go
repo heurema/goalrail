@@ -128,6 +128,37 @@ func TestCalculateCanaryReportCountsWrongButGreenIndependently(t *testing.T) {
 	}
 }
 
+func TestCalculateCanaryReportKeepsExclusionsOutOfAssignmentDenominators(t *testing.T) {
+	observations := passingCanaryObservations(t)[:2]
+	report, err := CalculateCanaryReport(CanaryReportInput{
+		Observations: observations,
+		Excluded:     3,
+		ExclusionReasons: map[EvidenceReasonCode]uint32{
+			"manual-task": 2,
+			"sensitive":   1,
+		},
+	})
+	if err != nil {
+		t.Fatalf("calculate report: %v", err)
+	}
+	if report.Assigned != 2 || report.Flow.Assigned+report.Baseline.Assigned != 2 {
+		t.Fatalf("exclusions changed assignment denominators: %#v", report)
+	}
+	if report.Excluded != 3 || report.ExclusionReasons["manual-task"] != 2 || report.ExclusionReasons["sensitive"] != 1 {
+		t.Fatalf("exclusions not preserved: %#v", report)
+	}
+}
+
+func TestCalculateCanaryReportRejectsUnaccountedExclusions(t *testing.T) {
+	_, err := CalculateCanaryReport(CanaryReportInput{
+		Excluded:         2,
+		ExclusionReasons: map[EvidenceReasonCode]uint32{"manual-task": 1},
+	})
+	if err == nil {
+		t.Fatal("unaccounted exclusion unexpectedly accepted")
+	}
+}
+
 func TestCalculateCanaryReportAppliesEveryHardStop(t *testing.T) {
 	tests := []struct {
 		name   string

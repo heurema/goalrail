@@ -6,6 +6,10 @@
   "manifest_version": 1,
   "change_id": "change-synthetic-e2e-v1",
   "run_id": "run-synthetic-e2e-v1",
+  "admission_decision": "eligible",
+  "frozen_check_refs": [
+    "test:synthetic-e2e-v1"
+  ],
   "check_refs": [
     "test:synthetic-e2e-v1"
   ],

@@ -53,7 +53,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	}
 	remaining := global.Args()
 	if len(remaining) == 0 {
-		return errors.New("command is required: start, inspect, deliver, abandon, assess, correct, report, or disable")
+		return errors.New("command is required: start, exclude, freeze-checks, inspect, deliver, abandon, assess, correct, report, or disable")
 	}
 
 	absRepo, err := filepath.Abs(filepath.Clean(*repoRoot))
@@ -79,6 +79,10 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	switch command {
 	case "start":
 		return runStart(service, resolvedStore, absRepo, commandArgs, stdin, stdout, stderr)
+	case "exclude":
+		return runExclude(service, commandArgs, stdout, stderr)
+	case "freeze-checks":
+		return runFreezeChecks(service, commandArgs, stdout, stderr)
 	case "inspect":
 		return runInspect(service, commandArgs, stdout, stderr)
 	case "deliver":
@@ -158,6 +162,7 @@ func runStart(
 	intentVersion := set.Uint("intent-version", 0, "confirmed intent version")
 	actor := set.String("actor", "", "operator actor ID")
 	source := set.String("source", "", "bounded source reference")
+	reason := set.String("reason", "", "categorical eligible-admission reason")
 	synthetic := set.Bool("synthetic", false, "allow only a synthetic pre-activation assignment")
 	if err := set.Parse(flagArgs); err != nil {
 		return err
@@ -184,6 +189,7 @@ func runStart(
 		OccurredAt:    time.Now().UTC(),
 		Actor:         domain.ActorID(*actor),
 		SourceRef:     domain.EvidenceReference(*source),
+		Reason:        domain.EvidenceReasonCode(*reason),
 		Synthetic:     *synthetic,
 	})
 	if err != nil {
@@ -209,6 +215,74 @@ func runStart(
 	return writeJSON(stdout, receipt)
 }
 
+func runExclude(service *operator.Service, args []string, stdout, stderr io.Writer) error {
+	set := flag.NewFlagSet("exclude", flag.ContinueOnError)
+	set.SetOutput(stderr)
+	changeID := set.String("change", "", "stable change ID")
+	actor := set.String("actor", "", "operator actor ID")
+	source := set.String("source", "", "bounded source reference")
+	reason := set.String("reason", "", "categorical exclusion reason")
+	synthetic := set.Bool("synthetic", false, "allow only synthetic pre-activation admission")
+	if err := set.Parse(args); err != nil {
+		return err
+	}
+	if err := requireNoArgs(set); err != nil {
+		return err
+	}
+	if err := requireCanonical("change", *changeID); err != nil {
+		return err
+	}
+	eventID, err := generatedEventID()
+	if err != nil {
+		return err
+	}
+	receipt, err := service.Exclude(operator.ExcludeInput{
+		EventID:    eventID,
+		ChangeID:   domain.ChangeID(*changeID),
+		OccurredAt: time.Now().UTC(),
+		Actor:      domain.ActorID(*actor),
+		SourceRef:  domain.EvidenceReference(*source),
+		Reason:     domain.EvidenceReasonCode(*reason),
+		Synthetic:  *synthetic,
+	})
+	if err != nil {
+		return err
+	}
+	return writeJSON(stdout, receipt)
+}
+
+func runFreezeChecks(service *operator.Service, args []string, stdout, stderr io.Writer) error {
+	set := flag.NewFlagSet("freeze-checks", flag.ContinueOnError)
+	set.SetOutput(stderr)
+	changeID := set.String("change", "", "stable change ID")
+	actor := set.String("actor", "", "operator actor ID")
+	source := set.String("source", "", "bounded check-selection source reference")
+	var checks stringList
+	set.Var(&checks, "check-ref", "bounded check reference; repeat for every selected check")
+	if err := set.Parse(args); err != nil {
+		return err
+	}
+	if err := requireNoArgs(set); err != nil {
+		return err
+	}
+	eventID, err := generatedEventID()
+	if err != nil {
+		return err
+	}
+	receipt, err := service.FreezeChecks(operator.FreezeChecksInput{
+		EventID:    eventID,
+		ChangeID:   domain.ChangeID(*changeID),
+		OccurredAt: time.Now().UTC(),
+		Actor:      domain.ActorID(*actor),
+		SourceRef:  domain.EvidenceReference(*source),
+		CheckRefs:  checks.references(),
+	})
+	if err != nil {
+		return err
+	}
+	return writeJSON(stdout, receipt)
+}
+
 func runInspect(service *operator.Service, args []string, stdout, stderr io.Writer) error {
 	set := flag.NewFlagSet("inspect", flag.ContinueOnError)
 	set.SetOutput(stderr)
@@ -226,7 +300,7 @@ func runInspect(service *operator.Service, args []string, stdout, stderr io.Writ
 	if err != nil {
 		return err
 	}
-	if view.Assignment == nil {
+	if view.Admission == nil && view.Assignment == nil {
 		return operator.ErrChangeNotStarted
 	}
 	return writeJSON(stdout, view)
@@ -330,14 +404,17 @@ func runAssess(service *operator.Service, args []string, stderr io.Writer) error
 func runCorrect(service *operator.Service, args []string, stderr io.Writer) error {
 	set := flag.NewFlagSet("correct", flag.ContinueOnError)
 	set.SetOutput(stderr)
-	kind := set.String("kind", "", "correction kind: material or assessment")
+	kind := set.String("kind", "", "correction kind: material, checks, or assessment")
 	changeID := set.String("change", "", "stable change ID")
 	owner := set.String("owner", "", "owner actor ID")
+	actor := set.String("actor", "", "operator actor ID for check correction")
 	source := set.String("source", "", "bounded correction source reference")
 	reason := set.String("reason", "", "categorical correction reason")
 	outcome := set.String("outcome", "", "corrected outcome for assessment correction")
 	var repeat optionalBool
+	var checks stringList
 	set.Var(&repeat, "repeat-opt-in", "corrected flow owner choice: yes or no")
+	set.Var(&checks, "check-ref", "corrected bounded check reference; repeat for the effective set")
 	if err := set.Parse(args); err != nil {
 		return err
 	}
@@ -351,7 +428,7 @@ func runCorrect(service *operator.Service, args []string, stderr io.Writer) erro
 	commonTime := time.Now().UTC()
 	switch *kind {
 	case "material":
-		if *outcome != "" || repeat.set {
+		if *actor != "" || *outcome != "" || repeat.set || len(checks) != 0 {
 			return errors.New("material correction does not accept assessment fields")
 		}
 		return service.RecordMaterialCorrection(operator.MaterialCorrectionInput{
@@ -363,6 +440,9 @@ func runCorrect(service *operator.Service, args []string, stderr io.Writer) erro
 			Reason:     domain.EvidenceReasonCode(*reason),
 		})
 	case "assessment":
+		if *actor != "" || len(checks) != 0 {
+			return errors.New("assessment correction does not accept check fields")
+		}
 		return service.CorrectAssessment(operator.CorrectAssessmentInput{
 			EventID:     eventID,
 			ChangeID:    domain.ChangeID(*changeID),
@@ -373,8 +453,22 @@ func runCorrect(service *operator.Service, args []string, stderr io.Writer) erro
 			Outcome:     domain.IntentOutcome(*outcome),
 			RepeatOptIn: repeat.pointer(),
 		})
+	case "checks":
+		if *owner != "" || *outcome != "" || repeat.set {
+			return errors.New("check correction does not accept owner-assessment fields")
+		}
+		_, err := service.CorrectChecks(operator.CorrectChecksInput{
+			EventID:    eventID,
+			ChangeID:   domain.ChangeID(*changeID),
+			OccurredAt: commonTime,
+			Actor:      domain.ActorID(*actor),
+			SourceRef:  domain.EvidenceReference(*source),
+			Reason:     domain.EvidenceReasonCode(*reason),
+			CheckRefs:  checks.references(),
+		})
+		return err
 	default:
-		return errors.New("correct --kind must be material or assessment")
+		return errors.New("correct --kind must be material, checks, or assessment")
 	}
 }
 

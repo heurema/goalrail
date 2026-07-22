@@ -4,10 +4,10 @@ This is the current local operator surface for one canary change. It is a
 command plus an append-only JSONL record, not a daemon, dashboard, or workflow
 engine.
 
-The real 15-change canary is **not activated**. `start` currently rejects every
-real assignment and accepts only an explicit `--synthetic` assignment. Removing
-that guard, installing a persistent hook, or starting ordinal 1 with real work
-requires a separate owner instruction.
+The real 15-change canary is **not activated**. `start` and `exclude` reject
+every real admission and accept only an explicit `--synthetic` candidate.
+Removing that guard, installing a persistent hook, or starting ordinal 1 with
+real work requires a separate owner instruction.
 
 ## Build
 
@@ -31,7 +31,22 @@ credentials.
 ## Automatic identity boundary
 
 The operator supplies `change_id`; Goalrail generates `run_id` and every event
-ID. There is no command flag for a Codex session ID.
+ID. An excluded candidate keeps that `change_id` but receives no run, ordinal,
+or variant. There is no command flag for a Codex session ID.
+
+Record an ineligible synthetic candidate before considering the next variant:
+
+```sh
+/tmp/goalrail-canary exclude \
+  --change change-synthetic-excluded-001 \
+  --actor operator \
+  --source request:synthetic-excluded-001 \
+  --reason manual-task \
+  --synthetic
+```
+
+The exclusion receipt and event contain no next-variant information and do not
+advance the ordinal. A second decision for the same `change_id` fails closed.
 
 For a CLI run, launch the process through `start`:
 
@@ -41,6 +56,7 @@ For a CLI run, launch the process through `start`:
   --intent-version 1 \
   --actor operator \
   --source request:synthetic-001 \
+  --reason eligibility-confirmed \
   --synthetic \
   -- codex
 ```
@@ -81,9 +97,11 @@ copy IDs by hand.
 /tmp/goalrail-canary inspect --change change-synthetic-001
 ```
 
-The JSON projection includes immutable assignment, latest lineage, terminal
-state, latest owner assessment, correction count, and event count. The JSONL
-record remains authoritative; `inspect` does not mutate it.
+The JSON projection includes admission and its reason, immutable assignment
+when eligible, effective frozen checks, latest lineage, terminal state, latest
+owner assessment, correction count, and event count. Excluded candidates are
+inspectable even though they have no assignment. The JSONL record remains
+authoritative; `inspect` does not mutate it.
 
 The aggregate report is derived from that same verified event chain:
 
@@ -91,7 +109,9 @@ The aggregate report is derived from that same verified event chain:
 /tmp/goalrail-canary report
 ```
 
-Before 15 terminal assignments its normal verdict is `PENDING`. Missing owner
+Before 15 terminal assignments its normal verdict is `PENDING`. The report
+shows exclusion count and exact categorical reason counts separately; they do
+not enter assigned, delivery, or outcome-rate denominators. Missing owner
 assessment, lineage, or flow overhead remains missing; the command does not
 impute it. A digest-chain integrity failure stops report generation.
 
@@ -108,8 +128,9 @@ Stop new assignments for this manifest version with an explicit owner action:
 
 `disable` appends one canary-level `canary_stopped` event to the same verified
 digest chain. It never deletes or rewrites prior events. The report then exposes
-`assignments_stopped=true` and verdict `STOP`; every later `start` fails closed.
-A second `disable` also fails instead of hiding the original stop receipt.
+`assignments_stopped=true` and verdict `STOP`; every later `start` or `exclude`
+fails closed. A second `disable` also fails instead of hiding the original stop
+receipt.
 
 Already assigned changes remain inspectable and may still append their lineage,
 terminal, assessment, or correction evidence. The stop marker is scoped to the
@@ -133,6 +154,37 @@ Only an owner-confirmed meaning change that changes the work is material:
 A typo or wording-only edit emits no material-correction event. Material
 corrections are rejected after delivery or abandonment.
 
+## Freeze checks before terminal verification
+
+After scope is understood and before running the first terminal verification,
+freeze the non-empty set of stable check references:
+
+```sh
+/tmp/goalrail-canary freeze-checks \
+  --change change-synthetic-001 \
+  --actor operator \
+  --source request:checks-synthetic-001 \
+  --check-ref check:go-test
+```
+
+An empty or duplicate set fails. Before terminal evidence, a legitimate
+correction may append references but cannot remove an already selected check:
+
+```sh
+/tmp/goalrail-canary correct \
+  --kind checks \
+  --change change-synthetic-001 \
+  --actor operator \
+  --source review:checks-correction-001 \
+  --reason missing-required-ci \
+  --check-ref check:go-test \
+  --check-ref ci:required
+```
+
+The correction automatically supersedes the latest check-set event while
+preserving it in the digest chain. Check corrections fail after delivery or
+abandonment.
+
 ## Deliver
 
 Record every selected check reference. Add `--green` only when the entire
@@ -144,13 +196,16 @@ selected set passed and none is missing:
   --actor operator \
   --source review:handoff-001 \
   --check-ref check:go-test \
+  --check-ref ci:required \
   --green \
   --overhead-minutes 12.5
 ```
 
-`--overhead-minutes` is valid only for a `flow` assignment and must be the
-manifest-v1 timestamp-derived measurement. Baseline delivery omits it. Delivery
-means a reviewable handoff; it does not imply merge or deploy.
+The delivered references must exactly match the effective frozen set; a
+missing, extra, or changed reference fails before append. `--overhead-minutes`
+is valid only for a `flow` assignment and must be the manifest-v1
+timestamp-derived measurement. Baseline delivery omits it. Delivery means a
+reviewable handoff; it does not imply merge or deploy.
 
 ## Abandon
 
@@ -204,6 +259,7 @@ assessment and preserves every earlier event:
 ```
 
 Every command validates the complete digest chain before appending. Invalid
-transitions, duplicate ordinals, changed run identity, changed verified root
-identity, assessment/check disagreement, and correction of a non-latest
-assessment fail closed.
+transitions, duplicate decisions or ordinals, changed run identity, changed
+verified root identity, missing or mismatched frozen checks,
+assessment/check disagreement, and correction of non-latest evidence fail
+closed.

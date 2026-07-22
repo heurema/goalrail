@@ -609,6 +609,12 @@ func TestStoreEnforcesAssignedCanaryLifecycleTransitions(t *testing.T) {
 	if err := store.Append(wrongRun); !errors.Is(err, ErrInvalidEvent) {
 		t.Fatalf("wrong lineage run error = %v, want ErrInvalidEvent", err)
 	}
+	checkSet := validCheckSetEvent("event-checks-1", assignment.ChangeID, "check:go-test")
+	checkSet.CanaryID = assignment.CanaryID
+	checkSet.OccurredAt = testTime.Add(time.Minute)
+	if err := store.Append(checkSet); err != nil {
+		t.Fatalf("append check set: %v", err)
+	}
 
 	terminal := domain.EvidenceEvent{
 		ID:         "event-terminal-1",
@@ -656,6 +662,161 @@ func TestStoreEnforcesAssignedCanaryLifecycleTransitions(t *testing.T) {
 	}
 	if err := store.Append(secondAssessment); !errors.Is(err, ErrInvalidEvent) {
 		t.Fatalf("second assessment error = %v, want ErrInvalidEvent", err)
+	}
+}
+
+func TestStoreAdmissionExclusionsConsumeNoOrdinalAndDecisionsDoNotReplay(t *testing.T) {
+	store := newTestStore(t)
+	excluded := validExcludedAdmissionEvent("event-excluded-1", "change-excluded-1", "manual-task")
+	if err := store.Append(excluded); err != nil {
+		t.Fatalf("append exclusion: %v", err)
+	}
+
+	first := validAssignmentEvent("event-eligible-1", "change-eligible-1", "run-eligible-1", 1)
+	if err := store.Append(first); err != nil {
+		t.Fatalf("append first eligible admission: %v", err)
+	}
+	beforeReplay := readStoreFile(t, store)
+	replay := validAssignmentEvent("event-replay-1", excluded.ChangeID, "run-replay-1", 2)
+	if err := store.Append(replay); !errors.Is(err, ErrInvalidEvent) {
+		t.Fatalf("conflicting replay error = %v, want ErrInvalidEvent", err)
+	}
+	if afterReplay := readStoreFile(t, store); !bytes.Equal(afterReplay, beforeReplay) {
+		t.Fatal("rejected admission replay changed evidence bytes")
+	}
+
+	second := validAssignmentEvent("event-eligible-2", "change-eligible-2", "run-eligible-2", 2)
+	if err := store.Append(second); err != nil {
+		t.Fatalf("append second eligible admission: %v", err)
+	}
+	events, err := store.ReadAll()
+	if err != nil {
+		t.Fatalf("read admission chain: %v", err)
+	}
+	if len(events) != 3 || events[0].Assignment != nil || events[1].Assignment.Ordinal != 1 || events[2].Assignment.Ordinal != 2 {
+		t.Fatalf("exclusion changed ordinal sequence: %#v", events)
+	}
+	if events[0].Admission.Decision != domain.AdmissionExcluded || events[0].ReasonCode != "manual-task" {
+		t.Fatalf("exclusion evidence not preserved: %#v", events[0])
+	}
+	if err := store.Verify(); err != nil {
+		t.Fatalf("verify admission chain: %v", err)
+	}
+}
+
+func TestStoreRejectsRealAdmissionAndLegacyAssignmentBeforeAppend(t *testing.T) {
+	store := newTestStore(t)
+	realAdmission := validExcludedAdmissionEvent("event-real-1", "change-real-1", "not-eligible")
+	realAdmission.Admission.Synthetic = false
+	if err := store.Append(realAdmission); !errors.Is(err, ErrRealCanaryNotActivated) {
+		t.Fatalf("real admission error = %v, want ErrRealCanaryNotActivated", err)
+	}
+	legacy := validAssignmentEvent("event-legacy-1", "change-legacy-1", "run-legacy-1", 1)
+	legacy.Kind = domain.EventChangeStarted
+	legacy.Admission = nil
+	legacy.ReasonCode = ""
+	if err := store.Append(legacy); !errors.Is(err, ErrInvalidEvent) {
+		t.Fatalf("new legacy assignment error = %v, want ErrInvalidEvent", err)
+	}
+	if _, err := os.Stat(store.path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("rejected pre-activation writes created evidence: %v", err)
+	}
+}
+
+func TestStoreFreezesChecksAndAcceptsOnlyAppendOnlyPreResultCorrection(t *testing.T) {
+	store := newTestStore(t)
+	assignment := validAssignmentEvent("event-eligible-checks", "change-checks", "run-checks", 1)
+	if err := store.Append(assignment); err != nil {
+		t.Fatalf("append eligible admission: %v", err)
+	}
+
+	delivery := domain.EvidenceEvent{
+		ID:         "event-delivery-checks",
+		CanaryID:   assignment.CanaryID,
+		ChangeID:   assignment.ChangeID,
+		Kind:       domain.EventTerminalStateChanged,
+		OccurredAt: testTime.Add(4 * time.Minute),
+		Actor:      "operator",
+		SourceRef:  "review:checks-handoff",
+		Terminal: &domain.CanaryTerminal{
+			State:       domain.CanaryStateDelivered,
+			CheckRefs:   []domain.EvidenceReference{"test:unit", "ci:required"},
+			ChecksGreen: true,
+		},
+	}
+	beforeMissingFreeze := readStoreFile(t, store)
+	if err := store.Append(delivery); !errors.Is(err, ErrInvalidEvent) {
+		t.Fatalf("delivery before freeze error = %v, want ErrInvalidEvent", err)
+	}
+	if after := readStoreFile(t, store); !bytes.Equal(after, beforeMissingFreeze) {
+		t.Fatal("delivery before freeze changed evidence bytes")
+	}
+
+	invalidSets := []domain.EvidenceEvent{
+		validCheckSetEvent("event-checks-empty", assignment.ChangeID),
+		validCheckSetEvent("event-checks-duplicate", assignment.ChangeID, "test:unit", "test:unit"),
+	}
+	for _, invalid := range invalidSets {
+		if err := store.Append(invalid); !errors.Is(err, ErrInvalidEvent) && !errors.Is(err, ErrSensitivePayload) {
+			t.Fatalf("invalid check set %s error = %v", invalid.ID, err)
+		}
+	}
+
+	frozen := validCheckSetEvent("event-checks-frozen", assignment.ChangeID, "test:unit")
+	if err := store.Append(frozen); err != nil {
+		t.Fatalf("freeze checks: %v", err)
+	}
+	mismatch := delivery
+	mismatch.ID = "event-delivery-mismatch"
+	if err := store.Append(mismatch); !errors.Is(err, ErrInvalidEvent) {
+		t.Fatalf("mismatched delivery error = %v, want ErrInvalidEvent", err)
+	}
+
+	corrected := domain.EvidenceEvent{
+		ID:                "event-checks-corrected",
+		CanaryID:          assignment.CanaryID,
+		ChangeID:          assignment.ChangeID,
+		Kind:              domain.EventEvidenceCorrected,
+		OccurredAt:        testTime.Add(2 * time.Minute),
+		Actor:             "operator",
+		SourceRef:         "review:checks-correction",
+		ReasonCode:        "missing-required-ci",
+		SupersedesEventID: frozen.ID,
+		CheckSet: &domain.CanaryCheckSet{
+			CheckRefs: []domain.EvidenceReference{"test:unit", "ci:required"},
+		},
+	}
+	if err := store.Append(corrected); err != nil {
+		t.Fatalf("append check correction: %v", err)
+	}
+	beforeRemoval := readStoreFile(t, store)
+	removal := corrected
+	removal.ID = "event-checks-removal"
+	removal.OccurredAt = testTime.Add(3 * time.Minute)
+	removal.SupersedesEventID = corrected.ID
+	removal.CheckSet = &domain.CanaryCheckSet{CheckRefs: []domain.EvidenceReference{"ci:required"}}
+	if err := store.Append(removal); !errors.Is(err, ErrInvalidCorrection) {
+		t.Fatalf("check removal error = %v, want ErrInvalidCorrection", err)
+	}
+	if after := readStoreFile(t, store); !bytes.Equal(after, beforeRemoval) {
+		t.Fatal("rejected check removal changed evidence bytes")
+	}
+
+	if err := store.Append(delivery); err != nil {
+		t.Fatalf("append delivery with effective checks: %v", err)
+	}
+	postTerminal := corrected
+	postTerminal.ID = "event-checks-post-terminal"
+	postTerminal.OccurredAt = testTime.Add(5 * time.Minute)
+	postTerminal.SupersedesEventID = corrected.ID
+	postTerminal.CheckSet = &domain.CanaryCheckSet{
+		CheckRefs: []domain.EvidenceReference{"test:unit", "ci:required", "check:manual"},
+	}
+	if err := store.Append(postTerminal); !errors.Is(err, ErrInvalidCorrection) {
+		t.Fatalf("post-terminal correction error = %v, want ErrInvalidCorrection", err)
+	}
+	if err := store.Verify(); err != nil {
+		t.Fatalf("verify corrected check chain: %v", err)
 	}
 }
 
@@ -760,10 +921,15 @@ func validAssignmentEvent(
 		ID:         id,
 		CanaryID:   domain.IntentCanaryV0ManifestID,
 		ChangeID:   changeID,
-		Kind:       domain.EventChangeStarted,
+		Kind:       domain.EventAdmissionDecided,
 		OccurredAt: testTime,
 		Actor:      "operator",
 		SourceRef:  "request:synthetic-change",
+		ReasonCode: "eligibility-confirmed",
+		Admission: &domain.CanaryAdmission{
+			Decision:  domain.AdmissionEligible,
+			Synthetic: true,
+		},
 		Assignment: &domain.CanaryAssignment{
 			Ordinal:         ordinal,
 			Variant:         variant,
@@ -771,6 +937,46 @@ func validAssignmentEvent(
 			IntentVersion:   1,
 			RunID:           runID,
 			Synthetic:       true,
+		},
+	}
+}
+
+func validExcludedAdmissionEvent(
+	id domain.EvidenceEventID,
+	changeID domain.ChangeID,
+	reason domain.EvidenceReasonCode,
+) domain.EvidenceEvent {
+	return domain.EvidenceEvent{
+		ID:         id,
+		CanaryID:   domain.IntentCanaryV0ManifestID,
+		ChangeID:   changeID,
+		Kind:       domain.EventAdmissionDecided,
+		OccurredAt: testTime,
+		Actor:      "operator",
+		SourceRef:  "request:synthetic-change",
+		ReasonCode: reason,
+		Admission: &domain.CanaryAdmission{
+			Decision:  domain.AdmissionExcluded,
+			Synthetic: true,
+		},
+	}
+}
+
+func validCheckSetEvent(
+	id domain.EvidenceEventID,
+	changeID domain.ChangeID,
+	checkRefs ...domain.EvidenceReference,
+) domain.EvidenceEvent {
+	return domain.EvidenceEvent{
+		ID:         id,
+		CanaryID:   domain.IntentCanaryV0ManifestID,
+		ChangeID:   changeID,
+		Kind:       domain.EventCheckSetFrozen,
+		OccurredAt: testTime.Add(time.Minute),
+		Actor:      "operator",
+		SourceRef:  "request:synthetic-checks",
+		CheckSet: &domain.CanaryCheckSet{
+			CheckRefs: append([]domain.EvidenceReference(nil), checkRefs...),
 		},
 	}
 }

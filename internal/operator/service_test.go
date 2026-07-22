@@ -53,6 +53,7 @@ func TestSyntheticFlowLifecycleKeepsOwnerAssessmentExplicitAndAppendOnly(t *test
 	}); err != nil {
 		t.Fatalf("record material correction: %v", err)
 	}
+	freezeSyntheticChecks(t, service, receipt.ChangeID, operatorTestTime.Add(150*time.Second), "check:go-test")
 	overhead := 12.5
 	if err := service.Deliver(DeliverInput{
 		EventID:             "event-delivery-1",
@@ -97,7 +98,7 @@ func TestSyntheticFlowLifecycleKeepsOwnerAssessmentExplicitAndAppendOnly(t *test
 	if err != nil {
 		t.Fatalf("inspect change: %v", err)
 	}
-	if view.EventCount != 6 || view.MaterialCorrections != 1 {
+	if view.EventCount != 7 || view.MaterialCorrections != 1 {
 		t.Fatalf("unexpected event projection: %#v", view)
 	}
 	if view.Assessment == nil || view.Assessment.Outcome != domain.IntentMatch ||
@@ -113,10 +114,10 @@ func TestSyntheticFlowLifecycleKeepsOwnerAssessmentExplicitAndAppendOnly(t *test
 	if err != nil {
 		t.Fatalf("read append-only events: %v", err)
 	}
-	if events[4].Kind != domain.EventAssessmentRecorded ||
-		events[5].SupersedesEventID != events[4].ID ||
-		events[4].Assessment.Outcome != domain.IntentPartial {
-		t.Fatalf("assessment history was not preserved: %#v", events[4:])
+	if events[5].Kind != domain.EventAssessmentRecorded ||
+		events[6].SupersedesEventID != events[5].ID ||
+		events[5].Assessment.Outcome != domain.IntentPartial {
+		t.Fatalf("assessment history was not preserved: %#v", events[5:])
 	}
 	if err := store.Verify(); err != nil {
 		t.Fatalf("verify evidence chain: %v", err)
@@ -147,6 +148,7 @@ func TestLaunchReceiptAndBaselineRulesNeedNoSessionFlag(t *testing.T) {
 		correlation.Lineage.IdentitySource != domain.SessionIdentityLaunchReceipt {
 		t.Fatalf("unexpected launch correlation: %#v", correlation)
 	}
+	freezeSyntheticChecks(t, service, baseline.ChangeID, operatorTestTime.Add(90*time.Second), "check:go-test")
 
 	overhead := 1.0
 	err = service.Deliver(DeliverInput{
@@ -253,6 +255,7 @@ func TestLaunchReceiptRepositoryEvidenceKeepsOnlyApprovedIdentity(t *testing.T) 
 func TestWordingOnlyFixtureDoesNotBecomeMaterialPrevention(t *testing.T) {
 	service, _, _ := newTestService(t)
 	receipt := startSynthetic(t, service, "change-wording-only-1", "run-wording-only-1", operatorTestTime)
+	freezeSyntheticChecks(t, service, receipt.ChangeID, operatorTestTime.Add(30*time.Second), "check:go-test")
 	overhead := 3.0
 	if err := service.Deliver(DeliverInput{
 		EventID:             "event-wording-delivery-1",
@@ -288,8 +291,139 @@ func TestWordingOnlyFixtureDoesNotBecomeMaterialPrevention(t *testing.T) {
 	}
 }
 
+func TestOperatorExclusionsStayOutsideOrdinalAndReportDenominators(t *testing.T) {
+	service, store, _ := newTestService(t)
+	excluded, err := service.Exclude(ExcludeInput{
+		EventID:    "event-excluded-manual-1",
+		ChangeID:   "change-excluded-manual-1",
+		OccurredAt: operatorTestTime,
+		Actor:      "operator",
+		SourceRef:  "request:manual-task",
+		Reason:     "manual-task",
+		Synthetic:  true,
+	})
+	if err != nil {
+		t.Fatalf("exclude candidate: %v", err)
+	}
+	if excluded.Decision != domain.AdmissionExcluded || excluded.Reason != "manual-task" {
+		t.Fatalf("unexpected exclusion receipt: %#v", excluded)
+	}
+	if _, err := service.Start(StartInput{
+		EventID:       "event-conflicting-eligible-1",
+		ChangeID:      excluded.ChangeID,
+		RunID:         "run-conflicting-eligible-1",
+		IntentVersion: 1,
+		OccurredAt:    operatorTestTime.Add(time.Second),
+		Actor:         "operator",
+		SourceRef:     "request:conflicting-eligible",
+		Reason:        "eligibility-confirmed",
+		Synthetic:     true,
+	}); !errors.Is(err, ErrChangeAlreadyStarted) {
+		t.Fatalf("conflicting decision error = %v, want ErrChangeAlreadyStarted", err)
+	}
+
+	first := startSynthetic(t, service, "change-eligible-after-exclusion-1", "run-eligible-after-exclusion-1", operatorTestTime.Add(2*time.Second))
+	second := startSynthetic(t, service, "change-eligible-after-exclusion-2", "run-eligible-after-exclusion-2", operatorTestTime.Add(3*time.Second))
+	if first.Ordinal != 1 || second.Ordinal != 2 {
+		t.Fatalf("exclusion consumed ordinal: first=%#v second=%#v", first, second)
+	}
+	view, err := service.Inspect(excluded.ChangeID)
+	if err != nil {
+		t.Fatalf("inspect exclusion: %v", err)
+	}
+	if view.Admission == nil || view.Admission.Decision != domain.AdmissionExcluded ||
+		view.AdmissionReason != "manual-task" || view.Assignment != nil {
+		t.Fatalf("exclusion projection is incomplete: %#v", view)
+	}
+	report, err := service.Report()
+	if err != nil {
+		t.Fatalf("report admissions: %v", err)
+	}
+	if report.Assigned != 2 || report.Excluded != 1 || report.ExclusionReasons["manual-task"] != 1 ||
+		report.Flow.Assigned+report.Baseline.Assigned != 2 {
+		t.Fatalf("admission report changed denominators: %#v", report)
+	}
+	if err := store.Verify(); err != nil {
+		t.Fatalf("verify admission evidence: %v", err)
+	}
+}
+
+func TestOperatorProjectsEffectiveChecksAndRejectsLateCorrection(t *testing.T) {
+	service, store, _ := newTestService(t)
+	receipt := startSynthetic(t, service, "change-check-correction-1", "run-check-correction-1", operatorTestTime)
+	frozen := freezeSyntheticChecks(t, service, receipt.ChangeID, operatorTestTime.Add(time.Minute), "test:unit")
+	corrected, err := service.CorrectChecks(CorrectChecksInput{
+		EventID:    "event-check-correction-1",
+		ChangeID:   receipt.ChangeID,
+		OccurredAt: operatorTestTime.Add(2 * time.Minute),
+		Actor:      "operator",
+		SourceRef:  "review:check-correction-1",
+		Reason:     "missing-ci",
+		CheckRefs:  []domain.EvidenceReference{"test:unit", "ci:required"},
+	})
+	if err != nil {
+		t.Fatalf("correct checks: %v", err)
+	}
+	if corrected.EvidenceEventID == frozen.EvidenceEventID || len(corrected.CheckRefs) != 2 {
+		t.Fatalf("unexpected check correction receipt: %#v", corrected)
+	}
+	view, err := service.Inspect(receipt.ChangeID)
+	if err != nil {
+		t.Fatalf("inspect corrected checks: %v", err)
+	}
+	if view.CheckSet == nil || len(view.CheckSet.CheckRefs) != 2 || view.CheckSetEventID != corrected.EvidenceEventID {
+		t.Fatalf("effective check set not projected: %#v", view)
+	}
+	if err := service.Deliver(DeliverInput{
+		EventID:     "event-delivery-check-mismatch-1",
+		ChangeID:    receipt.ChangeID,
+		OccurredAt:  operatorTestTime.Add(3 * time.Minute),
+		Actor:       "operator",
+		SourceRef:   "review:check-mismatch-1",
+		CheckRefs:   []domain.EvidenceReference{"test:unit"},
+		ChecksGreen: true,
+	}); !errors.Is(err, evidence.ErrInvalidEvent) {
+		t.Fatalf("mismatched delivery error = %v, want evidence.ErrInvalidEvent", err)
+	}
+	if err := service.Deliver(DeliverInput{
+		EventID:     "event-delivery-checks-1",
+		ChangeID:    receipt.ChangeID,
+		OccurredAt:  operatorTestTime.Add(3 * time.Minute),
+		Actor:       "operator",
+		SourceRef:   "review:checks-handoff-1",
+		CheckRefs:   []domain.EvidenceReference{"ci:required", "test:unit"},
+		ChecksGreen: true,
+	}); err != nil {
+		t.Fatalf("deliver effective checks: %v", err)
+	}
+	if _, err := service.CorrectChecks(CorrectChecksInput{
+		EventID:    "event-check-correction-late-1",
+		ChangeID:   receipt.ChangeID,
+		OccurredAt: operatorTestTime.Add(4 * time.Minute),
+		Actor:      "operator",
+		SourceRef:  "review:check-correction-late-1",
+		Reason:     "late-change",
+		CheckRefs:  []domain.EvidenceReference{"test:unit", "ci:required", "check:manual"},
+	}); !errors.Is(err, ErrChangeAlreadyTerminal) {
+		t.Fatalf("late check correction error = %v, want ErrChangeAlreadyTerminal", err)
+	}
+	if err := store.Verify(); err != nil {
+		t.Fatalf("verify corrected check evidence: %v", err)
+	}
+}
+
 func TestOperatorRejectsRealStartAndPostTerminalMaterialCorrection(t *testing.T) {
 	service, store, _ := newTestService(t)
+	if _, err := service.Exclude(ExcludeInput{
+		EventID:    "event-real-exclusion",
+		ChangeID:   "change-real-exclusion",
+		OccurredAt: operatorTestTime,
+		Actor:      "operator",
+		SourceRef:  "request:real-exclusion",
+		Reason:     "manual-task",
+	}); !errors.Is(err, ErrRealCanaryNotActivated) {
+		t.Fatalf("real exclusion error = %v, want ErrRealCanaryNotActivated", err)
+	}
 	_, err := service.Start(StartInput{
 		EventID:       "event-real-start",
 		ChangeID:      "change-real-1",
@@ -298,6 +432,7 @@ func TestOperatorRejectsRealStartAndPostTerminalMaterialCorrection(t *testing.T)
 		OccurredAt:    operatorTestTime,
 		Actor:         "operator",
 		SourceRef:     "request:real-change",
+		Reason:        "eligibility-confirmed",
 	})
 	if !errors.Is(err, ErrRealCanaryNotActivated) {
 		t.Fatalf("real start error = %v, want ErrRealCanaryNotActivated", err)
@@ -378,6 +513,7 @@ func TestDisableStopsNewAssignmentsAndPreservesExistingEvidence(t *testing.T) {
 		OccurredAt:    operatorTestTime.Add(2 * time.Minute),
 		Actor:         "operator",
 		SourceRef:     "request:synthetic-after-stop",
+		Reason:        "eligibility-confirmed",
 		Synthetic:     true,
 	})
 	if !errors.Is(err, ErrCanaryStopped) {
@@ -393,6 +529,7 @@ func TestDisableStopsNewAssignmentsAndPreservesExistingEvidence(t *testing.T) {
 
 	// Stopping assignments does not discard or freeze evidence for work that was
 	// already assigned.
+	freezeSyntheticChecks(t, service, receipt.ChangeID, operatorTestTime.Add(150*time.Second), "test:rollback-v1")
 	overhead := 1.5
 	if err := service.Deliver(DeliverInput{
 		EventID:             "event-deliver-after-stop-1",
@@ -569,10 +706,33 @@ func startSynthetic(
 		OccurredAt:    occurredAt,
 		Actor:         "operator",
 		SourceRef:     "request:synthetic-change",
+		Reason:        "eligibility-confirmed",
 		Synthetic:     true,
 	})
 	if err != nil {
 		t.Fatalf("start synthetic %s: %v", changeID, err)
+	}
+	return receipt
+}
+
+func freezeSyntheticChecks(
+	t *testing.T,
+	service *Service,
+	changeID domain.ChangeID,
+	occurredAt time.Time,
+	checkRefs ...domain.EvidenceReference,
+) FreezeChecksReceipt {
+	t.Helper()
+	receipt, err := service.FreezeChecks(FreezeChecksInput{
+		EventID:    domain.EvidenceEventID("event-checks-" + string(changeID)),
+		ChangeID:   changeID,
+		OccurredAt: occurredAt,
+		Actor:      "operator",
+		SourceRef:  "request:synthetic-checks",
+		CheckRefs:  checkRefs,
+	})
+	if err != nil {
+		t.Fatalf("freeze synthetic checks %s: %v", changeID, err)
 	}
 	return receipt
 }
