@@ -955,7 +955,10 @@ func validateTelemetryTransition(event domain.EvidenceEvent, prior []diskRecord)
 	if assignment.Variant == domain.VariantFlow {
 		phaseEvent := latestPayloadEvent(event, prior, func(previous domain.EvidenceEvent) bool { return previous.FlowPhase != nil })
 		if phaseEvent == nil {
-			return fmt.Errorf("%w: flow telemetry requires an explicit flow phase", ErrInvalidEvent)
+			if event.Telemetry.Status != domain.TelemetryUnavailable || event.ReasonCode != "flow-phase-missing" {
+				return fmt.Errorf("%w: flow telemetry without a phase must record flow-phase-missing as unavailable", ErrInvalidEvent)
+			}
+			return validateTelemetryMeasurement(*event.Telemetry, *assignment)
 		}
 		for _, interval := range event.Telemetry.TraceIntervals {
 			if interval.StartedAt.Before(phaseEvent.FlowPhase.StartedAt) || interval.StartedAt.After(phaseEvent.FlowPhase.CompletedAt) ||

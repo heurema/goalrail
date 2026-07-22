@@ -68,6 +68,46 @@ func TestReconcileTraceObservationsKeepsMissingConflictAndMixedExplicit(t *testi
 	}
 }
 
+func TestServicePersistsMissingFlowPhaseReconciliation(t *testing.T) {
+	service, store, _ := newTestServiceV2(t)
+	receipt := startSynthetic(t, service, "change-missing-flow-phase", "run-missing-flow-phase", reconcileTestTime)
+	lineage := domain.ExecutionLineage{
+		Status: domain.LineageVerified, ChangeID: receipt.ChangeID, RunID: receipt.RunID,
+		RootSessionID: "session-missing-flow-phase", IdentitySource: domain.SessionIdentityLifecycleHook,
+		ContextDigest: strings.Repeat("c", 64),
+	}
+	if err := store.Append(domain.EvidenceEvent{
+		ID: "event-lineage-missing-flow-phase", CanaryID: domain.IntentCanaryV0ManifestID, ManifestVersion: 2,
+		ChangeID: receipt.ChangeID, Kind: domain.EventLineageRecorded, OccurredAt: reconcileTestTime.Add(time.Minute),
+		Actor: "goalrail-hook", SourceRef: "codex-hook:lifecycle",
+		ObservationRefs: []domain.EvidenceReference{"langfuse-session:session-missing-flow-phase"},
+		Lineage:         &lineage, LineageResolutionAttempts: 1,
+	}); err != nil {
+		t.Fatalf("append lineage: %v", err)
+	}
+
+	source := &fakeTraceSource{}
+	reconciled, err := service.ReconcileTelemetry(context.Background(), source, ReconcileTelemetryInput{
+		EventID: "event-reconcile-missing-flow-phase", ChangeID: receipt.ChangeID,
+		OccurredAt: reconcileTestTime.Add(2 * time.Minute), Actor: "operator",
+		SourceRef: "langfuse-api:observations-v2",
+	})
+	if err != nil {
+		t.Fatalf("persist missing-phase reconciliation: %v", err)
+	}
+	if reconciled.Reason != ReasonFlowPhaseMissing || reconciled.Telemetry.Status != domain.TelemetryUnavailable {
+		t.Fatalf("unexpected missing-phase receipt: %#v", reconciled)
+	}
+	if source.calls != 0 {
+		t.Fatalf("missing phase queried telemetry source %d times", source.calls)
+	}
+	view, err := service.Inspect(receipt.ChangeID)
+	if err != nil || view.Telemetry == nil || view.Telemetry.Status != domain.TelemetryUnavailable ||
+		view.TelemetryEventID != reconciled.EvidenceEventID {
+		t.Fatalf("missing-phase evidence was not projected: view=%#v err=%v", view, err)
+	}
+}
+
 func TestServiceReconcilesFlowAndDerivesTerminalOverhead(t *testing.T) {
 	service, store, _ := newTestServiceV2(t)
 	receipt := startSynthetic(t, service, "change-reconcile-flow", "run-reconcile-flow", reconcileTestTime)
@@ -163,13 +203,22 @@ func TestServiceReconcilesFlowAndDerivesTerminalOverhead(t *testing.T) {
 	if err != nil || view.Terminal == nil || view.Terminal.FlowOverheadMinutes == nil || *view.Terminal.FlowOverheadMinutes != 1.5 {
 		t.Fatalf("terminal did not project derived overhead: view=%#v err=%v", view, err)
 	}
-	if _, err := service.ReconcileTelemetry(context.Background(), source, ReconcileTelemetryInput{
+	source.observations = append(source.observations, domain.TraceObservation{
+		TraceReference: "langfuse-trace:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+		SessionID:      "session-reconcile-flow", StartedAt: phase.StartedAt.Add(90 * time.Second),
+		EndedAt: phase.StartedAt.Add(105 * time.Second),
+	})
+	correctedTelemetry, err := service.ReconcileTelemetry(context.Background(), source, ReconcileTelemetryInput{
 		EventID: "event-reconcile-correction-after-delivery", ChangeID: receipt.ChangeID,
 		OccurredAt: reconcileTestTime.Add(9*time.Minute + 30*time.Second), Actor: "operator",
 		SourceRef: "langfuse-api:observations-v2", OwnerReview: ownerReview,
 		CorrectionReason: "delayed-provider-data",
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("correct telemetry after delivery: %v", err)
+	}
+	if correctedTelemetry.Telemetry.FlowOverhead == nil || correctedTelemetry.Telemetry.FlowOverhead.TotalMinutes != 1.75 {
+		t.Fatalf("unexpected corrected overhead: %#v", correctedTelemetry.Telemetry.FlowOverhead)
 	}
 	if err := service.Assess(AssessInput{
 		EventID: "event-assess-incomplete-flow", ChangeID: receipt.ChangeID,
@@ -229,6 +278,13 @@ func TestServiceReconcilesFlowAndDerivesTerminalOverhead(t *testing.T) {
 	if assessmentPayloads != 2 {
 		t.Fatalf("assessment correction did not retain history: %d payloads", assessmentPayloads)
 	}
+	report, err := service.Report()
+	if err != nil {
+		t.Fatalf("report corrected telemetry: %v", err)
+	}
+	if !report.MedianFlowOverhead.Available || report.MedianFlowOverhead.Value != 1.75 {
+		t.Fatalf("report used stale terminal overhead: %#v", report.MedianFlowOverhead)
+	}
 }
 
 func TestServiceReconcilesBaselineWithoutFlowOverhead(t *testing.T) {
@@ -286,6 +342,7 @@ type fakeTraceSource struct {
 	observations []domain.TraceObservation
 	err          error
 	query        domain.TraceObservationQuery
+	calls        int
 }
 
 func boolPointer(value bool) *bool { return &value }
@@ -294,6 +351,7 @@ func (source *fakeTraceSource) ListSessionObservations(
 	_ context.Context,
 	query domain.TraceObservationQuery,
 ) ([]domain.TraceObservation, error) {
+	source.calls++
 	source.query = query
 	return append([]domain.TraceObservation(nil), source.observations...), source.err
 }

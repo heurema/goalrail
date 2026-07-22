@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -108,6 +109,41 @@ func TestClientRedactsCredentialsAndResponseBodiesFromErrors(t *testing.T) {
 		if strings.Contains(strings.ToLower(err.Error()), strings.ToLower(forbidden)) {
 			t.Fatalf("error leaked %q: %v", forbidden, err)
 		}
+	}
+}
+
+func TestClientRejectsRedirectBeforeForwardingCredentials(t *testing.T) {
+	var redirectedRequests atomic.Int32
+	target := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		redirectedRequests.Add(1)
+		writer.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(writer, `{"data":[],"meta":{"cursor":null}}`)
+	}))
+	defer target.Close()
+
+	redirector := httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		http.Redirect(writer, request, target.URL, http.StatusFound)
+	}))
+	defer redirector.Close()
+	httpClient := redirector.Client()
+	httpClient.Timeout = time.Second
+	client, err := NewClient(ClientConfig{
+		BaseURL: redirector.URL, PublicKey: "public-test", SecretKey: "secret-test",
+		HTTPClient: httpClient, PageSize: 2, MaxPages: 2, MaxResponseBytes: 4096,
+	})
+	if err != nil {
+		t.Fatalf("create redirect-safe client: %v", err)
+	}
+	if httpClient.CheckRedirect != nil {
+		t.Fatal("NewClient mutated the injected HTTP client")
+	}
+
+	_, err = client.ListSessionObservations(context.Background(), validTraceQuery())
+	if !errors.Is(err, ErrObservationRead) {
+		t.Fatalf("redirect error = %v, want ErrObservationRead", err)
+	}
+	if redirectedRequests.Load() != 0 {
+		t.Fatalf("redirect target received %d credential-bearing requests", redirectedRequests.Load())
 	}
 }
 

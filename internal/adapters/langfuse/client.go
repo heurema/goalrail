@@ -82,10 +82,14 @@ func NewClient(config ClientConfig) (*Client, error) {
 		maxBytes < 1 || maxBytes > maxConfiguredResponseBytes {
 		return nil, ErrInvalidClientConfig
 	}
+	httpClient := *config.HTTPClient
+	httpClient.CheckRedirect = func(_ *http.Request, _ []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
 	baseURL.Path = strings.TrimSuffix(baseURL.Path, "/")
 	return &Client{
 		baseURL: baseURL, publicKey: config.PublicKey, secretKey: config.SecretKey,
-		httpClient: config.HTTPClient, pageSize: pageSize, maxPages: maxPages,
+		httpClient: &httpClient, pageSize: pageSize, maxPages: maxPages,
 		maxResponseBytes: maxBytes,
 	}, nil
 }

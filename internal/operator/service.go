@@ -929,6 +929,13 @@ func (s *Service) Report() (domain.CanaryReport, error) {
 			observation.FlowOverheadMinutes = copyFloat(view.Terminal.FlowOverheadMinutes)
 			observation.ProcessCausedAbandonment = view.Terminal.ProcessCausedAbandonment
 		}
+		if view.Assignment.ManifestVersion == domain.IntentCanaryV0ManifestVersion2 &&
+			view.Assignment.Variant == domain.VariantFlow {
+			observation.FlowOverheadMinutes = nil
+			if view.Telemetry != nil && view.Telemetry.FlowOverhead != nil && view.Telemetry.FlowOverhead.Available {
+				observation.FlowOverheadMinutes = copyFloat(&view.Telemetry.FlowOverhead.TotalMinutes)
+			}
+		}
 		if view.Assessment != nil {
 			assessment := copyAssessment(*view.Assessment)
 			observation.Assessment = &assessment

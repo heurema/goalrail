@@ -22,7 +22,10 @@ import (
 var (
 	ErrMalformedArtifact  = errors.New("malformed OpenSpec artifact")
 	ErrIntentNotConfirmed = errors.New("OpenSpec intent is not confirmed")
+	ErrContextRequired    = errors.New("OpenSpec context is required")
 )
+
+const goalrailIntentSchema = "goalrail-intent"
 
 type CompiledChange struct {
 	Intent   domain.IntentSnapshot
@@ -109,6 +112,14 @@ func LoadChange(changeDir string) (CompiledChange, error) {
 		contextPack = &parsed
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return CompiledChange{}, fmt.Errorf("open OpenSpec context: %w", err)
+	} else {
+		required, requirementErr := changeRequiresContext(changeDir)
+		if requirementErr != nil {
+			return CompiledChange{}, requirementErr
+		}
+		if required {
+			return CompiledChange{}, fmt.Errorf("%w: goalrail-intent change has no context.md", ErrContextRequired)
+		}
 	}
 
 	intentFile, err := os.Open(filepath.Join(changeDir, "intent.md"))
@@ -148,6 +159,78 @@ func LoadChange(changeDir string) (CompiledChange, error) {
 		return CompiledChange{}, fmt.Errorf("validate OpenSpec proposal coverage: %w", err)
 	}
 	return CompiledChange{Intent: intent, Proposal: proposal}, nil
+}
+
+func changeRequiresContext(changeDir string) (bool, error) {
+	schema, err := readChangeSchema(filepath.Join(changeDir, ".openspec.yaml"))
+	if err != nil || schema != goalrailIntentSchema {
+		return false, err
+	}
+	if !isArchivedChange(changeDir) {
+		return true, nil
+	}
+
+	intentFile, err := os.Open(filepath.Join(changeDir, "intent.md"))
+	if err != nil {
+		return false, fmt.Errorf("open archived OpenSpec intent metadata: %w", err)
+	}
+	document, readErr := readMarkdownDocument(intentFile)
+	closeErr := intentFile.Close()
+	if readErr != nil {
+		return false, readErr
+	}
+	if closeErr != nil {
+		return false, fmt.Errorf("close archived OpenSpec intent metadata: %w", closeErr)
+	}
+	metadata, err := parseBoldMetadata(document.preamble)
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(metadata["context pack"]) != "", nil
+}
+
+func readChangeSchema(path string) (string, error) {
+	file, err := os.Open(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("open OpenSpec change metadata: %w", err)
+	}
+	defer file.Close()
+
+	var schema string
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		key, value, found := strings.Cut(line, ":")
+		if !found || strings.TrimSpace(key) != "schema" {
+			continue
+		}
+		if schema != "" {
+			return "", fmt.Errorf("%w: duplicate schema in .openspec.yaml", ErrMalformedArtifact)
+		}
+		schema = strings.Trim(strings.TrimSpace(value), "'\"")
+	}
+	if err := scanner.Err(); err != nil {
+		return "", fmt.Errorf("read OpenSpec change metadata: %w", err)
+	}
+	if schema == "" {
+		return "", fmt.Errorf("%w: .openspec.yaml has no schema", ErrMalformedArtifact)
+	}
+	return schema, nil
+}
+
+func isArchivedChange(changeDir string) bool {
+	archiveDir := filepath.Dir(filepath.Clean(changeDir))
+	changesDir := filepath.Dir(archiveDir)
+	openspecDir := filepath.Dir(changesDir)
+	return filepath.Base(archiveDir) == "archive" &&
+		filepath.Base(changesDir) == "changes" &&
+		filepath.Base(openspecDir) == "openspec"
 }
 
 // ReadIntent parses only the structured fields owned by the custom schema.

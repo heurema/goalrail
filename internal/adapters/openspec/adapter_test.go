@@ -64,6 +64,40 @@ func TestLoadChangeBlocksConfirmedIntentWithMaterialContextUnknown(t *testing.T)
 	}
 }
 
+func TestLoadChangeRequiresContextForActiveGoalrailIntentChange(t *testing.T) {
+	changeDir := t.TempDir()
+	writeArtifact(t, changeDir, ".openspec.yaml", "schema: goalrail-intent\n")
+	writeArtifact(t, changeDir, "intent.md", minimalFlowIntent("confirmed", "None.", true))
+	writeArtifact(t, changeDir, "proposal.md", minimalProposal("OUT-1", "NG-1"))
+
+	_, err := LoadChange(changeDir)
+	if !errors.Is(err, ErrContextRequired) {
+		t.Fatalf("missing context error = %v, want ErrContextRequired", err)
+	}
+}
+
+func TestLoadChangeRequiresContextForArchivedV2IntentMetadata(t *testing.T) {
+	repositoryRoot := t.TempDir()
+	changeDir := filepath.Join(repositoryRoot, "openspec", "changes", "archive", "2026-07-22-v2-change")
+	if err := os.MkdirAll(changeDir, 0o700); err != nil {
+		t.Fatalf("create archived change: %v", err)
+	}
+	writeArtifact(t, changeDir, ".openspec.yaml", "schema: goalrail-intent\n")
+	intent := strings.Replace(
+		minimalFlowIntent("confirmed", "None.", true),
+		"- **Owner:** owner",
+		"- **Owner:** owner\n- **Context Pack:** CONTEXT-TEST version 1",
+		1,
+	)
+	writeArtifact(t, changeDir, "intent.md", intent)
+	writeArtifact(t, changeDir, "proposal.md", minimalProposal("OUT-1", "NG-1"))
+
+	_, err := LoadChange(changeDir)
+	if !errors.Is(err, ErrContextRequired) {
+		t.Fatalf("missing archived v2 context error = %v, want ErrContextRequired", err)
+	}
+}
+
 func TestLoadChangeReadsArchivedConfirmedArtifacts(t *testing.T) {
 	_, filename, _, ok := runtime.Caller(0)
 	if !ok {
