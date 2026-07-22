@@ -205,6 +205,38 @@ func TestCommandRunsSyntheticLifecycleWithoutManualSessionID(t *testing.T) {
 	}
 }
 
+func TestCommandDefaultStoreIsIndependentOfOpenSpecChangeLifecycle(t *testing.T) {
+	repoRoot := t.TempDir()
+	var output bytes.Buffer
+	if err := run([]string{
+		"--repo", repoRoot,
+		"start",
+		"--change", "change-default-store-1",
+		"--intent-version", "1",
+		"--actor", "operator",
+		"--source", "request:default-store",
+		"--synthetic",
+	}, bytes.NewReader(nil), &output, &bytes.Buffer{}); err != nil {
+		t.Fatalf("start with default store: %v", err)
+	}
+
+	storePath := filepath.Join(repoRoot, "canary", "intent-canary-v0", "events.jsonl")
+	store, err := evidence.NewStore(storePath)
+	if err != nil {
+		t.Fatalf("open default store: %v", err)
+	}
+	events, err := store.ReadAll()
+	if err != nil {
+		t.Fatalf("read default store: %v", err)
+	}
+	if len(events) != 1 || events[0].ChangeID != "change-default-store-1" {
+		t.Fatalf("unexpected default store events: %#v", events)
+	}
+	if _, err := os.Stat(filepath.Join(repoRoot, "openspec")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("default store recreated OpenSpec lifecycle path: %v", err)
+	}
+}
+
 func TestBindCommandsRejectManualIdentityArguments(t *testing.T) {
 	repoRoot := t.TempDir()
 	stderr := &bytes.Buffer{}

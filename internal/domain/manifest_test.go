@@ -175,10 +175,8 @@ func TestManifestArtifactMatchesCanonicalV1ReferencesAndRotation(t *testing.T) {
 	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(sourceFile), "..", ".."))
 	manifestPath := filepath.Join(
 		repoRoot,
-		"openspec",
-		"changes",
-		"intent-canary-v0",
 		"canary",
+		"intent-canary-v0",
 		"manifest-v1.md",
 	)
 	contents, err := os.ReadFile(manifestPath)

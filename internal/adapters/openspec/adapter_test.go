@@ -11,15 +11,21 @@ import (
 	"github.com/heurema/goalrail/internal/domain"
 )
 
-func TestLoadChangeReadsCurrentConfirmedArtifacts(t *testing.T) {
+func TestLoadChangeReadsArchivedConfirmedArtifacts(t *testing.T) {
 	_, filename, _, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatal("locate adapter test file")
 	}
 	repositoryRoot := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", "..", ".."))
-	change, err := LoadChange(filepath.Join(repositoryRoot, "openspec", "changes", "intent-canary-v0"))
+	change, err := LoadChange(filepath.Join(
+		repositoryRoot,
+		"openspec",
+		"changes",
+		"archive",
+		"2026-07-22-intent-canary-v0",
+	))
 	if err != nil {
-		t.Fatalf("load current change: %v", err)
+		t.Fatalf("load archived change: %v", err)
 	}
 	if change.Intent.Status != domain.IntentConfirmed || change.Intent.ID != "INTENT-CANARY-V0" {
 		t.Fatalf("unexpected intent identity: %#v", change.Intent)

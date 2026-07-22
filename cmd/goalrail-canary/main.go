@@ -61,7 +61,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	}
 	resolvedStore := strings.TrimSpace(*storePath)
 	if resolvedStore == "" {
-		resolvedStore = filepath.Join(absRepo, "openspec", "changes", "intent-canary-v0", "canary", "events.jsonl")
+		resolvedStore = filepath.Join(absRepo, "canary", "intent-canary-v0", "events.jsonl")
 	} else if !filepath.IsAbs(resolvedStore) {
 		resolvedStore = filepath.Join(absRepo, resolvedStore)
 	}
