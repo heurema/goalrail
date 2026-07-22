@@ -24,10 +24,11 @@ import (
 )
 
 const (
-	runContextEnvironment   = "GOALRAIL_RUN_CONTEXT"
-	evidencePathEnvironment = "GOALRAIL_EVIDENCE_PATH"
-	repoRootEnvironment     = "GOALRAIL_REPO_ROOT"
-	maxProviderInputBytes   = 64 * 1024
+	runContextEnvironment       = "GOALRAIL_RUN_CONTEXT"
+	evidencePathEnvironment     = "GOALRAIL_EVIDENCE_PATH"
+	repoRootEnvironment         = "GOALRAIL_REPO_ROOT"
+	defaultEvidenceRelativePath = "canary/intent-canary-v0/events.jsonl"
+	maxProviderInputBytes       = 64 * 1024
 )
 
 func main() {
@@ -61,7 +62,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 	}
 	resolvedStore := strings.TrimSpace(*storePath)
 	if resolvedStore == "" {
-		resolvedStore = filepath.Join(absRepo, "openspec", "changes", "intent-canary-v0", "canary", "events.jsonl")
+		resolvedStore = filepath.Join(absRepo, filepath.FromSlash(defaultEvidenceRelativePath))
 	} else if !filepath.IsAbs(resolvedStore) {
 		resolvedStore = filepath.Join(absRepo, resolvedStore)
 	}

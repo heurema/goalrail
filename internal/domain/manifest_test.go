@@ -175,15 +175,29 @@ func TestManifestArtifactMatchesCanonicalV1ReferencesAndRotation(t *testing.T) {
 	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(sourceFile), "..", ".."))
 	manifestPath := filepath.Join(
 		repoRoot,
-		"openspec",
-		"changes",
-		"intent-canary-v0",
 		"canary",
+		"intent-canary-v0",
 		"manifest-v1.md",
 	)
 	contents, err := os.ReadFile(manifestPath)
 	if err != nil {
 		t.Fatalf("read manifest artifact: %v", err)
+	}
+	archivedPath := filepath.Join(
+		repoRoot,
+		"openspec",
+		"changes",
+		"archive",
+		"2026-07-22-intent-canary-v0",
+		"canary",
+		"manifest-v1.md",
+	)
+	archived, err := os.ReadFile(archivedPath)
+	if err != nil {
+		t.Fatalf("read archived manifest artifact: %v", err)
+	}
+	if string(contents) != string(archived) {
+		t.Fatal("runtime manifest differs from archived frozen manifest")
 	}
 	text := string(contents)
 	for _, required := range []string{

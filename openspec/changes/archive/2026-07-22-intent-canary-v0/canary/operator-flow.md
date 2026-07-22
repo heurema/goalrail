@@ -1,6 +1,11 @@
 # Intent Canary v0 Operator Flow
 
-This is the complete local operator surface for one canary change. It is a
+> **Historical planning artifact.** This copy is retained with the archived
+> OpenSpec change and is not the current operator surface. Use
+> [`canary/intent-canary-v0/operator-flow.md`](../../../../../canary/intent-canary-v0/operator-flow.md),
+> which owns the executable default evidence path.
+
+This was the complete local operator surface captured by this change. It is a
 command plus an append-only JSONL record, not a daemon, dashboard, or workflow
 engine.
 
