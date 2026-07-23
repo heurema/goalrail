@@ -23,8 +23,16 @@ specific decision, and transitions keep explicit owner and effect gates.
 1. Explore only to gather evidence and reduce ambiguity. Create a bounded
    Context Pack; external research is justified only by a material unknown that
    can change intent or the current decision.
-2. Compile a candidate Intent Snapshot. The owner actively confirms its three
-   semantic groups. Silence and continued conversation do not confirm it.
+2. Compile the durable candidate Intent Snapshot in concise, model-legible
+   English. Before confirmation, render a separate plain-language view in the
+   resolved owner language. Use an explicit owner preference first, then an
+   explicit project or workflow preference, then the current conversation
+   language, and finally English as fallback; no language is universally
+   hard-coded. The view explains the owner's experience, visible behavior,
+   material boundaries, and recognizable success without unnecessary schema or
+   implementation detail. It must faithfully cover the exact version's three
+   semantic groups. The owner actively confirms that version; silence and
+   continued conversation do not confirm it.
 3. Generate proposal, specs, design, and tasks only from confirmed intent. Use
    the project-local `goalrail-intent` schema and the dependency order returned
    by OpenSpec.
