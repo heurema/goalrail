@@ -31,6 +31,11 @@ artifacts:
       solution.
 
 
+      Write the durable artifact in English using concise, explicit,
+      model-legible Markdown with stable identifiers and provenance. Do not
+      optimize its wording for one model provider.
+
+
       Keep source evidence and Context Pack references distinct from
       interpretation. Evidence may include owner statements and verified
       repository facts. Do not silently turn context or an inference into owner
@@ -47,6 +52,18 @@ artifacts:
       Intent contains only three semantic groups: desired outcomes, non-goals,
       and observable success signals. Source evidence, unknowns, and confirmation
       are provenance and lifecycle metadata, not extra intent categories.
+
+
+      Before requesting confirmation, present a separate plain-language view in
+      the resolved owner language. Resolve it from an explicit owner preference,
+      then an explicit project or workflow preference, then the current
+      conversation language, with English as fallback; never hard-code a
+      universal confirmation language. Explain the owner's experience, visible
+      system behavior, material boundaries, and recognizable success while
+      faithfully covering all material meaning in the exact candidate version.
+      Omit schema IDs and implementation terminology unless they affect the
+      owner's decision or the owner requests technical detail. The view is a
+      derived confirmation surface, not another artifact or semantic group.
     requires:
       - context
   - id: proposal

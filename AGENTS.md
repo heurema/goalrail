@@ -12,6 +12,14 @@
 - A material intent amendment creates a new version. Do not repair history by rewriting prior evidence.
 - Confirmed intent describes the requested result; it never grants permission for tools, credentials, writes, deployments, publications, or other effects.
 
+## Artifact Language and Owner Confirmation
+
+- Write durable repository documentation and development artifacts in English unless a specific external audience requires another language. Prefer concise, explicit, model-legible Markdown with stable identifiers and provenance over conversational prose or provider-specific prompt tricks.
+- Before asking the owner to confirm a candidate Intent Snapshot, present a separate plain-language view in the resolved owner language. Resolve it in this order: an explicit owner preference, an explicit project or workflow preference, the language of the current conversation, then English as fallback. Never hard-code Russian, English, or another language as the universal confirmation language.
+- In that resolved language, describe what the owner will do and see, what Goalrail will do, the important boundaries, and how success will be recognizable.
+- The owner-facing view must faithfully cover every material outcome, non-goal, and success signal in the exact candidate version. Omit schema IDs, internal structure, and implementation terminology unless they change the owner's experience or decision, or the owner asks for technical detail.
+- Ask one exact confirmation question that names the candidate version. The owner-facing view is a derived confirmation surface, not a fourth semantic intent group or a replacement for the versioned English artifact.
+
 ## OpenSpec
 
 - Use the project-local `goalrail-intent` schema for Goalrail changes.
