@@ -333,6 +333,10 @@ func (service *Service) Finish(ctx context.Context, input FinishInput) (Terminal
 		return TerminalReceipt{}, err
 	}
 	delta := CompareWorktrees(prepared.Preparation.Baseline, terminal, prepared.WorkSpec.Spec().Paths)
+	if delta.HeadChanged {
+		status = StateFailed
+		reasons = appendReason(reasons, "HEAD_CHANGED")
+	}
 	if len(delta.ScopeViolations) != 0 {
 		status = StateFailed
 		reasons = appendReason(reasons, "SCOPE_VIOLATION")
@@ -423,6 +427,9 @@ func (service *Service) failureReceipt(
 	reasons := make([]domain.EvidenceReasonCode, 0, 2)
 	if observation.Reason != "" {
 		reasons = append(reasons, observation.Reason)
+	}
+	if delta.HeadChanged {
+		reasons = appendReason(reasons, "HEAD_CHANGED")
 	}
 	if len(delta.ScopeViolations) != 0 {
 		reasons = appendReason(reasons, "SCOPE_VIOLATION")
@@ -620,6 +627,9 @@ func validateTerminalReceipt(receipt TerminalReceipt) error {
 		if receipt.CheckResults[index].ID != check.ID {
 			return fmt.Errorf("terminal receipt check result order differs from the frozen check set")
 		}
+	}
+	if receipt.WorktreeDelta.HeadChanged && receipt.Status == StatePassed {
+		return fmt.Errorf("terminal receipt cannot pass after repository HEAD changed")
 	}
 	return nil
 }

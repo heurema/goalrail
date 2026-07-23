@@ -395,6 +395,67 @@ func TestFinishCannotPassMissingChecksOrScopeViolation(t *testing.T) {
 	})
 }
 
+func TestFinishCannotPassAfterRepositoryHeadChanges(t *testing.T) {
+	adapter := &countingFixtureAdapter{result: ProviderObservation{
+		Outcome:        ProviderCompleted,
+		IdentityStatus: IdentityVerified,
+		RootSessionRef: "session-root",
+	}}
+	baseline := fixtureObservation("base")
+	terminal := fixtureObservation("terminal")
+	terminal.Head = strings.Repeat("b", 40)
+	service, spec, _, _ := fixtureService(t, adapter, []WorktreeObservation{baseline, terminal})
+	prepared := prepareFixture(t, service, spec)
+	service.newRunID = func() (domain.RunID, error) { return "run-head-change", nil }
+	if _, err := service.Start(context.Background(), StartInput{
+		WorkSpecDigest: prepared.WorkSpec.Digest(),
+		Adapter:        "fixture",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	receipt, err := service.Finish(context.Background(), FinishInput{
+		RunID:   "run-head-change",
+		Results: []CheckResult{{ID: "test", State: domain.CheckResultPass}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if receipt.Status != StateFailed ||
+		!receipt.WorktreeDelta.HeadChanged ||
+		len(receipt.Reasons) != 1 ||
+		receipt.Reasons[0] != "HEAD_CHANGED" {
+		t.Fatalf("receipt = %+v", receipt)
+	}
+}
+
+func TestFinishRejectsSecretShapedEvidenceReference(t *testing.T) {
+	adapter := &countingFixtureAdapter{result: ProviderObservation{
+		Outcome:        ProviderCompleted,
+		IdentityStatus: IdentityVerified,
+		RootSessionRef: "session-root",
+	}}
+	service, spec, _, _ := fixtureService(t, adapter, nil)
+	prepared := prepareFixture(t, service, spec)
+	service.newRunID = func() (domain.RunID, error) { return "run-secret-ref", nil }
+	if _, err := service.Start(context.Background(), StartInput{
+		WorkSpecDigest: prepared.WorkSpec.Digest(),
+		Adapter:        "fixture",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	_, err := service.Finish(context.Background(), FinishInput{
+		RunID: "run-secret-ref",
+		Results: []CheckResult{{
+			ID:          "test",
+			State:       domain.CheckResultPass,
+			EvidenceRef: "local:" + "sk-" + strings.Repeat("x", 16),
+		}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "evidence reference is invalid") {
+		t.Fatalf("expected secret-shaped evidence rejection, got %v", err)
+	}
+}
+
 func TestPrepareRejectsScopedSymlinkEscapeAndMissingIntent(t *testing.T) {
 	root := t.TempDir()
 	outside := t.TempDir()

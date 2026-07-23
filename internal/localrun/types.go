@@ -55,6 +55,7 @@ type WorktreeObservation struct {
 type WorktreeDelta struct {
 	BaselineDigest  string   `json:"baseline_digest"`
 	TerminalDigest  string   `json:"terminal_digest"`
+	HeadChanged     bool     `json:"head_changed,omitempty"`
 	ChangedPaths    []string `json:"changed_paths"`
 	ScopeViolations []string `json:"scope_violations,omitempty"`
 }

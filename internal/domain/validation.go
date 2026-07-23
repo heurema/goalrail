@@ -79,9 +79,9 @@ func IsCanonicalID(value string) bool {
 }
 
 // IsEvidenceReference reports whether value is a bounded provider-neutral
-// scheme:identifier reference. Adapters separately reject secret-shaped data.
+// scheme:identifier reference that is safe to retain.
 func IsEvidenceReference(value string) bool {
-	return evidenceReferencePattern.MatchString(value)
+	return evidenceReferencePattern.MatchString(value) && !hasSecretShapedContent(value)
 }
 
 // ValidateIntentSnapshot checks provider-neutral lifecycle and provenance

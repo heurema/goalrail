@@ -313,12 +313,18 @@ func validateRetainedText(v *validator, path, value string, maximum int) {
 	if hasUnsafeControl(value) {
 		v.add("work_spec.text.control_character", path, "value contains an unsupported control character")
 	}
+	if hasSecretShapedContent(value) {
+		v.add("work_spec.text.secret_shaped", path, "secret-shaped content cannot be retained")
+	}
+}
+
+func hasSecretShapedContent(value string) bool {
 	for _, pattern := range secretPatterns {
 		if pattern.MatchString(value) {
-			v.add("work_spec.text.secret_shaped", path, "secret-shaped content cannot be retained")
-			break
+			return true
 		}
 	}
+	return false
 }
 
 func normalizeWorkSpec(spec WorkSpec) WorkSpec {

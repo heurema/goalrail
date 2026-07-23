@@ -2,6 +2,7 @@ package localrun
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -55,6 +56,72 @@ func TestGitObserverTracksOnlyChangesAfterDirtyBaseline(t *testing.T) {
 	}
 	if strings.Join(delta.ScopeViolations, ",") != "outside.txt" {
 		t.Fatalf("scope violations = %v", delta.ScopeViolations)
+	}
+}
+
+func TestGitObserverIncludesIgnoredFilesInScopeEnforcement(t *testing.T) {
+	root, _ := testGitRepository(t)
+	if err := os.WriteFile(filepath.Join(root, ".gitignore"), []byte("ignored/\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, root, "add", ".gitignore")
+	runGit(t, root, "commit", "-qm", "ignore fixture output")
+
+	observer := GitObserver{}
+	baseline, err := observer.Observe(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "ignored"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "ignored", "outside.txt"), []byte("ignored change\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	terminal, err := observer.Observe(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	delta := CompareWorktrees(baseline, terminal, []string{"inside"})
+	if strings.Join(delta.ChangedPaths, ",") != "ignored/outside.txt" ||
+		strings.Join(delta.ScopeViolations, ",") != "ignored/outside.txt" {
+		t.Fatalf("ignored delta = %+v", delta)
+	}
+	if len(terminal.Entries) != 1 || terminal.Entries[0].Status != "!!" {
+		t.Fatalf("ignored observation = %+v", terminal)
+	}
+}
+
+func TestGitObserverDetectsChangedHeadEvenWhenStatusIsClean(t *testing.T) {
+	root, _ := testGitRepository(t)
+	observer := GitObserver{}
+	baseline, err := observer.Observe(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "outside.txt"), []byte("committed change\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, root, "add", "outside.txt")
+	runGit(t, root, "commit", "-qm", "commit outside scope")
+	terminal, err := observer.Observe(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	delta := CompareWorktrees(baseline, terminal, []string{"inside"})
+	if !delta.HeadChanged || len(delta.ChangedPaths) != 0 || len(delta.ScopeViolations) != 0 {
+		t.Fatalf("committed delta = %+v", delta)
+	}
+}
+
+func TestGitObserverBoundsStatusOutputWhileCommandRuns(t *testing.T) {
+	root, _ := testGitRepository(t)
+	if err := os.WriteFile(filepath.Join(root, "untracked-output.txt"), []byte("change\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	observer := GitObserver{MaxStatusBytes: 8}
+	if _, err := observer.Observe(context.Background(), root); !errors.Is(err, ErrWorktreeObservationTooLarge) {
+		t.Fatalf("expected bounded-output rejection, got %v", err)
 	}
 }
 

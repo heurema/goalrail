@@ -77,6 +77,11 @@ contains canonical metadata, hashes, bounded references, and changed paths.
 It contains no patch, copied source, command output, raw provider payload,
 prompt, transcript, or credential.
 
+Worktree observation includes tracked, untracked, and ignored files under
+explicit path-count and output-size bounds. Any repository `HEAD` change makes
+the terminal receipt fail with `HEAD_CHANGED`; a commit cannot hide mutations
+from v0 verification.
+
 Real provider activation, automated checks, Git lifecycle actions, external
 effects, credentials, retries, and stronger execution infrastructure require
 separate confirmed intent and implementation changes.

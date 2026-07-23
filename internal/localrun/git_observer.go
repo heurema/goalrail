@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -15,10 +16,18 @@ import (
 	"strings"
 )
 
-const DefaultMaxObservedPaths = 256
+const (
+	DefaultMaxObservedPaths  = 256
+	DefaultMaxGitStatusBytes = 1 << 20
+	defaultMaxGitOutputBytes = 64 << 10
+	defaultMaxGitErrorBytes  = 16 << 10
+)
+
+var ErrWorktreeObservationTooLarge = errors.New("worktree observation exceeds configured bound")
 
 type GitObserver struct {
-	MaxPaths int
+	MaxPaths       int
+	MaxStatusBytes int
 }
 
 func (observer GitObserver) ResolveRepository(
@@ -68,7 +77,7 @@ func (observer GitObserver) Observe(ctx context.Context, root string) (WorktreeO
 	if err != nil {
 		return WorktreeObservation{}, err
 	}
-	raw, err := observer.gitBytes(
+	raw, err := observer.gitStatusBytes(
 		ctx,
 		root,
 		"-c",
@@ -81,7 +90,19 @@ func (observer GitObserver) Observe(ctx context.Context, root string) (WorktreeO
 	if err != nil {
 		return WorktreeObservation{}, err
 	}
-	entries, err := observer.parseEntries(root, raw)
+	ignoredRaw, err := observer.gitStatusBytes(
+		ctx,
+		root,
+		"ls-files",
+		"-z",
+		"--others",
+		"--ignored",
+		"--exclude-standard",
+	)
+	if err != nil {
+		return WorktreeObservation{}, err
+	}
+	entries, err := observer.parseEntries(root, raw, ignoredRaw)
 	if err != nil {
 		return WorktreeObservation{}, err
 	}
@@ -130,35 +151,42 @@ func CompareWorktrees(
 	return WorktreeDelta{
 		BaselineDigest:  baseline.Digest,
 		TerminalDigest:  terminal.Digest,
+		HeadChanged:     baseline.Head != terminal.Head,
 		ChangedPaths:    changed,
 		ScopeViolations: violations,
 	}
 }
 
-func (observer GitObserver) parseEntries(root string, raw []byte) ([]WorktreeEntry, error) {
+func (observer GitObserver) parseEntries(
+	root string,
+	statusRaw []byte,
+	ignoredRaw []byte,
+) ([]WorktreeEntry, error) {
 	maximum := observer.MaxPaths
 	if maximum <= 0 {
 		maximum = DefaultMaxObservedPaths
 	}
-	records := bytes.Split(raw, []byte{0})
-	entries := make([]WorktreeEntry, 0, len(records))
-	for _, record := range records {
-		if len(record) == 0 {
-			continue
+	entries := make([]WorktreeEntry, 0, maximum)
+	seen := make(map[string]struct{}, maximum)
+	appendEntry := func(status, path string) error {
+		path = filepath.ToSlash(path)
+		if path == "" || filepath.IsAbs(path) || path == ".." || strings.HasPrefix(path, "../") {
+			return fmt.Errorf("Git reported an invalid repository path")
 		}
-		if len(record) < 4 || record[2] != ' ' {
-			return nil, fmt.Errorf("invalid Git status record")
+		if _, exists := seen[path]; exists {
+			return nil
 		}
 		if len(entries) >= maximum {
-			return nil, fmt.Errorf("dirty path count exceeds %d", maximum)
+			return fmt.Errorf(
+				"%w: dirty path count exceeds %d",
+				ErrWorktreeObservationTooLarge,
+				maximum,
+			)
 		}
-		path := filepath.ToSlash(string(record[3:]))
-		if path == "" || filepath.IsAbs(path) || path == ".." || strings.HasPrefix(path, "../") {
-			return nil, fmt.Errorf("Git reported an invalid repository path")
-		}
+		seen[path] = struct{}{}
 		entry := WorktreeEntry{
 			Path:   path,
-			Status: string(record[:2]),
+			Status: status,
 		}
 		fullPath := filepath.Join(root, filepath.FromSlash(path))
 		info, err := os.Lstat(fullPath)
@@ -166,12 +194,33 @@ func (observer GitObserver) parseEntries(root string, raw []byte) ([]WorktreeEnt
 			entry.Mode = uint32(info.Mode())
 			entry.Digest, err = hashPath(fullPath, info)
 			if err != nil {
-				return nil, fmt.Errorf("hash worktree path %q: %w", path, err)
+				return fmt.Errorf("hash worktree path %q: %w", path, err)
 			}
 		} else if !os.IsNotExist(err) {
-			return nil, fmt.Errorf("inspect worktree path %q: %w", path, err)
+			return fmt.Errorf("inspect worktree path %q: %w", path, err)
 		}
 		entries = append(entries, entry)
+		return nil
+	}
+
+	for _, record := range bytes.Split(statusRaw, []byte{0}) {
+		if len(record) == 0 {
+			continue
+		}
+		if len(record) < 4 || record[2] != ' ' {
+			return nil, fmt.Errorf("invalid Git status record")
+		}
+		if err := appendEntry(string(record[:2]), string(record[3:])); err != nil {
+			return nil, err
+		}
+	}
+	for _, record := range bytes.Split(ignoredRaw, []byte{0}) {
+		if len(record) == 0 {
+			continue
+		}
+		if err := appendEntry("!!", string(record)); err != nil {
+			return nil, err
+		}
 	}
 	sort.Slice(entries, func(left, right int) bool {
 		return entries[left].Path < entries[right].Path
@@ -184,20 +233,86 @@ func (observer GitObserver) git(ctx context.Context, root string, arguments ...s
 	return string(output), err
 }
 
-func (GitObserver) gitBytes(ctx context.Context, root string, arguments ...string) ([]byte, error) {
+func (observer GitObserver) gitBytes(
+	ctx context.Context,
+	root string,
+	arguments ...string,
+) ([]byte, error) {
+	return observer.runGitBytes(ctx, root, defaultMaxGitOutputBytes, arguments...)
+}
+
+func (observer GitObserver) gitStatusBytes(
+	ctx context.Context,
+	root string,
+	arguments ...string,
+) ([]byte, error) {
+	maximum := observer.MaxStatusBytes
+	if maximum <= 0 {
+		maximum = DefaultMaxGitStatusBytes
+	}
+	return observer.runGitBytes(ctx, root, maximum, arguments...)
+}
+
+func (GitObserver) runGitBytes(
+	ctx context.Context,
+	root string,
+	maximum int,
+	arguments ...string,
+) ([]byte, error) {
 	command := exec.CommandContext(ctx, "git", append([]string{"-C", root}, arguments...)...)
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
+	stdout := boundedBuffer{maximum: maximum}
+	stderr := boundedBuffer{maximum: defaultMaxGitErrorBytes}
 	command.Stdout = &stdout
 	command.Stderr = &stderr
-	if err := command.Run(); err != nil {
+	runErr := command.Run()
+	if stdout.exceeded {
+		return nil, fmt.Errorf(
+			"%w: Git output exceeds %d bytes",
+			ErrWorktreeObservationTooLarge,
+			maximum,
+		)
+	}
+	if stderr.exceeded {
+		return nil, fmt.Errorf("read Git state: error output exceeds %d bytes", defaultMaxGitErrorBytes)
+	}
+	if runErr != nil {
 		reason := strings.TrimSpace(stderr.String())
 		if reason == "" {
-			reason = err.Error()
+			reason = runErr.Error()
 		}
 		return nil, fmt.Errorf("read Git state: %s", reason)
 	}
-	return stdout.Bytes(), nil
+	return append([]byte(nil), stdout.Bytes()...), nil
+}
+
+type boundedBuffer struct {
+	buffer   bytes.Buffer
+	maximum  int
+	exceeded bool
+}
+
+func (buffer *boundedBuffer) Write(chunk []byte) (int, error) {
+	received := len(chunk)
+	remaining := buffer.maximum - buffer.buffer.Len()
+	if remaining > 0 {
+		if remaining < len(chunk) {
+			_, _ = buffer.buffer.Write(chunk[:remaining])
+		} else {
+			_, _ = buffer.buffer.Write(chunk)
+		}
+	}
+	if len(chunk) > remaining {
+		buffer.exceeded = true
+	}
+	return received, nil
+}
+
+func (buffer *boundedBuffer) Bytes() []byte {
+	return buffer.buffer.Bytes()
+}
+
+func (buffer *boundedBuffer) String() string {
+	return buffer.buffer.String()
 }
 
 func hashPath(path string, info os.FileInfo) (string, error) {
