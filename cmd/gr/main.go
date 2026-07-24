@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -55,7 +56,7 @@ func run(
 	factory serviceFactory,
 ) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: gr <prepare|inspect|start|finish> [flags]")
+		return fmt.Errorf("usage: gr <prepare|inspect|start|finish> [flags]; run gr help")
 	}
 	switch args[0] {
 	case "prepare":
@@ -66,12 +67,44 @@ func run(
 		return runStart(ctx, args[1:], stdin, stdout, stderr, factory)
 	case "finish":
 		return runFinish(ctx, args[1:], stdout, stderr, factory)
-	case "help", "-h", "--help":
-		_, err := fmt.Fprintln(stdout, "usage: gr <prepare|inspect|start|finish> [flags]")
-		return err
+	case "help":
+		if len(args) == 1 {
+			return writeHelp(stdout)
+		}
+		if len(args) == 2 && isCommand(args[1]) {
+			return run(ctx, []string{args[1], "--help"}, stdin, stdout, stderr, factory)
+		}
+		return fmt.Errorf("usage: gr help [prepare|inspect|start|finish]")
+	case "-h", "--help":
+		return writeHelp(stdout)
 	default:
 		return fmt.Errorf("unknown gr command %q", args[0])
 	}
+}
+
+func isCommand(value string) bool {
+	switch value {
+	case "prepare", "inspect", "start", "finish":
+		return true
+	default:
+		return false
+	}
+}
+
+func writeHelp(output io.Writer) error {
+	_, err := fmt.Fprint(output, `usage: gr <prepare|inspect|start|finish> [flags]
+
+Lifecycle:
+  prepare → inspect → start → finish
+
+  prepare  freeze and display one WorkSpec; does not launch a provider
+  inspect  display prepared state or a later run receipt
+  start    explicitly request one prepared provider run; owner-assisted
+  finish   record explicit check results and stop for review
+
+Run "gr help <command>" or "gr <command> --help" for command flags.
+`)
+	return err
 }
 
 func productionService(stateDirectory string) (runService, error) {
@@ -98,6 +131,9 @@ func runPrepare(
 	filePath := set.String("file", "", "path to one WorkSpec JSON file")
 	stateDirectory := set.String("state-dir", "", "Goalrail local state directory")
 	if err := set.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
 		return err
 	}
 	if set.NArg() != 0 || strings.TrimSpace(*filePath) == "" {
@@ -141,6 +177,9 @@ func runInspect(
 	runID := set.String("run", "", "generated run ID")
 	stateDirectory := set.String("state-dir", "", "Goalrail local state directory")
 	if err := set.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
 		return err
 	}
 	if set.NArg() != 0 || (*digest == "") == (*runID == "") {
@@ -191,6 +230,9 @@ func runStart(
 	adapter := set.String("adapter", "", "provider adapter; v0 recognizes codex but is not activated")
 	stateDirectory := set.String("state-dir", "", "Goalrail local state directory")
 	if err := set.Parse(flags); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
 		return err
 	}
 	if set.NArg() != 0 || !validDigest(*digest) {
@@ -231,6 +273,9 @@ func runFinish(
 	var results resultFlags
 	set.Var(&results, "result", "check result: <id>=<pass|fail|unavailable>[,<evidence-ref>[,<sha256>]]")
 	if err := set.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
 		return err
 	}
 	if set.NArg() != 0 || !domain.IsCanonicalID(*runID) {

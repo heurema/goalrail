@@ -1,5 +1,5 @@
 // Package localrun coordinates one prepared, one-shot, trusted local run.
-// Production activation is deliberately absent in v0.
+// Non-fixture activation requires the exact one-time dogfood admission.
 package localrun
 
 import (

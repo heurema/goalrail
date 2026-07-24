@@ -1,9 +1,12 @@
 # Local Run v0
 
 `gr` is the provider-neutral operator surface for one prepared trusted local
-run. The v0 implementation is intentionally inert: it can prepare and inspect
-a WorkSpec, but every production `start` returns `ACTIVATION_REQUIRED` before a
-run ID, launch claim, or provider invocation.
+run. Its lifecycle is `prepare → inspect → start → finish`: the owner prepares
+and reviews the frozen WorkSpec, explicitly starts a separately authorized run,
+then reviews the bounded terminal receipt. The v0 implementation is
+intentionally inert by default: without a separately implemented exact
+activation boundary, every production `start` returns `ACTIVATION_REQUIRED`
+before a run ID, launch claim, or provider invocation.
 
 ## WorkSpec
 
@@ -17,6 +20,21 @@ prompts, transcripts, credentials, and source bodies are not WorkSpec fields.
 Check `argv` values are frozen instructions; `gr` does not execute them.
 
 ## Commands
+
+View the lifecycle and command list:
+
+```sh
+go run ./cmd/gr help
+```
+
+Every command also has built-in flag guidance:
+
+```sh
+go run ./cmd/gr help prepare
+go run ./cmd/gr start --help
+```
+
+Help does not prepare, launch, or mutate a run.
 
 Prepare and display the canonical snapshot and digest:
 

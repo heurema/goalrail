@@ -60,12 +60,13 @@ type RunInspection struct {
 }
 
 type Service struct {
-	store    *Store
-	observer WorktreeObserver
-	intent   IntentVerifier
-	adapter  Adapter
-	now      func() time.Time
-	newRunID func() (domain.RunID, error)
+	store     *Store
+	observer  WorktreeObserver
+	intent    IntentVerifier
+	adapter   Adapter
+	admission *dogfoodAdmission
+	now       func() time.Time
+	newRunID  func() (domain.RunID, error)
 }
 
 func NewService(store *Store, observer WorktreeObserver, intent IntentVerifier) *Service {
@@ -91,6 +92,28 @@ func NewFixtureService(
 	}
 	service := NewService(store, observer, intent)
 	service.adapter = adapter
+	return service, nil
+}
+
+// NewDogfoodService enables only the Codex adapter behind the fixed,
+// one-time admission record for activate-dogfood-run-v0. It does not create
+// the admission record or expose a reusable activation control.
+func NewDogfoodService(
+	store *Store,
+	observer WorktreeObserver,
+	intent IntentVerifier,
+	adapter Adapter,
+) (*Service, error) {
+	if adapter == nil || adapter.Name() != "codex" {
+		return nil, fmt.Errorf("dogfood service requires the Codex adapter")
+	}
+	admission, err := newDogfoodAdmission(store)
+	if err != nil {
+		return nil, err
+	}
+	service := NewService(store, observer, intent)
+	service.adapter = adapter
+	service.admission = admission
 	return service, nil
 }
 
@@ -221,6 +244,14 @@ func (service *Service) Start(ctx context.Context, input StartInput) (StartResul
 	}
 	if prepared.Claim != nil {
 		return StartResult{}, ErrLaunchAlreadyClaimed
+	}
+	if service.adapter.Name() != "fixture" {
+		if service.admission == nil {
+			return StartResult{}, ErrActivationRequired
+		}
+		if err := service.admission.consume(prepared.WorkSpec); err != nil {
+			return StartResult{}, err
+		}
 	}
 	runID, err := service.newRunID()
 	if err != nil {
