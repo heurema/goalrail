@@ -259,6 +259,47 @@ func TestDogfoodAdmissionMismatchFailsBeforeRunArtifacts(t *testing.T) {
 	}
 }
 
+func TestDogfoodAdmissionRejectsRepositoryDriftBeforeConsume(t *testing.T) {
+	adapter := &recordingCodexAdapter{result: ProviderObservation{
+		Outcome:        ProviderCompleted,
+		IdentityStatus: IdentityVerified,
+		RootSessionRef: "session-should-not-exist",
+	}}
+	service, spec, store := dogfoodServiceFixture(t, adapter, nil)
+	prepared := prepareFixture(t, service, spec)
+	writeDogfoodAdmission(
+		t,
+		store,
+		validDogfoodAdmission(prepared, dogfoodAdmissionChange),
+	)
+	frozenSpec := prepared.WorkSpec.Spec()
+	service.observer = &fixtureObserver{
+		root:     frozenSpec.Repository.Root,
+		revision: strings.Repeat("b", 40),
+	}
+	var idCalls atomic.Int32
+	service.newRunID = func() (domain.RunID, error) {
+		idCalls.Add(1)
+		return "run-should-not-exist", nil
+	}
+
+	if _, err := service.Start(context.Background(), StartInput{
+		WorkSpecDigest: prepared.WorkSpec.Digest(),
+		Adapter:        "codex",
+	}); !errors.Is(err, ErrActivationRequired) {
+		t.Fatalf("start error = %v, want ACTIVATION_REQUIRED", err)
+	}
+	if idCalls.Load() != 0 || adapter.calls.Load() != 0 {
+		t.Fatal("repository drift generated a run ID or invoked the adapter")
+	}
+	if _, err := os.Stat(
+		filepath.Join(store.Root(), dogfoodAdmissionConsumedName),
+	); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("repository drift consumed the admission record: %v", err)
+	}
+	assertNoDogfoodRunArtifacts(t, store, prepared.WorkSpec.Digest())
+}
+
 func TestDogfoodAdmissionConcurrentStartsInvokeAdapterAtMostOnce(t *testing.T) {
 	adapter := &recordingCodexAdapter{result: ProviderObservation{
 		Outcome:        ProviderCompleted,

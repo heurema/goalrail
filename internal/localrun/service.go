@@ -246,7 +246,18 @@ func (service *Service) Start(ctx context.Context, input StartInput) (StartResul
 		return StartResult{}, ErrLaunchAlreadyClaimed
 	}
 	if service.adapter.Name() != "fixture" {
-		if service.admission == nil {
+		if service.observer == nil || service.admission == nil {
+			return StartResult{}, ErrActivationRequired
+		}
+		spec := prepared.WorkSpec.Spec()
+		root, revision, err := service.observer.ResolveRepository(
+			ctx,
+			spec.Repository.Root,
+			spec.Repository.BaseRevision,
+		)
+		if err != nil ||
+			root != spec.Repository.Root ||
+			revision != spec.Repository.BaseRevision {
 			return StartResult{}, ErrActivationRequired
 		}
 		if err := service.admission.consume(prepared.WorkSpec); err != nil {
