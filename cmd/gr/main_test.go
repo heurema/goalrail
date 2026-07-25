@@ -167,6 +167,58 @@ func TestProductionStartIsActivationDeniedBeforeState(t *testing.T) {
 	}
 }
 
+func TestHelpDescribesLifecycleAndCommandFlagsWithoutService(t *testing.T) {
+	called := false
+	factory := func(string) (runService, error) {
+		called = true
+		return nil, errors.New("service must not be constructed for help")
+	}
+
+	var topLevel bytes.Buffer
+	if err := run(
+		context.Background(),
+		[]string{"help"},
+		bytes.NewReader(nil),
+		&topLevel,
+		io.Discard,
+		factory,
+	); err != nil {
+		t.Fatal(err)
+	}
+	for _, fragment := range []string{
+		"prepare → inspect → start → finish",
+		"gr help <command>",
+	} {
+		if !strings.Contains(topLevel.String(), fragment) {
+			t.Fatalf("top-level help missing %q: %s", fragment, topLevel.String())
+		}
+	}
+
+	for _, command := range []string{"prepare", "inspect", "start", "finish"} {
+		for _, args := range [][]string{{"help", command}, {command, "--help"}} {
+			t.Run(strings.Join(args, "_"), func(t *testing.T) {
+				var commandHelp bytes.Buffer
+				if err := run(
+					context.Background(),
+					args,
+					bytes.NewReader(nil),
+					io.Discard,
+					&commandHelp,
+					factory,
+				); err != nil {
+					t.Fatalf("%v: %v", args, err)
+				}
+				if !strings.Contains(commandHelp.String(), "Usage of") {
+					t.Fatalf("%v did not print flag guidance: %s", args, commandHelp.String())
+				}
+			})
+		}
+	}
+	if called {
+		t.Fatal("help constructed a service")
+	}
+}
+
 func TestStartAndFinishKeepAdapterArgumentsOutsideResults(t *testing.T) {
 	service := &commandService{
 		startResult: localrun.StartResult{
