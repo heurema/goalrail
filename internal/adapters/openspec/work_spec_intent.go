@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -59,7 +60,7 @@ func (IntentResolver) Verify(
 	if observedDigest != reference.Digest {
 		return fmt.Errorf("intent digest mismatch: expected %s, got %s", reference.Digest, observedDigest)
 	}
-	snapshot, err := ReadIntent(bytes.NewReader(raw))
+	snapshot, err := readResolvedIntent(root, resolvedArtifact, raw)
 	if err != nil {
 		return fmt.Errorf("read confirmed intent: %w", err)
 	}
@@ -76,6 +77,79 @@ func (IntentResolver) Verify(
 		)
 	}
 	return nil
+}
+
+func readResolvedIntent(
+	repositoryRoot string,
+	resolvedArtifact string,
+	rawIntent []byte,
+) (domain.IntentSnapshot, error) {
+	contextPath := filepath.Join(filepath.Dir(resolvedArtifact), "context.md")
+	resolvedContext, err := filepath.EvalSymlinks(contextPath)
+	if errors.Is(err, os.ErrNotExist) {
+		declaresContext, declarationErr := intentDeclaresContext(rawIntent)
+		if declarationErr != nil {
+			return domain.IntentSnapshot{}, declarationErr
+		}
+		if declaresContext {
+			return domain.IntentSnapshot{}, fmt.Errorf(
+				"%w: intent declares sibling context.md",
+				ErrContextRequired,
+			)
+		}
+		return ReadIntent(bytes.NewReader(rawIntent))
+	}
+	if err != nil {
+		return domain.IntentSnapshot{}, fmt.Errorf("resolve intent context: %w", err)
+	}
+	resolvedContext = filepath.Clean(resolvedContext)
+	if !pathWithin(repositoryRoot, resolvedContext) {
+		return domain.IntentSnapshot{}, fmt.Errorf("intent context escapes the repository")
+	}
+
+	file, err := os.Open(resolvedContext)
+	if err != nil {
+		return domain.IntentSnapshot{}, fmt.Errorf("open intent context: %w", err)
+	}
+	rawContext, readErr := io.ReadAll(io.LimitReader(file, MaxResolvedIntentBytes+1))
+	closeErr := file.Close()
+	if readErr != nil {
+		return domain.IntentSnapshot{}, fmt.Errorf("read intent context: %w", readErr)
+	}
+	if closeErr != nil {
+		return domain.IntentSnapshot{}, fmt.Errorf("close intent context: %w", closeErr)
+	}
+	if len(rawContext) > MaxResolvedIntentBytes {
+		return domain.IntentSnapshot{}, fmt.Errorf(
+			"intent context exceeds %d bytes",
+			MaxResolvedIntentBytes,
+		)
+	}
+
+	contextPack, err := ReadContext(bytes.NewReader(rawContext))
+	if err != nil {
+		return domain.IntentSnapshot{}, fmt.Errorf("read intent context: %w", err)
+	}
+	snapshot, err := readIntent(bytes.NewReader(rawIntent), &contextPack)
+	if err != nil {
+		return domain.IntentSnapshot{}, err
+	}
+	if err := domain.ValidateFlowIntentSnapshot(snapshot); err != nil {
+		return domain.IntentSnapshot{}, fmt.Errorf("validate OpenSpec flow intent: %w", err)
+	}
+	return snapshot, nil
+}
+
+func intentDeclaresContext(rawIntent []byte) (bool, error) {
+	document, err := readMarkdownDocument(bytes.NewReader(rawIntent))
+	if err != nil {
+		return false, err
+	}
+	metadata, err := parseBoldMetadata(document.preamble)
+	if err != nil {
+		return false, err
+	}
+	return cleanInline(metadata["context pack"]) != "", nil
 }
 
 func pathWithin(root, candidate string) bool {
