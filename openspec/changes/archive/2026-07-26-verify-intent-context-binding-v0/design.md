@@ -37,9 +37,11 @@ Preparation-time enforcement is a property of preparation, not a separate capabi
 
 `changeRequiresContext` already encodes the distinction: a current change under the project intent schema always requires a pack, an archived change requires one only when its intent declares it, and another schema does not. Preparation calls that same function, so the two paths cannot drift. The intent's own declaration remains an additional trigger for changes the loader does not cover.
 
-### 4. Guard both bounded reads, not only the reported one
+### 4. Guard both bounded reads, and guard them on the descriptor
 
-The FIFO finding named the Context Pack read, but the intent artifact is opened by the same pattern in the same call path. A guard on only one would leave an identical hang reachable through the other, so `requireRegularFile` is applied to both. It uses `Lstat` on an already symlink-resolved path, so a symlink appearing between resolution and open is rejected rather than followed.
+The FIFO finding named the Context Pack read, but the intent artifact is opened by the same pattern in the same call path. A guard on only one would leave an identical hang reachable through the other, so both reads go through `readBoundedRegularFile`.
+
+The first attempt checked the pathname with `Lstat` and then opened it. Review showed that sequence is racy: a concurrent local process can replace the checked path between the two calls, so a substituted pipe would still block the open and a substituted symbolic link would let the read leave the verified repository boundary. The guarantee is therefore made on the descriptor instead. The artifact is opened with `O_NOFOLLOW`, which rejects a substituted link, and `O_NONBLOCK`, which keeps a substituted pipe from blocking; the descriptor that is then inspected with `Stat` is the same one that is read. A pathname check cannot provide this, so the requirement states the descriptor property rather than an ordering that a race can invalidate.
 
 ### 5. Amend the snapshot rather than remove the implementation
 
@@ -66,7 +68,8 @@ The alternative to version 2 was splitting the implementation out of this change
 
 - **[Specification could drift from implementation]** → Each scenario is written against an observed test, and the boundary wording was corrected to the order `Service.Prepare` actually uses.
 - **[Reusing the loader's rule couples two paths]** → That coupling is the point: it is what prevents the bypass. If the rule changes, both paths change together.
-- **[The regular-file guard could reject a legitimate artifact]** → Only non-regular artifacts are rejected; a regular file reached through symlinks still resolves, because resolution happens before the guard.
+- **[The regular-file guard could reject a legitimate artifact]** → Only non-regular artifacts are rejected; a regular file reached through symlinks still resolves, because `EvalSymlinks` runs before the guard and the guard opens the already-resolved path.
+- **[`O_NOFOLLOW` protects only the final path component]** → An intermediate directory substituted during resolution is not covered. That is a deeper hardening question about the resolution step itself, and is deliberately left outside this slice rather than claimed by the requirement.
 - **[Modifying a requirement rewrites its intent annotation]** → The `Intent IDs` line moves to this change's intent, following the convention already used when a promoted requirement is modified. The prior annotation remains readable in the archived change that introduced it.
 - **[Two changes touch the same capability file]** → Deltas apply to the promoted spec only at archive time. The merged hook-linkage change modified a different requirement, so the delta still applies; whichever archives second must re-read the promoted text first.
 

@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/heurema/goalrail/internal/domain"
 )
@@ -39,23 +40,9 @@ func (IntentResolver) Verify(
 		return fmt.Errorf("intent artifact escapes the repository")
 	}
 
-	if err := requireRegularFile(resolvedArtifact, "intent artifact"); err != nil {
-		return err
-	}
-	file, err := os.Open(resolvedArtifact)
+	raw, err := readBoundedRegularFile(resolvedArtifact, "intent artifact")
 	if err != nil {
-		return fmt.Errorf("open intent artifact: %w", err)
-	}
-	raw, readErr := io.ReadAll(io.LimitReader(file, MaxResolvedIntentBytes+1))
-	closeErr := file.Close()
-	if readErr != nil {
-		return fmt.Errorf("read intent artifact: %w", readErr)
-	}
-	if closeErr != nil {
-		return fmt.Errorf("close intent artifact: %w", closeErr)
-	}
-	if len(raw) > MaxResolvedIntentBytes {
-		return fmt.Errorf("intent artifact exceeds %d bytes", MaxResolvedIntentBytes)
+		return err
 	}
 
 	sum := sha256.Sum256(raw)
@@ -101,26 +88,9 @@ func readResolvedIntent(
 		return domain.IntentSnapshot{}, fmt.Errorf("intent context escapes the repository")
 	}
 
-	if err := requireRegularFile(resolvedContext, "intent context"); err != nil {
-		return domain.IntentSnapshot{}, err
-	}
-	file, err := os.Open(resolvedContext)
+	rawContext, err := readBoundedRegularFile(resolvedContext, "intent context")
 	if err != nil {
-		return domain.IntentSnapshot{}, fmt.Errorf("open intent context: %w", err)
-	}
-	rawContext, readErr := io.ReadAll(io.LimitReader(file, MaxResolvedIntentBytes+1))
-	closeErr := file.Close()
-	if readErr != nil {
-		return domain.IntentSnapshot{}, fmt.Errorf("read intent context: %w", readErr)
-	}
-	if closeErr != nil {
-		return domain.IntentSnapshot{}, fmt.Errorf("close intent context: %w", closeErr)
-	}
-	if len(rawContext) > MaxResolvedIntentBytes {
-		return domain.IntentSnapshot{}, fmt.Errorf(
-			"intent context exceeds %d bytes",
-			MaxResolvedIntentBytes,
-		)
+		return domain.IntentSnapshot{}, err
 	}
 
 	contextPack, err := ReadContext(bytes.NewReader(rawContext))
@@ -169,18 +139,39 @@ func readIntentWithoutContext(
 	return ReadIntent(bytes.NewReader(rawIntent))
 }
 
-// requireRegularFile rejects a non-regular artifact before it is opened. A FIFO
-// would otherwise block os.Open until a writer connects, so preparation would
-// hang instead of failing with a bounded reason.
-func requireRegularFile(path string, label string) error {
-	info, err := os.Lstat(path)
+// readBoundedRegularFile opens an already resolved artifact and reads it under
+// the shared size bound.
+//
+// The regular-file check is made on the open descriptor rather than on the
+// pathname, because a check-then-open sequence can be raced: replacing the
+// checked path with a FIFO would still block the open, and replacing it with a
+// symlink would let the read leave the verified repository boundary. Opening
+// with O_NOFOLLOW rejects a substituted symlink, O_NONBLOCK keeps a substituted
+// FIFO from blocking, and the descriptor that is then inspected is the one that
+// is read.
+func readBoundedRegularFile(path string, label string) ([]byte, error) {
+	file, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
 	if err != nil {
-		return fmt.Errorf("stat %s: %w", label, err)
+		return nil, fmt.Errorf("open %s: %w", label, err)
+	}
+	defer file.Close()
+
+	info, err := file.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("stat %s: %w", label, err)
 	}
 	if !info.Mode().IsRegular() {
-		return fmt.Errorf("%s is not a regular file", label)
+		return nil, fmt.Errorf("%s is not a regular file", label)
 	}
-	return nil
+
+	raw, err := io.ReadAll(io.LimitReader(file, MaxResolvedIntentBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", label, err)
+	}
+	if len(raw) > MaxResolvedIntentBytes {
+		return nil, fmt.Errorf("%s exceeds %d bytes", label, MaxResolvedIntentBytes)
+	}
+	return raw, nil
 }
 
 func intentDeclaresContext(rawIntent []byte) (bool, error) {

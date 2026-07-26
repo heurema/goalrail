@@ -6,12 +6,19 @@
 The `gr` operator surface SHALL resolve and validate the requested WorkSpec, freeze its canonical content, and display the exact snapshot and digest before launch. Preparation MUST NOT launch a provider or mutate the target repository worktree.
 
 Before any prepared state is persisted, preparation SHALL verify the exact
-referenced confirmed intent bytes and digest, and SHALL parse that intent
-against the Context Pack of its change. The intent artifact and its Context
-Pack MUST both resolve inside the canonical repository root, MUST each be a
-regular file, and MUST each remain within the same bounded artifact size limit.
-A non-regular artifact MUST be rejected before it is opened, so preparation
-fails with a bounded reason instead of blocking.
+referenced confirmed intent bytes and digest. When a Context Pack is present or
+required, preparation SHALL additionally parse that intent against the pack,
+and the pack MUST resolve inside the canonical repository root. The intent
+artifact, and every Context Pack that is read, MUST resolve inside the
+canonical repository root, MUST be a regular file, and MUST remain within the
+same bounded artifact size limit.
+
+Rejection of a non-regular artifact MUST NOT depend on a check that a
+concurrent local process can invalidate before the artifact is read. Reading
+SHALL therefore inspect the same open descriptor it reads from, and SHALL open
+in a way that neither follows a substituted symbolic link nor blocks on a
+substituted pipe. Preparation fails with a bounded reason instead of blocking
+or reading outside the verified boundary.
 
 A Context Pack SHALL be required whenever the change loader would require one:
 a current change under the project intent schema always requires it, an
@@ -52,5 +59,9 @@ canonical WorkSpec.
 - **THEN** preparation verifies the intent alone and continues without requiring a pack
 
 #### Scenario: Intent artifact or Context Pack is not a regular file
-- **WHEN** either artifact resolves to a FIFO, device, directory, or other non-regular file
-- **THEN** preparation rejects it with a bounded reason before opening it, and does not block waiting for the artifact
+- **WHEN** either artifact is a FIFO, device, directory, or other non-regular file
+- **THEN** preparation rejects it with a bounded reason and does not block waiting for the artifact
+
+#### Scenario: An artifact is substituted after it is resolved
+- **WHEN** a concurrent local process replaces a resolved artifact with a symbolic link or a pipe between resolution and reading
+- **THEN** preparation rejects it rather than following the link outside the verified boundary or blocking on the pipe, because the regular-file check inspects the same descriptor that is read
