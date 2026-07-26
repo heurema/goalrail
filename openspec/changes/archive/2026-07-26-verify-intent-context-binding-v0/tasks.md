@@ -16,8 +16,9 @@
 
 - [x] 3.1 Call `changeRequiresContext` from the missing-context path so preparation and the change loader cannot drift.
 - [x] 3.2 Keep the intent's own Context Pack declaration as an additional trigger for changes the loader does not cover.
-- [x] 3.3 Add `requireRegularFile` and apply it to both bounded reads, using `Lstat` on the already symlink-resolved path.
-- [x] 3.4 Add regression tests: a current project-schema change without a pack is rejected; an archived change without one and a change under another schema still succeed; a FIFO supplied as either artifact fails with a bounded reason under a deadline.
+- [x] 3.3 Route both bounded reads through `readBoundedRegularFile`, which opens with `O_NOFOLLOW` and `O_NONBLOCK` and inspects the same descriptor it reads, so the guarantee cannot be raced by a substituted link or pipe.
+- [x] 3.5 Qualify the requirement so the artifact clauses apply to the Context Pack only when one is present or required, keeping it consistent with the supported no-pack path.
+- [x] 3.4 Add regression tests: a current project-schema change without a pack is rejected; an archived change without one and a change under another schema still succeed; a FIFO supplied as either artifact fails with a bounded reason under a deadline; and the read primitive rejects a substituted symbolic link, does not block on a substituted pipe, and still reads a regular file.
 
 ## 4. Verify
 
