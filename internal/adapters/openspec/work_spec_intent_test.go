@@ -3,6 +3,7 @@ package openspec
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +11,97 @@ import (
 
 	"github.com/heurema/goalrail/internal/domain"
 )
+
+// writeIntentChange lays out one OpenSpec change directory and returns the
+// WorkSpec reference that names its intent artifact.
+func writeIntentChange(
+	t *testing.T,
+	root string,
+	changeRelative string,
+	schema string,
+	intent string,
+) domain.WorkSpecIntentReference {
+	t.Helper()
+
+	changeDir := filepath.Join(root, filepath.FromSlash(changeRelative))
+	if err := os.MkdirAll(changeDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if schema != "" {
+		metadata := []byte("schema: " + schema + "\ncreated: 2026-07-25\n")
+		if err := os.WriteFile(filepath.Join(changeDir, ".openspec.yaml"), metadata, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	raw := []byte(intent)
+	if err := os.WriteFile(filepath.Join(changeDir, "intent.md"), raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(raw)
+	return domain.WorkSpecIntentReference{
+		ID:          "INTENT-TEST",
+		Version:     1,
+		ArtifactRef: changeRelative + "/intent.md",
+		Digest:      "sha256:" + hex.EncodeToString(sum[:]),
+	}
+}
+
+func TestIntentResolverRequiresContextForCurrentSchemaChange(t *testing.T) {
+	// Omitting both the Context Pack declaration and context.md must not
+	// bypass verification for a current change under the project schema.
+	root := t.TempDir()
+	reference := writeIntentChange(
+		t,
+		root,
+		"openspec/changes/test-change",
+		"goalrail-intent",
+		minimalIntent("confirmed", "None.", true),
+	)
+
+	err := (IntentResolver{}).Verify(root, reference)
+	if err == nil {
+		t.Fatal("expected rejection when a current project-schema change omits its Context Pack")
+	}
+	if !errors.Is(err, ErrContextRequired) {
+		t.Fatalf("error = %v, want ErrContextRequired", err)
+	}
+}
+
+func TestIntentResolverAllowsMissingContextOutsideCurrentSchema(t *testing.T) {
+	tests := []struct {
+		name           string
+		changeRelative string
+		schema         string
+	}{
+		{
+			name:           "archived project-schema change declaring no pack",
+			changeRelative: "openspec/changes/archive/2026-07-01-test-change",
+			schema:         "goalrail-intent",
+		},
+		{
+			name:           "change under another schema",
+			changeRelative: "openspec/changes/test-change",
+			schema:         "spec-driven",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			root := t.TempDir()
+			reference := writeIntentChange(
+				t,
+				root,
+				test.changeRelative,
+				test.schema,
+				minimalIntent("confirmed", "None.", true),
+			)
+
+			if err := (IntentResolver{}).Verify(root, reference); err != nil {
+				t.Fatalf("unexpected rejection: %v", err)
+			}
+		})
+	}
+}
 
 func TestIntentResolverVerifiesConfirmedIdentityAndDigest(t *testing.T) {
 	root := t.TempDir()

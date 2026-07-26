@@ -39,6 +39,9 @@ func (IntentResolver) Verify(
 		return fmt.Errorf("intent artifact escapes the repository")
 	}
 
+	if err := requireRegularFile(resolvedArtifact, "intent artifact"); err != nil {
+		return err
+	}
 	file, err := os.Open(resolvedArtifact)
 	if err != nil {
 		return fmt.Errorf("open intent artifact: %w", err)
@@ -84,20 +87,11 @@ func readResolvedIntent(
 	resolvedArtifact string,
 	rawIntent []byte,
 ) (domain.IntentSnapshot, error) {
-	contextPath := filepath.Join(filepath.Dir(resolvedArtifact), "context.md")
+	changeDir := filepath.Dir(resolvedArtifact)
+	contextPath := filepath.Join(changeDir, "context.md")
 	resolvedContext, err := filepath.EvalSymlinks(contextPath)
 	if errors.Is(err, os.ErrNotExist) {
-		declaresContext, declarationErr := intentDeclaresContext(rawIntent)
-		if declarationErr != nil {
-			return domain.IntentSnapshot{}, declarationErr
-		}
-		if declaresContext {
-			return domain.IntentSnapshot{}, fmt.Errorf(
-				"%w: intent declares sibling context.md",
-				ErrContextRequired,
-			)
-		}
-		return ReadIntent(bytes.NewReader(rawIntent))
+		return readIntentWithoutContext(changeDir, rawIntent)
 	}
 	if err != nil {
 		return domain.IntentSnapshot{}, fmt.Errorf("resolve intent context: %w", err)
@@ -107,6 +101,9 @@ func readResolvedIntent(
 		return domain.IntentSnapshot{}, fmt.Errorf("intent context escapes the repository")
 	}
 
+	if err := requireRegularFile(resolvedContext, "intent context"); err != nil {
+		return domain.IntentSnapshot{}, err
+	}
 	file, err := os.Open(resolvedContext)
 	if err != nil {
 		return domain.IntentSnapshot{}, fmt.Errorf("open intent context: %w", err)
@@ -138,6 +135,52 @@ func readResolvedIntent(
 		return domain.IntentSnapshot{}, fmt.Errorf("validate OpenSpec flow intent: %w", err)
 	}
 	return snapshot, nil
+}
+
+// readIntentWithoutContext handles an intent whose sibling context.md is
+// absent. It applies the same schema-aware distinction as changeRequiresContext
+// so that omitting both the Context Pack declaration and the artifact cannot
+// bypass verification for a current change under the project intent schema.
+func readIntentWithoutContext(
+	changeDir string,
+	rawIntent []byte,
+) (domain.IntentSnapshot, error) {
+	required, err := changeRequiresContext(changeDir)
+	if err != nil {
+		return domain.IntentSnapshot{}, err
+	}
+	if required {
+		return domain.IntentSnapshot{}, fmt.Errorf(
+			"%w: change requires a sibling context.md",
+			ErrContextRequired,
+		)
+	}
+
+	declaresContext, err := intentDeclaresContext(rawIntent)
+	if err != nil {
+		return domain.IntentSnapshot{}, err
+	}
+	if declaresContext {
+		return domain.IntentSnapshot{}, fmt.Errorf(
+			"%w: intent declares sibling context.md",
+			ErrContextRequired,
+		)
+	}
+	return ReadIntent(bytes.NewReader(rawIntent))
+}
+
+// requireRegularFile rejects a non-regular artifact before it is opened. A FIFO
+// would otherwise block os.Open until a writer connects, so preparation would
+// hang instead of failing with a bounded reason.
+func requireRegularFile(path string, label string) error {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return fmt.Errorf("stat %s: %w", label, err)
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("%s is not a regular file", label)
+	}
+	return nil
 }
 
 func intentDeclaresContext(rawIntent []byte) (bool, error) {
