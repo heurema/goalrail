@@ -63,5 +63,5 @@
 - [x] 8.1 Obtain an explicit owner instruction before beginning implementation.
 - [x] 8.2 Obtain a separate explicit owner instruction before committing.
 - [x] 8.3 Obtain a separate explicit owner instruction before pushing and opening a pull request; merging remains ungranted.
-- [ ] 8.4 Obtain a separate explicit owner instruction before archiving this change and promoting the delta; re-read the promoted text immediately before promotion in case another change archived first.
+- [x] 8.4 Obtain a separate explicit owner instruction before archiving this change and promoting the delta; re-read the promoted text immediately before promotion in case another change archived first. The promoted specs were confirmed unchanged since the deltas were authored, so both modified requirements applied to the text they were written against.
 - [ ] 8.5 Obtain a separate explicit owner authorization before any live session or provider run is treated as evidence. One live session closes the recorded limits together: hook behaviour end to end, announcement delivery, and the reserved path's writability.
