@@ -27,6 +27,8 @@ type recordingCodexAdapter struct {
 func (*recordingCodexAdapter) Name() string    { return "codex" }
 func (*recordingCodexAdapter) Version() string { return "local-test-v0" }
 
+func (*recordingCodexAdapter) VerifyAnnouncementDelivery() error { return nil }
+
 func (adapter *recordingCodexAdapter) Launch(
 	_ context.Context,
 	request LaunchRequest,

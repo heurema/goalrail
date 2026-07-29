@@ -657,6 +657,8 @@ type escalatingFixtureAdapter struct {
 func (*escalatingFixtureAdapter) Name() string    { return "fixture" }
 func (*escalatingFixtureAdapter) Version() string { return "v0" }
 
+func (*escalatingFixtureAdapter) VerifyAnnouncementDelivery() error { return nil }
+
 func (adapter *escalatingFixtureAdapter) Launch(
 	_ context.Context,
 	_ LaunchRequest,

@@ -278,6 +278,13 @@ func (service *Service) Start(ctx context.Context, input StartInput) (StartResul
 			return StartResult{}, err
 		}
 	}
+	// A run that cannot be told about the escalation channel cannot use it, and
+	// would return to guessing while still producing an ordinary receipt. Fail
+	// before any run ID or launch claim exists.
+	if err := service.adapter.VerifyAnnouncementDelivery(); err != nil {
+		return StartResult{}, fmt.Errorf("%w: %w", ErrAnnouncementUndeliverable, err)
+	}
+
 	// A prepared run is reused rather than re-observed, and it can be started
 	// long after preparation froze its baseline. An artifact that appears in
 	// that window belongs to no provider, so it must not reach a launch.
@@ -324,12 +331,13 @@ func (service *Service) Start(ctx context.Context, input StartInput) (StartResul
 	}
 
 	observation := service.adapter.Launch(ctx, LaunchRequest{
-		RunID:     runID,
-		WorkSpec:  prepared.WorkSpec,
-		Arguments: append([]string(nil), input.Arguments...),
-		Stdin:     input.Stdin,
-		Stdout:    input.Stdout,
-		Stderr:    input.Stderr,
+		RunID:                  runID,
+		WorkSpec:               prepared.WorkSpec,
+		Arguments:              append([]string(nil), input.Arguments...),
+		EscalationAnnouncement: EscalationAnnouncement,
+		Stdin:                  input.Stdin,
+		Stdout:                 input.Stdout,
+		Stderr:                 input.Stderr,
 	})
 	observation.WorkSpecDigest = input.WorkSpecDigest
 	observation.RunID = runID
@@ -903,6 +911,11 @@ type FixtureAdapter struct {
 
 func (FixtureAdapter) Name() string    { return "fixture" }
 func (FixtureAdapter) Version() string { return "v0" }
+
+// VerifyAnnouncementDelivery reports that the fixture can carry the
+// announcement: it hands the launch request straight to the recorded
+// behaviour, so nothing is lost in transport.
+func (FixtureAdapter) VerifyAnnouncementDelivery() error { return nil }
 
 func (adapter FixtureAdapter) Launch(
 	_ context.Context,

@@ -143,14 +143,28 @@ type LaunchRequest struct {
 	RunID     domain.RunID
 	WorkSpec  domain.FrozenWorkSpec
 	Arguments []string
-	Stdin     io.Reader
-	Stdout    io.Writer
-	Stderr    io.Writer
+
+	// EscalationAnnouncement is the provider-neutral text telling the run that
+	// the escalation channel exists. The adapter delivers it in the terms of its
+	// own provider contract; it may not alter the content.
+	EscalationAnnouncement string
+
+	Stdin  io.Reader
+	Stdout io.Writer
+	Stderr io.Writer
 }
 
 type Adapter interface {
 	Name() string
 	Version() string
+
+	// VerifyAnnouncementDelivery reports whether this adapter can tell a run
+	// that the escalation channel exists. Start calls it before launching and
+	// refuses to launch when it returns an error, because a run whose
+	// escalation channel is unreachable guesses and still produces an
+	// ordinary-looking receipt.
+	VerifyAnnouncementDelivery() error
+
 	Launch(context.Context, LaunchRequest) ProviderObservation
 }
 

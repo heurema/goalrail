@@ -98,10 +98,11 @@ func TestLocalRunAdapterIsInjectedAndRetainsNoRawPayload(t *testing.T) {
 	}
 	var stdout bytes.Buffer
 	observation := adapter.Launch(context.Background(), localrun.LaunchRequest{
-		RunID:     "run-one",
-		WorkSpec:  frozen,
-		Arguments: []string{"--sandbox", "workspace-write"},
-		Stdout:    &stdout,
+		RunID:                  "run-one",
+		WorkSpec:               frozen,
+		Arguments:              []string{"--sandbox", "workspace-write"},
+		EscalationAnnouncement: localrun.EscalationAnnouncement,
+		Stdout:                 &stdout,
 	})
 	if observation.Outcome != localrun.ProviderCompleted ||
 		observation.IdentityStatus != localrun.IdentityVerified ||
@@ -117,9 +118,16 @@ func TestLocalRunAdapterIsInjectedAndRetainsNoRawPayload(t *testing.T) {
 	if launcher.request.Directory != frozen.Spec().Repository.Root {
 		t.Fatalf("directory = %q", launcher.request.Directory)
 	}
-	if len(launcher.request.Environment) != 2 ||
-		!strings.HasPrefix(launcher.request.Environment[1], LocalRunContextEnvironment+"=") {
+	if len(launcher.request.Environment) != 3 ||
+		!strings.HasPrefix(launcher.request.Environment[1], LocalRunContextEnvironment+"=") ||
+		!strings.HasPrefix(launcher.request.Environment[2], EscalationAnnouncementEnvironment+"=") {
 		t.Fatalf("environment = %v", launcher.request.Environment)
+	}
+	// The announcement travels verbatim: the adapter carries it, it does not
+	// compose or edit it.
+	if launcher.request.Environment[2] !=
+		EscalationAnnouncementEnvironment+"="+localrun.EscalationAnnouncement {
+		t.Fatal("the adapter altered the announcement in transit")
 	}
 	encoded, err := json.Marshal(observation)
 	if err != nil {
@@ -144,8 +152,9 @@ func TestLocalRunAdapterRejectsCredentialEnvironmentAndMissingIdentity(t *testin
 		t.Fatal(err)
 	}
 	observation := adapter.Launch(context.Background(), localrun.LaunchRequest{
-		RunID:    "run-one",
-		WorkSpec: testFrozenWorkSpec(t),
+		RunID:                  "run-one",
+		WorkSpec:               testFrozenWorkSpec(t),
+		EscalationAnnouncement: localrun.EscalationAnnouncement,
 	})
 	if observation.IdentityStatus != localrun.IdentityUnlinked ||
 		observation.Reason != ReasonInvalidHookInput {

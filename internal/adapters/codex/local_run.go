@@ -249,6 +249,13 @@ func NewLocalRunAdapter(
 func (*LocalRunAdapter) Name() string    { return "codex" }
 func (*LocalRunAdapter) Version() string { return LocalRunAdapterVersion }
 
+// VerifyAnnouncementDelivery reports that this adapter can tell a run the
+// escalation channel exists. Delivery reuses the SessionStart hook Goalrail
+// already renders for lineage: the announcement travels the invocation
+// environment to the capsule, which returns it as the session's additional
+// context.
+func (*LocalRunAdapter) VerifyAnnouncementDelivery() error { return nil }
+
 func (adapter *LocalRunAdapter) Launch(
 	ctx context.Context,
 	request localrun.LaunchRequest,
@@ -267,8 +274,15 @@ func (adapter *LocalRunAdapter) Launch(
 	if err != nil {
 		return invalidLaunchObservation("INVALID_RUN_CONTEXT")
 	}
+	if request.EscalationAnnouncement == "" {
+		return invalidLaunchObservation("MISSING_ESCALATION_ANNOUNCEMENT")
+	}
 	environment := append([]string(nil), adapter.baseEnvironment...)
 	environment = append(environment, LocalRunContextEnvironment+"="+encodedContext)
+	environment = append(
+		environment,
+		EscalationAnnouncementEnvironment+"="+request.EscalationAnnouncement,
+	)
 	processResult := adapter.launcher.Launch(ctx, ProcessRequest{
 		Directory:   spec.Repository.Root,
 		Arguments:   append([]string(nil), request.Arguments...),
