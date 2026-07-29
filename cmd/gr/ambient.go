@@ -96,7 +96,46 @@ func runConnect(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	return writeJSON(stdout, map[string]any{"plan": plan, "applied": changed})
+	return writeJSON(stdout, map[string]any{
+		"plan":    plan,
+		"applied": changed,
+		// Registration alone does not make the attachment act. Saying nothing
+		// here is the worst outcome available: the user connects, works, sees
+		// nothing happen, and reasonably concludes Goalrail is broken.
+		"notice":        ambient.ConnectionNotice(selected),
+		"trust_surface": ambient.TrustSurface(selected),
+		"active_now":    false,
+	})
+}
+
+func runHealth(args []string, stdout, stderr io.Writer) error {
+	set := flag.NewFlagSet("health", flag.ContinueOnError)
+	set.SetOutput(stderr)
+	scaffold := set.String("scaffold", string(ambient.ScaffoldCodex), "codex or claude-code")
+	repository := set.String("repo", ".", "repository to check")
+	if err := set.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
+		return err
+	}
+	selected, err := parseScaffold(*scaffold)
+	if err != nil {
+		return err
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	root, err := filepath.Abs(*repository)
+	if err != nil {
+		return err
+	}
+	state, err := ambient.Inspect(selected, home, root)
+	if err != nil {
+		return err
+	}
+	return writeJSON(stdout, state)
 }
 
 func runDisconnect(args []string, stdout, stderr io.Writer) error {

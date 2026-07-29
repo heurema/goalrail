@@ -274,3 +274,92 @@ func TestHookDoesNotReadThePayloadInAnUninitializedDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestConnectOutputDisclosesTheTrustStep(t *testing.T) {
+	// Without this the user connects, works, observes nothing, and reasonably
+	// concludes the product is broken. That happened during live verification.
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	var stdout bytes.Buffer
+	if err := run(
+		context.Background(),
+		[]string{"connect", "--scaffold", "codex", "--yes"},
+		strings.NewReader(""),
+		&stdout,
+		&bytes.Buffer{},
+		productionService,
+	); err != nil {
+		t.Fatal(err)
+	}
+	var decoded struct {
+		Applied      bool   `json:"applied"`
+		Notice       string `json:"notice"`
+		TrustSurface string `json:"trust_surface"`
+		ActiveNow    bool   `json:"active_now"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if !decoded.Applied || decoded.ActiveNow {
+		t.Fatalf("connect reported %+v", decoded)
+	}
+	for _, required := range []string{"not yet active", "trust", "does nothing"} {
+		if !strings.Contains(strings.ToLower(decoded.Notice), required) {
+			t.Fatalf("notice omits %q: %s", required, decoded.Notice)
+		}
+	}
+	if decoded.TrustSurface == "" {
+		t.Fatal("connect did not name where the user grants trust")
+	}
+}
+
+func TestHealthCommandReportsWhatIsMissing(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	directory := t.TempDir()
+	var stdout bytes.Buffer
+	if err := run(
+		context.Background(),
+		[]string{"health", "--scaffold", "codex", "--repo", directory},
+		strings.NewReader(""),
+		&stdout,
+		&bytes.Buffer{},
+		productionService,
+	); err != nil {
+		t.Fatal(err)
+	}
+	var decoded struct {
+		Connected  bool   `json:"connected"`
+		Working    bool   `json:"working"`
+		NextAction string `json:"next_action"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded.Connected || decoded.Working {
+		t.Fatalf("health reported %+v on an unconnected scaffold", decoded)
+	}
+	if !strings.Contains(decoded.NextAction, "gr connect") {
+		t.Fatalf("health did not name the next action: %q", decoded.NextAction)
+	}
+}
+
+func TestHelpPresentsHealthAndTheTrustStep(t *testing.T) {
+	var stdout bytes.Buffer
+	if err := run(
+		context.Background(),
+		[]string{"help"},
+		strings.NewReader(""),
+		&stdout,
+		&bytes.Buffer{},
+		productionService,
+	); err != nil {
+		t.Fatal(err)
+	}
+	text := stdout.String()
+	for _, required := range []string{"health", "trust", "nothing runs until"} {
+		if !strings.Contains(strings.ToLower(text), required) {
+			t.Fatalf("help omits %q:\n%s", required, text)
+		}
+	}
+}
