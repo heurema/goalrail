@@ -67,5 +67,5 @@
 - [x] 8.1 Obtain an explicit owner instruction before beginning implementation.
 - [x] 8.2 Obtain a separate explicit owner instruction before committing.
 - [x] 8.3 Obtain a separate explicit owner instruction before pushing and opening a pull request; merging remains ungranted.
-- [ ] 8.4 Obtain a separate explicit owner instruction before archiving this change and promoting the deltas; re-read the promoted text immediately before promotion in case another change archived first.
+- [x] 8.4 Obtain a separate explicit owner instruction before archiving this change and promoting the deltas; re-read the promoted text immediately before promotion in case another change archived first. The promoted specs were confirmed unchanged since the deltas were written, so both modified requirements applied to the text they were authored against.
 - [ ] 8.5 Obtain a separate explicit owner authorization before any real provider run; planning and implementation completion authorize none.
