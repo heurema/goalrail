@@ -109,19 +109,20 @@ Confirmation of an Intent Snapshot SHALL express what the owner wants but SHALL 
 - **THEN** downstream execution still requires a separate applicable task grant and enforcement check before that effect
 
 ### Requirement: An answering intent version records the escalation it resolves
-**Intent IDs:** OUT-5, SIG-5
+**Intent IDs:** OUT-5
 
 An Intent Snapshot version created in response to a blocked run MAY record the
-escalation it answers as lifecycle provenance: the run identifier and the digest
-of the retained escalation bytes, together with one disposition of `answered`,
-`spurious`, or `withdrawn`. The record is optional, is provenance rather than a
-fourth semantic intent group, and MUST NOT be added to a previously confirmed
-version — answering a blocked run creates a new version.
+escalation it answers as lifecycle provenance: the canonical identifier of what
+is being resolved — a blocked run or a background question record — and the
+digest of the retained escalation bytes, together with one disposition of
+`answered`, `spurious`, or `withdrawn`. The record is optional, is provenance
+rather than a fourth semantic intent group, and MUST NOT be added to a
+previously confirmed version — answering creates a new version.
 
-When the record is present, validation SHALL reject a malformed run identifier,
-a malformed digest, an unknown disposition, or a duplicate record within one
-version. An absent record MUST NOT block confirmation, and its absence MUST NOT
-be inferred as any particular disposition.
+When the record is present, validation SHALL reject a malformed resolved
+reference, a malformed digest, an unknown disposition, or a duplicate record
+within one version. An absent record MUST NOT block confirmation, and its
+absence MUST NOT be inferred as any particular disposition.
 
 Adding, removing, or changing the record is a material change. A wording-only
 amendment SHALL preserve it exactly, so a version that is already confirmed
@@ -135,12 +136,16 @@ version answers; it does not authorize a run, a launch, or any external effect.
 - **WHEN** a new intent version is created to resolve a blocked run
 - **THEN** it may record that run identifier, the retained escalation digest, and the disposition `answered`, while the prior confirmed version remains unmodified
 
+#### Scenario: Owner answers a background question
+- **WHEN** a new intent version is created to resolve a question recorded by a background session
+- **THEN** it records the question record's own identifier through the same field, because a background session has no run to name
+
 #### Scenario: The question should not have been asked
-- **WHEN** the owner judges a blocked run's question unnecessary or already answered
+- **WHEN** the owner judges a recorded question unnecessary or already answered
 - **THEN** the answering version records the disposition `spurious` or `withdrawn`, making a low-value escalation visible and countable rather than invisible
 
 #### Scenario: The record is malformed
-- **WHEN** a recorded escalation reference carries a malformed run identifier, a malformed digest, an unknown disposition, or a duplicate entry
+- **WHEN** a recorded escalation reference carries a malformed resolved reference, a malformed digest, an unknown disposition, or a duplicate entry
 - **THEN** validation rejects the version and does not silently drop the record
 
 #### Scenario: A wording-only edit would acquire or alter the record
