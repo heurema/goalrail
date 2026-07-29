@@ -87,6 +87,50 @@ go run ./cmd/gr finish \
 checks, stage files, commit, push, create a pull request, deploy, publish, or
 perform another effect.
 
+## Blocked runs
+
+A run can end because the work item cannot be completed as specified. The run
+writes its question to one reserved repository-relative path,
+`.goalrail/blocked.md`, and leaves the declared scope untouched. The terminal
+status is then `blocked`: no implementation exists and an owner decision is
+required.
+
+`blocked` is terminal. Answering never resumes the run — the answer creates a
+new intent version and a new one-shot run. The intent version that answers may
+record which run and question it resolves, and whether the escalation was
+`answered`, `spurious`, or `withdrawn`.
+
+Goalrail treats the question as opaque bytes. It checks retention hygiene only —
+regular file, non-empty, bounded, valid UTF-8, no unsupported control
+characters, no secret-shaped content — and retains the exact bytes append-only
+at provider observation. Deleting the worktree file afterwards does not change
+the recorded outcome. The payload's shape is
+[`goalrail.escalation/v0`](schemas/goalrail-escalation-v0.md), validated by
+downstream tooling rather than by Goalrail.
+
+The status rules are fail-closed:
+
+- `prepare` refuses to run when the reserved path is already populated, and
+  `start` refuses again before launching, so a stale question cannot attach
+  itself to a new run through either window;
+- `prepare` also refuses when the reserved directory resolves outside the
+  repository, which would put the question where observation cannot see it;
+- retained bytes must match the digest the deciding observation recorded; a
+  mismatch is recorded as invalid rather than bound to the receipt, and a run
+  whose observation names the reserved path without a retained record cannot be
+  finished at all;
+- a question together with edits inside the declared scope is `failed`, not
+  `blocked`, and the question is still retained;
+- `unlinked`, `denied`, and `launch_failed` take precedence — an unattributable
+  session records the question as evidence without minting a blocked status;
+- supplied check results are recorded verbatim, and an explicit check failure
+  stays `failed`;
+- no combination of inputs yields `passed` while a question is retained.
+
+Receipts carry an explicit `goalrail.terminal-receipt/v1` schema identifier and
+the frozen intent reference. A receipt stored before the identifier existed
+remains readable and is never rewritten.
+
 ## State and evidence
 
 Local state is stored under `--state-dir`, `GOALRAIL_STATE_HOME`, or the

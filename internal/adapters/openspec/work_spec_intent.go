@@ -6,12 +6,11 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 
+	"github.com/heurema/goalrail/internal/boundedio"
 	"github.com/heurema/goalrail/internal/domain"
 )
 
@@ -139,39 +138,11 @@ func readIntentWithoutContext(
 	return ReadIntent(bytes.NewReader(rawIntent))
 }
 
-// readBoundedRegularFile opens an already resolved artifact and reads it under
-// the shared size bound.
-//
-// The regular-file check is made on the open descriptor rather than on the
-// pathname, because a check-then-open sequence can be raced: replacing the
-// checked path with a FIFO would still block the open, and replacing it with a
-// symlink would let the read leave the verified repository boundary. Opening
-// with O_NOFOLLOW rejects a substituted symlink, O_NONBLOCK keeps a substituted
-// FIFO from blocking, and the descriptor that is then inspected is the one that
-// is read.
+// readBoundedRegularFile reads an already resolved artifact under the shared
+// intent size bound. The descriptor-level guarantees live in boundedio so the
+// escalation artifact and the intent artifact cannot drift apart.
 func readBoundedRegularFile(path string, label string) ([]byte, error) {
-	file, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
-	if err != nil {
-		return nil, fmt.Errorf("open %s: %w", label, err)
-	}
-	defer file.Close()
-
-	info, err := file.Stat()
-	if err != nil {
-		return nil, fmt.Errorf("stat %s: %w", label, err)
-	}
-	if !info.Mode().IsRegular() {
-		return nil, fmt.Errorf("%s is not a regular file", label)
-	}
-
-	raw, err := io.ReadAll(io.LimitReader(file, MaxResolvedIntentBytes+1))
-	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", label, err)
-	}
-	if len(raw) > MaxResolvedIntentBytes {
-		return nil, fmt.Errorf("%s exceeds %d bytes", label, MaxResolvedIntentBytes)
-	}
-	return raw, nil
+	return boundedio.ReadRegularFile(path, label, MaxResolvedIntentBytes)
 }
 
 func intentDeclaresContext(rawIntent []byte) (bool, error) {

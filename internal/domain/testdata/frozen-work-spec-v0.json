@@ -1,0 +1,20 @@
+{
+  "schema": "goalrail.work-spec/v0",
+  "id": "work-frozen-fixture",
+  "version": 1,
+  "repository": {
+    "root": "/repo/fixture",
+    "base_revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "intent": {
+    "id": "intent-frozen-fixture",
+    "version": 1,
+    "artifact_ref": "openspec/changes/frozen-fixture/intent.md",
+    "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "task": "Freeze this WorkSpec so its digest can guard goalrail.work-spec/v0.",
+  "paths": ["inside"],
+  "checks": [{"id": "test", "argv": ["go", "test", "./..."]}],
+  "stop_conditions": [{"id": "receipt", "description": "Stop after the terminal receipt."}],
+  "posture": "trusted-local-provider-enforced-v0"
+}

@@ -172,7 +172,63 @@ func ValidateIntentSnapshot(snapshot IntentSnapshot) error {
 		v.add("intent.status.invalid", "status", "status must be candidate or confirmed")
 	}
 
+	validateEscalationResolution(v, snapshot.ResolvedEscalation)
+
 	return v.result()
+}
+
+// validateEscalationResolution rejects a malformed answering record. An absent
+// record is valid and carries no inferred disposition: a version that answers
+// nothing is the ordinary case.
+func validateEscalationResolution(v *validator, resolution *IntentEscalationResolution) {
+	if resolution == nil {
+		return
+	}
+	if !validCanonicalID(string(resolution.RunID)) {
+		v.add(
+			"intent.resolves.run_invalid",
+			"resolves.run_id",
+			"resolved run ID must be canonical",
+		)
+	}
+	if !validEscalationDigest(resolution.EscalationDigest) {
+		v.add(
+			"intent.resolves.digest_invalid",
+			"resolves.escalation_digest",
+			"resolved escalation digest must be SHA-256",
+		)
+	}
+	switch resolution.Disposition {
+	case DispositionAnswered, DispositionSpurious, DispositionWithdrawn:
+	default:
+		v.add(
+			"intent.resolves.disposition_invalid",
+			"resolves.disposition",
+			"disposition must be answered, spurious, or withdrawn",
+		)
+	}
+}
+
+func sameEscalationResolution(previous, next *IntentEscalationResolution) bool {
+	if previous == nil || next == nil {
+		return previous == next
+	}
+	return *previous == *next
+}
+
+func validEscalationDigest(value string) bool {
+	const prefix = "sha256:"
+	if !strings.HasPrefix(value, prefix) || len(value) != len(prefix)+64 {
+		return false
+	}
+	for _, character := range value[len(prefix):] {
+		isDigit := character >= '0' && character <= '9'
+		isLowerHex := character >= 'a' && character <= 'f'
+		if !isDigit && !isLowerHex {
+			return false
+		}
+	}
+	return true
 }
 
 // ValidateFlowIntentSnapshot applies the context gate required by the v2 flow
@@ -332,6 +388,17 @@ func ValidateIntentAmendment(previous, next IntentSnapshot, kind AmendmentKind) 
 		}
 		if !sameConfirmation(previous.Confirmation, next.Confirmation) {
 			v.add("amendment.wording.confirmation_changed", "confirmation", "wording-only edit must preserve confirmation")
+		}
+		// Claiming to answer a blocked run is a material act: it records which
+		// question a version resolves and how. Allowing it through a wording-only
+		// edit would let a previously confirmed version acquire a disposition
+		// without returning to candidate and being confirmed again.
+		if !sameEscalationResolution(previous.ResolvedEscalation, next.ResolvedEscalation) {
+			v.add(
+				"amendment.wording.resolution_changed",
+				"resolves",
+				"wording-only edit must preserve the resolved escalation record",
+			)
 		}
 		validateSameIntentItemIDs(v, previous, next)
 		validateWordingOnlyProvenance(v, previous, next)

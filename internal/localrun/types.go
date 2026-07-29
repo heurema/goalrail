@@ -22,7 +22,15 @@ const (
 	StatePassed                 RunState = "passed"
 	StateFailed                 RunState = "failed"
 	StateVerificationIncomplete RunState = "verification_incomplete"
+	StateBlocked                RunState = "blocked"
 )
+
+// TerminalReceiptSchemaV1 makes the receipt contract explicit. Adding the
+// blocked status breaks every reader that whitelists terminal statuses, so the
+// break happens once, deliberately, together with the version that makes it
+// legible. A stored receipt without a schema identifier remains readable as the
+// unversioned predecessor and is never rewritten.
+const TerminalReceiptSchemaV1 = "goalrail.terminal-receipt/v1"
 
 type ProviderOutcome string
 
@@ -95,10 +103,23 @@ type CheckResult struct {
 	EvidenceDigest string                  `json:"evidence_digest,omitempty"`
 }
 
+// ReceiptIntentReference records which confirmed intent a run was launched
+// from. The receipt carried no intent reference before this schema version, so
+// the question-to-decision chain could not be followed from recorded
+// identifiers alone.
+type ReceiptIntentReference struct {
+	ID      domain.IntentID `json:"id"`
+	Version uint32          `json:"version"`
+	Digest  string          `json:"digest"`
+}
+
 type TerminalReceipt struct {
+	Schema             string                      `json:"schema,omitempty"`
 	WorkSpecID         domain.WorkSpecID           `json:"work_spec_id"`
 	WorkSpecVersion    uint32                      `json:"work_spec_version"`
 	WorkSpecDigest     domain.WorkSpecDigest       `json:"work_spec_digest"`
+	Intent             *ReceiptIntentReference     `json:"intent,omitempty"`
+	Escalation         *EscalationRecord           `json:"escalation,omitempty"`
 	RunID              domain.RunID                `json:"run_id"`
 	Adapter            string                      `json:"adapter"`
 	AdapterVersion     string                      `json:"adapter_version"`

@@ -298,12 +298,18 @@ func readIntent(reader io.Reader, contextPack *domain.ContextPack) (domain.Inten
 		return domain.IntentSnapshot{}, err
 	}
 
+	resolvedEscalation, err := parseEscalationResolution(metadata)
+	if err != nil {
+		return domain.IntentSnapshot{}, err
+	}
+
 	snapshot := domain.IntentSnapshot{
-		ID:              domain.IntentID(cleanInline(metadata["intent id"])),
-		Version:         version,
-		PreviousVersion: previousVersion,
-		Status:          status,
-		ContextPack:     contextPack,
+		ID:                 domain.IntentID(cleanInline(metadata["intent id"])),
+		Version:            version,
+		PreviousVersion:    previousVersion,
+		Status:             status,
+		ContextPack:        contextPack,
+		ResolvedEscalation: resolvedEscalation,
 	}
 	if snapshot.SourceEvidence, err = parseSourceEvidence(sourceLines); err != nil {
 		return domain.IntentSnapshot{}, err
@@ -358,6 +364,42 @@ func parseContextPackDeclaration(value string) (domain.ContextPackID, uint32, er
 		return "", 0, fmt.Errorf("%w: Context Pack metadata has an invalid ID or version", ErrMalformedArtifact)
 	}
 	return id, uint32(version), nil
+}
+
+// parseEscalationResolution reads the optional record naming the blocked run an
+// intent version answers. Both fields travel together: a resolution without a
+// disposition would say a question was answered without saying how, and a
+// disposition without a resolution would name no question at all.
+//
+// Duplicate records need no check here — parseBoldMetadata already rejects a
+// repeated metadata field.
+func parseEscalationResolution(
+	metadata map[string]string,
+) (*domain.IntentEscalationResolution, error) {
+	rawResolves := cleanInline(metadata["resolves"])
+	rawDisposition := cleanInline(metadata["disposition"])
+	if rawResolves == "" && rawDisposition == "" {
+		return nil, nil
+	}
+	if rawResolves == "" || rawDisposition == "" {
+		return nil, fmt.Errorf(
+			"%w: Resolves and Disposition must be recorded together",
+			ErrMalformedArtifact,
+		)
+	}
+	fields := strings.Fields(rawResolves)
+	if len(fields) != 3 || !strings.EqualFold(fields[1], "escalation") {
+		return nil, fmt.Errorf(
+			"%w: Resolves metadata must be '<run-id> escalation <digest>'",
+			ErrMalformedArtifact,
+		)
+	}
+	resolution := &domain.IntentEscalationResolution{
+		RunID:            domain.RunID(strings.Trim(fields[0], "`")),
+		EscalationDigest: strings.ToLower(strings.Trim(fields[2], "`")),
+		Disposition:      domain.IntentDisposition(strings.ToLower(rawDisposition)),
+	}
+	return resolution, nil
 }
 
 // ReadProposal treats Intent Coverage rows as the compiled change list. Other
