@@ -217,6 +217,19 @@ type ProcessResult struct {
 }
 
 type ProcessLauncher interface {
+	// VerifyAnnouncementDelivery reports whether the session this launcher
+	// starts will actually receive the escalation announcement.
+	//
+	// The adapter cannot answer this on its own. It places the announcement in
+	// the invocation environment, but the value only reaches the session if the
+	// launcher installs a capsule that reads
+	// EscalationAnnouncementEnvironment and answers the SessionStart hook with
+	// it. A launcher that does not install one must say so: an adapter that
+	// claimed delivery it does not perform would defeat the fail-closed check
+	// entirely, launching a run that cannot escalate while Start believes the
+	// channel is reachable.
+	VerifyAnnouncementDelivery() error
+
 	Launch(context.Context, ProcessRequest) ProcessResult
 }
 
@@ -249,12 +262,16 @@ func NewLocalRunAdapter(
 func (*LocalRunAdapter) Name() string    { return "codex" }
 func (*LocalRunAdapter) Version() string { return LocalRunAdapterVersion }
 
-// VerifyAnnouncementDelivery reports that this adapter can tell a run the
-// escalation channel exists. Delivery reuses the SessionStart hook Goalrail
-// already renders for lineage: the announcement travels the invocation
-// environment to the capsule, which returns it as the session's additional
-// context.
-func (*LocalRunAdapter) VerifyAnnouncementDelivery() error { return nil }
+// VerifyAnnouncementDelivery reports whether a launched run will be told the
+// escalation channel exists.
+//
+// The adapter places the announcement in the invocation environment, but the
+// value only reaches the session when the launcher installs a capsule that
+// reads it and answers the SessionStart hook. Only the launcher knows whether
+// that capsule exists, so the answer is delegated rather than assumed.
+func (adapter *LocalRunAdapter) VerifyAnnouncementDelivery() error {
+	return adapter.launcher.VerifyAnnouncementDelivery()
+}
 
 func (adapter *LocalRunAdapter) Launch(
 	ctx context.Context,

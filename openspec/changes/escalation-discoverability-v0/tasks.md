@@ -42,10 +42,19 @@
 - [x] 6.6 Run `gofmt -l`, `go build ./...`, `go vet ./...`, `go test ./...`, and `go test -race ./...`.
 - [x] 6.7 Run pinned telemetry-disabled strict OpenSpec validation across the change and every promoted spec.
 
-## 7. Stop at the owner gates
+## 7. Address review findings on the implementation
 
-- [x] 7.1 Obtain an explicit owner instruction before beginning implementation.
-- [ ] 7.2 Obtain a separate explicit owner instruction before committing.
-- [ ] 7.3 Obtain a separate explicit owner instruction before pushing, opening a pull request, or merging.
-- [ ] 7.4 Obtain a separate explicit owner instruction before archiving this change and promoting the deltas; re-read the promoted text immediately before promotion in case another change archived first.
-- [ ] 7.5 Obtain a separate explicit owner authorization before any real provider run. That run closes two open questions at once: whether the reserved path is writable inside the provider sandbox, and whether the announced context reaches the agent. Neither is evidence until it happens.
+- [x] 7.1 Delegate the delivery report to the launcher, so the adapter cannot claim an announcement that only a capsule it does not install would deliver.
+- [x] 7.2 Emit the announcement only for the session-start source that opens a run, so resumption, clearing, and compaction do not repeat it.
+- [x] 7.3 Verify delivery before consuming the one-time admission, so an undeliverable announcement does not discard the owner's authorization.
+- [x] 7.4 Retain the measurement claims beside the Context Pack and repoint the misattributed constraint at the promoted capability that actually states it.
+- [x] 7.5 Add a regression test per finding, state each new rule in the spec delta, and re-run the full verification set.
+- [x] 7.6 Leave the confirmed intent unmodified: the corrections make the shipped behaviour honest against outcomes version 1 already states.
+
+## 8. Stop at the owner gates
+
+- [x] 8.1 Obtain an explicit owner instruction before beginning implementation.
+- [x] 8.2 Obtain a separate explicit owner instruction before committing.
+- [x] 8.3 Obtain a separate explicit owner instruction before pushing and opening a pull request; merging remains ungranted.
+- [ ] 8.4 Obtain a separate explicit owner instruction before archiving this change and promoting the deltas; re-read the promoted text immediately before promotion in case another change archived first.
+- [ ] 8.5 Obtain a separate explicit owner authorization before any real provider run. That run closes two open questions at once: whether the reserved path is writable inside the provider sandbox, and whether the announced context reaches the agent. Neither is evidence until it happens.

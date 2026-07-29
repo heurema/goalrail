@@ -26,16 +26,27 @@ type sessionStartHookResponse struct {
 	HookSpecificOutput sessionStartHookSpecificOutput `json:"hookSpecificOutput"`
 }
 
+// StartupHookSource is the only SessionStart source that opens a run. Codex
+// also emits SessionStart for `resume`, `clear`, and `compact`, all of which
+// occur inside a run that has already started.
+const StartupHookSource = "startup"
+
 // RenderSessionStartHookResponse renders the reply a capsule writes when Codex
 // invokes the SessionStart hook, carrying the escalation announcement as the
 // session's additional context.
+//
+// The announcement is delivered exactly once, so it is emitted only for the
+// startup source. Codex re-emits SessionStart on resume, clear, and compaction
+// — all recognised sources in the correlation path — and repeating the
+// announcement there would turn one statement into a recurring instruction
+// inside a single run.
 //
 // This is the provider-specific half of the announcement. The content is
 // composed by the local-run boundary and is provider-neutral; only this
 // transport knows the shape Codex accepts. The renderer therefore never edits
 // the text — it rejects an announcement it cannot carry verbatim rather than
 // truncating or reformatting one.
-func RenderSessionStartHookResponse(announcement string) (string, error) {
+func RenderSessionStartHookResponse(announcement string, source string) (string, error) {
 	if announcement == "" {
 		return "", errors.New("codex: escalation announcement is empty")
 	}
@@ -44,9 +55,11 @@ func RenderSessionStartHookResponse(announcement string) (string, error) {
 	}
 	response := sessionStartHookResponse{
 		HookSpecificOutput: sessionStartHookSpecificOutput{
-			HookEventName:     sessionStartHookEvent,
-			AdditionalContext: announcement,
+			HookEventName: sessionStartHookEvent,
 		},
+	}
+	if source == StartupHookSource {
+		response.HookSpecificOutput.AdditionalContext = announcement
 	}
 	encoded, err := json.Marshal(response)
 	if err != nil {

@@ -259,6 +259,14 @@ func (service *Service) Start(ctx context.Context, input StartInput) (StartResul
 	if prepared.Claim != nil {
 		return StartResult{}, ErrLaunchAlreadyClaimed
 	}
+	// A run that cannot be told about the escalation channel cannot use it, and
+	// would return to guessing while still producing an ordinary receipt. This
+	// check precedes the admission consumption deliberately: admission is a
+	// one-time authorization, and burning it on a launch that cannot happen
+	// would discard the owner's grant with nothing to show for it.
+	if err := service.adapter.VerifyAnnouncementDelivery(); err != nil {
+		return StartResult{}, fmt.Errorf("%w: %w", ErrAnnouncementUndeliverable, err)
+	}
 	if service.adapter.Name() != "fixture" {
 		if service.observer == nil || service.admission == nil {
 			return StartResult{}, ErrActivationRequired
@@ -277,12 +285,6 @@ func (service *Service) Start(ctx context.Context, input StartInput) (StartResul
 		if err := service.admission.consume(prepared.WorkSpec); err != nil {
 			return StartResult{}, err
 		}
-	}
-	// A run that cannot be told about the escalation channel cannot use it, and
-	// would return to guessing while still producing an ordinary receipt. Fail
-	// before any run ID or launch claim exists.
-	if err := service.adapter.VerifyAnnouncementDelivery(); err != nil {
-		return StartResult{}, fmt.Errorf("%w: %w", ErrAnnouncementUndeliverable, err)
 	}
 
 	// A prepared run is reused rather than re-observed, and it can be started

@@ -18,6 +18,14 @@ type recordingLauncher struct {
 	result  ProcessResult
 	calls   int
 	lock    sync.Mutex
+
+	// announcementErr stands in for a launcher that installs no capsule able to
+	// answer the SessionStart hook with the announcement.
+	announcementErr error
+}
+
+func (launcher *recordingLauncher) VerifyAnnouncementDelivery() error {
+	return launcher.announcementErr
 }
 
 func (launcher *recordingLauncher) Launch(

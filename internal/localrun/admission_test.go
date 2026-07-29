@@ -457,3 +457,63 @@ func assertNoDogfoodRunArtifacts(
 		t.Fatalf("denied admission created run artifacts: %v", entries)
 	}
 }
+
+// silentCodexAdapter stands in for a Codex adapter whose launcher installs no
+// capsule able to answer the SessionStart hook with the announcement.
+type silentCodexAdapter struct {
+	calls atomic.Int32
+}
+
+func (*silentCodexAdapter) Name() string    { return "codex" }
+func (*silentCodexAdapter) Version() string { return "local-test-v0" }
+
+func (*silentCodexAdapter) VerifyAnnouncementDelivery() error {
+	return errors.New("launcher installs no announcing capsule")
+}
+
+func (adapter *silentCodexAdapter) Launch(
+	_ context.Context,
+	_ LaunchRequest,
+) ProviderObservation {
+	adapter.calls.Add(1)
+	return ProviderObservation{
+		Outcome:        ProviderCompleted,
+		IdentityStatus: IdentityVerified,
+		RootSessionRef: "session-should-not-exist",
+	}
+}
+
+func TestUndeliverableAnnouncementDoesNotConsumeTheAdmission(t *testing.T) {
+	// Admission is a one-time owner authorization. Burning it on a launch that
+	// cannot happen would discard the grant with nothing to show for it, and no
+	// retry could use the same authorization afterwards.
+	adapter := &silentCodexAdapter{}
+	service, spec, store := dogfoodServiceFixture(t, adapter, nil)
+	prepared := prepareFixture(t, service, spec)
+	writeDogfoodAdmission(
+		t,
+		store,
+		validDogfoodAdmission(prepared, dogfoodAdmissionChange),
+	)
+	var idCalls atomic.Int32
+	service.newRunID = func() (domain.RunID, error) {
+		idCalls.Add(1)
+		return "run-should-not-exist", nil
+	}
+
+	if _, err := service.Start(context.Background(), StartInput{
+		WorkSpecDigest: prepared.WorkSpec.Digest(),
+		Adapter:        "codex",
+	}); !errors.Is(err, ErrAnnouncementUndeliverable) {
+		t.Fatalf("start error = %v, want an undeliverable announcement", err)
+	}
+	if idCalls.Load() != 0 || adapter.calls.Load() != 0 {
+		t.Fatal("an unannounceable launch generated a run ID or invoked the adapter")
+	}
+	if _, err := os.Stat(
+		filepath.Join(store.Root(), dogfoodAdmissionConsumedName),
+	); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("an unannounceable launch consumed the admission record: %v", err)
+	}
+	assertNoDogfoodRunArtifacts(t, store, prepared.WorkSpec.Digest())
+}

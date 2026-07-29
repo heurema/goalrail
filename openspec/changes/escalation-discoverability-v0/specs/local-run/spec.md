@@ -21,7 +21,14 @@ may not be.
 
 The announcement SHALL be delivered exactly once, at launch, as a statement. It
 MUST NOT create a reply path, acknowledgement, capability handshake, retry, or
-any later delivery, and MUST NOT be repeated inside a run.
+any later delivery, and MUST NOT be repeated inside a run. Where a provider
+signals session events that recur within one run — resumption, clearing, or
+compaction — the announcement SHALL accompany only the event that opens the run.
+
+Delivery SHALL be verified before any irreversible step of the launch,
+including before a one-time activation authorization is consumed. An
+authorization spent on a launch that cannot happen is discarded with nothing to
+show for it, and no retry can use it afterwards.
 
 Goalrail MUST NOT place the announcement in the canonical WorkSpec, the terminal
 receipt, or the target repository worktree. Composing the work item itself
@@ -43,6 +50,14 @@ remains outside this boundary.
 - **WHEN** a run is launched and continues to completion
 - **THEN** exactly one announcement exists, with no acknowledgement, retry, repetition, or reply path
 
+#### Scenario: A provider session event recurs inside a run
+- **WHEN** the provider signals a session event for resumption, clearing, or compaction after the run has started
+- **THEN** no further announcement accompanies it, because one launch-time statement must not become a recurring instruction
+
+#### Scenario: An undeliverable announcement meets a one-time authorization
+- **WHEN** a launch cannot deliver the announcement and the run is authorized by a one-time activation record
+- **THEN** the launch fails without consuming that authorization, leaving it usable once the delivery path exists
+
 ## MODIFIED Requirements
 
 ### Requirement: Provider adapter preserves enforcement boundaries
@@ -56,6 +71,13 @@ deliver the announcement MUST fail the launch explicitly, rather than starting a
 run whose escalation channel is unreachable. A silent degradation would return
 the run to the guessing behaviour the channel exists to prevent, while still
 recording an outcome that looks ordinary.
+
+An adapter MUST NOT report delivery it does not itself perform. Where delivery
+depends on a component the adapter only invokes — a launcher, a capsule, or any
+other collaborator that completes the path into the session — the report SHALL
+come from the component that knows whether that path exists. An adapter that
+assumed delivery on a collaborator's behalf would defeat this check entirely,
+because the launch would proceed while the channel remained unreachable.
 
 Carrying the announcement MUST NOT add provider fields to the canonical WorkSpec
 or the terminal receipt, and MUST NOT alter the provider's sandbox or approval
@@ -80,3 +102,7 @@ decisions.
 #### Scenario: The adapter cannot deliver the announcement
 - **WHEN** an adapter has no path for delivering the announcement to the run
 - **THEN** the launch fails explicitly and no run is started whose escalation channel would be unreachable
+
+#### Scenario: Delivery depends on a collaborator the adapter only invokes
+- **WHEN** the announcement reaches the session only if a launcher or capsule completes the path
+- **THEN** the report of whether delivery happens comes from that component rather than being assumed by the adapter, so a missing collaborator fails the launch instead of passing the check

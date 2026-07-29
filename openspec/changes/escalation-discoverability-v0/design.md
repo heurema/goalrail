@@ -109,6 +109,39 @@ future capabilities. Each addition would be another variable in the same
 measurement. If a second capability needs announcing later, that is a separate
 decision with its own evidence, not an extension of this string.
 
+### 7. Corrections from automated review of the implementation
+
+Four findings, all confirmed against the code and all fixed. One repeats a
+pattern worth naming: a fail-closed check is only as honest as the thing it asks.
+
+- **The adapter reported delivery it does not perform.** `VerifyAnnouncementDelivery`
+  returned success unconditionally, while the value only reaches the session if a
+  launcher installs a capsule that reads it and answers the hook. No production
+  code in this repository does that — the renderer was called only by tests. The
+  check passed and the run could launch with no announcement, which defeats the
+  entire mechanism. The report now comes from the launcher, which is the
+  component that knows whether the path exists.
+- **The announcement would have repeated inside a run.** The provider re-signals
+  session start on resumption, clearing, and compaction — all four sources are
+  recognised in the correlation path — and the rendered matcher does not
+  distinguish them. The renderer now emits the announcement only for the source
+  that opens a run, so one statement cannot become a recurring instruction.
+- **An undeliverable announcement burned the one-time authorization.** The check
+  ran after admission was consumed, so a failed launch discarded the owner's
+  grant with nothing to show for it and no retry could reuse it. Verification now
+  precedes every irreversible step of the launch.
+- **The Context Pack cited evidence that does not resolve.** Two items pointed at
+  paths in a separate repository, and a third attributed the one-shot and
+  control-plane constraints to `AGENTS.md`, where they do not appear — they live
+  in the promoted `local-run` capability. The measurement claims are now retained
+  verbatim beside the pack so it can be audited without leaving the repository,
+  and the misattributed item points at its real source.
+
+The confirmed intent was left unmodified. These corrections make the shipped
+behaviour honest against outcomes version 1 already states; none of them changes
+what the owner confirmed, so none of them justifies editing a confirmed snapshot
+in place.
+
 ## Correlation and Evidence
 
 - **Work identity:** confirmed intent `intent-escalation-discoverability-v0`
