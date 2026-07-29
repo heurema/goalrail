@@ -162,6 +162,13 @@ func (service *Service) Prepare(ctx context.Context, reader io.Reader) (Prepared
 	if err != nil {
 		return PreparedRun{}, err
 	}
+	if observationHasEscalation(baseline) {
+		return PreparedRun{}, fmt.Errorf(
+			"%w: %s is already populated at the frozen baseline",
+			ErrEscalationArtifactPresent,
+			ReservedEscalationPath,
+		)
+	}
 	preparation := Preparation{
 		WorkSpecDigest: frozen.Digest(),
 		PreparedAt:     service.now(),
@@ -330,6 +337,39 @@ func (service *Service) Start(ctx context.Context, input StartInput) (StartResul
 		return StartResult{}, err
 	}
 
+	// One observation decides both the escalation artifact and the run's delta.
+	// Observing again at finish would leave a window in which the artifact could
+	// be substituted between the read that classifies it and the read that
+	// computes the delta.
+	terminal, err := service.observer.Observe(ctx, prepared.WorkSpec.Spec().Repository.Root)
+	if err != nil {
+		return StartResult{}, err
+	}
+	if err := service.store.WriteJSONOnce(
+		runPath(runID, "terminal-observation.json"),
+		terminal,
+		false,
+	); err != nil {
+		return StartResult{}, err
+	}
+	escalation, err := service.captureEscalation(
+		prepared.WorkSpec.Spec().Repository.Root,
+		runID,
+		terminal,
+	)
+	if err != nil {
+		return StartResult{}, err
+	}
+	if escalation != nil {
+		if err := service.store.WriteJSONOnce(
+			runPath(runID, "escalation.json"),
+			escalation,
+			false,
+		); err != nil {
+			return StartResult{}, err
+		}
+	}
+
 	result := StartResult{
 		Claim:       claim,
 		Observation: observation,
@@ -338,7 +378,7 @@ func (service *Service) Start(ctx context.Context, input StartInput) (StartResul
 	if observation.Outcome == ProviderCompleted && observation.IdentityStatus == IdentityVerified {
 		return result, nil
 	}
-	receipt, err := service.failureReceipt(ctx, prepared, claim, observation)
+	receipt, err := service.failureReceipt(prepared, claim, observation, terminal, escalation)
 	if err != nil {
 		return StartResult{}, err
 	}
@@ -370,7 +410,11 @@ func (service *Service) Finish(ctx context.Context, input FinishInput) (Terminal
 	if err != nil {
 		return TerminalReceipt{}, err
 	}
-	terminal, err := service.observer.Observe(ctx, prepared.WorkSpec.Spec().Repository.Root)
+	terminal, err := service.terminalObservation(ctx, input.RunID, prepared.WorkSpec.Spec().Repository.Root)
+	if err != nil {
+		return TerminalReceipt{}, err
+	}
+	escalation, err := service.retainedEscalation(input.RunID)
 	if err != nil {
 		return TerminalReceipt{}, err
 	}
@@ -383,6 +427,13 @@ func (service *Service) Finish(ctx context.Context, input FinishInput) (Terminal
 		status = StateFailed
 		reasons = appendReason(reasons, "SCOPE_VIOLATION")
 	}
+	status, reasons = applyEscalationRules(
+		status,
+		reasons,
+		escalation,
+		delta,
+		prepared.WorkSpec.Spec().Paths,
+	)
 	receipt := buildReceipt(
 		prepared,
 		inspection.Claim,
@@ -392,6 +443,7 @@ func (service *Service) Finish(ctx context.Context, input FinishInput) (Terminal
 		reasons,
 		terminal,
 		delta,
+		escalation,
 		service.now(),
 	)
 	if err := validateTerminalReceipt(receipt); err != nil {
@@ -449,17 +501,21 @@ func (service *Service) InspectRun(runID domain.RunID) (RunInspection, error) {
 	return inspection, nil
 }
 
+// failureReceipt records a terminal outcome that Start already decided. It uses
+// the observation Start took rather than taking its own, so the artifact and the
+// delta come from one snapshot.
+//
+// An unlinked, denied, or launch-failed outcome takes precedence over blocked:
+// an unattributable session must not mint an authoritative question. The
+// escalation is still recorded as evidence.
 func (service *Service) failureReceipt(
-	ctx context.Context,
 	prepared PreparedRun,
 	claim LaunchClaim,
 	observation ProviderObservation,
+	terminal WorktreeObservation,
+	escalation *EscalationRecord,
 ) (TerminalReceipt, error) {
 	spec := prepared.WorkSpec.Spec()
-	terminal, err := service.observer.Observe(ctx, spec.Repository.Root)
-	if err != nil {
-		return TerminalReceipt{}, err
-	}
 	delta := CompareWorktrees(prepared.Preparation.Baseline, terminal, spec.Paths)
 	results := make([]CheckResult, 0, len(spec.Checks))
 	for _, check := range spec.Checks {
@@ -476,6 +532,9 @@ func (service *Service) failureReceipt(
 	if len(delta.ScopeViolations) != 0 {
 		reasons = appendReason(reasons, "SCOPE_VIOLATION")
 	}
+	if escalation != nil {
+		reasons = appendReason(reasons, "ESCALATION_RECORDED")
+	}
 	receipt := buildReceipt(
 		prepared,
 		claim,
@@ -485,6 +544,7 @@ func (service *Service) failureReceipt(
 		reasons,
 		terminal,
 		delta,
+		escalation,
 		service.now(),
 	)
 	if err := validateTerminalReceipt(receipt); err != nil {
@@ -505,13 +565,21 @@ func buildReceipt(
 	reasons []domain.EvidenceReasonCode,
 	terminal WorktreeObservation,
 	delta WorktreeDelta,
+	escalation *EscalationRecord,
 	terminalAt time.Time,
 ) TerminalReceipt {
 	spec := prepared.WorkSpec.Spec()
 	receipt := TerminalReceipt{
-		WorkSpecID:         spec.ID,
-		WorkSpecVersion:    spec.Version,
-		WorkSpecDigest:     prepared.WorkSpec.Digest(),
+		Schema:          TerminalReceiptSchemaV1,
+		WorkSpecID:      spec.ID,
+		WorkSpecVersion: spec.Version,
+		WorkSpecDigest:  prepared.WorkSpec.Digest(),
+		Intent: &ReceiptIntentReference{
+			ID:      spec.Intent.ID,
+			Version: spec.Intent.Version,
+			Digest:  spec.Intent.Digest,
+		},
+		Escalation:         escalation,
 		RunID:              claim.RunID,
 		Adapter:            claim.Adapter,
 		AdapterVersion:     claim.AdapterVersion,
@@ -657,10 +725,31 @@ func validateTerminalReceipt(receipt TerminalReceipt) error {
 		receipt.TerminalAt.IsZero() {
 		return fmt.Errorf("terminal receipt has invalid required metadata")
 	}
+	// An empty schema identifies a receipt written before the identifier
+	// existed. Such a receipt stays readable and is never rewritten.
+	if receipt.Schema != "" && receipt.Schema != TerminalReceiptSchemaV1 {
+		return fmt.Errorf("terminal receipt has unsupported schema %q", receipt.Schema)
+	}
 	switch receipt.Status {
 	case StatePassed, StateFailed, StateVerificationIncomplete, StateLaunchFailed, StateUnlinked:
+	case StateBlocked:
+		if receipt.Escalation == nil || !receipt.Escalation.Valid {
+			return fmt.Errorf("blocked receipt requires a valid retained escalation")
+		}
 	default:
 		return fmt.Errorf("terminal receipt has non-terminal status %q", receipt.Status)
+	}
+	if receipt.Escalation != nil {
+		if receipt.Escalation.Path != ReservedEscalationPath {
+			return fmt.Errorf("terminal receipt escalation names an unexpected path")
+		}
+		if receipt.Escalation.Valid &&
+			(!validDigest(receipt.Escalation.Digest) || receipt.Escalation.RetainedRef == "") {
+			return fmt.Errorf("terminal receipt escalation lacks retained evidence")
+		}
+		if receipt.Status == StatePassed {
+			return fmt.Errorf("terminal receipt cannot pass while an escalation is retained")
+		}
 	}
 	if len(receipt.Checks) != len(receipt.CheckResults) {
 		return fmt.Errorf("terminal receipt check results do not match the frozen check set")

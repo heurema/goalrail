@@ -124,6 +124,28 @@ type IntentSnapshot struct {
 	Ambiguities     []IntentAmbiguity
 	Confirmation    *IntentConfirmation
 	ContextPack     *ContextPack
+
+	// ResolvedEscalation records which blocked run this version answers. It is
+	// lifecycle provenance rather than a fourth semantic intent group, it is
+	// optional, and it grants no effect authority.
+	ResolvedEscalation *IntentEscalationResolution
+}
+
+type IntentDisposition string
+
+const (
+	DispositionAnswered  IntentDisposition = "answered"
+	DispositionSpurious  IntentDisposition = "spurious"
+	DispositionWithdrawn IntentDisposition = "withdrawn"
+)
+
+// IntentEscalationResolution links an answering intent version back to the
+// blocked run that produced the question. `spurious` and `withdrawn` exist so a
+// low-value escalation stays visible and countable instead of disappearing.
+type IntentEscalationResolution struct {
+	RunID            RunID
+	EscalationDigest string
+	Disposition      IntentDisposition
 }
 
 // GrantsEffectAuthority is deliberately invariant: confirmed intent describes

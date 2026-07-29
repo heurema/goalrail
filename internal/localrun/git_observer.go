@@ -142,6 +142,13 @@ func CompareWorktrees(
 			continue
 		}
 		changed = append(changed, path)
+		// The reserved escalation path stays visible as a changed path but is
+		// never a scope violation. Excluding it from the delta entirely would
+		// create the only unauditable write channel in the contract; treating it
+		// as a violation would turn every escalation into a failed run.
+		if path == ReservedEscalationPath {
+			continue
+		}
 		if !pathInScope(path, scope) {
 			violations = append(violations, path)
 		}
