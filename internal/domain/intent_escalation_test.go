@@ -64,6 +64,48 @@ func TestIntentEscalationRecordRejectsMalformedValues(t *testing.T) {
 	}
 }
 
+func TestWordingOnlyAmendmentCannotAcquireAnEscalationRecord(t *testing.T) {
+	// Claiming to answer a blocked run is a material act. Allowing it through a
+	// wording-only edit would let an already confirmed version acquire a
+	// disposition without returning to candidate and being confirmed again.
+	previous := answeringIntentFixture()
+	previous.ResolvedEscalation = nil
+
+	for name, mutate := range map[string]func(*IntentSnapshot){
+		"record added": func(next *IntentSnapshot) {
+			next.ResolvedEscalation = &IntentEscalationResolution{
+				RunID:            "run-blocked-one",
+				EscalationDigest: "sha256:" + strings.Repeat("c", 64),
+				Disposition:      DispositionAnswered,
+			}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			next := previous
+			mutate(&next)
+			if err := ValidateIntentAmendment(previous, next, AmendmentWordingOnly); err == nil {
+				t.Fatal("a wording-only edit acquired an escalation record")
+			}
+		})
+	}
+
+	withRecord := answeringIntentFixture()
+	changed := withRecord
+	changed.ResolvedEscalation = &IntentEscalationResolution{
+		RunID:            withRecord.ResolvedEscalation.RunID,
+		EscalationDigest: withRecord.ResolvedEscalation.EscalationDigest,
+		Disposition:      DispositionSpurious,
+	}
+	if err := ValidateIntentAmendment(withRecord, changed, AmendmentWordingOnly); err == nil {
+		t.Fatal("a wording-only edit changed a recorded disposition")
+	}
+
+	unchanged := withRecord
+	if err := ValidateIntentAmendment(withRecord, unchanged, AmendmentWordingOnly); err != nil {
+		t.Fatalf("a wording-only edit preserving the record was rejected: %v", err)
+	}
+}
+
 func TestAnsweringIntentGrantsNoEffectAuthority(t *testing.T) {
 	snapshot := answeringIntentFixture()
 	if snapshot.GrantsEffectAuthority() {

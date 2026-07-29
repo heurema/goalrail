@@ -173,6 +173,39 @@ low-value escalation is visible and countable — answering both the DoS finding
 (questions cost the owner attention) and its inverse (a culture that punishes
 asking).
 
+### 8. Corrections from automated review of the implementation
+
+An automated review of the first implementation found six defects, all
+confirmed against the code and all fixed. Two of them broke properties this
+design had claimed as closed by construction, which is worth recording plainly:
+
+- **The single-observation guarantee was not enforced.** The observation hashes
+  the artifact and retention read it a second time; nothing compared the two, so
+  a file changed between them would bind a receipt to bytes the delta never saw.
+  Retention now compares its read against the observed digest and records a
+  mismatch as invalid rather than binding it.
+- **`passed` was still reachable.** The observation was persisted before
+  retention, so a retention failure left an observation naming the reserved path
+  with no record beside it, and Finish read that as "no question". Retention now
+  precedes the observation write, and Finish fails closed when an observed
+  question has no retained record.
+- **The preparation gate had a window.** A prepared run is reused rather than
+  re-observed and can be started much later, so an artifact created between
+  preparation and launch would be attributed to a provider that had not run yet.
+  Start now gates the reserved path before launching.
+- **The reserved path had no boundary check.** A `.goalrail` symlink pointing
+  outside the repository would let a provider write the question where
+  observation never sees it — the silent-dead-channel failure this design exists
+  to avoid. The reserved path now gets the same ancestor-boundary treatment as a
+  declared scoped path.
+- **The promised chain could vanish.** A v1 receipt with an absent or malformed
+  intent reference still validated. Validation now requires a usable reference
+  from v1 onwards, keeping the relaxed path only for receipts that predate the
+  identifier.
+- **An answering record could be backdated.** Nothing stopped a wording-only
+  amendment from adding or changing `ResolvedEscalation` on an already confirmed
+  version. Wording-only amendments must now preserve it exactly.
+
 ## Correlation and Evidence
 
 - **Work identity:** confirmed intent `intent-blocked-terminal-outcome-v0`

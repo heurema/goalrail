@@ -141,6 +141,13 @@ func (service *Service) Prepare(ctx context.Context, reader io.Reader) (Prepared
 	if err := validateScopedPathBoundaries(root, spec.Paths); err != nil {
 		return PreparedRun{}, err
 	}
+	// The reserved escalation path gets the same boundary treatment as a
+	// declared scoped path. Without it, a `.goalrail` symlink pointing outside
+	// the repository would let a provider write the question into an external
+	// directory that observation never sees, silently killing the channel.
+	if err := validateScopedPathBoundaries(root, []string{ReservedEscalationPath}); err != nil {
+		return PreparedRun{}, err
+	}
 	frozen, err := domain.FreezeWorkSpec(spec)
 	if err != nil {
 		return PreparedRun{}, err
@@ -271,6 +278,20 @@ func (service *Service) Start(ctx context.Context, input StartInput) (StartResul
 			return StartResult{}, err
 		}
 	}
+	// A prepared run is reused rather than re-observed, and it can be started
+	// long after preparation froze its baseline. An artifact that appears in
+	// that window belongs to no provider, so it must not reach a launch.
+	present, err := escalationArtifactPresent(prepared.WorkSpec.Spec().Repository.Root)
+	if err != nil {
+		return StartResult{}, err
+	}
+	if present {
+		return StartResult{}, fmt.Errorf(
+			"%w: %s was populated after preparation and before launch",
+			ErrEscalationArtifactPresent,
+			ReservedEscalationPath,
+		)
+	}
 	runID, err := service.newRunID()
 	if err != nil {
 		return StartResult{}, err
@@ -345,13 +366,9 @@ func (service *Service) Start(ctx context.Context, input StartInput) (StartResul
 	if err != nil {
 		return StartResult{}, err
 	}
-	if err := service.store.WriteJSONOnce(
-		runPath(runID, "terminal-observation.json"),
-		terminal,
-		false,
-	); err != nil {
-		return StartResult{}, err
-	}
+	// Retention happens before the observation is persisted. A persisted
+	// observation naming the reserved path without a retained record would let a
+	// later Finish treat the question as absent.
 	escalation, err := service.captureEscalation(
 		prepared.WorkSpec.Spec().Repository.Root,
 		runID,
@@ -368,6 +385,13 @@ func (service *Service) Start(ctx context.Context, input StartInput) (StartResul
 		); err != nil {
 			return StartResult{}, err
 		}
+	}
+	if err := service.store.WriteJSONOnce(
+		runPath(runID, "terminal-observation.json"),
+		terminal,
+		false,
+	); err != nil {
+		return StartResult{}, err
 	}
 
 	result := StartResult{
@@ -417,6 +441,15 @@ func (service *Service) Finish(ctx context.Context, input FinishInput) (Terminal
 	escalation, err := service.retainedEscalation(input.RunID)
 	if err != nil {
 		return TerminalReceipt{}, err
+	}
+	// Fail closed rather than treat an unretained question as no question. This
+	// is reachable when retention failed after the observation was taken, and
+	// without it the run could still be finished as passed.
+	if escalation == nil && observationHasEscalation(terminal) {
+		return TerminalReceipt{}, fmt.Errorf(
+			"run observed %s but retained no escalation record",
+			ReservedEscalationPath,
+		)
 	}
 	delta := CompareWorktrees(prepared.Preparation.Baseline, terminal, prepared.WorkSpec.Spec().Paths)
 	if delta.HeadChanged {
@@ -726,8 +759,18 @@ func validateTerminalReceipt(receipt TerminalReceipt) error {
 		return fmt.Errorf("terminal receipt has invalid required metadata")
 	}
 	// An empty schema identifies a receipt written before the identifier
-	// existed. Such a receipt stays readable and is never rewritten.
-	if receipt.Schema != "" && receipt.Schema != TerminalReceiptSchemaV1 {
+	// existed. Such a receipt stays readable and is never rewritten, so the
+	// intent reference is required only from v1 onwards.
+	switch receipt.Schema {
+	case "":
+	case TerminalReceiptSchemaV1:
+		if receipt.Intent == nil ||
+			!domain.IsCanonicalID(string(receipt.Intent.ID)) ||
+			receipt.Intent.Version == 0 ||
+			!validDigest(receipt.Intent.Digest) {
+			return fmt.Errorf("terminal receipt lacks a usable frozen intent reference")
+		}
+	default:
 		return fmt.Errorf("terminal receipt has unsupported schema %q", receipt.Schema)
 	}
 	switch receipt.Status {

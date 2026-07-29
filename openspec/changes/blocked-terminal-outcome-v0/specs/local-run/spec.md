@@ -14,12 +14,27 @@ The escalation channel SHALL be one constant repository-relative path, fixed by
 Goalrail and identical for every WorkSpec. It MUST NOT be declared, overridden,
 or otherwise expressed in the canonical WorkSpec.
 
+A prepared run MAY be started long after its baseline was frozen, and a prepared
+run is reused rather than re-observed. Goalrail SHALL therefore reject a start
+whose reserved path is already populated, before the provider is launched and
+before any run ID or launch claim exists. An artifact that predates the launch
+belongs to no provider and MUST NOT be attributed to one.
+
 At provider observation, Goalrail SHALL capture the artifact at that path from
 the same worktree observation that decides the run's delta, and SHALL retain its
 exact bytes append-only in the run store before any terminal receipt is written.
 The retained bytes are authoritative for the run; a later deletion, truncation,
-or substitution of the worktree file MUST NOT change the recorded outcome. The
-reserved path SHALL remain visible in the observed changed paths, MUST NOT be
+or substitution of the worktree file MUST NOT change the recorded outcome.
+
+The retained bytes MUST be the bytes the observation recorded. When the artifact
+read for retention does not match the digest the observation recorded for it,
+the artifact changed between the two reads, the single-observation guarantee
+does not hold, and the record SHALL be marked invalid with an explicit reason
+rather than bound to the receipt. Retention MUST complete before the observation
+is persisted, and a run whose observation names the reserved path without a
+retained record MUST NOT reach a terminal receipt.
+
+The reserved path SHALL remain visible in the observed changed paths, MUST NOT be
 recorded as a scope violation, and MUST NOT be counted as an in-scope edit,
 whether or not it falls inside the declared scope.
 
@@ -55,6 +70,18 @@ The terminal status SHALL follow these rules:
 #### Scenario: Escalation artifact already exists at preparation
 - **WHEN** the reserved escalation path is already populated in the frozen baseline observation
 - **THEN** preparation fails closed with a bounded reason before any prepared state is persisted, and no run ID, launch claim, or provider invocation is created
+
+#### Scenario: Escalation artifact appears between preparation and launch
+- **WHEN** a prepared run is started and the reserved path was populated after its baseline was frozen
+- **THEN** the start fails closed before the provider is launched, and no run ID or launch claim is created, so the artifact is never attributed to that run
+
+#### Scenario: The artifact changes between observation and retention
+- **WHEN** the bytes read for retention do not match the digest the deciding observation recorded for the reserved path
+- **THEN** the record is marked invalid with an explicit reason, the mismatched bytes are not retained as the observed artifact, and the run does not end blocked
+
+#### Scenario: An observed question was not retained
+- **WHEN** a run's persisted observation names the reserved path but no retained escalation record exists
+- **THEN** finishing fails closed rather than treating the question as absent, and the run cannot be recorded as passed
 
 #### Scenario: Artifact is accompanied by in-scope edits
 - **WHEN** a run populates the reserved escalation path and also edits paths inside the declared scope
@@ -118,6 +145,13 @@ or manually authored question cannot attach itself to a new run. The gate
 applies to that exact path and MUST NOT reject unrelated content that shares its
 directory.
 
+The reserved escalation path SHALL receive the same repository-boundary
+treatment as a declared scoped path: its existing ancestors MUST resolve inside
+the canonical repository root. A reserved directory that resolves outside the
+repository MUST fail preparation, because a provider writing through it would
+place the question where worktree observation can never see it and the channel
+would be silently unusable.
+
 This verification MUST NOT depend on proposal, specification, design, task,
 provider, or activation artifacts, and MUST NOT add Context Pack fields or an
 escalation path field to the canonical WorkSpec.
@@ -158,6 +192,10 @@ escalation path field to the canonical WorkSpec.
 - **WHEN** the reserved escalation path holds content at the moment the baseline observation is frozen
 - **THEN** preparation fails with a bounded reason before any prepared state is persisted, while unrelated content in the same directory does not block preparation
 
+#### Scenario: Reserved escalation directory escapes the repository
+- **WHEN** an existing ancestor of the reserved escalation path resolves outside the canonical repository root
+- **THEN** preparation fails with a bounded reason, rather than admitting a run whose question would be written where observation cannot see it
+
 ### Requirement: Terminal receipt is bounded and reviewable
 **Intent IDs:** OUT-1, OUT-4, OUT-5, SIG-1, SIG-4, SIG-5
 
@@ -170,7 +208,11 @@ rewritten, re-signed, or invalidated by the introduction of the identifier.
 
 A v1 receipt SHALL additionally carry the frozen intent reference — identifier,
 version, and digest — taken from the frozen WorkSpec, so a run can be traced to
-the confirmed intent it was launched from without a naming convention.
+the confirmed intent it was launched from without a naming convention. Receipt
+validation MUST reject a v1 receipt whose intent reference is absent or
+malformed; the relaxed behaviour remains available only to receipts that predate
+the schema identifier. A chain that silently disappears is worse than one that
+was never promised.
 
 When an escalation artifact was retained for the run, the receipt SHALL carry an
 escalation block naming the reserved path, the digest of the retained bytes, and
@@ -197,6 +239,10 @@ payload itself.
 #### Scenario: A receipt predating the schema identifier is read
 - **WHEN** a stored receipt carries no schema identifier
 - **THEN** it still validates as the unversioned predecessor and is neither rewritten nor rejected
+
+#### Scenario: A v1 receipt lacks a usable intent reference
+- **WHEN** a receipt carries the current schema identifier but its intent reference is absent, non-canonical, zero-versioned, or carries a malformed digest
+- **THEN** receipt validation rejects it, while a receipt without a schema identifier is still accepted without one
 
 #### Scenario: Blocked receipt records the escalation
 - **WHEN** a run ends blocked

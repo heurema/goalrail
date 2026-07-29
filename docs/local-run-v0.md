@@ -110,8 +110,15 @@ downstream tooling rather than by Goalrail.
 
 The status rules are fail-closed:
 
-- `prepare` refuses to run when the reserved path is already populated, so a
-  stale question cannot attach itself to a new run;
+- `prepare` refuses to run when the reserved path is already populated, and
+  `start` refuses again before launching, so a stale question cannot attach
+  itself to a new run through either window;
+- `prepare` also refuses when the reserved directory resolves outside the
+  repository, which would put the question where observation cannot see it;
+- retained bytes must match the digest the deciding observation recorded; a
+  mismatch is recorded as invalid rather than bound to the receipt, and a run
+  whose observation names the reserved path without a retained record cannot be
+  finished at all;
 - a question together with edits inside the declared scope is `failed`, not
   `blocked`, and the question is still retained;
 - `unlinked`, `denied`, and `launch_failed` take precedence — an unattributable

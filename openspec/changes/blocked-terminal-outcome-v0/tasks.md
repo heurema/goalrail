@@ -31,10 +31,10 @@
 
 ## 5. Implement
 
-- [x] 5.1 Verify that the supported adapter can write the reserved path inside the provider sandbox. **Established by analysis, not by experiment:** Goalrail configures no sandbox — it passes the repository root as the working directory and leaves the filesystem policy to the provider, as the declared posture requires; the local provider runs `workspace-write`, which makes the working directory writable, with exclusions parameterized rather than fixed to directory names; and the reserved path lies inside that working directory. `codex sandbox` requires a permission profile whose configuration shape is not documented locally, and `codex exec` would launch a real provider run, which is a separate owner gate. The empirical confirmation therefore lands at 7.5, before any real run is treated as evidence.
+- [x] 5.1 Verify that the supported adapter can write the reserved path inside the provider sandbox. **Established by analysis, not by experiment:** Goalrail configures no sandbox — it passes the repository root as the working directory and leaves the filesystem policy to the provider, as the declared posture requires; the local provider runs `workspace-write`, which makes the working directory writable, with exclusions parameterized rather than fixed to directory names; and the reserved path lies inside that working directory. `codex sandbox` requires a permission profile whose configuration shape is not documented locally, and `codex exec` would launch a real provider run, which is a separate owner gate. The empirical confirmation therefore lands at 8.5, before any real run is treated as evidence.
 - [x] 5.2 Add the reserved-path constant and its bounded hygiene check, reusing the retained-text rules and the descriptor-level regular-file guarantees rather than adding a second family. The descriptor-level read moved into `internal/boundedio` and both callers now share it.
 - [x] 5.3 Add the preparation gate on the frozen baseline observation, rejecting the exact reserved file and leaving unrelated content in its directory alone.
-- [x] 5.4 Observe the worktree once after provider observation in `Start`, retain the artifact bytes append-only, and persist that observation; fail the run when retention fails.
+- [x] 5.4 Observe the worktree once after provider observation in `Start`, retain the artifact bytes append-only, and persist that observation; fail the run when retention fails. Retention was later reordered ahead of the observation write — see 7.3.
 - [x] 5.5 Compute the delta in `Finish` from the persisted observation, falling back to observing at finish only when no persisted observation exists.
 - [x] 5.6 Exclude the reserved path from scope violations and from the in-scope edit test while keeping it in the observed changed paths.
 - [x] 5.7 Add the `blocked` state, the precedence rules, the hedge rule, the failing-check rule, and the never-`passed` rule.
@@ -52,10 +52,20 @@
 - [x] 6.6 Run `gofmt -l`, `go build ./...`, `go vet ./...`, `go test ./...`, and `go test -race ./...`.
 - [x] 6.7 Run pinned telemetry-disabled strict OpenSpec validation across the change and every promoted spec.
 
-## 7. Stop at the owner gates
+## 7. Address review findings on the implementation
 
-- [x] 7.1 Obtain an explicit owner instruction before beginning implementation.
-- [ ] 7.2 Obtain a separate explicit owner instruction before committing.
-- [ ] 7.3 Obtain a separate explicit owner instruction before pushing, opening a pull request, or merging.
-- [ ] 7.4 Obtain a separate explicit owner instruction before archiving this change and promoting the deltas; re-read the promoted text immediately before promotion in case another change archived first.
-- [ ] 7.5 Obtain a separate explicit owner authorization before any real provider run; planning and implementation completion authorize none.
+- [x] 7.1 Gate the reserved path in `Start` before launching, closing the window between preparation and a later start of a reused prepared run.
+- [x] 7.2 Compare the bytes read for retention against the digest the deciding observation recorded, and record a mismatch as invalid instead of binding it to the receipt.
+- [x] 7.3 Retain before persisting the observation, and fail `Finish` closed when a persisted observation names the reserved path without a retained record.
+- [x] 7.4 Apply the repository-boundary check to the reserved path's ancestors, so a symlinked reserved directory cannot silently move the channel outside the repository.
+- [x] 7.5 Require a usable frozen intent reference on v1 receipts, keeping the relaxed path only for receipts that predate the schema identifier.
+- [x] 7.6 Require a material amendment for any change to the answering escalation record.
+- [x] 7.7 Add a regression test per finding, state each new rule in the spec deltas, and re-run the full verification set including the race detector and strict OpenSpec validation.
+
+## 8. Stop at the owner gates
+
+- [x] 8.1 Obtain an explicit owner instruction before beginning implementation.
+- [x] 8.2 Obtain a separate explicit owner instruction before committing.
+- [x] 8.3 Obtain a separate explicit owner instruction before pushing and opening a pull request; merging remains ungranted.
+- [ ] 8.4 Obtain a separate explicit owner instruction before archiving this change and promoting the deltas; re-read the promoted text immediately before promotion in case another change archived first.
+- [ ] 8.5 Obtain a separate explicit owner authorization before any real provider run; planning and implementation completion authorize none.

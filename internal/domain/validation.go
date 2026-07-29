@@ -209,6 +209,13 @@ func validateEscalationResolution(v *validator, resolution *IntentEscalationReso
 	}
 }
 
+func sameEscalationResolution(previous, next *IntentEscalationResolution) bool {
+	if previous == nil || next == nil {
+		return previous == next
+	}
+	return *previous == *next
+}
+
 func validEscalationDigest(value string) bool {
 	const prefix = "sha256:"
 	if !strings.HasPrefix(value, prefix) || len(value) != len(prefix)+64 {
@@ -381,6 +388,17 @@ func ValidateIntentAmendment(previous, next IntentSnapshot, kind AmendmentKind) 
 		}
 		if !sameConfirmation(previous.Confirmation, next.Confirmation) {
 			v.add("amendment.wording.confirmation_changed", "confirmation", "wording-only edit must preserve confirmation")
+		}
+		// Claiming to answer a blocked run is a material act: it records which
+		// question a version resolves and how. Allowing it through a wording-only
+		// edit would let a previously confirmed version acquire a disposition
+		// without returning to candidate and being confirmed again.
+		if !sameEscalationResolution(previous.ResolvedEscalation, next.ResolvedEscalation) {
+			v.add(
+				"amendment.wording.resolution_changed",
+				"resolves",
+				"wording-only edit must preserve the resolved escalation record",
+			)
 		}
 		validateSameIntentItemIDs(v, previous, next)
 		validateWordingOnlyProvenance(v, previous, next)

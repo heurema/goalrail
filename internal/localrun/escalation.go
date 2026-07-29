@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"github.com/heurema/goalrail/internal/boundedio"
@@ -41,12 +42,36 @@ type EscalationRecord struct {
 // reserved path. Observation includes ignored files, so an ignored directory
 // does not hide the artifact.
 func observationHasEscalation(observation WorktreeObservation) bool {
+	_, present := escalationEntry(observation)
+	return present
+}
+
+func escalationEntry(observation WorktreeObservation) (WorktreeEntry, bool) {
 	for _, entry := range observation.Entries {
 		if entry.Path == ReservedEscalationPath {
-			return true
+			return entry, true
 		}
 	}
-	return false
+	return WorktreeEntry{}, false
+}
+
+// escalationArtifactPresent reports whether the reserved path exists in the
+// worktree right now, independently of any observation.
+//
+// Preparation gates the frozen baseline, but a prepared run can be started
+// later, and a prepared run is reused rather than re-observed. Without a
+// pre-launch check, an artifact created between preparation and launch would be
+// attributed to the provider that had not run yet.
+func escalationArtifactPresent(repositoryRoot string) (bool, error) {
+	artifactPath := filepath.Join(repositoryRoot, filepath.FromSlash(ReservedEscalationPath))
+	_, err := os.Lstat(artifactPath)
+	if err == nil {
+		return true, nil
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	return false, fmt.Errorf("inspect reserved escalation path: %w", err)
 }
 
 // captureEscalation reads the reserved path from the worktree that produced the
@@ -62,7 +87,8 @@ func (service *Service) captureEscalation(
 	runID domain.RunID,
 	observation WorktreeObservation,
 ) (*EscalationRecord, error) {
-	if !observationHasEscalation(observation) {
+	observed, present := escalationEntry(observation)
+	if !present {
 		return nil, nil
 	}
 	artifactPath := filepath.Join(repositoryRoot, filepath.FromSlash(ReservedEscalationPath))
@@ -81,6 +107,17 @@ func (service *Service) captureEscalation(
 
 	sum := sha256.Sum256(raw)
 	digest := "sha256:" + hex.EncodeToString(sum[:])
+	// The observation hashed the artifact; this read is a second read. If the
+	// two disagree, the file changed between them and the single-snapshot
+	// evidence chain does not hold, so the record is recorded as invalid rather
+	// than silently binding a receipt to bytes the delta never saw.
+	if observed.Digest != "" && observed.Digest != digest {
+		return &EscalationRecord{
+			Path:   ReservedEscalationPath,
+			Valid:  false,
+			Reason: "ESCALATION_ARTIFACT_CHANGED",
+		}, nil
+	}
 	retainedRef := runPath(runID, retainedEscalationName)
 	if err := service.store.WriteBytesOnce(retainedRef, raw, true); err != nil {
 		return nil, fmt.Errorf("retain escalation artifact: %w", err)

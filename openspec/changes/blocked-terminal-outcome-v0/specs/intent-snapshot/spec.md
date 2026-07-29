@@ -15,6 +15,11 @@ a malformed digest, an unknown disposition, or a duplicate record within one
 version. An absent record MUST NOT block confirmation, and its absence MUST NOT
 be inferred as any particular disposition.
 
+Adding, removing, or changing the record is a material change. A wording-only
+amendment SHALL preserve it exactly, so a version that is already confirmed
+cannot acquire or alter a disposition without returning to candidate and being
+confirmed again.
+
 The record SHALL NOT grant effect authority. It expresses which question a
 version answers; it does not authorize a run, a launch, or any external effect.
 
@@ -29,6 +34,10 @@ version answers; it does not authorize a run, a launch, or any external effect.
 #### Scenario: The record is malformed
 - **WHEN** a recorded escalation reference carries a malformed run identifier, a malformed digest, an unknown disposition, or a duplicate entry
 - **THEN** validation rejects the version and does not silently drop the record
+
+#### Scenario: A wording-only edit would acquire or alter the record
+- **WHEN** a wording-only amendment adds an escalation record to a confirmed version, removes one, or changes its disposition
+- **THEN** validation rejects the amendment and requires a material next version with fresh owner confirmation
 
 #### Scenario: A version answers nothing
 - **WHEN** an intent version records no escalation reference

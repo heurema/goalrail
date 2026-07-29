@@ -3,12 +3,15 @@ package localrun
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/heurema/goalrail/internal/domain"
@@ -24,7 +27,7 @@ question: Which retention period governs when the two documents disagree?
 func TestPrepareRejectsPreexistingEscalationArtifact(t *testing.T) {
 	adapter := &countingFixtureAdapter{result: completedObservation()}
 	service, spec, store, _ := fixtureService(t, adapter, []WorktreeObservation{
-		observationWith("base", escalationEntry()),
+		observationWith("base", escalationWorktreeEntry(validEscalationPayload)),
 	})
 	writeWorktreeEscalation(t, spec.Repository.Root, validEscalationPayload)
 
@@ -69,10 +72,119 @@ func TestPrepareAllowsUnrelatedContentBesideTheReservedPath(t *testing.T) {
 	}
 }
 
+func TestStartRejectsAnArtifactCreatedAfterPreparation(t *testing.T) {
+	// Preparation gates the frozen baseline, but a prepared run is reused rather
+	// than re-observed and can be started much later. Without a pre-launch gate,
+	// an artifact created in that window would be attributed to a provider that
+	// had not run yet.
+	adapter := &countingFixtureAdapter{result: completedObservation()}
+	service, spec, _, _ := fixtureService(t, adapter, []WorktreeObservation{
+		observationWith("base"),
+		observationWith("terminal", escalationWorktreeEntry(validEscalationPayload)),
+	})
+	prepared := prepareFixture(t, service, spec)
+	writeWorktreeEscalation(t, spec.Repository.Root, validEscalationPayload)
+	service.newRunID = func() (domain.RunID, error) { return "run-stale-artifact", nil }
+
+	_, err := service.Start(context.Background(), StartInput{
+		WorkSpecDigest: prepared.WorkSpec.Digest(),
+		Adapter:        "fixture",
+	})
+	if !errors.Is(err, ErrEscalationArtifactPresent) {
+		t.Fatalf("expected the pre-launch gate to reject a stale artifact, got %v", err)
+	}
+	if adapter.calls.Load() != 0 {
+		t.Fatal("a stale artifact reached the provider")
+	}
+}
+
+func TestPrepareRejectsASymlinkedReservedDirectory(t *testing.T) {
+	// Git reports only the `.goalrail` entry for a symlinked directory, so an
+	// exact-path check alone would accept preparation. The provider would then
+	// write the question outside the repository, where observation never sees
+	// it, and the channel would be silently dead.
+	adapter := &countingFixtureAdapter{result: completedObservation()}
+	service, spec, _, _ := fixtureService(t, adapter, []WorktreeObservation{
+		observationWith("base"),
+		observationWith("terminal"),
+	})
+	external := t.TempDir()
+	link := filepath.Join(spec.Repository.Root, ".goalrail")
+	if err := os.Symlink(external, link); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := service.Prepare(context.Background(), specReader(t, spec)); err == nil {
+		t.Fatal("preparation accepted a reserved directory pointing outside the repository")
+	}
+}
+
+func TestRetentionMismatchIsRecordedRatherThanBound(t *testing.T) {
+	// The observation hashes the artifact and retention reads it again. If the
+	// file changed between the two, binding the receipt to the second read would
+	// silently break the single-snapshot evidence chain.
+	receipt := runEscalationLifecycle(t, escalationLifecycle{
+		payload:      validEscalationPayload,
+		terminal:     observationWith("terminal", escalationWorktreeEntry("a different question\n")),
+		expectStatus: StateFailed,
+	})
+
+	if receipt.Status != StateFailed {
+		t.Fatalf("status = %q, want failed", receipt.Status)
+	}
+	if receipt.Escalation == nil || receipt.Escalation.Valid {
+		t.Fatalf("escalation = %+v, want an invalid record", receipt.Escalation)
+	}
+	if receipt.Escalation.Reason != "ESCALATION_ARTIFACT_CHANGED" {
+		t.Fatalf("reason = %q, want ESCALATION_ARTIFACT_CHANGED", receipt.Escalation.Reason)
+	}
+	if receipt.Escalation.RetainedRef != "" {
+		t.Fatal("a mismatched artifact was retained as if it were the observed one")
+	}
+}
+
+func TestFinishFailsClosedWhenAnObservedQuestionWasNotRetained(t *testing.T) {
+	// Reachable when retention fails after the observation exists. Treating the
+	// missing record as "no question" would let the run finish as passed.
+	adapter := &escalatingFixtureAdapter{result: completedObservation()}
+	service, spec, store, _ := fixtureService(t, adapter, []WorktreeObservation{
+		observationWith("base"),
+		observationWith("terminal", escalationWorktreeEntry(validEscalationPayload)),
+	})
+	adapter.onLaunch = writeEscalationDuringLaunch(t, spec.Repository.Root, validEscalationPayload)
+	prepared := prepareFixture(t, service, spec)
+	service.newRunID = func() (domain.RunID, error) { return "run-unretained", nil }
+	if _, err := service.Start(context.Background(), StartInput{
+		WorkSpecDigest: prepared.WorkSpec.Digest(),
+		Adapter:        "fixture",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(
+		store.Root(),
+		filepath.FromSlash(runPath("run-unretained", "escalation.json")),
+	)); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := service.Finish(context.Background(), FinishInput{
+		RunID: "run-unretained",
+		Results: []CheckResult{{
+			ID:             "test",
+			State:          domain.CheckResultPass,
+			EvidenceRef:    "local:test-log",
+			EvidenceDigest: "sha256:" + strings.Repeat("d", 64),
+		}},
+	})
+	if err == nil {
+		t.Fatal("finish accepted a run whose observed question was never retained")
+	}
+}
+
 func TestValidEscalationWithCleanScopeYieldsBlockedReceipt(t *testing.T) {
 	receipt := runEscalationLifecycle(t, escalationLifecycle{
 		payload:  validEscalationPayload,
-		terminal: observationWith("terminal", escalationEntry()),
+		terminal: observationWith("terminal", escalationWorktreeEntry(validEscalationPayload)),
 	})
 
 	if receipt.Status != StateBlocked {
@@ -120,7 +232,7 @@ func TestEscalationWithInScopeEditsYieldsFailed(t *testing.T) {
 		payload: validEscalationPayload,
 		terminal: observationWith(
 			"terminal",
-			escalationEntry(),
+			escalationWorktreeEntry(validEscalationPayload),
 			WorktreeEntry{Path: "inside/patch.go", Status: " M", Digest: digestOf("patch")},
 		),
 	})
@@ -143,7 +255,7 @@ func TestReservedPathIsNotAnInScopeEditUnderABroadScope(t *testing.T) {
 	}
 	receipt := runEscalationLifecycle(t, escalationLifecycle{
 		payload:      validEscalationPayload,
-		terminal:     observationWith("terminal", escalationEntry()),
+		terminal:     observationWith("terminal", escalationWorktreeEntry(validEscalationPayload)),
 		mutateSpec:   spec,
 		expectStatus: StateBlocked,
 	})
@@ -169,7 +281,7 @@ func TestInvalidEscalationPayloadYieldsFailedAndNeverBlocked(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			receipt := runEscalationLifecycle(t, escalationLifecycle{
 				payload:      payload,
-				terminal:     observationWith("terminal", escalationEntry()),
+				terminal:     observationWith("terminal", escalationWorktreeEntry(payload)),
 				expectStatus: StateFailed,
 			})
 			if receipt.Status != StateFailed {
@@ -216,12 +328,12 @@ func TestUnattributableOutcomesTakePrecedenceOverBlocked(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			adapter := &countingFixtureAdapter{result: testCase.observation}
+			adapter := &escalatingFixtureAdapter{result: testCase.observation}
 			service, spec, _, _ := fixtureService(t, adapter, []WorktreeObservation{
 				observationWith("base"),
-				observationWith("terminal", escalationEntry()),
+				observationWith("terminal", escalationWorktreeEntry(validEscalationPayload)),
 			})
-			writeWorktreeEscalation(t, spec.Repository.Root, validEscalationPayload)
+			adapter.onLaunch = writeEscalationDuringLaunch(t, spec.Repository.Root, validEscalationPayload)
 			prepared := prepareFixture(t, service, spec)
 			service.newRunID = func() (domain.RunID, error) { return "run-precedence", nil }
 
@@ -256,7 +368,7 @@ func TestUnattributableOutcomesTakePrecedenceOverBlocked(t *testing.T) {
 func TestFailingCheckKeepsFailedWhenAnEscalationExists(t *testing.T) {
 	receipt := runEscalationLifecycle(t, escalationLifecycle{
 		payload:  validEscalationPayload,
-		terminal: observationWith("terminal", escalationEntry()),
+		terminal: observationWith("terminal", escalationWorktreeEntry(validEscalationPayload)),
 		results: []CheckResult{{
 			ID:             "test",
 			State:          domain.CheckResultFail,
@@ -282,7 +394,7 @@ func TestFailingCheckKeepsFailedWhenAnEscalationExists(t *testing.T) {
 func TestPassingChecksNeverYieldPassedWhileAnEscalationIsRetained(t *testing.T) {
 	receipt := runEscalationLifecycle(t, escalationLifecycle{
 		payload:  validEscalationPayload,
-		terminal: observationWith("terminal", escalationEntry()),
+		terminal: observationWith("terminal", escalationWorktreeEntry(validEscalationPayload)),
 		results: []CheckResult{{
 			ID:             "test",
 			State:          domain.CheckResultPass,
@@ -303,12 +415,12 @@ func TestPassingChecksNeverYieldPassedWhileAnEscalationIsRetained(t *testing.T) 
 }
 
 func TestRetainedEscalationSurvivesWorktreeMutation(t *testing.T) {
-	adapter := &countingFixtureAdapter{result: completedObservation()}
+	adapter := &escalatingFixtureAdapter{result: completedObservation()}
 	service, spec, store, _ := fixtureService(t, adapter, []WorktreeObservation{
 		observationWith("base"),
-		observationWith("terminal", escalationEntry()),
+		observationWith("terminal", escalationWorktreeEntry(validEscalationPayload)),
 	})
-	writeWorktreeEscalation(t, spec.Repository.Root, validEscalationPayload)
+	adapter.onLaunch = writeEscalationDuringLaunch(t, spec.Repository.Root, validEscalationPayload)
 	prepared := prepareFixture(t, service, spec)
 	service.newRunID = func() (domain.RunID, error) { return "run-retained", nil }
 
@@ -342,14 +454,14 @@ func TestRetainedEscalationSurvivesWorktreeMutation(t *testing.T) {
 }
 
 func TestFinishUsesTheObservationTakenAtStart(t *testing.T) {
-	adapter := &countingFixtureAdapter{result: completedObservation()}
+	adapter := &escalatingFixtureAdapter{result: completedObservation()}
 	service, spec, _, _ := fixtureService(t, adapter, []WorktreeObservation{
 		observationWith("base"),
-		observationWith("terminal", escalationEntry()),
+		observationWith("terminal", escalationWorktreeEntry(validEscalationPayload)),
 		// A third observation would only be reached if Finish observed again.
 		observationWith("late"),
 	})
-	writeWorktreeEscalation(t, spec.Repository.Root, validEscalationPayload)
+	adapter.onLaunch = writeEscalationDuringLaunch(t, spec.Repository.Root, validEscalationPayload)
 	prepared := prepareFixture(t, service, spec)
 	service.newRunID = func() (domain.RunID, error) { return "run-single-observation", nil }
 
@@ -411,7 +523,7 @@ func TestFinishFallsBackToObservingWhenNoStartObservationExists(t *testing.T) {
 
 func TestReservedPathIsNeverAScopeViolation(t *testing.T) {
 	baseline := observationWith("base")
-	terminal := observationWith("terminal", escalationEntry())
+	terminal := observationWith("terminal", escalationWorktreeEntry(validEscalationPayload))
 	delta := CompareWorktrees(baseline, terminal, []string{"inside"})
 
 	if len(delta.ScopeViolations) != 0 {
@@ -441,6 +553,32 @@ func TestReceiptSchemaRulesAcceptLegacyAndRejectUnknown(t *testing.T) {
 	unknown.Schema = "goalrail.terminal-receipt/v9"
 	if err := validateTerminalReceipt(unknown); err == nil {
 		t.Fatal("an unsupported receipt schema was accepted")
+	}
+
+	// A v1 receipt promises the run-to-intent chain. A missing or malformed
+	// reference would make that chain vanish or point at the wrong decision.
+	withoutIntent := base
+	withoutIntent.Intent = nil
+	if err := validateTerminalReceipt(withoutIntent); err == nil {
+		t.Fatal("a v1 receipt was accepted without a frozen intent reference")
+	}
+	for name, reference := range map[string]ReceiptIntentReference{
+		"non-canonical id": {ID: "Intent One", Version: 1, Digest: "sha256:" + strings.Repeat("b", 64)},
+		"zero version":     {ID: "intent-dogfood", Version: 0, Digest: "sha256:" + strings.Repeat("b", 64)},
+		"malformed digest": {ID: "intent-dogfood", Version: 1, Digest: "sha256:short"},
+	} {
+		malformed := base
+		malformed.Intent = &reference
+		if err := validateTerminalReceipt(malformed); err == nil {
+			t.Fatalf("a v1 receipt was accepted with a %s intent reference", name)
+		}
+	}
+	// The relaxed path stays available only to receipts predating the identifier.
+	legacyWithoutIntent := base
+	legacyWithoutIntent.Schema = ""
+	legacyWithoutIntent.Intent = nil
+	if err := validateTerminalReceipt(legacyWithoutIntent); err != nil {
+		t.Fatalf("a legacy receipt was required to carry an intent reference: %v", err)
 	}
 
 	blockedWithoutEvidence := base
@@ -478,7 +616,7 @@ type escalationLifecycle struct {
 
 func runEscalationLifecycle(t *testing.T, lifecycle escalationLifecycle) TerminalReceipt {
 	t.Helper()
-	adapter := &countingFixtureAdapter{result: completedObservation()}
+	adapter := &escalatingFixtureAdapter{result: completedObservation()}
 	service, spec, _, _ := fixtureService(t, adapter, []WorktreeObservation{
 		observationWith("base"),
 		lifecycle.terminal,
@@ -486,7 +624,7 @@ func runEscalationLifecycle(t *testing.T, lifecycle escalationLifecycle) Termina
 	if lifecycle.mutateSpec != nil {
 		spec = lifecycle.mutateSpec(spec)
 	}
-	writeWorktreeEscalation(t, spec.Repository.Root, lifecycle.payload)
+	adapter.onLaunch = writeEscalationDuringLaunch(t, spec.Repository.Root, lifecycle.payload)
 	prepared := prepareFixture(t, service, spec)
 	service.newRunID = func() (domain.RunID, error) { return "run-escalation", nil }
 
@@ -506,6 +644,30 @@ func runEscalationLifecycle(t *testing.T, lifecycle escalationLifecycle) Termina
 	return receipt
 }
 
+// escalatingFixtureAdapter writes the reserved path while it "runs", which is
+// when a provider would write it. Writing it before start is now rejected by
+// the pre-launch gate, and rightly so: an artifact that predates the launch
+// belongs to no provider.
+type escalatingFixtureAdapter struct {
+	result   ProviderObservation
+	onLaunch func()
+	calls    atomic.Int32
+}
+
+func (*escalatingFixtureAdapter) Name() string    { return "fixture" }
+func (*escalatingFixtureAdapter) Version() string { return "v0" }
+
+func (adapter *escalatingFixtureAdapter) Launch(
+	_ context.Context,
+	_ LaunchRequest,
+) ProviderObservation {
+	adapter.calls.Add(1)
+	if adapter.onLaunch != nil {
+		adapter.onLaunch()
+	}
+	return adapter.result
+}
+
 func specReader(t *testing.T, spec domain.WorkSpec) io.Reader {
 	t.Helper()
 	raw, err := json.Marshal(spec)
@@ -513,6 +675,16 @@ func specReader(t *testing.T, spec domain.WorkSpec) io.Reader {
 		t.Fatal(err)
 	}
 	return bytes.NewReader(raw)
+}
+
+// writeEscalationDuringLaunch returns a launch hook that writes the reserved
+// path, matching when a real provider would create it. Writing it earlier now
+// trips the pre-launch gate.
+func writeEscalationDuringLaunch(t *testing.T, root, payload string) func() {
+	t.Helper()
+	return func() {
+		writeWorktreeEscalation(t, root, payload)
+	}
 }
 
 func writeWorktreeEscalation(t *testing.T, root, payload string) {
@@ -526,11 +698,15 @@ func writeWorktreeEscalation(t *testing.T, root, payload string) {
 	}
 }
 
-func escalationEntry() WorktreeEntry {
+// escalationWorktreeEntry mirrors what the real observer records: the digest of
+// the artifact's actual bytes. Retention compares its own read against this
+// digest, so a fixture that invented one would hide the mismatch it guards.
+func escalationWorktreeEntry(payload string) WorktreeEntry {
+	sum := sha256.Sum256([]byte(payload))
 	return WorktreeEntry{
 		Path:   ReservedEscalationPath,
 		Status: "!!",
-		Digest: digestOf("escalation"),
+		Digest: "sha256:" + hex.EncodeToString(sum[:]),
 	}
 }
 
@@ -570,10 +746,15 @@ func hasReason(reasons []domain.EvidenceReasonCode, wanted domain.EvidenceReason
 func validFixtureReceipt() TerminalReceipt {
 	now := fixedClock()
 	return TerminalReceipt{
-		Schema:             TerminalReceiptSchemaV1,
-		WorkSpecID:         "work-dogfood",
-		WorkSpecVersion:    1,
-		WorkSpecDigest:     domain.WorkSpecDigest("sha256:" + strings.Repeat("a", 64)),
+		Schema:          TerminalReceiptSchemaV1,
+		WorkSpecID:      "work-dogfood",
+		WorkSpecVersion: 1,
+		WorkSpecDigest:  domain.WorkSpecDigest("sha256:" + strings.Repeat("a", 64)),
+		Intent: &ReceiptIntentReference{
+			ID:      "intent-dogfood",
+			Version: 3,
+			Digest:  "sha256:" + strings.Repeat("b", 64),
+		},
 		RunID:              "run-one",
 		Adapter:            "fixture",
 		AdapterVersion:     "v0",
