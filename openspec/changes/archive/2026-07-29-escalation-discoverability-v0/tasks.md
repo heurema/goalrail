@@ -56,5 +56,5 @@
 - [x] 8.1 Obtain an explicit owner instruction before beginning implementation.
 - [x] 8.2 Obtain a separate explicit owner instruction before committing.
 - [x] 8.3 Obtain a separate explicit owner instruction before pushing and opening a pull request; merging remains ungranted.
-- [ ] 8.4 Obtain a separate explicit owner instruction before archiving this change and promoting the deltas; re-read the promoted text immediately before promotion in case another change archived first.
+- [x] 8.4 Obtain a separate explicit owner instruction before archiving this change and promoting the deltas; re-read the promoted text immediately before promotion in case another change archived first. The promoted `local-run` text was confirmed unchanged since the delta was authored, so the modified adapter requirement applied to the text it was written against.
 - [ ] 8.5 Obtain a separate explicit owner authorization before any real provider run. That run closes two open questions at once: whether the reserved path is writable inside the provider sandbox, and whether the announced context reaches the agent. Neither is evidence until it happens.
