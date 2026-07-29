@@ -117,18 +117,28 @@ func isConnected(scaffold Scaffold, configPath string) (bool, error) {
 	case ScaffoldCodex:
 		return strings.Contains(string(raw), blockBegin), nil
 	case ScaffoldClaudeCode:
+		// An empty settings file is an empty configuration, exactly as the
+		// write path treats it; failing here would make connection impossible
+		// for a user whose scaffold created a zero-length file.
+		if len(strings.TrimSpace(string(raw))) == 0 {
+			return false, nil
+		}
 		var settings map[string]any
 		if err := json.Unmarshal(raw, &settings); err != nil {
 			return false, fmt.Errorf("scaffold settings are malformed: %w", err)
 		}
-		return claudeCodeHasGoalrail(settings), nil
+		// The connection is present only when every event is registered. A
+		// partial registration — say Stop was hand-removed — must read as
+		// absent, or re-running the consented command could never repair it.
+		return claudeCodeHasGoalrail(settings, "SessionStart") &&
+			claudeCodeHasGoalrail(settings, "Stop"), nil
 	default:
 		return false, fmt.Errorf("unsupported scaffold %q", scaffold)
 	}
 }
 
 func connectCodex(plan ConnectionPlan) error {
-	command := shellQuote(plan.Executable) + " hook"
+	command := managedCommand(plan.Executable)
 	block := strings.Join([]string{
 		"",
 		blockBegin,
@@ -149,6 +159,19 @@ func connectCodex(plan ConnectionPlan) error {
 	return appendToFile(plan.ConfigPath, block)
 }
 
+// managedMarker travels inside our handler command so removal identifies the
+// exact handler connection installed, never a lookalike. The hook entry point
+// ignores arguments, so the marker is inert at run time.
+const managedMarker = "--managed-by=goalrail"
+
+func managedCommand(executable string) string {
+	return shellQuote(executable) + " hook " + managedMarker
+}
+
+func isManagedCommand(command string) bool {
+	return strings.Contains(command, managedMarker)
+}
+
 func connectClaudeCode(plan ConnectionPlan) error {
 	settings, err := readJSONObject(plan.ConfigPath)
 	if err != nil {
@@ -158,43 +181,38 @@ func connectClaudeCode(plan ConnectionPlan) error {
 	if hooks == nil {
 		hooks = map[string]any{}
 	}
-	entry := func() any {
-		return []any{map[string]any{
+	// Reconcile per event: a partially present registration gains only what is
+	// missing, so a repeated consented connection repairs rather than
+	// duplicates.
+	for _, event := range []string{"SessionStart", "Stop"} {
+		if claudeCodeHasGoalrail(settings, event) {
+			continue
+		}
+		existing, _ := hooks[event].([]any)
+		hooks[event] = append(existing, map[string]any{
 			"hooks": []any{map[string]any{
 				"type":    "command",
-				"command": shellQuote(plan.Executable) + " hook",
+				"command": managedCommand(plan.Executable),
 			}},
-		}}
-	}
-	for _, event := range []string{"SessionStart", "Stop"} {
-		existing, _ := hooks[event].([]any)
-		hooks[event] = append(existing, entry().([]any)...)
+		})
+		settings["hooks"] = hooks
 	}
 	settings["hooks"] = hooks
 	return writeJSONObject(plan.ConfigPath, settings)
 }
 
-func claudeCodeHasGoalrail(settings map[string]any) bool {
+func claudeCodeHasGoalrail(settings map[string]any, event string) bool {
 	hooks, _ := settings["hooks"].(map[string]any)
-	for _, event := range []string{"SessionStart", "Stop"} {
-		groups, _ := hooks[event].([]any)
-		for _, group := range groups {
-			if commandGroupMentionsGoalrail(group) {
+	groups, _ := hooks[event].([]any)
+	for _, group := range groups {
+		asMap, _ := group.(map[string]any)
+		handlers, _ := asMap["hooks"].([]any)
+		for _, handler := range handlers {
+			handlerMap, _ := handler.(map[string]any)
+			command, _ := handlerMap["command"].(string)
+			if isManagedCommand(command) {
 				return true
 			}
-		}
-	}
-	return false
-}
-
-func commandGroupMentionsGoalrail(group any) bool {
-	asMap, _ := group.(map[string]any)
-	handlers, _ := asMap["hooks"].([]any)
-	for _, handler := range handlers {
-		handlerMap, _ := handler.(map[string]any)
-		command, _ := handlerMap["command"].(string)
-		if strings.Contains(command, "gr' hook") || strings.HasSuffix(command, "gr hook") {
-			return true
 		}
 	}
 	return false
@@ -215,19 +233,36 @@ func removeClaudeCodeHooks(configPath string) (bool, error) {
 	removed := false
 	for _, event := range []string{"SessionStart", "Stop"} {
 		groups, _ := hooks[event].([]any)
-		kept := make([]any, 0, len(groups))
+		keptGroups := make([]any, 0, len(groups))
 		for _, group := range groups {
-			if commandGroupMentionsGoalrail(group) {
-				removed = true
+			// Filter at the handler level: a group can mix our handler with a
+			// foreign one, and disconnection may remove only what connection
+			// added.
+			asMap, _ := group.(map[string]any)
+			handlers, _ := asMap["hooks"].([]any)
+			keptHandlers := make([]any, 0, len(handlers))
+			for _, handler := range handlers {
+				handlerMap, _ := handler.(map[string]any)
+				command, _ := handlerMap["command"].(string)
+				if isManagedCommand(command) {
+					removed = true
+					continue
+				}
+				keptHandlers = append(keptHandlers, handler)
+			}
+			if len(keptHandlers) == 0 && len(handlers) > 0 {
 				continue
 			}
-			kept = append(kept, group)
+			if len(handlers) > 0 {
+				asMap["hooks"] = keptHandlers
+			}
+			keptGroups = append(keptGroups, group)
 		}
-		if len(kept) == 0 {
+		if len(keptGroups) == 0 {
 			delete(hooks, event)
 			continue
 		}
-		hooks[event] = kept
+		hooks[event] = keptGroups
 	}
 	if !removed {
 		return false, nil
@@ -236,6 +271,15 @@ func removeClaudeCodeHooks(configPath string) (bool, error) {
 		delete(settings, "hooks")
 	} else {
 		settings["hooks"] = hooks
+	}
+	if len(settings) == 0 {
+		// Connection created this file for its own registration; an empty
+		// object left behind is residue.
+		if err := os.Remove(configPath); err != nil {
+			return false, err
+		}
+		_ = os.Remove(filepath.Dir(configPath))
+		return true, nil
 	}
 	return true, writeJSONObject(configPath, settings)
 }
@@ -265,7 +309,17 @@ func removeManagedBlock(configPath string) (bool, error) {
 	if trimmed != "" {
 		trimmed += "\n"
 	}
-	return true, os.WriteFile(configPath, []byte(trimmed+content[tail:]), 0o644)
+	remaining := trimmed + content[tail:]
+	if strings.TrimSpace(remaining) == "" {
+		// Connection created this file for its own block; leaving an empty
+		// file and directory behind is residue.
+		if err := os.Remove(configPath); err != nil {
+			return false, err
+		}
+		_ = os.Remove(filepath.Dir(configPath))
+		return true, nil
+	}
+	return true, os.WriteFile(configPath, []byte(remaining), 0o644)
 }
 
 func readJSONObject(path string) (map[string]any, error) {

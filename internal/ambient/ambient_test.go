@@ -352,3 +352,100 @@ func writeQuestion(t *testing.T, root, payload string) {
 		t.Fatal(err)
 	}
 }
+
+func TestTwoIdenticalQuestionsKeepSeparateRecords(t *testing.T) {
+	// Byte-identical questions from two sessions share retained bytes but not
+	// identity: the second record must not collide with the first and lose its
+	// attribution.
+	root := initializedRepository(t)
+	store := newRecordingStore()
+
+	writeQuestion(t, root, validQuestion)
+	first, err := StopSession(store, root, "session-one", fixedIntents{}, fixedClock())
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeQuestion(t, root, validQuestion)
+	later := func() time.Time { return time.Date(2026, 7, 29, 18, 0, 0, 0, time.UTC) }
+	second, err := StopSession(store, root, "session-two", fixedIntents{}, later)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.QuestionID == second.QuestionID {
+		t.Fatal("two occurrences of the same question share one identity")
+	}
+	if first.Digest != second.Digest {
+		t.Fatal("identical payloads produced different digests")
+	}
+	records := 0
+	for name := range store.json {
+		if strings.Contains(name, "questions/records/") {
+			records++
+		}
+	}
+	if records != 2 {
+		t.Fatalf("records = %d, want one per occurrence", records)
+	}
+}
+
+func TestAnUnreadableQuestionStillLeavesARecord(t *testing.T) {
+	// The session tried to escalate; the attempt must leave evidence even when
+	// the artifact itself cannot be retained.
+	root := initializedRepository(t)
+	if err := os.MkdirAll(filepath.Join(root, ".goalrail", "blocked.md"), 0o755); err != nil {
+		t.Fatal(err) // a directory at the reserved path is unreadable by design
+	}
+	store := newRecordingStore()
+
+	record, err := StopSession(store, root, "session-one", fixedIntents{}, fixedClock())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if record == nil || record.Invalid != "ESCALATION_ARTIFACT_UNREADABLE" {
+		t.Fatalf("record = %+v", record)
+	}
+	if record.QuestionID == "" {
+		t.Fatal("an unreadable question has no identity to answer or dismiss")
+	}
+	if store.json[recordPath(record.QuestionID)] == nil {
+		t.Fatal("the unreadable question left no persisted record")
+	}
+}
+
+func TestAStaleSymlinkIsClearedWithoutFollowingIt(t *testing.T) {
+	// Archival gets the same hygiene as retention: following a stale symlink
+	// would copy bytes from outside the repository into Goalrail state.
+	root := initializedRepository(t)
+	outside := filepath.Join(t.TempDir(), "outside.md")
+	if err := os.WriteFile(outside, []byte("secret outside content"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	linkPath := questionPath(root)
+	if err := os.MkdirAll(filepath.Dir(linkPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, linkPath); err != nil {
+		t.Fatal(err)
+	}
+	store := newRecordingStore()
+
+	archived, err := archiveStaleQuestion(store, root, fixedClock())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !archived {
+		t.Fatal("a stale symlink was left in place for the new session")
+	}
+	if _, err := os.Lstat(linkPath); !os.IsNotExist(err) {
+		t.Fatal("the stale symlink was not cleared")
+	}
+	for _, content := range store.bytes {
+		if strings.Contains(string(content), "secret outside content") {
+			t.Fatal("archival followed the symlink and copied outside bytes")
+		}
+	}
+	// The target itself must be untouched.
+	if raw, err := os.ReadFile(outside); err != nil || string(raw) != "secret outside content" {
+		t.Fatal("archival disturbed the symlink target")
+	}
+}

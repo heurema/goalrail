@@ -34,7 +34,11 @@ started, driven, and ended entirely by the user in their own scaffold.
 The first act of every hook invocation SHALL be to determine whether the
 session's directory is a Goalrail-initialized repository. Everywhere else the
 hook MUST exit immediately, reading nothing beyond the initialization check,
-writing nothing, and retaining no observation of the session.
+writing nothing, and retaining no observation of the session. In particular,
+the scaffold's event payload MUST NOT be read before the check passes: a
+payload can carry prompts, transcript paths, and authorization fields, and
+reading one in an unconnected directory observes the session regardless of
+what happens afterwards.
 
 Observing sessions outside connected directories is prohibited, not merely
 avoided: a persistent hook fires for every session of the user, and acting
@@ -61,7 +65,10 @@ clearing, or compaction.
 When the reserved path already holds a question left by an earlier session,
 the hook SHALL archive it into the state root outside the repository before
 the session proceeds, so a stale question is never attributed to the new
-session.
+session. The archival read SHALL apply the same bounded regular-file hygiene
+as retention: a stale artifact that is oversized, non-regular, or a link
+outside the repository is cleared and noted without being followed, blocking
+on, or copied.
 
 #### Scenario: Agent learns the channel exists
 - **WHEN** a session opens in a connected directory
@@ -81,7 +88,12 @@ session.
 At session stop in a connected directory, when the reserved path holds a
 question, the hook SHALL retain its exact bytes append-only in the state root
 outside the repository, applying the existing escalation hygiene. The retained
-record SHALL carry the question digest and the session reference.
+record SHALL carry the question digest and the session reference, and SHALL
+have an identity of its own — one record per occurrence, so two sessions
+asking a byte-identical question keep separate, individually answerable
+records. A question that cannot be read still leaves a persisted record with
+an explicit reason: the session tried to escalate, and the attempt must leave
+evidence.
 
 The record SHALL be bound to the directory's single active confirmed intent —
 its ID, version, and digest. When no single active confirmed intent is
@@ -92,9 +104,17 @@ A background session produces a question record, not a run outcome: no run ID,
 launch claim, terminal receipt, or `blocked` status is minted.
 
 The answer to a recorded question is a new intent version carrying the
-existing resolves-and-disposition record, and the next session works from that
-version. No second answering mechanism, dialogue, acknowledgement, or resume
-exists.
+existing resolves-and-disposition record, citing the question record's own
+identifier, and the next session works from that version. No second answering
+mechanism, dialogue, acknowledgement, or resume exists.
+
+#### Scenario: Two sessions ask the identical question
+- **WHEN** two sessions produce byte-identical questions
+- **THEN** the payload is retained once but each occurrence keeps its own record and identity, and neither collides with the other
+
+#### Scenario: The question cannot be read
+- **WHEN** the reserved path holds something oversized, non-regular, or otherwise unreadable at session stop
+- **THEN** a record with an explicit reason is still persisted, because the escalation attempt itself is evidence
 
 #### Scenario: Question is retained and bound
 - **WHEN** a session ends with a question at the reserved path and the directory has one active confirmed intent

@@ -13,8 +13,9 @@
 ## 3. State the contract as spec deltas
 
 - [x] 3.1 Add the `ambient-connect` capability: consented reversible connection, the initialized-directory gate, session-start announcement with stale-file archival, session-stop retention with exact-or-explicitly-unbound intent binding, and the fail-quiet posture beside the unchanged fail-closed wrapper.
-- [x] 3.2 Modify `operator-cli-help` so help presents the background surface, states that ordinary work needs no per-task command, and never advertises the scaffold-invoked hook entry point.
-- [x] 3.3 Run pinned telemetry-disabled strict OpenSpec validation on the change.
+- [x] 3.2 Modify `intent-snapshot` so the answering reference names a blocked run or a background question record.
+- [x] 3.3 Modify `operator-cli-help` so help presents the background surface, states that ordinary work needs no per-task command, and never advertises the scaffold-invoked hook entry point.
+- [x] 3.4 Run pinned telemetry-disabled strict OpenSpec validation on the change.
 
 ## 4. Record the design
 
@@ -44,10 +45,23 @@
 - [x] 6.6 Run `gofmt -l`, `go build ./...`, `go vet ./...`, `go test ./...`, and `go test -race ./...`.
 - [x] 6.7 Run pinned telemetry-disabled strict OpenSpec validation across the change and every promoted spec.
 
-## 7. Stop at the owner gates
+## 7. Address review findings on the implementation
 
-- [x] 7.1 Obtain an explicit owner instruction before beginning implementation.
-- [ ] 7.2 Obtain a separate explicit owner instruction before committing.
-- [ ] 7.3 Obtain a separate explicit owner instruction before pushing, opening a pull request, or merging.
-- [ ] 7.4 Obtain a separate explicit owner instruction before archiving this change and promoting the delta; re-read the promoted text immediately before promotion in case another change archived first.
-- [ ] 7.5 Obtain a separate explicit owner authorization before any live session or provider run is treated as evidence. One live session closes the recorded limits together: hook behaviour end to end, announcement delivery, and the reserved path's writability.
+- [x] 7.1 Check initialization before reading the scaffold payload, so an unconnected session is never observed.
+- [x] 7.2 Give question records a canonical identifier of their own and widen the answering reference so a background question can be answered without pretending a session is a run.
+- [x] 7.3 Key records by occurrence so two identical questions keep separate, individually answerable records.
+- [x] 7.4 Persist the record for an unreadable question: the escalation attempt is itself evidence.
+- [x] 7.5 Apply bounded regular-file hygiene to the stale-question archival read, and clear what cannot be retained.
+- [x] 7.6 Mark the installed handler and remove exactly it, so a mixed group or a lookalike command is never removed.
+- [x] 7.7 Remove configuration files and directories that connection itself created.
+- [x] 7.8 Require every event before reporting a connection present, and reconcile per event on reconnection.
+- [x] 7.9 Treat an empty scaffold settings file as an empty configuration in planning, as the write path already does.
+- [x] 7.10 Add a regression test per finding, state each new rule in the spec deltas, and re-run the full verification set.
+
+## 8. Stop at the owner gates
+
+- [x] 8.1 Obtain an explicit owner instruction before beginning implementation.
+- [x] 8.2 Obtain a separate explicit owner instruction before committing.
+- [x] 8.3 Obtain a separate explicit owner instruction before pushing and opening a pull request; merging remains ungranted.
+- [ ] 8.4 Obtain a separate explicit owner instruction before archiving this change and promoting the delta; re-read the promoted text immediately before promotion in case another change archived first.
+- [ ] 8.5 Obtain a separate explicit owner authorization before any live session or provider run is treated as evidence. One live session closes the recorded limits together: hook behaviour end to end, announcement delivery, and the reserved path's writability.

@@ -25,7 +25,14 @@ const (
 // outcome: an attached session mints no run ID, launch claim, terminal
 // receipt, or status. It is a question, retained and attributable.
 type QuestionRecord struct {
-	Schema      string     `json:"schema"`
+	Schema string `json:"schema"`
+
+	// QuestionID is the identifier an answering intent version cites. A
+	// background session has no run ID by design, and the answering record
+	// must still be writable, so the question carries an identity of its own
+	// rather than borrowing a run's.
+	QuestionID string `json:"question_id"`
+
 	Repository  string     `json:"repository"`
 	SessionRef  string     `json:"session_ref,omitempty"`
 	Path        string     `json:"path"`
@@ -35,6 +42,17 @@ type QuestionRecord struct {
 	Intent      *IntentRef `json:"intent,omitempty"`
 	UnboundWhy  string     `json:"unbound_reason,omitempty"`
 	Invalid     string     `json:"invalid_reason,omitempty"`
+}
+
+// newQuestionID mints a canonical identifier for one occurrence of a question.
+//
+// Two sessions can write byte-identical questions: the payload deduplicates,
+// but the occurrences do not, and each needs its own record. The identifier is
+// therefore derived from the occurrence, not from the bytes.
+func newQuestionID(digest, sessionRef string, at time.Time) string {
+	seed := digest + "|" + sessionRef + "|" + at.UTC().Format(time.RFC3339Nano)
+	sum := sha256.Sum256([]byte(seed))
+	return "question-" + hex.EncodeToString(sum[:])[:16]
 }
 
 // Store is the append-only state root outside the repository. It is satisfied
@@ -73,12 +91,36 @@ func archiveStaleQuestion(
 	now func() time.Time,
 ) (bool, error) {
 	questionPath := filepath.Join(repositoryRoot, filepath.FromSlash(ReservedEscalationPath))
-	raw, err := os.ReadFile(questionPath)
-	if err != nil {
+	if _, err := os.Lstat(questionPath); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return false, nil
 		}
 		return false, err
+	}
+	// The archive read gets the same descriptor-level hygiene as the stop
+	// path. An unbounded read here could block session startup on a FIFO,
+	// consume arbitrary memory, or follow a symlink and copy bytes from
+	// outside the repository into Goalrail state — at exactly the moment a
+	// stale artifact exists.
+	raw, err := boundedio.ReadRegularFile(
+		questionPath,
+		"stale escalation artifact",
+		domain.MaxEscalationBytes,
+	)
+	if err != nil {
+		// Unreadable stale content still must not reach the new session. Clear
+		// the path and record that something unretainable was there.
+		if removeErr := os.Remove(questionPath); removeErr != nil {
+			return false, removeErr
+		}
+		return true, store.WriteJSONOnce(
+			filepath.ToSlash(filepath.Join(
+				archiveDirectory,
+				now().UTC().Format("20060102T150405.000000000Z")+"-unreadable.json",
+			)),
+			map[string]string{"path": ReservedEscalationPath, "reason": "STALE_ARTIFACT_UNREADABLE"},
+			true,
+		)
 	}
 	digest := digestOf(raw)
 	stamp := now().UTC().Format("20060102T150405Z")
@@ -119,20 +161,29 @@ func StopSession(
 		}
 		return nil, err
 	}
+	recordedAt := now().UTC()
 	raw, readErr := boundedio.ReadRegularFile(
 		questionPath,
 		"escalation artifact",
 		domain.MaxEscalationBytes,
 	)
 	if readErr != nil {
-		return &QuestionRecord{
+		// An unreadable question is still an event: the session tried to
+		// escalate and the attempt must leave evidence, or the owner sees
+		// nothing at all.
+		record := QuestionRecord{
 			Schema:     questionRecordSchema,
+			QuestionID: newQuestionID("", sessionRef, recordedAt),
 			Repository: repositoryRoot,
 			SessionRef: sessionRef,
 			Path:       ReservedEscalationPath,
-			RecordedAt: now().UTC(),
+			RecordedAt: recordedAt,
 			Invalid:    "ESCALATION_ARTIFACT_UNREADABLE",
-		}, nil
+		}
+		if err := store.WriteJSONOnce(recordPath(record.QuestionID), record, true); err != nil {
+			return nil, fmt.Errorf("record unreadable question: %w", err)
+		}
+		return &record, nil
 	}
 
 	digest := digestOf(raw)
@@ -147,12 +198,13 @@ func StopSession(
 
 	record := QuestionRecord{
 		Schema:      questionRecordSchema,
+		QuestionID:  newQuestionID(digest, sessionRef, recordedAt),
 		Repository:  repositoryRoot,
 		SessionRef:  sessionRef,
 		Path:        ReservedEscalationPath,
 		Digest:      digest,
 		RetainedRef: retainedRef,
-		RecordedAt:  now().UTC(),
+		RecordedAt:  recordedAt,
 	}
 	if err := domain.ValidateEscalationPayload(raw); err != nil {
 		record.Invalid = "ESCALATION_ARTIFACT_INVALID"
@@ -168,15 +220,17 @@ func StopSession(
 		record.UnboundWhy = reason
 	}
 
-	relative := filepath.ToSlash(filepath.Join(
-		questionDirectory,
-		shortDigest(digest),
-		"record.json",
-	))
-	if err := store.WriteJSONOnce(relative, record, true); err != nil {
+	// The record is keyed by occurrence, not by payload: two sessions may ask
+	// the identical question, and the second must not collide with the first
+	// and lose its attribution.
+	if err := store.WriteJSONOnce(recordPath(record.QuestionID), record, true); err != nil {
 		return nil, fmt.Errorf("record question: %w", err)
 	}
 	return &record, nil
+}
+
+func recordPath(questionID string) string {
+	return filepath.ToSlash(filepath.Join(questionDirectory, "records", questionID+".json"))
 }
 
 func digestOf(content []byte) string {

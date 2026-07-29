@@ -240,3 +240,37 @@ func TestHelpPresentsBackgroundSurfaceAndHidesTheHook(t *testing.T) {
 		t.Fatalf("help advertises the scaffold-invoked hook:\n%s", text)
 	}
 }
+
+// tattlingReader fails the test if anything reads from it. It stands in for a
+// hook payload in a repository the user never connected: prompts, transcript
+// paths, and authorization fields that must not be observed.
+type tattlingReader struct{ t *testing.T }
+
+func (reader tattlingReader) Read([]byte) (int, error) {
+	reader.t.Fatal("the hook read the session payload before the initialization check")
+	return 0, nil
+}
+
+func TestHookDoesNotReadThePayloadInAnUninitializedDirectory(t *testing.T) {
+	directory := t.TempDir()
+	t.Setenv("GOALRAIL_STATE_HOME", t.TempDir())
+	previous, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(directory); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(previous) })
+
+	if err := run(
+		context.Background(),
+		[]string{"hook"},
+		tattlingReader{t: t},
+		&bytes.Buffer{},
+		&bytes.Buffer{},
+		productionService,
+	); err != nil {
+		t.Fatal(err)
+	}
+}

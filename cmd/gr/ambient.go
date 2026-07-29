@@ -129,17 +129,19 @@ func runDisconnect(args []string, stdout, stderr io.Writer) error {
 // failed loudly would break an ordinary session that has nothing to do with
 // Goalrail. Errors worth keeping are recorded in the state root.
 func runHook(args []string, stdin io.Reader, stdout io.Writer) error {
-	event, sessionRef := readHookEvent(stdin)
-	if event == "" {
-		return nil
-	}
+	// The marker check comes before the payload is read, not merely before it
+	// is acted on. A hook payload can carry prompts, transcript paths, and
+	// authorization fields; reading one from a repository the user never
+	// connected would observe unrelated work regardless of what happened next.
 	root, err := os.Getwd()
 	if err != nil {
 		return nil
 	}
 	if !ambient.IsInitialized(root) {
-		// Not our repository. Exit having read nothing else and written
-		// nothing: a persistent hook fires everywhere the user works.
+		return nil
+	}
+	event, sessionRef := readHookEvent(stdin)
+	if event == "" {
 		return nil
 	}
 	store, err := localrun.NewStore("")

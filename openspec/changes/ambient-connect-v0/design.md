@@ -100,6 +100,53 @@ violate. Background mode therefore retains the question without judging the
 worktree, and mints no status at all. The hedge rule continues to guard the
 wrapper, where it belongs.
 
+### 8. Corrections from automated review of the implementation
+
+Nine findings, all confirmed against the code and all fixed. Two struck at
+promises this change makes rather than at details.
+
+- **The privacy boundary was ordered wrong.** The hook read and parsed the
+  scaffold payload before checking the marker. A payload carries prompts,
+  transcript paths, and authorization fields, so unrelated sessions were
+  observed no matter what happened next. The check now precedes the read, and a
+  test supplies a reader that fails if anything touches it.
+- **The loop could not actually close.** A background session has no run ID by
+  design, but the only answering parser required `<run-id> escalation <digest>`,
+  so no recorded ambient identifier could produce a valid answering version
+  without pretending a session was a run. Question records now carry a canonical
+  identifier of their own, and the answering field is a resolved reference —
+  a blocked run or a question record — rather than a run ID. This widens the
+  promoted `intent-snapshot` requirement, so it travels as a delta.
+- **Identical questions collided.** Two sessions writing byte-identical
+  questions produced the same record path; the second write was rejected and the
+  fail-quiet hook swallowed the loss. Records are now keyed by occurrence while
+  the payload still deduplicates.
+- **Unreadable questions vanished.** The invalid record was constructed and
+  never persisted, so an escalation attempt against an unreadable artifact left
+  no evidence at all. It is persisted now.
+- **Archival bypassed its own hygiene.** The stale-question read was unbounded
+  and followed links, so it could block startup on a FIFO or copy bytes from
+  outside the repository into Goalrail state — precisely when a stale artifact
+  exists. It uses the bounded regular-file reader, and clears what it cannot
+  retain.
+- **Disconnection could remove foreign configuration.** A group mixing our
+  handler with someone else's was dropped whole, and any command merely ending
+  in `gr hook` matched. The installed handler now carries a managed marker, and
+  removal filters that exact handler.
+- **Disconnection left files connection created.** A configuration file and
+  directory created solely for the registration survived removal, contradicting
+  the residue-free contract. Both are removed when nothing else remains.
+- **A partial registration read as complete.** With one event hand-removed, the
+  connection reported itself present and the consented command could never
+  restore the missing half. Presence now requires every event, and connection
+  reconciles per event.
+- **An empty settings file blocked connection.** Planning applied a stricter
+  parse than the write path, which already treats empty content as an empty
+  configuration.
+
+The confirmed intent is unmodified: every correction makes the shipped
+behaviour honest against outcomes version 1 already states.
+
 ## Correlation and Evidence
 
 - **Work identity:** confirmed intent `intent-ambient-connect-v0` version 1

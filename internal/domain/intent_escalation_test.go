@@ -33,10 +33,10 @@ func TestIntentEscalationRecordAcceptsEachDisposition(t *testing.T) {
 func TestIntentEscalationRecordRejectsMalformedValues(t *testing.T) {
 	for name, mutate := range map[string]func(*IntentEscalationResolution){
 		"run id not canonical": func(resolution *IntentEscalationResolution) {
-			resolution.RunID = "Run One"
+			resolution.ResolvedID = "Run One"
 		},
 		"empty run id": func(resolution *IntentEscalationResolution) {
-			resolution.RunID = ""
+			resolution.ResolvedID = ""
 		},
 		"digest not sha-256": func(resolution *IntentEscalationResolution) {
 			resolution.EscalationDigest = "md5:" + strings.Repeat("a", 32)
@@ -74,7 +74,7 @@ func TestWordingOnlyAmendmentCannotAcquireAnEscalationRecord(t *testing.T) {
 	for name, mutate := range map[string]func(*IntentSnapshot){
 		"record added": func(next *IntentSnapshot) {
 			next.ResolvedEscalation = &IntentEscalationResolution{
-				RunID:            "run-blocked-one",
+				ResolvedID:       "run-blocked-one",
 				EscalationDigest: "sha256:" + strings.Repeat("c", 64),
 				Disposition:      DispositionAnswered,
 			}
@@ -92,7 +92,7 @@ func TestWordingOnlyAmendmentCannotAcquireAnEscalationRecord(t *testing.T) {
 	withRecord := answeringIntentFixture()
 	changed := withRecord
 	changed.ResolvedEscalation = &IntentEscalationResolution{
-		RunID:            withRecord.ResolvedEscalation.RunID,
+		ResolvedID:       withRecord.ResolvedEscalation.ResolvedID,
 		EscalationDigest: withRecord.ResolvedEscalation.EscalationDigest,
 		Disposition:      DispositionSpurious,
 	}
@@ -146,7 +146,7 @@ func answeringIntentFixture() IntentSnapshot {
 			VerificationAction: "Owner reviewed and confirmed the answering version.",
 		},
 		ResolvedEscalation: &IntentEscalationResolution{
-			RunID:            "run-blocked-one",
+			ResolvedID:       "run-blocked-one",
 			EscalationDigest: "sha256:" + strings.Repeat("c", 64),
 			Disposition:      DispositionAnswered,
 		},

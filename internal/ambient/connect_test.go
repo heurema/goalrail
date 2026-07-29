@@ -185,3 +185,128 @@ func readJSON(t *testing.T, path string) map[string]any {
 	}
 	return settings
 }
+
+func TestConnectRepairsAPartialClaudeRegistration(t *testing.T) {
+	// A hand-removed Stop registration must read as "not connected" so the
+	// consented command can restore it; otherwise questions are never retained
+	// at session stop and nothing reports why.
+	home := t.TempDir()
+	applyConnection(t, ScaffoldClaudeCode, home)
+	configPath := filepath.Join(home, ".claude", "settings.json")
+	settings := readJSON(t, configPath)
+	hooks := settings["hooks"].(map[string]any)
+	delete(hooks, "Stop")
+	writeFile(t, configPath, marshalJSON(t, settings))
+
+	plan, err := PlanConnection(ScaffoldClaudeCode, home, executablePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.AlreadyPresent {
+		t.Fatal("a partial registration was reported as complete")
+	}
+	if _, err := Connect(plan); err != nil {
+		t.Fatal(err)
+	}
+	settings = readJSON(t, configPath)
+	hooks = settings["hooks"].(map[string]any)
+	if _, ok := hooks["Stop"]; !ok {
+		t.Fatal("reconnection did not restore the missing Stop registration")
+	}
+	if starts := hooks["SessionStart"].([]any); len(starts) != 1 {
+		t.Fatalf("reconnection duplicated SessionStart: %d groups", len(starts))
+	}
+}
+
+func TestConnectTreatsAnEmptySettingsFileAsEmpty(t *testing.T) {
+	home := t.TempDir()
+	writeFile(t, filepath.Join(home, ".claude", "settings.json"), "")
+	if _, err := PlanConnection(ScaffoldClaudeCode, home, executablePath); err != nil {
+		t.Fatalf("an empty settings file blocked connection planning: %v", err)
+	}
+}
+
+func TestDisconnectRemovesOnlyOurHandlerFromAMixedGroup(t *testing.T) {
+	// A group can mix our handler with a foreign one. Removal must filter the
+	// handler, not drop its containing group.
+	home := t.TempDir()
+	configPath := filepath.Join(home, ".claude", "settings.json")
+	applyConnection(t, ScaffoldClaudeCode, home)
+	settings := readJSON(t, configPath)
+	hooks := settings["hooks"].(map[string]any)
+	group := hooks["SessionStart"].([]any)[0].(map[string]any)
+	group["hooks"] = append(group["hooks"].([]any), map[string]any{
+		"type": "command", "command": "/usr/bin/foreign-tool",
+	})
+	writeFile(t, configPath, marshalJSON(t, settings))
+
+	if _, err := Disconnect(ScaffoldClaudeCode, home); err != nil {
+		t.Fatal(err)
+	}
+	settings = readJSON(t, configPath)
+	hooks = settings["hooks"].(map[string]any)
+	starts := hooks["SessionStart"].([]any)
+	if len(starts) != 1 {
+		t.Fatalf("the mixed group was dropped entirely: %v", starts)
+	}
+	handlers := starts[0].(map[string]any)["hooks"].([]any)
+	if len(handlers) != 1 ||
+		handlers[0].(map[string]any)["command"] != "/usr/bin/foreign-tool" {
+		t.Fatalf("the foreign handler did not survive: %v", handlers)
+	}
+}
+
+func TestDisconnectIgnoresALookalikeCommand(t *testing.T) {
+	// Another tool that happens to invoke an executable named gr must not be
+	// treated as ours: removal keys on the managed marker, not the name.
+	home := t.TempDir()
+	configPath := filepath.Join(home, ".claude", "settings.json")
+	writeFile(t, configPath, `{
+  "hooks": {
+    "SessionStart": [
+      {"hooks": [{"type": "command", "command": "/opt/other/gr hook"}]}
+    ]
+  }
+}`)
+	removed, err := Disconnect(ScaffoldClaudeCode, home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if removed {
+		t.Fatal("a lookalike command was removed as if it were ours")
+	}
+}
+
+func TestDisconnectRemovesAConfigurationFileConnectionCreated(t *testing.T) {
+	// When connection created the file, an empty leftover is residue: the
+	// filesystem must return to its pre-connection state.
+	for _, scaffold := range SupportedScaffolds() {
+		t.Run(string(scaffold), func(t *testing.T) {
+			home := t.TempDir()
+			applyConnection(t, scaffold, home)
+			configPath, err := ConfigPath(scaffold, home)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := os.Stat(configPath); err != nil {
+				t.Fatal("connection did not create the configuration")
+			}
+			removed, err := Disconnect(scaffold, home)
+			if err != nil || !removed {
+				t.Fatalf("disconnect removed = %v err = %v", removed, err)
+			}
+			if _, err := os.Stat(configPath); !os.IsNotExist(err) {
+				t.Fatal("a configuration file created by connection was left behind")
+			}
+		})
+	}
+}
+
+func marshalJSON(t *testing.T, value any) string {
+	t.Helper()
+	encoded, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(encoded)
+}

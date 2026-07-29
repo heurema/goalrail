@@ -184,11 +184,11 @@ func validateEscalationResolution(v *validator, resolution *IntentEscalationReso
 	if resolution == nil {
 		return
 	}
-	if !validCanonicalID(string(resolution.RunID)) {
+	if !validCanonicalID(resolution.ResolvedID) {
 		v.add(
-			"intent.resolves.run_invalid",
-			"resolves.run_id",
-			"resolved run ID must be canonical",
+			"intent.resolves.reference_invalid",
+			"resolves.resolved_id",
+			"resolved reference must be a canonical identifier",
 		)
 	}
 	if !validEscalationDigest(resolution.EscalationDigest) {

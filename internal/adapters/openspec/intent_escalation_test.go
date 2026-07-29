@@ -23,8 +23,8 @@ func TestReadIntentParsesTheAnsweringEscalationRecord(t *testing.T) {
 	if resolution == nil {
 		t.Fatal("the answering record was dropped")
 	}
-	if resolution.RunID != "run-blocked-one" {
-		t.Fatalf("run ID = %q", resolution.RunID)
+	if resolution.ResolvedID != "run-blocked-one" {
+		t.Fatalf("reference = %q", resolution.ResolvedID)
 	}
 	if resolution.EscalationDigest != fixtureEscalationDigest {
 		t.Fatalf("escalation digest = %q", resolution.EscalationDigest)
@@ -98,4 +98,21 @@ func intentWithMetadata(metadata string) string {
 		"- **Owner:** owner\n"+metadata,
 		1,
 	)
+}
+
+func TestReadIntentAcceptsAQuestionReference(t *testing.T) {
+	// A background session has no run ID by design; the answering version cites
+	// the question record's own identifier instead, and the gate accepts it
+	// through the same field.
+	raw := intentWithMetadata(
+		"- **Resolves:** `question-a1b2c3d4e5f60718` escalation `" + fixtureEscalationDigest + "`\n" +
+			"- **Disposition:** answered",
+	)
+	snapshot, err := ReadIntent(strings.NewReader(raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.ResolvedEscalation.ResolvedID != "question-a1b2c3d4e5f60718" {
+		t.Fatalf("reference = %q", snapshot.ResolvedEscalation.ResolvedID)
+	}
 }

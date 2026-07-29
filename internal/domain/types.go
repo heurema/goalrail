@@ -140,10 +140,12 @@ const (
 )
 
 // IntentEscalationResolution links an answering intent version back to the
-// blocked run that produced the question. `spurious` and `withdrawn` exist so a
-// low-value escalation stays visible and countable instead of disappearing.
+// question it resolves — a blocked run's escalation or a background session's
+// question record, both named by canonical identifier. `spurious` and
+// `withdrawn` exist so a low-value escalation stays visible and countable
+// instead of disappearing.
 type IntentEscalationResolution struct {
-	RunID            RunID
+	ResolvedID       string
 	EscalationDigest string
 	Disposition      IntentDisposition
 }
