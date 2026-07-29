@@ -56,7 +56,7 @@ func run(
 	factory serviceFactory,
 ) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: gr <prepare|inspect|start|finish> [flags]; run gr help")
+		return fmt.Errorf("usage: gr <init|connect|disconnect|prepare|inspect|start|finish> [flags]; run gr help")
 	}
 	switch args[0] {
 	case "prepare":
@@ -67,6 +67,16 @@ func run(
 		return runStart(ctx, args[1:], stdin, stdout, stderr, factory)
 	case "finish":
 		return runFinish(ctx, args[1:], stdout, stderr, factory)
+	case "init":
+		return runInit(args[1:], stdout, stderr)
+	case "connect":
+		return runConnect(args[1:], stdout, stderr)
+	case "disconnect":
+		return runDisconnect(args[1:], stdout, stderr)
+	case "hook":
+		// Ambient entry point: fail-quiet by contract, so a Goalrail problem
+		// never breaks a session the user started for their own reasons.
+		return runHook(args[1:], stdin, stdout)
 	case "help":
 		if len(args) == 1 {
 			return writeHelp(stdout)
@@ -74,7 +84,7 @@ func run(
 		if len(args) == 2 && isCommand(args[1]) {
 			return run(ctx, []string{args[1], "--help"}, stdin, stdout, stderr, factory)
 		}
-		return fmt.Errorf("usage: gr help [prepare|inspect|start|finish]")
+		return fmt.Errorf("usage: gr help [init|connect|disconnect|prepare|inspect|start|finish]")
 	case "-h", "--help":
 		return writeHelp(stdout)
 	default:
@@ -84,7 +94,7 @@ func run(
 
 func isCommand(value string) bool {
 	switch value {
-	case "prepare", "inspect", "start", "finish":
+	case "prepare", "inspect", "start", "finish", "init", "connect", "disconnect":
 		return true
 	default:
 		return false
@@ -92,9 +102,16 @@ func isCommand(value string) bool {
 }
 
 func writeHelp(output io.Writer) error {
-	_, err := fmt.Fprint(output, `usage: gr <prepare|inspect|start|finish> [flags]
+	_, err := fmt.Fprint(output, `usage: gr <init|connect|disconnect|prepare|inspect|start|finish> [flags]
 
-Lifecycle:
+Background attachment:
+  connect → init → work normally; ordinary work needs no Goalrail command
+
+  connect     attach Goalrail to a scaffold's sessions; needs --yes
+  disconnect  detach and remove everything connect added
+  init        mark this repository as one Goalrail attaches to
+
+Wrapper lifecycle (benchmark and owner-driven runs):
   prepare → inspect → start → finish
 
   prepare  freeze and display one WorkSpec; does not launch a provider

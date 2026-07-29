@@ -390,12 +390,12 @@ func parseEscalationResolution(
 	fields := strings.Fields(rawResolves)
 	if len(fields) != 3 || !strings.EqualFold(fields[1], "escalation") {
 		return nil, fmt.Errorf(
-			"%w: Resolves metadata must be '<run-id> escalation <digest>'",
+			"%w: Resolves metadata must be '<reference> escalation <digest>', where the reference names a blocked run or a background question record",
 			ErrMalformedArtifact,
 		)
 	}
 	resolution := &domain.IntentEscalationResolution{
-		RunID:            domain.RunID(strings.Trim(fields[0], "`")),
+		ResolvedID:       strings.Trim(fields[0], "`"),
 		EscalationDigest: strings.ToLower(strings.Trim(fields[2], "`")),
 		Disposition:      domain.IntentDisposition(strings.ToLower(rawDisposition)),
 	}
