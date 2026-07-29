@@ -217,6 +217,19 @@ type ProcessResult struct {
 }
 
 type ProcessLauncher interface {
+	// VerifyAnnouncementDelivery reports whether the session this launcher
+	// starts will actually receive the escalation announcement.
+	//
+	// The adapter cannot answer this on its own. It places the announcement in
+	// the invocation environment, but the value only reaches the session if the
+	// launcher installs a capsule that reads
+	// EscalationAnnouncementEnvironment and answers the SessionStart hook with
+	// it. A launcher that does not install one must say so: an adapter that
+	// claimed delivery it does not perform would defeat the fail-closed check
+	// entirely, launching a run that cannot escalate while Start believes the
+	// channel is reachable.
+	VerifyAnnouncementDelivery() error
+
 	Launch(context.Context, ProcessRequest) ProcessResult
 }
 
@@ -249,6 +262,17 @@ func NewLocalRunAdapter(
 func (*LocalRunAdapter) Name() string    { return "codex" }
 func (*LocalRunAdapter) Version() string { return LocalRunAdapterVersion }
 
+// VerifyAnnouncementDelivery reports whether a launched run will be told the
+// escalation channel exists.
+//
+// The adapter places the announcement in the invocation environment, but the
+// value only reaches the session when the launcher installs a capsule that
+// reads it and answers the SessionStart hook. Only the launcher knows whether
+// that capsule exists, so the answer is delegated rather than assumed.
+func (adapter *LocalRunAdapter) VerifyAnnouncementDelivery() error {
+	return adapter.launcher.VerifyAnnouncementDelivery()
+}
+
 func (adapter *LocalRunAdapter) Launch(
 	ctx context.Context,
 	request localrun.LaunchRequest,
@@ -267,8 +291,15 @@ func (adapter *LocalRunAdapter) Launch(
 	if err != nil {
 		return invalidLaunchObservation("INVALID_RUN_CONTEXT")
 	}
+	if request.EscalationAnnouncement == "" {
+		return invalidLaunchObservation("MISSING_ESCALATION_ANNOUNCEMENT")
+	}
 	environment := append([]string(nil), adapter.baseEnvironment...)
 	environment = append(environment, LocalRunContextEnvironment+"="+encodedContext)
+	environment = append(
+		environment,
+		EscalationAnnouncementEnvironment+"="+request.EscalationAnnouncement,
+	)
 	processResult := adapter.launcher.Launch(ctx, ProcessRequest{
 		Directory:   spec.Repository.Root,
 		Arguments:   append([]string(nil), request.Arguments...),

@@ -64,6 +64,8 @@ type countingFixtureAdapter struct {
 func (*countingFixtureAdapter) Name() string    { return "fixture" }
 func (*countingFixtureAdapter) Version() string { return "v0" }
 
+func (*countingFixtureAdapter) VerifyAnnouncementDelivery() error { return nil }
+
 func (adapter *countingFixtureAdapter) Launch(
 	_ context.Context,
 	_ LaunchRequest,

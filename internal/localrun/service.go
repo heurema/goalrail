@@ -259,6 +259,14 @@ func (service *Service) Start(ctx context.Context, input StartInput) (StartResul
 	if prepared.Claim != nil {
 		return StartResult{}, ErrLaunchAlreadyClaimed
 	}
+	// A run that cannot be told about the escalation channel cannot use it, and
+	// would return to guessing while still producing an ordinary receipt. This
+	// check precedes the admission consumption deliberately: admission is a
+	// one-time authorization, and burning it on a launch that cannot happen
+	// would discard the owner's grant with nothing to show for it.
+	if err := service.adapter.VerifyAnnouncementDelivery(); err != nil {
+		return StartResult{}, fmt.Errorf("%w: %w", ErrAnnouncementUndeliverable, err)
+	}
 	if service.adapter.Name() != "fixture" {
 		if service.observer == nil || service.admission == nil {
 			return StartResult{}, ErrActivationRequired
@@ -278,6 +286,7 @@ func (service *Service) Start(ctx context.Context, input StartInput) (StartResul
 			return StartResult{}, err
 		}
 	}
+
 	// A prepared run is reused rather than re-observed, and it can be started
 	// long after preparation froze its baseline. An artifact that appears in
 	// that window belongs to no provider, so it must not reach a launch.
@@ -324,12 +333,13 @@ func (service *Service) Start(ctx context.Context, input StartInput) (StartResul
 	}
 
 	observation := service.adapter.Launch(ctx, LaunchRequest{
-		RunID:     runID,
-		WorkSpec:  prepared.WorkSpec,
-		Arguments: append([]string(nil), input.Arguments...),
-		Stdin:     input.Stdin,
-		Stdout:    input.Stdout,
-		Stderr:    input.Stderr,
+		RunID:                  runID,
+		WorkSpec:               prepared.WorkSpec,
+		Arguments:              append([]string(nil), input.Arguments...),
+		EscalationAnnouncement: EscalationAnnouncement,
+		Stdin:                  input.Stdin,
+		Stdout:                 input.Stdout,
+		Stderr:                 input.Stderr,
 	})
 	observation.WorkSpecDigest = input.WorkSpecDigest
 	observation.RunID = runID
@@ -903,6 +913,11 @@ type FixtureAdapter struct {
 
 func (FixtureAdapter) Name() string    { return "fixture" }
 func (FixtureAdapter) Version() string { return "v0" }
+
+// VerifyAnnouncementDelivery reports that the fixture can carry the
+// announcement: it hands the launch request straight to the recorded
+// behaviour, so nothing is lost in transport.
+func (FixtureAdapter) VerifyAnnouncementDelivery() error { return nil }
 
 func (adapter FixtureAdapter) Launch(
 	_ context.Context,
