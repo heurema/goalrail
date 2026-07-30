@@ -8,13 +8,23 @@ import (
 	"testing"
 )
 
-const executablePath = "/usr/local/bin/gr"
+// realExecutable is a file that actually exists and is runnable: health now
+// verifies the registered binary, so a fictional path would fail for the wrong
+// reason.
+func realExecutable(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "gr")
+	if err := os.WriteFile(path, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
 
 func TestConnectionRequiresConsentAndIsPlannedFirst(t *testing.T) {
 	// Editing a user's own configuration is consented to as a concrete act:
 	// the plan is computed before anything is written.
 	home := t.TempDir()
-	plan, err := PlanConnection(ScaffoldCodex, home, executablePath)
+	plan, err := PlanConnection(ScaffoldCodex, home, realExecutable(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +58,7 @@ func TestCodexConnectionIsIdempotentAndResidueFree(t *testing.T) {
 	}
 
 	// A second connection must change nothing.
-	plan, err := PlanConnection(ScaffoldCodex, home, executablePath)
+	plan, err := PlanConnection(ScaffoldCodex, home, realExecutable(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,7 +155,7 @@ func TestDisconnectOnAnUntouchedConfigurationDoesNothing(t *testing.T) {
 
 func applyConnection(t *testing.T, scaffold Scaffold, home string) {
 	t.Helper()
-	plan, err := PlanConnection(scaffold, home, executablePath)
+	plan, err := PlanConnection(scaffold, home, realExecutable(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -198,7 +208,7 @@ func TestConnectRepairsAPartialClaudeRegistration(t *testing.T) {
 	delete(hooks, "Stop")
 	writeFile(t, configPath, marshalJSON(t, settings))
 
-	plan, err := PlanConnection(ScaffoldClaudeCode, home, executablePath)
+	plan, err := PlanConnection(ScaffoldClaudeCode, home, realExecutable(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -221,7 +231,7 @@ func TestConnectRepairsAPartialClaudeRegistration(t *testing.T) {
 func TestConnectTreatsAnEmptySettingsFileAsEmpty(t *testing.T) {
 	home := t.TempDir()
 	writeFile(t, filepath.Join(home, ".claude", "settings.json"), "")
-	if _, err := PlanConnection(ScaffoldClaudeCode, home, executablePath); err != nil {
+	if _, err := PlanConnection(ScaffoldClaudeCode, home, realExecutable(t)); err != nil {
 		t.Fatalf("an empty settings file blocked connection planning: %v", err)
 	}
 }

@@ -96,7 +96,76 @@ func runConnect(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	return writeJSON(stdout, map[string]any{"plan": plan, "applied": changed})
+	response := map[string]any{
+		"plan":          plan,
+		"applied":       changed,
+		"trust_surface": ambient.TrustSurface(selected),
+	}
+	// Whether the hooks can run is a fact to observe, not to assume. Judge it by
+	// trust alone: connection answers for the scaffold, while whether any given
+	// repository participates is what `gr init` decides, and the current
+	// directory is not necessarily one the user cares about here.
+	if state, inspectErr := ambient.Inspect(selected, home, "."); inspectErr == nil {
+		trusted := state.Trust == ambient.TrustRecorded
+		response["active_now"] = trusted
+		if !trusted {
+			// Registration alone does not make the attachment act. Silence here
+			// is the worst outcome available: the user connects, works, sees
+			// nothing happen, and reasonably concludes Goalrail is broken.
+			response["notice"] = ambient.ConnectionNotice(selected)
+		}
+	} else {
+		response["notice"] = ambient.ConnectionNotice(selected)
+	}
+	return writeJSON(stdout, response)
+}
+
+func runHealth(args []string, stdout, stderr io.Writer) error {
+	set := flag.NewFlagSet("health", flag.ContinueOnError)
+	set.SetOutput(stderr)
+	scaffold := set.String("scaffold", "", "codex or claude-code; omit to check all supported scaffolds")
+	repository := set.String("repo", ".", "repository to check")
+	if err := set.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
+		return err
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	root, err := filepath.Abs(*repository)
+	if err != nil {
+		return err
+	}
+
+	// Defaulting to one scaffold would hand a user who connected the other a
+	// confident, wrong diagnosis: "nothing is connected, run connect" for a
+	// scaffold they never chose. With no way to infer intent, check them all.
+	selected := ambient.SupportedScaffolds()
+	if strings.TrimSpace(*scaffold) != "" {
+		one, parseErr := parseScaffold(*scaffold)
+		if parseErr != nil {
+			return parseErr
+		}
+		selected = []ambient.Scaffold{one}
+	}
+
+	states := make([]ambient.AttachmentState, 0, len(selected))
+	anyWorking := false
+	for _, candidate := range selected {
+		state, inspectErr := ambient.Inspect(candidate, home, root)
+		if inspectErr != nil {
+			return inspectErr
+		}
+		anyWorking = anyWorking || state.Working
+		states = append(states, state)
+	}
+	if len(states) == 1 {
+		return writeJSON(stdout, states[0])
+	}
+	return writeJSON(stdout, map[string]any{"any_working": anyWorking, "scaffolds": states})
 }
 
 func runDisconnect(args []string, stdout, stderr io.Writer) error {

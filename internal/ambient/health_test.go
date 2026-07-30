@@ -1,0 +1,250 @@
+package ambient
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func TestHealthDistinguishesEveryState(t *testing.T) {
+	// "Not working" is useless when three causes produce it, so each state must
+	// be named and each must carry its own next action.
+	t.Run("not connected", func(t *testing.T) {
+		home, repo := t.TempDir(), initializedRepository(t)
+		state := inspect(t, ScaffoldCodex, home, repo)
+		if state.Connected || state.Working {
+			t.Fatalf("state = %+v", state)
+		}
+		mustMention(t, state.NextAction, "gr connect")
+	})
+
+	t.Run("connected but repository not initialized", func(t *testing.T) {
+		home, repo := connectedHome(t), t.TempDir()
+		state := inspect(t, ScaffoldCodex, home, repo)
+		if !state.Connected || state.Initialized || state.Working {
+			t.Fatalf("state = %+v", state)
+		}
+		mustMention(t, state.NextAction, "gr init")
+	})
+
+	t.Run("connected and initialized but trust pending", func(t *testing.T) {
+		home, repo := connectedHome(t), initializedRepository(t)
+		state := inspect(t, ScaffoldCodex, home, repo)
+		if state.Trust != TrustPending || state.Working {
+			t.Fatalf("state = %+v", state)
+		}
+		// This is the state that otherwise looks exactly like breakage.
+		mustMention(t, state.NextAction, "/hooks")
+	})
+
+	t.Run("working", func(t *testing.T) {
+		home, repo := connectedHome(t), initializedRepository(t)
+		grantTrust(t, home)
+		state := inspect(t, ScaffoldCodex, home, repo)
+		if !state.Working || state.Trust != TrustRecorded {
+			t.Fatalf("state = %+v", state)
+		}
+		if state.NextAction != "" {
+			t.Fatalf("a working attachment still asked for something: %q", state.NextAction)
+		}
+	})
+}
+
+func TestHealthReportsUnknownRatherThanGuessing(t *testing.T) {
+	// No trust record has been observed for this scaffold. Claiming either
+	// answer would be invention, and an optimistic guess is the worse one.
+	home, repo := t.TempDir(), initializedRepository(t)
+	applyConnection(t, ScaffoldClaudeCode, home)
+	state := inspect(t, ScaffoldClaudeCode, home, repo)
+	if state.Trust != TrustUnknown || state.Working {
+		t.Fatalf("state = %+v", state)
+	}
+	mustMention(t, state.NextAction, "could not be determined")
+}
+
+func TestConnectionNoticeMatchesWhatWasActuallyObserved(t *testing.T) {
+	// For the scaffold whose trust gate was observed live, the notice states the
+	// requirement outright.
+	codex := ConnectionNotice(ScaffoldCodex)
+	for _, required := range []string{"not yet active", "trust", "does nothing"} {
+		if !strings.Contains(strings.ToLower(codex), required) {
+			t.Fatalf("codex notice omits %q: %s", required, codex)
+		}
+	}
+
+	// For the scaffold whose behaviour was not observed, asserting a mandatory
+	// approval step would send the user hunting for a screen that may not
+	// exist. Inventing an obstacle is its own kind of misinformation.
+	other := strings.ToLower(ConnectionNotice(ScaffoldClaudeCode))
+	if strings.Contains(other, "requires you to review") {
+		t.Fatalf("unverified scaffold notice asserts a trust gate: %s", other)
+	}
+	if !strings.Contains(other, "not been verified") {
+		t.Fatalf("unverified scaffold notice hides its uncertainty: %s", other)
+	}
+
+	// Either way the user must be told where to look.
+	for _, scaffold := range SupportedScaffolds() {
+		if !strings.Contains(ConnectionNotice(scaffold), TrustSurface(scaffold)) {
+			t.Fatalf("%s notice does not name the surface", scaffold)
+		}
+	}
+}
+
+func TestInspectionNeverWritesAnything(t *testing.T) {
+	// The prohibition is on writing trust, and the cheapest proof is that
+	// inspection leaves the scaffold configuration byte-identical.
+	home, repo := connectedHome(t), initializedRepository(t)
+	configPath := filepath.Join(home, ".codex", "config.toml")
+	before, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 3; i++ {
+		inspect(t, ScaffoldCodex, home, repo)
+	}
+	after, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(before) != string(after) {
+		t.Fatal("inspecting attachment health modified the scaffold configuration")
+	}
+}
+
+func TestNoTrustRecordIsEverWritten(t *testing.T) {
+	// Forging trust is reproducible and practised elsewhere, so the absence of
+	// a write path is pinned rather than assumed. Trust is standing consent to
+	// run a command in every session; manufacturing it is not ours to do.
+	home, repo := t.TempDir(), initializedRepository(t)
+	configPath := filepath.Join(home, ".codex", "config.toml")
+
+	applyConnection(t, ScaffoldCodex, home)
+	inspect(t, ScaffoldCodex, home, repo)
+	if _, err := Disconnect(ScaffoldCodex, home); err != nil {
+		t.Fatal(err)
+	}
+	applyConnection(t, ScaffoldCodex, home)
+
+	raw, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, forbidden := range []string{"hooks.state", "trusted_hash"} {
+		if strings.Contains(string(raw), forbidden) {
+			t.Fatalf("Goalrail wrote a scaffold trust record (%q):\n%s", forbidden, raw)
+		}
+	}
+}
+
+func inspect(t *testing.T, scaffold Scaffold, home, repo string) AttachmentState {
+	t.Helper()
+	state, err := Inspect(scaffold, home, repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return state
+}
+
+func connectedHome(t *testing.T) string {
+	t.Helper()
+	home := t.TempDir()
+	applyConnection(t, ScaffoldCodex, home)
+	return home
+}
+
+func TestHealthRefusesToReportWorkingWhenTheBinaryIsGone(t *testing.T) {
+	// A registration pointing at a missing binary satisfies every configuration
+	// check and still cannot run. A green result there is worse than no health
+	// command at all.
+	home, repo := t.TempDir(), initializedRepository(t)
+	executable := realExecutable(t)
+	plan, err := PlanConnection(ScaffoldCodex, home, executable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Connect(plan); err != nil {
+		t.Fatal(err)
+	}
+	grantTrust(t, home)
+	if state := inspect(t, ScaffoldCodex, home, repo); !state.Working {
+		t.Fatalf("healthy attachment reported as broken: %+v", state)
+	}
+
+	if err := os.Remove(executable); err != nil {
+		t.Fatal(err)
+	}
+	state := inspect(t, ScaffoldCodex, home, repo)
+	if state.Working {
+		t.Fatal("health reported working with the registered binary missing")
+	}
+	mustMention(t, state.NextAction, "missing")
+}
+
+func TestHealthReportsAHalfRemovedRegistration(t *testing.T) {
+	// If one stanza is removed while the marker survives, either the
+	// announcement or the question retention is silently gone.
+	home, repo := connectedHome(t), initializedRepository(t)
+	configPath := filepath.Join(home, ".codex", "config.toml")
+	grantTrust(t, home)
+	raw := readFile(t, configPath)
+	writeFile(t, configPath, strings.Replace(raw, "[[hooks.Stop.hooks]]", "", 1))
+
+	state := inspect(t, ScaffoldCodex, home, repo)
+	if state.Connected || state.Working {
+		t.Fatalf("a half-removed registration reported as connected: %+v", state)
+	}
+}
+
+func TestHealthSurfacesAnUnreadableConfiguration(t *testing.T) {
+	// Reporting "not connected" would recommend a connection that reads the
+	// same file and fails identically.
+	home, repo := t.TempDir(), initializedRepository(t)
+	writeFile(t, filepath.Join(home, ".claude", "settings.json"), "{not json")
+	state := inspect(t, ScaffoldClaudeCode, home, repo)
+	if state.ConfigError == "" {
+		t.Fatalf("an unreadable configuration was reported as an ordinary state: %+v", state)
+	}
+	if state.Working {
+		t.Fatal("an unreadable configuration reported as working")
+	}
+	mustMention(t, state.NextAction, "repair")
+}
+
+func TestHealthNamesWhatItCouldNotVerify(t *testing.T) {
+	// A green result must not read as "everything works" when it means
+	// "nothing detected".
+	home, repo := connectedHome(t), initializedRepository(t)
+	grantTrust(t, home)
+	state := inspect(t, ScaffoldCodex, home, repo)
+	if len(state.Unverifiable) == 0 {
+		t.Fatal("health hid its own blind spot about trust-record freshness")
+	}
+}
+
+// grantTrust simulates what the scaffold itself writes once the user has
+// reviewed the hooks. Tests may write it; Goalrail may not.
+func grantTrust(t *testing.T, home string) {
+	t.Helper()
+	configPath := filepath.Join(home, ".codex", "config.toml")
+	raw, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry := "\n[hooks.state]\n"
+	for _, event := range []string{"session_start", "stop"} {
+		entry += "\n[hooks.state.\"" + configPath + ":" + event + ":0:0\"]\n" +
+			"trusted_hash = \"sha256:" + strings.Repeat("a", 64) + "\"\n"
+	}
+	if err := os.WriteFile(configPath, append(raw, []byte(entry)...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func mustMention(t *testing.T, text, fragment string) {
+	t.Helper()
+	if !strings.Contains(text, fragment) {
+		t.Fatalf("next action %q does not mention %q", text, fragment)
+	}
+}

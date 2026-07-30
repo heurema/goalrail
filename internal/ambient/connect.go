@@ -115,7 +115,19 @@ func isConnected(scaffold Scaffold, configPath string) (bool, error) {
 	}
 	switch scaffold {
 	case ScaffoldCodex:
-		return strings.Contains(string(raw), blockBegin), nil
+		content := string(raw)
+		if !strings.Contains(content, blockBegin) {
+			return false, nil
+		}
+		// The opening marker alone is not the registration. If a stanza is
+		// removed while the marker survives, the announcement or the question
+		// retention is gone while everything still looks installed.
+		for _, event := range []string{"[[hooks.SessionStart.hooks]]", "[[hooks.Stop.hooks]]"} {
+			if !strings.Contains(content, event) {
+				return false, nil
+			}
+		}
+		return strings.Contains(content, managedMarker), nil
 	case ScaffoldClaudeCode:
 		// An empty settings file is an empty configuration, exactly as the
 		// write path treats it; failing here would make connection impossible
