@@ -362,3 +362,29 @@ func TestObservabilityConfigurationNeverEntersTheRepository(t *testing.T) {
 		t.Fatalf("walk: %v", walkErr)
 	}
 }
+
+// TestObservabilityEndpointNeverEchoesEmbeddedCredentials pins the redaction the
+// pre-PR review asked for: a URL carrying userinfo would otherwise print its
+// secret in the one line that promises to name the endpoint at most.
+func TestObservabilityEndpointNeverEchoesEmbeddedCredentials(t *testing.T) {
+	state := InspectObservability("", func(name string) string {
+		switch name {
+		case "LANGFUSE_HOST":
+			return "https://user:embedded-secret@langfuse.example"
+		case "LANGFUSE_PUBLIC_KEY":
+			return "pk-x"
+		case "LANGFUSE_SECRET_KEY":
+			return "sk-x"
+		}
+		return ""
+	})
+	if !state.Configured {
+		t.Fatal("a configured endpoint was not detected")
+	}
+	if strings.Contains(state.Endpoint, "embedded-secret") || strings.Contains(state.Endpoint, "user") && strings.Contains(state.Endpoint, "@") {
+		t.Errorf("the reported endpoint carries credentials: %q", state.Endpoint)
+	}
+	if !strings.Contains(state.Endpoint, "langfuse.example") {
+		t.Errorf("redaction destroyed the endpoint: %q", state.Endpoint)
+	}
+}

@@ -146,3 +146,40 @@ so.
 7. **Credential containment was untested.** That no key reaches a report was covered; that none reaches repository content was not. `TestObservabilityConfigurationNeverEntersTheRepository`.
 8. **The update command's help was untested.** The report's note was covered; the help text a user reads before running it was not. `TestUpdateHelpSaysItDoesNotUpdateTheBinary`.
 9. **The documented-absent disclosure branch was unreachable and untested.** No supported scaffold is in that state today — one gate was observed to exist, the other observed not to — so the branch had no exercise at all. A synthetic profile now reaches it the way production would. `TestTheDocumentedAbsentDisclosureStatesItsOwnLimit`.
+
+## Addendum: the pre-PR adversarial review
+
+After this map was written, an adversarial review ran over the branch — five
+independent reviewers, thirty-two pooled findings, fourteen verified by agents
+prompted to refute them. Thirteen were confirmed. The code defects and their
+regression tests:
+
+| Confirmed defect | Fix pinned by |
+|---|---|
+| The hook entry point handled only `SessionStart` and `Stop`, so the `SessionEnd` registration this change ships made retention silently never fire on the second scaffold — while the diagnosis reported the attachment active | `TestHookRetainsAQuestionAtSessionEnd`, plus a live re-check on a scratch stand |
+| A quoted schema value with a trailing comment misparsed — quotes were trimmed before the comment was cut — so a correctly configured repository was refused as running a foreign schema | `TestEnsureConfigReadsAQuotedValueWithATrailingComment`, `TestEnsureConfigTreatsACommentOnlyValueAsUnnamed` |
+| A superseded overlay file made every update fail its own verification forever, in a state re-materializing cannot change | `TestUpdateConvergesWithASupersededFilePresent` |
+| The update report never named the canon it moved from, which the delta requires | `TestUpdateNamesTheCanonItMovedFrom`, including the backup manifest |
+| The diagnosis exit-status contract (0 healthy / 1 problem / 2 the check did not run) was designed but not implemented | live exit-code check; `doctorFailure` in `cmd/gr/harness.go` |
+
+Hardening taken from the unverified pool while the files were open: a
+repository-scope registration path that is a symbolic link, or resolves outside
+the repository, is refused (`TestRegistrationRefusesAPathThatResolvesOutsideTheRepository`);
+an observability endpoint carrying URL userinfo is redacted before it is
+reported (`TestObservabilityEndpointNeverEchoesEmbeddedCredentials`); a tracked
+settings path no longer gets a useless ignore entry or advice naming a flag that
+cannot help; an update whose verification fails still prints the report naming
+the backup; the usage lines list every accepted command; the dead `fixIgnore`
+parameter is gone.
+
+Artifact corrections from the same review: the ambient-connect delta's
+approval-question paragraph now records the interactive observation instead of
+mandating the record stay "unverified", and the disclosure taxonomy names four
+evidence states with a scenario for the observed-absent one
+(`TestConnectionNoticeMatchesWhatWasActuallyObserved`,
+`TestTheDocumentedAbsentDisclosureStatesItsOwnLimit`); the harness-doctor delta
+allows a next action to name the user's own act where the tool deliberately has
+no command; design decisions 6, 8, and 12 were reconciled with the code; tasks
+6.13 and 8.3 were corrected to say what actually happened; and intent version 4
+rewords OUT-11/SIG-13, whose "in either scope" overstated the shipped behaviour
+against NG-6.

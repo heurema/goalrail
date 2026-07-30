@@ -54,6 +54,11 @@ type FileFinding struct {
 
 	// Expected is what the current canon defines, empty for a superseded file.
 	Expected string `json:"expected,omitempty"`
+
+	// MatchedCanon identifies the earlier canon a behind or superseded file
+	// matches, so a report can name what the repository is moving from rather
+	// than only that it differs.
+	MatchedCanon string `json:"matched_canon,omitempty"`
 }
 
 // OverlayState answers, for one repository, whether the harness files are there
@@ -116,11 +121,12 @@ func InspectOverlay(repositoryRoot string) (OverlayState, error) {
 			return OverlayState{}, fmt.Errorf("read %s: %w", file.Path, readErr)
 		default:
 			finding.Digest = Digest(content)
-			switch {
+			switch matched := matchingPreviousCanon(file.Path, finding.Digest); {
 			case finding.Digest == file.Digest:
 				finding.State = FileCurrent
-			case matchesAnyPreviousCanon(file.Path, finding.Digest):
+			case matched != "":
 				finding.State = FileBehind
+				finding.MatchedCanon = matched
 			default:
 				finding.State = FileEdited
 			}
@@ -137,11 +143,13 @@ func InspectOverlay(repositoryRoot string) (OverlayState, error) {
 		if readErr != nil {
 			continue
 		}
+		digest := Digest(content)
 		state.Present = true
 		state.Files = append(state.Files, FileFinding{
-			Path:   superseded,
-			State:  FileSuperseded,
-			Digest: Digest(content),
+			Path:         superseded,
+			State:        FileSuperseded,
+			Digest:       digest,
+			MatchedCanon: matchingPreviousCanon(superseded, digest),
 		})
 	}
 
@@ -170,13 +178,33 @@ func InspectOverlay(repositoryRoot string) (OverlayState, error) {
 	return state, nil
 }
 
-func matchesAnyPreviousCanon(relativePath, digest string) bool {
+// matchingPreviousCanon returns the identity of the earlier canon whose version
+// of one path matches the given digest, or an empty string. The newest match
+// wins, since previousCanons is oldest-first.
+func matchingPreviousCanon(relativePath, digest string) string {
+	matched := ""
 	for _, previous := range previousCanons {
 		if known, present := previous.Digest(relativePath); present && known == digest {
-			return true
+			matched = previous.ID
 		}
 	}
-	return false
+	return matched
+}
+
+// Settled reports whether an update has anything left to do: every canon file is
+// present and matches the current canon. A superseded file does not unsettle it —
+// that is repository content the canon no longer defines, reported for the user
+// to remove, and re-materializing can never change it. Folding it into the
+// verdict made an update fail its own verification forever in that state.
+func (state OverlayState) Settled() bool {
+	for _, finding := range state.Files {
+		switch finding.State {
+		case FileCurrent, FileSuperseded:
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // supersededPaths returns paths a previous canon carried that the current one

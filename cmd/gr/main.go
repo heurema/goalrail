@@ -43,6 +43,13 @@ func main() {
 		productionService,
 	); err != nil {
 		fmt.Fprintln(os.Stderr, err)
+		// An error may carry its own exit status — the diagnosis distinguishes
+		// "your harness needs attention" from "the command did not run", which an
+		// unattended check can only read from the code.
+		var coded interface{ ExitCode() int }
+		if errors.As(err, &coded) {
+			os.Exit(coded.ExitCode())
+		}
 		os.Exit(1)
 	}
 }
@@ -56,7 +63,7 @@ func run(
 	factory serviceFactory,
 ) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: gr <init|doctor|update|connect|disconnect|prepare|inspect|start|finish> [flags]; run gr help")
+		return fmt.Errorf("usage: gr <init|doctor|update|version|connect|disconnect|health|prepare|inspect|start|finish> [flags]; run gr help")
 	}
 	switch args[0] {
 	case "prepare":
@@ -94,7 +101,7 @@ func run(
 		if len(args) == 2 && isCommand(args[1]) {
 			return run(ctx, []string{args[1], "--help"}, stdin, stdout, stderr, factory)
 		}
-		return fmt.Errorf("usage: gr help [init|connect|health|disconnect|prepare|inspect|start|finish]")
+		return fmt.Errorf("usage: gr help [init|doctor|update|version|connect|disconnect|health|prepare|inspect|start|finish]")
 	case "-h", "--help":
 		return writeHelp(stdout)
 	default:
@@ -113,7 +120,7 @@ func isCommand(value string) bool {
 }
 
 func writeHelp(output io.Writer) error {
-	_, err := fmt.Fprint(output, `usage: gr <init|doctor|update|connect|disconnect|prepare|inspect|start|finish> [flags]
+	_, err := fmt.Fprint(output, `usage: gr <init|doctor|update|version|connect|disconnect|health|prepare|inspect|start|finish> [flags]
 
 The harness:
   init → work normally; ordinary work needs no Goalrail command

@@ -122,6 +122,11 @@ func ConfiguredSchema(repositoryRoot string) (string, bool, error) {
 //
 // Only a line starting at column zero counts: an indented `schema:` belongs to
 // some nested structure, and rewriting it would change a different setting.
+//
+// Quoting is resolved before comments, not after. A quoted value ends at its
+// closing quote and everything past it is commentary; trimming quotes first left
+// the closing quote stranded inside `schema: "x" # note`, and the stray character
+// made a correctly configured repository read as running a foreign schema.
 func schemaAssignment(content string) (string, int) {
 	for index, line := range strings.SplitAfter(content, "\n") {
 		trimmed := strings.TrimRight(line, "\r\n")
@@ -129,7 +134,17 @@ func schemaAssignment(content string) (string, int) {
 			continue
 		}
 		value := strings.TrimSpace(strings.TrimPrefix(trimmed, "schema:"))
-		value = strings.Trim(value, `"'`)
+		if len(value) > 0 && (value[0] == '"' || value[0] == '\'') {
+			if end := strings.IndexByte(value[1:], value[0]); end >= 0 {
+				return value[1 : 1+end], index
+			}
+			// An unterminated quote names nothing readable.
+			return "", index
+		}
+		// Unquoted: a comment starts the value or follows whitespace.
+		if strings.HasPrefix(value, "#") {
+			return "", index
+		}
 		if commented := strings.Index(value, " #"); commented >= 0 {
 			value = strings.TrimSpace(value[:commented])
 		}

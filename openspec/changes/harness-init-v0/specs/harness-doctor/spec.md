@@ -18,17 +18,19 @@ contributing a failure, because a report that nags about what the product
 declares optional teaches the user to ignore it.
 
 Drift SHALL be reported per file. "Something under the overlay differs" leaves
-the user diffing eight files by hand, which is exactly the work the diagnosis
-exists to remove.
+the user diffing the overlay by hand, file by file, which is exactly the work
+the diagnosis exists to remove.
 
 The diagnosis SHALL be readable by a machine as well as a person: structured
 output alongside the human report, and an exit status that separates healthy from
 not, so the check can run unattended.
 
-Every next action the diagnosis prints SHALL be a command this tool accepts. A
-report that prescribes a command which cannot be run, or cannot perform the
-repair, is worse than no report: the user follows correct advice and has no
-remaining move.
+Every next action the diagnosis prints SHALL be a command this tool accepts —
+or, where the tool deliberately has no command for the act because the content
+is the user's own to remove, the action SHALL say that plainly rather than
+inventing a command. A report that prescribes a command which cannot be run, or
+cannot perform the repair, is worse than no report: the user follows correct
+advice and has no remaining move.
 
 #### Scenario: The repository is not initialized
 - **WHEN** diagnosis runs in a directory with no Goalrail marker

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io/fs"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -53,7 +54,7 @@ func InspectObservability(stateRoot string, lookupEnvironment func(string) strin
 	publicKey := strings.TrimSpace(lookupEnvironment(observabilityPublicKeyEnvironment))
 	secretKey := strings.TrimSpace(lookupEnvironment(observabilitySecretKeyEnvironment))
 	if endpoint != "" && publicKey != "" && secretKey != "" {
-		return ObservabilityState{Configured: true, Endpoint: endpoint, Source: "environment"}
+		return ObservabilityState{Configured: true, Endpoint: redactedEndpoint(endpoint), Source: "environment"}
 	}
 
 	if strings.TrimSpace(stateRoot) != "" {
@@ -70,7 +71,7 @@ func InspectObservability(stateRoot string, lookupEnvironment func(string) strin
 				strings.TrimSpace(configured.SecretKey) != "" {
 				return ObservabilityState{
 					Configured: true,
-					Endpoint:   strings.TrimSpace(configured.Endpoint),
+					Endpoint:   redactedEndpoint(strings.TrimSpace(configured.Endpoint)),
 					Source:     "state root",
 				}
 			}
@@ -81,4 +82,17 @@ func InspectObservability(stateRoot string, lookupEnvironment func(string) strin
 		}
 	}
 	return ObservabilityState{Note: "observability: not configured (optional)"}
+}
+
+// redactedEndpoint strips credentials a URL may embed before the endpoint is
+// reported. "The endpoint is the most a report may name" has to survive a user
+// who configured https://user:secret@host — reflecting that verbatim would print
+// the secret in the one line that promises not to.
+func redactedEndpoint(endpoint string) string {
+	parsed, err := url.Parse(endpoint)
+	if err != nil || parsed.User == nil {
+		return endpoint
+	}
+	parsed.User = nil
+	return parsed.String()
 }

@@ -131,8 +131,8 @@ was rejected — the marker is per clone and git-ignored, so two clones of one
 repository would answer differently about committed content, and the question is
 about the content.
 
-At v0 the history holds one entry, so *behind* is unreachable in the field until a
-second canon ships. It is implemented and exercised with a synthetic historical
+At v0 the history is empty — the embedded canon is the only one that has ever
+shipped — so *behind* is unreachable in the field until a second canon ships. It is implemented and exercised with a synthetic historical
 entry in tests rather than left for later, because the alternative is discovering
 the shape of the state on the day it first matters.
 
@@ -165,9 +165,12 @@ change: the connection and repair notices name `gr health` today, and a renamed
 surface with stale advice is worse than either name alone. A test asserts every
 remedy string resolves to a command the CLI accepts.
 
-Exit status: `0` healthy, `1` a harness problem the user can act on, `2` usage or
-internal failure. An absent Node runtime and absent observability do not affect
-it — they are facts, not faults.
+Exit status, for the diagnosis command specifically: `0` healthy, `1` a harness
+problem the user can act on, `2` the check itself did not run — bad usage or an
+internal failure. The distinction is for unattended use: a broken cron job must
+not read as a healthy repository. Other commands keep the ordinary `1`. An
+absent Node runtime and absent observability do not affect it — they are facts,
+not faults.
 
 ### 9. Per-file drift reporting, not a single verdict
 
@@ -195,16 +198,23 @@ the unconsented write the promoted requirement forbids. So `doctor` detects it,
 names it, and prescribes `gr disconnect --scaffold claude-code`, and the user's own
 act completes the migration.
 
-### 12. The trust disclosure gains a documented state
+### 12. The trust disclosure follows a four-state evidence class
 
 The existing discipline had two states: observed (assert the trust step) and
-unobserved (say so). Documentation now records that the second scaffold has no
-approval step for hooks configured in a settings file, that its hook browser is
-read-only, and that its workspace trust dialog gates permission rules and
-additional directories rather than hooks. That is stronger than nothing and weaker
-than an observation, so it gets its own state: *documented*, stated as documented,
-naming what the adjacent consent surface actually gates so the user is not sent to
-a screen that does something else.
+unobserved (say so). Two more exist now. Documentation records that the second
+scaffold has no approval step for hooks configured in a settings file, that its
+hook browser is read-only, and that its workspace trust dialog gates permission
+rules and additional directories rather than hooks — stronger than nothing,
+weaker than an observation, so it is its own state: *documented*, stated as
+documented, naming what the adjacent consent surface actually gates. And the
+approval probe then upgraded that scaffold past it: three interactive sessions
+ran a registered hook with no approval step, which is *observed absent* — the
+disclosure states the absence as observed and sends the user nowhere to approve
+anything, because pointing at an approval surface the observation ruled out is
+the same invention in the opposite direction. No supported scaffold sits in the
+documented state today; the state exists because a third scaffold will arrive
+with documentation and no observation, and quietly upgrading documentation to
+an observation is the drift this discipline forbids.
 
 The evidence class per scaffold lives in code as data, not prose, so a disclosure
 cannot drift from what was established.

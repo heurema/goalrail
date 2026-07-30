@@ -36,9 +36,11 @@ than of Goalrail's first act.
   scaffold's stop-like event fires once per turn while a separate event fires when
   a session ends; the existing registration was written against the first
   scaffold's session-scoped stop, so a question left at the reserved path is
-  retained again on every turn. The session-ending event is registered instead, a
-  registration naming the per-turn event is repaired in place in either scope, and
-  removal covers whichever event was actually registered. The retained record's
+  retained again on every turn. The session-ending event is registered instead; a
+  registration naming the per-turn event is repaired in place at repository scope,
+  while a user-scope one from the earlier arrangement is reported and removed
+  through the consented disconnection command; and removal covers whichever event
+  was actually registered. The retained record's
   shape, identity, binding, and bounded reading are untouched.
 - Re-running `gr init` repairs a registration that is stale, unscoped, or naming a
   superseded event, under the replace-not-accompany discipline connection already
@@ -76,7 +78,7 @@ than of Goalrail's first act.
 | An existing OpenSpec root survives; a foreign custom schema stops initialization. | OUT-2, SIG-3 | NG-4 |
 | The hook is registered per repository, in the per-user project file, only when Git ignores it. | OUT-3, SIG-5 | NG-6 |
 | Scaffold selection is detection plus a flag override; no scaffold still installs the overlay. | OUT-3, SIG-5 | NG-6 |
-| Registration names the session-ending event rather than the per-turn one, and a registration naming the per-turn event is repaired in either scope. | OUT-11, SIG-13 | NG-5 |
+| Registration names the session-ending event rather than the per-turn one, and a registration naming the per-turn event is repaired through the consented command that owns its scope. | OUT-11, SIG-13 | NG-5, NG-6 |
 | Removal covers whichever event was actually registered. | OUT-11, SIG-13 | NG-8 |
 | The diagnosis reports a registration naming a superseded event as needing repair. | OUT-11, OUT-6, SIG-13 | NG-7 |
 | Re-running initialization repairs a stale, unscoped, or superseded-event registration. | OUT-3, OUT-11, SIG-6 | NG-7 |

@@ -1,6 +1,7 @@
 package harness
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -46,6 +47,11 @@ type UpdateReport struct {
 	// AlreadyCurrent reports an update that had nothing to do.
 	AlreadyCurrent bool `json:"already_current"`
 
+	// MovedFrom names the earlier canons the replaced files matched, so the
+	// report says what the repository moved from and not only that it moved.
+	// Empty when the replaced content matched no canon this binary knows.
+	MovedFrom []string `json:"moved_from,omitempty"`
+
 	Files []FileOutcome `json:"files"`
 
 	// Backup names where the replaced files were copied, empty when nothing was
@@ -90,7 +96,17 @@ func Update(input UpdateInput) (UpdateReport, error) {
 	if err != nil {
 		return UpdateReport{}, err
 	}
-	if state.Current {
+	for _, finding := range state.Files {
+		if finding.State == FileSuperseded {
+			report.Notes = append(report.Notes,
+				finding.Path+" is overlay content the canon no longer defines; "+
+					"an update never deletes repository content, so removing it stays your act")
+		}
+	}
+	// Settled, not Current: a superseded file is unreachable by re-materializing,
+	// and treating it as unfinished business would make every subsequent update
+	// report failure against a state it cannot change.
+	if state.Settled() {
 		report.AlreadyCurrent, report.Verified = true, true
 		return report, nil
 	}
@@ -99,6 +115,9 @@ func Update(input UpdateInput) (UpdateReport, error) {
 	for _, finding := range state.Files {
 		if finding.State == FileEdited {
 			edited = append(edited, finding.Path)
+		}
+		if finding.MatchedCanon != "" && finding.State == FileBehind {
+			report.MovedFrom = appendUnique(report.MovedFrom, finding.MatchedCanon)
 		}
 	}
 	if len(edited) > 0 && !input.DiscardLocalEdits {
@@ -130,11 +149,20 @@ func Update(input UpdateInput) (UpdateReport, error) {
 	if err != nil {
 		return UpdateReport{}, err
 	}
-	report.Verified = after.Current
-	if !after.Current {
+	report.Verified = after.Settled()
+	if !report.Verified {
 		return report, errors.New("the overlay does not match the canon after the update")
 	}
 	return report, nil
+}
+
+func appendUnique(values []string, value string) []string {
+	for _, existing := range values {
+		if existing == value {
+			return values
+		}
+	}
+	return append(values, value)
 }
 
 // backupReplaced copies every file the update is about to replace into a
@@ -159,6 +187,25 @@ func backupReplaced(
 	}
 	directory := filepath.Join(stateRoot, filepath.FromSlash(BackupDirectory),
 		now().UTC().Format("20060102T150405Z"))
+	// A manifest beside the files records what the backup is a backup of, so a
+	// directory found months later answers its own questions.
+	manifest := struct {
+		Canon string        `json:"replaced_toward_canon"`
+		Files []FileFinding `json:"files"`
+	}{Files: replaced}
+	if canon, canonErr := CurrentCanon(); canonErr == nil {
+		manifest.Canon = canon.ID
+	}
+	encoded, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(directory, 0o700); err != nil {
+		return "", fmt.Errorf("create backup directory: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(directory, "manifest.json"), append(encoded, '\n'), 0o600); err != nil {
+		return "", fmt.Errorf("write backup manifest: %w", err)
+	}
 	for _, finding := range replaced {
 		content, err := os.ReadFile(filepath.Join(repositoryRoot, filepath.FromSlash(finding.Path)))
 		if err != nil {

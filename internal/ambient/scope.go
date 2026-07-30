@@ -250,6 +250,46 @@ func DetectScaffolds(home string) []Scaffold {
 	return found
 }
 
+// repositoryScopePathContained verifies that writing the registration path stays
+// inside the repository. It resolves the deepest existing ancestor of the path
+// and refuses when that resolution leaves the resolved repository root, or when
+// the settings file itself is a link.
+//
+// The root is resolved too, so a repository that legitimately lives behind a
+// symlinked prefix (as /tmp does on macOS) is not refused for it.
+func repositoryScopePathContained(repositoryRoot, settingsPath string) error {
+	resolvedRoot, err := filepath.EvalSymlinks(repositoryRoot)
+	if err != nil {
+		return fmt.Errorf("resolve repository root: %w", err)
+	}
+	if info, lstatErr := os.Lstat(settingsPath); lstatErr == nil && info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("the registration path %s is a symbolic link; refusing to write through it", settingsPath)
+	}
+	// Walk up to the deepest ancestor that exists and resolve that.
+	ancestor := filepath.Dir(settingsPath)
+	for {
+		if _, statErr := os.Lstat(ancestor); statErr == nil {
+			break
+		}
+		parent := filepath.Dir(ancestor)
+		if parent == ancestor {
+			break
+		}
+		ancestor = parent
+	}
+	resolvedAncestor, err := filepath.EvalSymlinks(ancestor)
+	if err != nil {
+		return fmt.Errorf("resolve %s: %w", ancestor, err)
+	}
+	separator := string(filepath.Separator)
+	if resolvedAncestor != resolvedRoot &&
+		!strings.HasPrefix(resolvedAncestor+separator, resolvedRoot+separator) {
+		return fmt.Errorf("the registration path resolves outside the repository (%s); refusing to write there",
+			resolvedAncestor)
+	}
+	return nil
+}
+
 // HasAnyRegistration reports whether one target carries any handler of ours,
 // current or superseded.
 //
@@ -341,7 +381,13 @@ func AddIgnoreEntries(repositoryRoot string, entries []string) ([]string, error)
 			continue
 		}
 		ignored, ignoreErr := IgnoreState(repositoryRoot, entry)
-		if ignoreErr == nil && ignored {
+		if ignoreErr != nil {
+			// A tracked path, or a check that cannot run: an ignore entry would
+			// change nothing, and writing one anyway would dress the refusal that
+			// follows as half-fixed.
+			continue
+		}
+		if ignored {
 			// Already covered by a rule that does not name it literally.
 			continue
 		}

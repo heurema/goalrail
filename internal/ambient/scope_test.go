@@ -375,3 +375,59 @@ func TestTheDocumentedAbsentDisclosureStatesItsOwnLimit(t *testing.T) {
 		t.Errorf("the repair notice asserts a gate the documentation denies: %s", repair)
 	}
 }
+
+// TestRegistrationRefusesAPathThatResolvesOutsideTheRepository closes the
+// symlink route the pre-PR review flagged: a repository shipping .claude as a
+// link would receive the registration into whatever the link points at,
+// including the user's own configuration.
+func TestRegistrationRefusesAPathThatResolvesOutsideTheRepository(t *testing.T) {
+	executable := realExecutable(t)
+
+	t.Run("linked settings directory", func(t *testing.T) {
+		repo, elsewhere := t.TempDir(), t.TempDir()
+		if err := os.Symlink(elsewhere, filepath.Join(repo, ".claude")); err != nil {
+			t.Fatal(err)
+		}
+		target, err := RegistrationTarget(ScaffoldClaudeCode, t.TempDir(), repo)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := PlanRegistration(target, executable); err == nil {
+			t.Fatal("a settings directory resolving outside the repository was accepted")
+		} else if !strings.Contains(err.Error(), "outside the repository") {
+			t.Fatalf("the refusal does not name the cause: %v", err)
+		}
+	})
+
+	t.Run("linked settings file", func(t *testing.T) {
+		repo, elsewhere := t.TempDir(), t.TempDir()
+		if err := os.MkdirAll(filepath.Join(repo, ".claude"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		outside := filepath.Join(elsewhere, "settings.local.json")
+		writeFile(t, outside, "{}\n")
+		if err := os.Symlink(outside, filepath.Join(repo, ".claude", "settings.local.json")); err != nil {
+			t.Fatal(err)
+		}
+		target, err := RegistrationTarget(ScaffoldClaudeCode, t.TempDir(), repo)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := PlanRegistration(target, executable); err == nil {
+			t.Fatal("a symlinked settings file was accepted")
+		} else if !strings.Contains(err.Error(), "symbolic link") {
+			t.Fatalf("the refusal does not name the cause: %v", err)
+		}
+	})
+
+	t.Run("an ordinary repository is unaffected", func(t *testing.T) {
+		repo := t.TempDir()
+		target, err := RegistrationTarget(ScaffoldClaudeCode, t.TempDir(), repo)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := PlanRegistration(target, executable); err != nil {
+			t.Fatalf("an ordinary repository was refused: %v", err)
+		}
+	})
+}

@@ -53,10 +53,14 @@ session ends, the registration MUST NOT name the per-turn event: a question left
 at the reserved path would be retained again on every turn, minting a record per
 turn from one session's single question, and per-occurrence identity — which is
 correct for two sessions asking the same thing — would then multiply one
-escalation instead of separating two. A registration naming such an event SHALL be
-treated as needing repair and replaced with the session-scoped one, in whichever
-scope it lives, and removal SHALL cover whichever event was actually registered
-rather than only the event the current arrangement writes.
+escalation instead of separating two. A registration naming such an
+event SHALL be treated as needing repair, through the consented command that
+owns its scope: at repository scope, re-running initialization replaces it in
+place with the session-scoped form; at user scope, where only the earlier
+arrangement wrote it, it is reported and removed through the consented
+disconnection command rather than rewritten by initialization. Removal SHALL
+cover whichever event was actually registered rather than only the event the
+current arrangement writes.
 
 Where a health report names re-running connection as the remedy for a defect,
 connection SHALL be able to repair that defect. A report that prescribes a
@@ -94,16 +98,18 @@ Registration alone does not make the attachment act where a scaffold gates it.
 Where the scaffold requires the user to review and trust the exact hook
 definition before it runs, and records that trust against the definition's
 current form, a changed command needs review again. Connection SHALL therefore
-disclose what is actually established for that scaffold, distinguishing three
-states: a gate observed in a live session is stated as required; a gate that the
-provider's own documentation records as absent is stated as documented-absent,
-with the documented scope of any adjacent consent surface named so the user is
-not sent to a screen that gates something else; and a scaffold whose behaviour is
-neither observed nor documented is stated as unverified. Silence is the worst
-available outcome — the user connects, works, observes nothing, and reasonably
-concludes the product is broken — and inventing an obstacle is its own kind of
-misinformation, because it sends the user hunting for a screen that may not
-exist.
+disclose what is actually established for that scaffold, distinguishing four
+states: a gate observed in a live session is stated as required; a gate observed
+absent in a live session — a registered hook ran with no approval step — is
+stated as observed, and the disclosure sends the user nowhere to approve
+anything; a gate that the provider's own documentation records as absent without
+an observation is stated as documented, with the documented scope of any
+adjacent consent surface named so the user is not sent to a screen that gates
+something else; and a scaffold whose behaviour is neither observed nor
+documented is stated as unverified. Silence is the worst available outcome — the
+user connects, works, observes nothing, and reasonably concludes the product is
+broken — and inventing an obstacle is its own kind of misinformation, because it
+sends the user hunting for a screen that may not exist.
 
 A repair changes the hook definition, so it SHALL carry that same disclosure and
 SHALL NOT report the repaired attachment as active on the strength of a trust
@@ -122,14 +128,16 @@ retained outside the repository with its own identity and an explicit unbound
 reason. The agent named the reserved path and the payload schema although the task
 mentioned neither, which is how delivery was established rather than assumed.
 
-Still unverified by observation, and the record MUST keep saying so: whether that
-scaffold asks the user to approve a registered hook in an interactive session. No
-prompt appeared in the live run, and that is not evidence — the run was
-non-interactive, where the provider documents that the trust dialog is skipped,
-and the hooks were supplied for that run rather than registered. Both differences
-bear on precisely the question that remains open. What is documented is narrower
-than an observation and SHALL be recorded as documentation: the provider records
-no approval step for a hook configured in a settings file, describes its hook
+The approval question that run left open has since been answered by observation,
+and the record SHALL say so at its own strength: in three interactive sessions
+with the hooks registered in the repository's per-user project settings file —
+the settings layer a real user's registration lives in, not a per-run supply —
+the registered hook ran with no approval step, and the announcement reached the
+agent. The disclosure for this scaffold therefore states the absence as
+observed. What those sessions did not capture MUST stay outside the claim: what
+the scaffold's startup screen displayed was not recorded, and the documented
+facts about its trust surfaces remain documentation — the provider records no
+approval step for a hook configured in a settings file, describes its hook
 browser as read-only, and gates its workspace trust dialog on permission rules
 and additional directories rather than on hooks. The registration shape itself
 still rests on the provider's published matcher contract together with an
@@ -181,7 +189,7 @@ scaffold.
 
 #### Scenario: A registration names an event that fires once per turn
 - **WHEN** a registration of ours names a stop-like event that fires once per turn on a scaffold that also exposes a session-ending event
-- **THEN** it is treated as needing repair and replaced with the session-ending event, so one session's single question is retained once
+- **THEN** it is treated as needing repair through the consented command that owns its scope — replaced in place at repository scope, reported and removed through consented disconnection at user scope — so one session's single question is retained once
 
 #### Scenario: Removal covers the event that was registered
 - **WHEN** the user disconnects a scaffold whose handlers were registered against an event the current arrangement no longer writes
@@ -246,6 +254,10 @@ scaffold.
 #### Scenario: The scaffold's trust behaviour is unverified
 - **WHEN** registration or repair happens on a scaffold whose trust gate is neither observed nor documented
 - **THEN** the disclosure says the behaviour is unverified rather than asserting a mandatory approval step
+
+#### Scenario: The scaffold was observed to require no approval
+- **WHEN** registration or repair happens on a scaffold where a live session showed a registered hook running with no approval step
+- **THEN** the disclosure states that as observed, asserts no review step, and sends the user nowhere to approve anything
 
 #### Scenario: The scaffold documents no approval step
 - **WHEN** registration or repair happens on a scaffold whose documentation records no approval step for a hook configured in a settings file

@@ -27,6 +27,16 @@ func (err diagnosisError) Error() string {
 
 func (err diagnosisError) ExitCode() int { return exitDiagnosis }
 
+// doctorFailure marks a diagnosis that did not run — bad usage or an internal
+// failure — as distinct from one that ran and found problems. A script watching
+// the exit status must be able to tell "the harness needs attention" (1) from
+// "the check itself broke" (2), or a broken cron job reads as a healthy repo.
+type doctorFailure struct{ cause error }
+
+func (err doctorFailure) Error() string { return err.cause.Error() }
+func (err doctorFailure) Unwrap() error { return err.cause }
+func (err doctorFailure) ExitCode() int { return 2 }
+
 func runDoctor(args []string, stdout, stderr io.Writer) error {
 	set := flag.NewFlagSet("doctor", flag.ContinueOnError)
 	set.SetOutput(stderr)
@@ -38,14 +48,14 @@ func runDoctor(args []string, stdout, stderr io.Writer) error {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
 		}
-		return err
+		return doctorFailure{cause: err}
 	}
 	if set.NArg() != 0 {
-		return fmt.Errorf("doctor accepts no positional arguments")
+		return doctorFailure{cause: fmt.Errorf("doctor accepts no positional arguments")}
 	}
 	diagnosis, err := diagnose(*repository, *scaffold, *stateDirectory)
 	if err != nil {
-		return err
+		return doctorFailure{cause: err}
 	}
 	if *asJSON {
 		if err := writeJSON(stdout, diagnosis); err != nil {
@@ -132,6 +142,15 @@ func runUpdate(args []string, stdout, stderr io.Writer) error {
 		StateRoot:         stateRoot,
 		DiscardLocalEdits: *discard,
 	})
+	// A failed verification still made a backup and rewrote files. Discarding the
+	// report there would lose the backup path at exactly the moment the user needs
+	// it, so a report that names one is printed even on the error path.
+	if report.Backup != "" {
+		if writeErr := writeJSON(stdout, report); writeErr != nil && err == nil {
+			return writeErr
+		}
+		return err
+	}
 	if err != nil {
 		return err
 	}

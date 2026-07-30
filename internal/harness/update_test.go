@@ -213,3 +213,94 @@ func contains(text, fragment string) bool {
 		return false
 	})()
 }
+
+// TestUpdateConvergesWithASupersededFilePresent pins the fix for a review
+// finding: folding a superseded file into the verification verdict made every
+// update fail forever in a state re-materializing cannot change.
+func TestUpdateConvergesWithASupersededFilePresent(t *testing.T) {
+	root, state := t.TempDir(), t.TempDir()
+	if _, err := Materialize(root, false); err != nil {
+		t.Fatalf("materialize: %v", err)
+	}
+	dropped := OverlayDirectory + "/templates/retired.md"
+	if err := os.WriteFile(filepath.Join(root, filepath.FromSlash(dropped)), []byte("retired\n"), 0o644); err != nil {
+		t.Fatalf("write retired template: %v", err)
+	}
+	restore := previousCanons
+	previousCanons = []Canon{{ID: "sha256:older", Files: []CanonFile{{Path: dropped, Digest: Digest([]byte("retired\n"))}}}}
+	defer func() { previousCanons = restore }()
+
+	report, err := Update(UpdateInput{RepositoryRoot: root, StateRoot: state, Now: fixedClock()})
+	if err != nil {
+		t.Fatalf("an update with only a superseded file present failed: %v", err)
+	}
+	if !report.AlreadyCurrent || !report.Verified {
+		t.Fatalf("report = %+v", report)
+	}
+	var noted bool
+	for _, note := range report.Notes {
+		if contains(note, dropped) {
+			noted = true
+		}
+	}
+	if !noted {
+		t.Errorf("the kept superseded file is not named: %+v", report.Notes)
+	}
+	// And with a behind file alongside, the update proceeds and still converges.
+	behind := OverlayDirectory + "/templates/tasks.md"
+	older := []byte("## older\n")
+	if err := os.WriteFile(filepath.Join(root, filepath.FromSlash(behind)), older, 0o644); err != nil {
+		t.Fatalf("write older content: %v", err)
+	}
+	previousCanons = []Canon{{ID: "sha256:older", Files: []CanonFile{
+		{Path: dropped, Digest: Digest([]byte("retired\n"))},
+		{Path: behind, Digest: Digest(older)},
+	}}}
+	report, err = Update(UpdateInput{RepositoryRoot: root, StateRoot: state, Now: fixedClock()})
+	if err != nil {
+		t.Fatalf("update alongside a superseded file failed: %v", err)
+	}
+	if !report.Verified || report.AlreadyCurrent {
+		t.Fatalf("report = %+v", report)
+	}
+}
+
+// TestUpdateNamesTheCanonItMovedFrom pins the from/to reporting the delta
+// requires: a report that says only that the repository moved leaves the user
+// unable to say what it moved from.
+func TestUpdateNamesTheCanonItMovedFrom(t *testing.T) {
+	root, state := t.TempDir(), t.TempDir()
+	if _, err := Materialize(root, false); err != nil {
+		t.Fatalf("materialize: %v", err)
+	}
+	relative := OverlayDirectory + "/templates/design.md"
+	older := []byte("## an earlier canon's design template\n")
+	if err := os.WriteFile(filepath.Join(root, filepath.FromSlash(relative)), older, 0o644); err != nil {
+		t.Fatalf("write older content: %v", err)
+	}
+	restore := previousCanons
+	previousCanons = []Canon{{ID: "sha256:older", Files: []CanonFile{{Path: relative, Digest: Digest(older)}}}}
+	defer func() { previousCanons = restore }()
+
+	report, err := Update(UpdateInput{RepositoryRoot: root, StateRoot: state, Now: fixedClock()})
+	if err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if len(report.MovedFrom) != 1 || report.MovedFrom[0] != "sha256:older" {
+		t.Errorf("the report does not name the canon it moved from: %+v", report.MovedFrom)
+	}
+	if report.Canon == "" || report.Canon == "sha256:older" {
+		t.Errorf("the report does not name the canon it moved to: %q", report.Canon)
+	}
+	// The backup carries a manifest, so a directory found months later answers
+	// its own questions.
+	manifest, readErr := os.ReadFile(filepath.Join(report.Backup, "manifest.json"))
+	if readErr != nil {
+		t.Fatalf("read manifest: %v", readErr)
+	}
+	for _, expected := range []string{"sha256:older", report.Canon, relative} {
+		if !contains(string(manifest), expected) {
+			t.Errorf("the manifest omits %q", expected)
+		}
+	}
+}

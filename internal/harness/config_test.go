@@ -188,3 +188,48 @@ func TestEnsureConfigPreservesWindowsLineEndings(t *testing.T) {
 		t.Errorf("line endings were not preserved:\n%q", actual)
 	}
 }
+
+// TestEnsureConfigReadsAQuotedValueWithATrailingComment pins the combination the
+// pre-PR review found: quoting resolved after comment-stripping left the closing
+// quote inside the value, and a correctly configured repository was refused as
+// running a foreign schema.
+func TestEnsureConfigReadsAQuotedValueWithATrailingComment(t *testing.T) {
+	root := t.TempDir()
+	writeConfig(t, root, "schema: \""+SchemaName+"\" # pinned by AGENTS.md\n")
+	outcome, err := EnsureConfig(root, false)
+	if err != nil {
+		t.Fatalf("ensure config: %v", err)
+	}
+	if outcome.Action != ConfigUnchanged {
+		t.Errorf("a quoted, commented Goalrail schema was reported as %q", outcome.Action)
+	}
+
+	stock := t.TempDir()
+	writeConfig(t, stock, "schema: \"spec-driven\" # the default\n")
+	outcome, err = EnsureConfig(stock, false)
+	if err != nil {
+		t.Fatalf("a quoted, commented stock schema was refused: %v", err)
+	}
+	if outcome.Action != ConfigSwitched || outcome.PreviousSchema != "spec-driven" {
+		t.Errorf("stock adoption reported %+v", outcome)
+	}
+}
+
+func TestEnsureConfigTreatsACommentOnlyValueAsUnnamed(t *testing.T) {
+	root := t.TempDir()
+	writeConfig(t, root, "schema: # decided per team\n")
+	outcome, err := EnsureConfig(root, false)
+	if err != nil {
+		t.Fatalf("a comment-only value was refused as a foreign schema: %v", err)
+	}
+	if outcome.Action != ConfigSwitched {
+		t.Errorf("an unnamed schema was reported as %q", outcome.Action)
+	}
+	named, _, err := ConfiguredSchema(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if named != SchemaName {
+		t.Errorf("configuration names %q afterwards", named)
+	}
+}

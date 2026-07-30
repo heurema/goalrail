@@ -104,6 +104,15 @@ func PlanRegistration(target Target, executable string) (ConnectionPlan, error) 
 	if !filepath.IsAbs(executable) {
 		return ConnectionPlan{}, errors.New("registration requires the absolute gr executable path")
 	}
+	if target.Scope == ScopeRepository {
+		// A repository-scope write must land inside the repository. A settings
+		// directory or file that is a symlink resolves the write somewhere else —
+		// a repository shipping such a link would receive the registration into
+		// whatever it points at, including the user's own configuration.
+		if err := repositoryScopePathContained(target.Repository, target.Path); err != nil {
+			return ConnectionPlan{}, err
+		}
+	}
 	present, err := isConnected(target.Scaffold, target.Path)
 	if err != nil {
 		return ConnectionPlan{}, err

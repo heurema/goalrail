@@ -118,6 +118,31 @@ func TestHookRetainsAQuestionAtSessionStop(t *testing.T) {
 	}
 }
 
+// TestHookRetainsAQuestionAtSessionEnd drives the event the second scaffold's
+// registration actually names. The registered command carries no event argument,
+// so the payload's event name is the sole dispatch key — a switch that handled
+// only Stop made retention silently never fire there, while every diagnosis
+// reported the attachment as active. Found by the pre-PR review.
+func TestHookRetainsAQuestionAtSessionEnd(t *testing.T) {
+	directory := t.TempDir()
+	stateHome := t.TempDir()
+	t.Setenv("GOALRAIL_STATE_HOME", stateHome)
+	if _, _, err := ambient.Initialize(directory, nowUTC); err != nil {
+		t.Fatal(err)
+	}
+	question := filepath.Join(directory, filepath.FromSlash(ambient.ReservedEscalationPath))
+	if err := os.WriteFile(question, []byte("Which document governs here?\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := runHookIn(t, directory, `{"hook_event_name":"SessionEnd","session_id":"session-two"}`); err != nil {
+		t.Fatal(err)
+	}
+	if !containsRetainedQuestion(t, stateHome) {
+		t.Fatal("a SessionEnd payload did not retain the question")
+	}
+}
+
 func TestHookNeverFailsIntoTheSession(t *testing.T) {
 	// Fail-quiet: whatever is malformed, missing, or broken, an ordinary
 	// session must proceed as if Goalrail were not installed.

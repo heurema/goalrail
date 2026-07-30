@@ -136,7 +136,7 @@ func runInit(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if err := registerSelected(&report, selected, home, root, *fixIgnore); err != nil {
+	if err := registerSelected(&report, selected, home, root); err != nil {
 		return err
 	}
 
@@ -178,7 +178,6 @@ func registerSelected(
 	report *initReport,
 	candidates []ambient.Scaffold,
 	home, root string,
-	fixIgnore bool,
 ) error {
 	if len(candidates) == 0 {
 		report.Next = append(report.Next,
@@ -204,7 +203,7 @@ func registerSelected(
 		if report.Registration != nil {
 			continue
 		}
-		registration, err := registerRepositoryScope(candidate, home, root, fixIgnore)
+		registration, err := registerRepositoryScope(candidate, home, root)
 		if err != nil {
 			return err
 		}
@@ -216,7 +215,6 @@ func registerSelected(
 func registerRepositoryScope(
 	scaffold ambient.Scaffold,
 	home, root string,
-	fixIgnore bool,
 ) (*registrationReport, error) {
 	target, err := ambient.RegistrationTarget(scaffold, home, root)
 	if err != nil {
@@ -232,13 +230,18 @@ func registerRepositoryScope(
 	// path a commit could carry is refused rather than written.
 	ignored, ignoreErr := ambient.IgnoreState(root, ambient.RepositorySettingsPath)
 	if !ignored {
-		reason := "the registration path is not ignored by version control, so a commit " +
-			"would install these hooks in every teammate's sessions"
+		// The advice follows the cause. An ordinary missing entry is what the
+		// flag adds; a tracked file or an unrunnable check is not, and telling the
+		// user to re-run with a flag that cannot help would be a remedy that
+		// prescribes itself.
 		if ignoreErr != nil {
-			reason = ignoreErr.Error()
+			registration.Refused = ignoreErr.Error() +
+				"; --fix-gitignore cannot repair this — untrack the path or make the check runnable first"
+		} else {
+			registration.Refused = "the registration path is not ignored by version control, so a commit " +
+				"would install these hooks in every teammate's sessions; add `" +
+				ambient.RepositorySettingsPath + "` to .gitignore, or re-run with --fix-gitignore"
 		}
-		registration.Refused = reason + "; add `" + ambient.RepositorySettingsPath +
-			"` to .gitignore, or re-run with --fix-gitignore"
 		return registration, nil
 	}
 
@@ -497,7 +500,13 @@ func runHook(args []string, stdin io.Reader, stdout io.Writer) error {
 			return nil
 		}
 		fmt.Fprintln(stdout, rendered)
-	case "stop":
+	case "stop", "sessionend":
+		// Both names mean the same thing to retention: the session is over. The
+		// first scaffold signals it as Stop; the second fires Stop once per turn
+		// and signals the end of a session as SessionEnd, which is the event its
+		// registration names. Handling only one of them would make retention
+		// silently never fire on the other scaffold while every diagnosis reports
+		// the attachment as active.
 		if _, stopErr := ambient.StopSession(
 			store,
 			root,
