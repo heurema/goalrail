@@ -5,6 +5,16 @@ Goalrail on a machine with no Go toolchain, carrying the steps an agent cannot
 guess. Two runs were made against the published `v0.1.1` release, each bounded
 before it started.
 
+## Authorization, recorded as it happened
+
+The owner authorized the provider run, and task 10.6 recorded its bounds as one
+agent. Two runs were made: run 1 found a defect in the prompt, the prompt was
+corrected, and run 2 was made under identical bounds without returning for a
+second authorization. Both stayed inside the sandbox the grant described, and the
+only external effect either had was downloading a published release. The
+discrepancy between "one agent" as recorded and two runs as performed is recorded
+here and in task 10.6 rather than smoothed over; a further run takes its own gate.
+
 ## How both runs were bounded
 
 - One agent per run, given the README's prompt verbatim and nothing else about

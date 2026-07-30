@@ -101,10 +101,9 @@ Goalrail is meant to be installed by the agent, not by hand. Paste this:
 > the repository root. If its report says anything is not ignored by git — the
 > settings path it registers the hooks in, or the marker file — re-run with
 > `~/.local/bin/gr init --fix-gitignore`, which adds those entries. If it says no
-> supported scaffold was detected, tell me so plainly: that means this machine has
-> no agent scaffold configured, the harness is still installed, and the diagnosis
-> will report the attachment as missing for that reason rather than because
-> anything failed. Finally run `~/.local/bin/gr doctor` and show me its output
+> supported scaffold was detected, tell me that verbatim without guessing why: the
+> harness is still installed, and the diagnosis will report the attachment as
+> missing for that reason rather than because anything failed. Finally run `~/.local/bin/gr doctor` and show me its output
 > verbatim. Apart from `~/.local/bin/gr` and a scratch download directory you clean
 > up, do not edit any file outside this repository.
 
