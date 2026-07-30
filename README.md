@@ -58,16 +58,21 @@ That is the whole installation for scaffolds whose settings layer allows it. `gr
 init` prints exactly what it created, what it changed, and what it left alone.
 
 **macOS:** the binaries are not notarized. Downloaded with `curl` as above, they
-carry no quarantine flag and run without a prompt. Downloaded through a browser
-and extracted in Finder, they do carry one, and macOS refuses to run the binary
-until you clear it:
+carry no quarantine flag and run without a prompt.
+
+Downloaded through a browser, the archive is quarantined and the flag survives
+extraction — with Finder and with `tar` alike. macOS then blocks the binary, and
+what you see is not an error: the command hangs on a Gatekeeper prompt and prints
+nothing. Clear the flag *before* the first run:
 
 ```sh
 xattr -d com.apple.quarantine ~/.local/bin/gr
 ```
 
-The graphical route is System Settings → Privacy & Security → Open Anyway.
-Control-clicking the file has not overridden Gatekeeper since macOS Sequoia.
+If you already ran it and it was blocked, clearing the flag afterwards does not
+release it — extract a fresh copy and clear that one before running it. macOS's
+own route is System Settings → Privacy & Security → Open Anyway; Control-clicking
+the file has not overridden Gatekeeper since macOS Sequoia.
 
 **Windows is not supported.** The escalation artifact is opened with
 `O_NOFOLLOW|O_NONBLOCK`, flags Windows does not have, and those flags are how the
@@ -98,11 +103,14 @@ Goalrail is meant to be installed by the agent, not by hand. Paste this:
 > -c checksums.txt` on Linux. Extract `gr` into `~/.local/bin`: that one write
 > outside this repository is expected, and the binary has to stay there because
 > the session hooks record its absolute path. Then run `~/.local/bin/gr init` in
-> the repository root. If it refuses to register the session hooks because the
-> settings path is not ignored by git, read the reason it prints and re-run with
-> `~/.local/bin/gr init --fix-gitignore`. Finally run `~/.local/bin/gr doctor` and
-> show me its output verbatim. Apart from `~/.local/bin/gr` and a scratch download
-> directory you clean up, do not edit any file outside this repository.
+> the repository root. If its report says anything is not ignored by git — the
+> settings path it registers the hooks in, or the marker file — re-run with
+> `~/.local/bin/gr init --fix-gitignore`, which adds those entries. If it says no
+> supported scaffold was detected, tell me that verbatim without guessing why: the
+> harness is still installed, and the diagnosis will report the attachment as
+> missing for that reason rather than because anything failed. Finally run `~/.local/bin/gr doctor` and show me its output
+> verbatim. Apart from `~/.local/bin/gr` and a scratch download directory you clean
+> up, do not edit any file outside this repository.
 
 The last step is the point: the agent proves the installation rather than
 claiming it.
