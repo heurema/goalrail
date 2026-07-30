@@ -2,6 +2,7 @@ package ambient
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -319,4 +320,151 @@ func marshalJSON(t *testing.T, value any) string {
 		t.Fatal(err)
 	}
 	return string(encoded)
+}
+
+// claudeCodeSessionStartGroups returns the raw session-start group list.
+func claudeCodeSessionStartGroups(t *testing.T, configPath string) []any {
+	t.Helper()
+	settings := readJSON(t, configPath)
+	hooks, ok := settings["hooks"].(map[string]any)
+	if !ok {
+		t.Fatal("settings carry no hooks object")
+	}
+	groups, _ := hooks["SessionStart"].([]any)
+	return groups
+}
+
+func TestClaudeCodeRegistersOnlyTheOpeningOccurrence(t *testing.T) {
+	// An omitted matcher means every occurrence on this scaffold, which would
+	// repeat the announcement on resumption, clearing, compaction, and forking.
+	// The transport here has no occurrence to inspect, so the registration is
+	// the only place the single-delivery rule can hold.
+	home := t.TempDir()
+	configPath := filepath.Join(home, ".claude", "settings.json")
+	applyConnection(t, ScaffoldClaudeCode, home)
+
+	groups := claudeCodeSessionStartGroups(t, configPath)
+	if len(groups) != 1 {
+		t.Fatalf("session-start groups = %d, want exactly one", len(groups))
+	}
+	group := groups[0].(map[string]any)
+	if group["matcher"] != openingSessionMatcher {
+		t.Fatalf("matcher = %v, want %q", group["matcher"], openingSessionMatcher)
+	}
+	for _, recurring := range []string{"resume", "clear", "compact", "fork"} {
+		if group["matcher"] == recurring {
+			t.Fatalf("registered against a recurring occurrence %q", recurring)
+		}
+	}
+}
+
+func TestClaudeCodeRepairsAnUnscopedRegistration(t *testing.T) {
+	// A user who connected with an earlier version carries a registration that
+	// fires on every occurrence. Treating it as "already present" would leave
+	// them permanently unable to repair it.
+	home := t.TempDir()
+	configPath := filepath.Join(home, ".claude", "settings.json")
+	writeFile(t, configPath, `{
+  "hooks": {
+    "SessionStart": [
+      {"hooks": [{"type": "command", "command": "'/old/gr' hook --managed-by=goalrail"}]}
+    ],
+    "Stop": [
+      {"hooks": [{"type": "command", "command": "'/old/gr' hook --managed-by=goalrail"}]}
+    ]
+  }
+}`)
+
+	plan, err := PlanConnection(ScaffoldClaudeCode, home, realExecutable(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.AlreadyPresent {
+		t.Fatal("an unscoped registration was reported as already present")
+	}
+	if _, err := Connect(plan); err != nil {
+		t.Fatal(err)
+	}
+
+	groups := claudeCodeSessionStartGroups(t, configPath)
+	if len(groups) != 1 {
+		t.Fatalf("session-start groups after repair = %d, want one", len(groups))
+	}
+	group := groups[0].(map[string]any)
+	if group["matcher"] != openingSessionMatcher {
+		t.Fatalf("repair left matcher = %v", group["matcher"])
+	}
+	// Scoped to this change: the unscoped session-start handler is gone. A
+	// stale executable path elsewhere in the registration is a separate defect,
+	// recorded rather than fixed here — connect currently reports "already
+	// present" for it, which makes health's "re-run connect" advice useless.
+	for _, group := range groups {
+		if strings.Contains(fmt.Sprint(group), "/old/gr") {
+			t.Fatal("the stale unscoped session-start handler survived the repair")
+		}
+	}
+}
+
+func TestClaudeCodeScopedRegistrationIsIdempotent(t *testing.T) {
+	home := t.TempDir()
+	configPath := filepath.Join(home, ".claude", "settings.json")
+	applyConnection(t, ScaffoldClaudeCode, home)
+	before := readFile(t, configPath)
+
+	plan, err := PlanConnection(ScaffoldClaudeCode, home, realExecutable(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !plan.AlreadyPresent {
+		t.Fatal("a correctly scoped registration was not recognised")
+	}
+	changed, err := Connect(plan)
+	if err != nil || changed {
+		t.Fatalf("second connection changed = %v err = %v", changed, err)
+	}
+	if readFile(t, configPath) != before {
+		t.Fatal("a repeated connection rewrote the configuration")
+	}
+}
+
+func TestClaudeCodeRemovalSpansTheScopedRegistration(t *testing.T) {
+	// Removal matches on the managed marker rather than position, so it must
+	// widen with the registration and still leave foreign entries alone.
+	home := t.TempDir()
+	configPath := filepath.Join(home, ".claude", "settings.json")
+	original := `{
+  "theme": "dark",
+  "hooks": {
+    "SessionStart": [
+      {"matcher": "resume", "hooks": [{"type": "command", "command": "/usr/bin/other-tool"}]}
+    ]
+  }
+}`
+	writeFile(t, configPath, original)
+	applyConnection(t, ScaffoldClaudeCode, home)
+
+	removed, err := Disconnect(ScaffoldClaudeCode, home)
+	if err != nil || !removed {
+		t.Fatalf("disconnect removed = %v err = %v", removed, err)
+	}
+	after := readJSON(t, configPath)
+	if after["theme"] != "dark" {
+		t.Fatal("disconnection disturbed unrelated settings")
+	}
+	hooks := after["hooks"].(map[string]any)
+	groups, _ := hooks["SessionStart"].([]any)
+	if len(groups) != 1 {
+		t.Fatalf("session-start groups after disconnect = %d, want the foreign one", len(groups))
+	}
+	foreign := groups[0].(map[string]any)
+	handler := foreign["hooks"].([]any)[0].(map[string]any)
+	if handler["command"] != "/usr/bin/other-tool" {
+		t.Fatal("disconnection removed a foreign handler")
+	}
+	if foreign["matcher"] != "resume" {
+		t.Fatal("disconnection altered a foreign matcher")
+	}
+	if strings.Contains(readFile(t, configPath), managedMarker) {
+		t.Fatal("a managed handler survived disconnection")
+	}
 }
