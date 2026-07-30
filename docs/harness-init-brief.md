@@ -49,6 +49,32 @@ grows out of `gr health` into full diagnosis. Updating becomes one command.
 - One exporter interface; the existing Langfuse adapter is its first
   implementation; Phoenix and others slot in later if demanded.
 
+## Where the hook gets registered
+
+Today `gr connect` writes to user scope only — one path, the scaffold's user
+settings. The promoted requirement already records why that is a limitation
+rather than a preference, and that it holds for the first scaffold alone: there,
+project-local hooks are silently skipped by an external defect, so user scope is
+forced. The second scaffold's project-level hooks are an ordinary merging
+settings layer, so the route is open there and is named in the requirement as
+the first thing to revisit.
+
+Project scope is better, and for a structural reason. Under user scope the hook
+is invoked in every session the user starts anywhere and switches itself off by
+checking for the repository marker — the boundary holds because our first act
+enforces it. Registered per repository, the hook is never invoked in unrelated
+sessions at all, and the boundary is a property of where it is installed.
+
+That makes `gr init` its natural home: marking a repository and registering the
+hook in it are one act, and for the second scaffold a separate `connect` step
+then has no reason to exist. Which is squarely this work's territory.
+
+Consequence for the open approval question: **do not answer it with a
+user-scope registration.** It is a throwaway — the registration would be
+installed in the owner's working configuration, read once, removed, and then
+superseded by the project-scope arrangement anyway. Answer it inside this work,
+in the configuration that will actually ship.
+
 ## Owner decisions, 2026-07-30
 
 1. **Hosted multi-tenant Langfuse: deferred.** Traces carry prompts and user
@@ -61,3 +87,10 @@ grows out of `gr health` into full diagnosis. Updating becomes one command.
 3. **The update surface is `gr`'s own version.** OpenSpec compatibility is
    verified internally before a release; the user is never asked to reason
    about OpenSpec versions.
+4. **Registration scope belongs to this work, and the first real attachment
+   waits for it.** The owner asked why a live check would use user scope when
+   project scope is the direction, and the answer was only that the code has
+   nothing else today — which is a reason to build it, not a reason to install a
+   registration that will be replaced. So: no user-scope registration in the
+   owner's own configuration for the sake of a one-off observation, and the
+   approval question is answered here, once, in the shipping arrangement.
