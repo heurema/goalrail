@@ -157,17 +157,52 @@ func TestInitCommandIsExplicitAndReportsItself(t *testing.T) {
 		t.Fatal(err)
 	}
 	var decoded struct {
-		Created bool   `json:"created"`
-		Marker  string `json:"marker"`
+		MarkerCreated bool   `json:"marker_created"`
+		Marker        string `json:"marker"`
+		Canon         string `json:"canon"`
+		Invocation    string `json:"invocation"`
+		Files         []struct {
+			Path   string `json:"path"`
+			Action string `json:"action"`
+		} `json:"files"`
+		Next []string `json:"next"`
 	}
 	if err := json.Unmarshal(stdout.Bytes(), &decoded); err != nil {
 		t.Fatal(err)
 	}
-	if !decoded.Created || decoded.Marker != ambient.MarkerPath {
+	if !decoded.MarkerCreated || decoded.Marker != ambient.MarkerPath {
 		t.Fatalf("init reported %+v", decoded)
 	}
 	if !ambient.IsInitialized(directory) {
 		t.Fatal("init did not initialize the repository")
+	}
+	// Initialization installs the harness, not just the marker, and says so.
+	if decoded.Canon == "" {
+		t.Fatal("init did not report which overlay it installed")
+	}
+	if len(decoded.Files) == 0 {
+		t.Fatal("init reported no materialized files")
+	}
+	for _, file := range decoded.Files {
+		if file.Action != "created" {
+			t.Fatalf("%s reported %q in a fresh repository", file.Path, file.Action)
+		}
+	}
+	// The pinned invocation carries the explicit schema argument, without which a
+	// repository holding only the files fails on its first change.
+	if !strings.Contains(decoded.Invocation, "--schema goalrail-intent") {
+		t.Fatalf("init did not report the invocation with its schema argument: %q", decoded.Invocation)
+	}
+	// The files are the user's to commit; an install that leaves that unsaid lets
+	// them believe the act was self-contained.
+	var mentionsCommit bool
+	for _, next := range decoded.Next {
+		if strings.Contains(next, "commit") {
+			mentionsCommit = true
+		}
+	}
+	if !mentionsCommit {
+		t.Fatal("init did not say that committing the new files is the user's act")
 	}
 }
 
@@ -236,8 +271,24 @@ func TestHelpPresentsBackgroundSurfaceAndHidesTheHook(t *testing.T) {
 	// The hook is invoked by the scaffold, never by a person. Advertising it
 	// would invite manual runs of a fail-quiet path whose silence reads as
 	// breakage.
-	if strings.Contains(text, "hook") {
-		t.Fatalf("help advertises the scaffold-invoked hook:\n%s", text)
+	//
+	// The check reads the two places help lists commands — the usage line and the
+	// indented command entries — rather than the whole text. Describing what
+	// initialization installs necessarily says the word; naming `hook` as something
+	// to run is the thing this forbids, and a bare substring search cannot tell
+	// those apart.
+	usage, _, _ := strings.Cut(text, "\n")
+	if strings.Contains(usage, "hook") {
+		t.Fatalf("the usage line lists the scaffold-invoked hook:\n%s", usage)
+	}
+	for _, line := range strings.Split(text, "\n") {
+		entry := strings.TrimPrefix(line, "  ")
+		if len(entry) == len(line) || strings.HasPrefix(entry, " ") {
+			continue
+		}
+		if command, _, _ := strings.Cut(entry, " "); command == "hook" {
+			t.Fatalf("help lists the scaffold-invoked hook as a command:\n%s", text)
+		}
 	}
 }
 
@@ -344,7 +395,7 @@ func TestHealthCommandReportsWhatIsMissing(t *testing.T) {
 	}
 }
 
-func TestHelpPresentsHealthAndTheTrustStep(t *testing.T) {
+func TestHelpPresentsTheDiagnosisAndWhatItDistinguishes(t *testing.T) {
 	var stdout bytes.Buffer
 	if err := run(
 		context.Background(),
@@ -356,11 +407,39 @@ func TestHelpPresentsHealthAndTheTrustStep(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
-	text := stdout.String()
-	for _, required := range []string{"health", "trust", "nothing runs until"} {
-		if !strings.Contains(strings.ToLower(text), required) {
+	text := strings.ToLower(stdout.String())
+	// The states the diagnosis distinguishes — a pending review step, an overlay
+	// that has drifted — are otherwise indistinguishable from a broken install, so
+	// help has to point at the command that names them.
+	for _, required := range []string{"doctor", "review step", "drifted", "broken install"} {
+		if !strings.Contains(text, required) {
 			t.Fatalf("help omits %q:\n%s", required, text)
 		}
+	}
+}
+
+func TestTheSupersededNameStillWorksAndNamesItsSuccessor(t *testing.T) {
+	// Renaming a surface while printed remedies still name the old one leaves the
+	// user following instructions that fail, so the old name keeps working. Its
+	// stdout must stay exactly what it was, because a script may parse it — the
+	// deprecation line goes to stderr.
+	var stdout, stderr bytes.Buffer
+	if err := run(
+		context.Background(),
+		[]string{"health", "--repo", t.TempDir()},
+		strings.NewReader(""),
+		&stdout,
+		&stderr,
+		productionService,
+	); err != nil {
+		t.Fatal(err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &decoded); err != nil {
+		t.Fatalf("the superseded name no longer emits its JSON: %v", err)
+	}
+	if !strings.Contains(stderr.String(), "gr doctor") {
+		t.Fatalf("the superseded name does not name its successor: %q", stderr.String())
 	}
 }
 

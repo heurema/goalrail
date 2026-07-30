@@ -51,16 +51,28 @@ func TestHealthDistinguishesEveryState(t *testing.T) {
 	})
 }
 
-func TestHealthReportsUnknownRatherThanGuessing(t *testing.T) {
-	// No trust record has been observed for this scaffold. Claiming either
-	// answer would be invention, and an optimistic guess is the worse one.
+func TestHealthReportsNoTrustStepWhereNoneWasObserved(t *testing.T) {
+	// A live session ran a hook registered in this scaffold's repository-scope
+	// settings file with no approval step. Reporting a trust state as pending or
+	// undetermined here would invent an obstacle the observation ruled out, and
+	// reporting a record would invent a grant nobody made — hence its own state.
 	home, repo := t.TempDir(), initializedRepository(t)
-	applyConnection(t, ScaffoldClaudeCode, home, realExecutable(t))
+	applyConnection(t, ScaffoldClaudeCode, repo, realExecutable(t))
 	state := inspect(t, ScaffoldClaudeCode, home, repo)
-	if state.Trust != TrustUnknown || state.Working {
-		t.Fatalf("state = %+v", state)
+	if state.Trust != TrustNotRequired {
+		t.Fatalf("trust state = %q, want %q: %+v", state.Trust, TrustNotRequired, state)
 	}
-	mustMention(t, state.NextAction, "could not be determined")
+	if !state.Working {
+		t.Fatalf("an attachment needing no approval step is not reported as working: %+v", state)
+	}
+	if state.NextAction != "" {
+		t.Fatalf("a working attachment still asked for something: %q", state.NextAction)
+	}
+	// What the run did not capture is still named, so a green report does not read
+	// as "everything about this scaffold is known".
+	if len(state.Unverifiable) == 0 {
+		t.Fatal("the report claims no blind spots at all")
+	}
 }
 
 func TestConnectionNoticeMatchesWhatWasActuallyObserved(t *testing.T) {
@@ -73,21 +85,30 @@ func TestConnectionNoticeMatchesWhatWasActuallyObserved(t *testing.T) {
 		}
 	}
 
-	// For the scaffold whose behaviour was not observed, asserting a mandatory
-	// approval step would send the user hunting for a screen that may not
-	// exist. Inventing an obstacle is its own kind of misinformation.
+	// For the scaffold observed running a registered hook with no approval step,
+	// asserting a mandatory review would send the user hunting for a screen that
+	// does not exist. Inventing an obstacle is its own kind of misinformation.
 	other := strings.ToLower(ConnectionNotice(ScaffoldClaudeCode))
 	if strings.Contains(other, "requires you to review") {
-		t.Fatalf("unverified scaffold notice asserts a trust gate: %s", other)
+		t.Fatalf("notice asserts a trust gate that was observed not to exist: %s", other)
 	}
-	if !strings.Contains(other, "not been verified") {
-		t.Fatalf("unverified scaffold notice hides its uncertainty: %s", other)
+	if !strings.Contains(other, "no approval step") {
+		t.Fatalf("notice does not say the attachment needs no approval: %s", other)
+	}
+	if !strings.Contains(other, "live session") {
+		t.Fatalf("notice states the absence without saying it was observed: %s", other)
 	}
 
-	// Either way the user must be told where to look.
+	// A scaffold that does gate execution must name where the user acts; one that
+	// does not must not send them anywhere at all.
 	for _, scaffold := range SupportedScaffolds() {
-		if !strings.Contains(ConnectionNotice(scaffold), TrustSurface(scaffold)) {
+		notice := ConnectionNotice(scaffold)
+		gated := TrustEvidenceOf(scaffold) == TrustGateObserved
+		if gated && !strings.Contains(notice, TrustSurface(scaffold)) {
 			t.Fatalf("%s notice does not name the surface", scaffold)
+		}
+		if !gated && strings.Contains(strings.ToLower(notice), "trust them first") {
+			t.Fatalf("%s notice invents a review step: %s", scaffold, notice)
 		}
 	}
 }
@@ -122,7 +143,7 @@ func TestNoTrustRecordIsEverWritten(t *testing.T) {
 
 	applyConnection(t, ScaffoldCodex, home, realExecutable(t))
 	inspect(t, ScaffoldCodex, home, repo)
-	if _, err := Disconnect(ScaffoldCodex, home); err != nil {
+	if _, err := Disconnect(ScaffoldCodex, home, home); err != nil {
 		t.Fatal(err)
 	}
 	applyConnection(t, ScaffoldCodex, home, realExecutable(t))
@@ -201,7 +222,8 @@ func TestHealthSurfacesAnUnreadableConfiguration(t *testing.T) {
 	// Reporting "not connected" would recommend a connection that reads the
 	// same file and fails identically.
 	home, repo := t.TempDir(), initializedRepository(t)
-	writeFile(t, filepath.Join(home, ".claude", "settings.json"), "{not json")
+	// The malformed file goes where this scaffold's registration lives.
+	writeFile(t, filepath.Join(repo, ".claude", "settings.local.json"), "{not json")
 	state := inspect(t, ScaffoldClaudeCode, home, repo)
 	if state.ConfigError == "" {
 		t.Fatalf("an unreadable configuration was reported as an ordinary state: %+v", state)
@@ -314,24 +336,26 @@ func TestRepairNoticeMatchesWhatWasActuallyObserved(t *testing.T) {
 		}
 	}
 
-	// For the scaffold whose gate was never observed, asserting that review is
-	// mandatory would invent an obstacle.
+	// For the scaffold observed to gate nothing, a replaced command needs no second
+	// review, and claiming otherwise would invent an obstacle.
 	other := strings.ToLower(RepairNotice(ScaffoldClaudeCode, "/old/gr"))
 	if strings.Contains(other, "no longer applies") {
-		t.Fatalf("unverified scaffold repair notice asserts a trust gate: %s", other)
+		t.Fatalf("repair notice asserts a trust gate that was observed not to exist: %s", other)
 	}
-	if !strings.Contains(other, "not been verified") {
-		t.Fatalf("unverified scaffold repair notice hides its uncertainty: %s", other)
+	if !strings.Contains(other, "without an approval step") {
+		t.Fatalf("repair notice does not say the replacement simply applies: %s", other)
 	}
 
-	// Either way the user must be told where to look, and the replacement must be
-	// named even when the previous path could not be read.
+	// The replacement must be named on every scaffold, even when the previous path
+	// could not be read, and only a gated scaffold sends the user to a surface.
 	for _, scaffold := range SupportedScaffolds() {
-		if !strings.Contains(RepairNotice(scaffold, ""), TrustSurface(scaffold)) {
-			t.Fatalf("%s repair notice does not name the surface", scaffold)
-		}
-		if !strings.Contains(RepairNotice(scaffold, ""), "was replaced") {
+		notice := RepairNotice(scaffold, "")
+		if !strings.Contains(notice, "was replaced") {
 			t.Fatalf("%s repair notice does not say a replacement happened", scaffold)
+		}
+		if TrustEvidenceOf(scaffold) == TrustGateObserved &&
+			!strings.Contains(notice, TrustSurface(scaffold)) {
+			t.Fatalf("%s repair notice does not name the surface", scaffold)
 		}
 	}
 }
@@ -368,23 +392,23 @@ func TestRepairNoticeDoesNotSendTheUserToASurfaceThatContradictsIt(t *testing.T)
 	// is needed" and then points at that command hands the user two answers and no
 	// way to choose between them.
 	codex := RepairNotice(ScaffoldCodex, "/old/gr")
-	if strings.Contains(codex, "Run `gr health` to check") {
+	if strings.Contains(codex, "Run `gr doctor` to check") {
 		t.Fatalf("the repair notice points at a command that contradicts it: %s", codex)
 	}
 	if !strings.Contains(codex, "cannot confirm") {
 		t.Fatalf("the repair notice hides that health cannot see this step: %s", codex)
 	}
 
-	// For the scaffold with no observed trust gate, health reports the trust state
-	// as undetermined rather than working, so the pointer stays accurate there.
+	// For the scaffold observed to gate nothing, the diagnosis agrees with the
+	// notice — it reports the attachment as working — so the pointer stays accurate.
 	other := RepairNotice(ScaffoldClaudeCode, "/old/gr")
-	if !strings.Contains(other, "gr health") {
+	if !strings.Contains(other, "gr doctor") {
 		t.Fatalf("the notice withholds an accurate pointer: %s", other)
 	}
 
-	// And the first-connection notice keeps its pointer: with no record yet, health
-	// reports trust as pending and names the review surface.
-	if !strings.Contains(ConnectionNotice(ScaffoldCodex), "gr health") {
+	// And the first-connection notice keeps its pointer: with no record yet, the
+	// diagnosis reports trust as pending and names the review surface.
+	if !strings.Contains(ConnectionNotice(ScaffoldCodex), "gr doctor") {
 		t.Fatal("the first-connection notice lost an accurate pointer")
 	}
 }

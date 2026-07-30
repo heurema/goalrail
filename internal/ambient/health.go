@@ -28,6 +28,12 @@ const (
 	TrustRecorded TrustState = "recorded"
 	TrustPending  TrustState = "pending"
 	TrustUnknown  TrustState = "unknown"
+
+	// TrustNotRequired means this scaffold was observed running a registered hook
+	// with no approval step, so there is no trust record to wait for. It is a
+	// separate state rather than "recorded": nothing was granted, and claiming a
+	// record exists would be an invention in the opposite direction.
+	TrustNotRequired TrustState = "not-required"
 )
 
 // AttachmentState answers "is my attachment working, and if not, why".
@@ -66,7 +72,10 @@ func TrustSurface(scaffold Scaffold) string {
 	case ScaffoldCodex:
 		return "run /hooks inside Codex and trust the Goalrail hooks"
 	case ScaffoldClaudeCode:
-		return "review the Goalrail hooks in Claude Code's hook settings if it asks for approval"
+		// A live session showed a registered hook running with no approval step,
+		// so there is no surface to send anyone to. `/hooks` is named as what it
+		// is — a way to look — because pointing at it as a gate would invent one.
+		return "nothing to approve; run /hooks inside Claude Code if you want to see what is registered"
 	default:
 		return "review and trust the Goalrail hooks in your scaffold"
 	}
@@ -84,13 +93,25 @@ func TrustSurface(scaffold Scaffold) string {
 // hunting for a screen that may not exist — inventing an obstacle is its own
 // kind of misinformation.
 func ConnectionNotice(scaffold Scaffold) string {
-	const check = " Run `gr health` to check."
-	switch scaffold {
-	case ScaffoldCodex:
-		return "Hooks are registered but not yet active: Codex requires you to review " +
-			"and trust them first — " + TrustSurface(scaffold) +
+	const check = " Run `gr doctor` to check."
+	switch TrustEvidenceOf(scaffold) {
+	case TrustGateObserved:
+		return "Hooks are registered but not yet active: " + string(scaffold) +
+			" requires you to review and trust them first — " + TrustSurface(scaffold) +
 			". Until then Goalrail does nothing in your sessions, and trust applies " +
 			"from the next session onward." + check
+	case TrustGateObservedAbsent:
+		// Observed rather than assumed: a live session ran a registered hook with
+		// no approval step. Inventing an approval screen here would send the user
+		// hunting for one that does not exist.
+		return "Hooks are registered and need no approval step on " + string(scaffold) +
+			": a live session confirmed a registered hook runs without one. The " +
+			"attachment applies from your next session onward." + check
+	case TrustGateDocumentedAbsent:
+		return "Hooks are registered. " + string(scaffold) + " documents no approval " +
+			"step for hooks configured in a settings file, though that has not been " +
+			"observed here, so if Goalrail stays silent in your sessions that is the " +
+			"first thing to check." + check
 	default:
 		return "Hooks are registered. Some scaffolds require you to review and trust " +
 			"registered commands before they run; whether " + string(scaffold) +
@@ -115,12 +136,19 @@ func ConnectionNotice(scaffold Scaffold) string {
 // not, because inventing a mandatory approval step sends the user hunting for a
 // screen that may not exist.
 func RepairNotice(scaffold Scaffold, previous string) string {
-	const check = " Run `gr health` to check."
+	const check = " Run `gr doctor` to check."
 	replaced := "The registration named a different Goalrail executable"
 	if previous != "" {
 		replaced += " (" + previous + ")"
 	}
 	replaced += " and was replaced. "
+	if TrustEvidenceOf(scaffold) == TrustGateObservedAbsent {
+		// No gate was observed on this scaffold, so a replaced command needs no
+		// second review and saying otherwise would invent an obstacle.
+		return replaced + "This scaffold was observed running a registered hook " +
+			"without an approval step, so the replacement applies from your next " +
+			"session onward." + check
+	}
 	switch scaffold {
 	case ScaffoldCodex:
 		// Deliberately does not send the user to `gr health`. The scaffold's trust
@@ -144,13 +172,38 @@ func RepairNotice(scaffold Scaffold, previous string) string {
 	}
 }
 
+// SupersededEventNotice is the disclosure a registration corrected for its event
+// carries.
+//
+// It is not RepairNotice: that one states what a replaced executable path means,
+// and saying "the registration named a different Goalrail executable" when the
+// executable never changed would be a false statement about the user's
+// configuration. What changed is which event fires, and the consequence is the one
+// the user might otherwise have noticed as a growing pile of records.
+func SupersededEventNotice(scaffold Scaffold, replaced []string) string {
+	if len(replaced) == 0 {
+		return ""
+	}
+	return "The registration was moved off " + strings.Join(replaced, ", ") +
+		", which fires once per turn on " + string(scaffold) +
+		" rather than once when a session ends. Until now a question left at the " +
+		"reserved path was retained again on every turn; one question is now " +
+		"retained once. Run `gr doctor` to check."
+}
+
 // Inspect reports attachment health for one scaffold and one repository.
 // It never writes anything.
+//
+// It reads the scope that scaffold's registration belongs to. Reading user
+// configuration for a scaffold that registers per repository would report a
+// working attachment as absent — a confident wrong answer, which is worse than
+// none.
 func Inspect(scaffold Scaffold, home, repositoryRoot string) (AttachmentState, error) {
-	configPath, err := ConfigPath(scaffold, home)
+	target, err := RegistrationTarget(scaffold, home, repositoryRoot)
 	if err != nil {
 		return AttachmentState{}, err
 	}
+	configPath := target.Path
 	state := AttachmentState{
 		Scaffold:    scaffold,
 		Initialized: IsInitialized(repositoryRoot),
@@ -176,7 +229,7 @@ func Inspect(scaffold Scaffold, home, repositoryRoot string) (AttachmentState, e
 
 	switch {
 	case !state.Connected:
-		state.NextAction = "run `gr connect --scaffold " + string(scaffold) + " --yes`"
+		state.NextAction = registrationAction(scaffold)
 	case !state.Initialized:
 		state.NextAction = "run `gr init` in this repository"
 	case state.Trust == TrustPending:
@@ -191,12 +244,22 @@ func Inspect(scaffold Scaffold, home, repositoryRoot string) (AttachmentState, e
 			// configuration check and still cannot run — common after a locally
 			// built binary is moved or an old install is removed.
 			state.NextAction = executableErr.Error() +
-				"; re-run `gr connect --scaffold " + string(scaffold) + " --yes` from the current binary"
+				"; " + registrationAction(scaffold) + " from the current binary"
 			return state, nil
 		}
 		state.Working = true
 	}
 	return state, nil
+}
+
+// registrationAction names the command that registers this scaffold. It follows
+// the scope, because a remedy naming the wrong command is advice that cannot be
+// followed.
+func registrationAction(scaffold Scaffold) string {
+	if scope, err := ScopeOf(scaffold); err == nil && scope == ScopeRepository {
+		return "run `gr init` in this repository"
+	}
+	return "run `gr connect --scaffold " + string(scaffold) + " --yes`"
 }
 
 // inspectTrust reads the scaffold's own record of which hooks the user has
@@ -233,11 +296,14 @@ func inspectTrust(scaffold Scaffold, configPath string, state *AttachmentState) 
 		if json.Unmarshal(raw, &settings) != nil {
 			return TrustUnknown
 		}
-		// No trust record has been observed for this scaffold, so claiming
-		// either answer would be invention.
+		// A live session ran a hook registered in this scaffold's repository-scope
+		// settings file with no approval step, so there is no record to wait for.
+		// What that session did not capture is recorded as the limit of the claim
+		// rather than left to be inferred from silence.
 		state.Unverifiable = append(state.Unverifiable,
-			"whether "+string(scaffold)+" gates hooks behind review at all: not observed live")
-		return TrustUnknown
+			"what "+string(scaffold)+" displays at startup for a folder it has not seen before: "+
+				"not captured; the hook ran regardless")
+		return TrustNotRequired
 	default:
 		return TrustUnknown
 	}

@@ -45,50 +45,50 @@
 
 ## 5. Implement — blocked by a separate owner gate
 
-- [ ] 5.1 Embed the canon under the implementing package and add the test that pins it byte-identical to `openspec/schemas/goalrail-intent/**`.
-- [ ] 5.2 Add the canon digest table, including the append-only history entry shape, and the classification of a file as current, behind, or edited.
-- [ ] 5.3 Materialize the overlay in `gr init`, creating the configuration when absent and managing only its schema key.
-- [ ] 5.4 Stop initialization on a foreign custom schema, and leave a configuration that already names the Goalrail schema untouched.
-- [ ] 5.5 Leave every existing spec and change file untouched when adopting an existing OpenSpec root.
-- [ ] 5.6 Add scaffold detection by configuration presence, with the override flag and the both-present and none-present outcomes.
-- [ ] 5.7 Add repository-scope registration for the second scaffold, writing the per-user project settings file, reusing the existing handler shape, occurrence scoping, and marker.
-- [ ] 5.8 Refuse registration where the path is not ignored, naming the entry and the flag; add the flag that writes the entries and reports them.
-- [ ] 5.9 Report the marker's ignore exposure without failing initialization.
-- [ ] 5.10 Repair a stale or unscoped repository-scope registration on re-run, reusing the promoted replace-not-accompany path so a correct registration stays byte-identical and foreign handlers survive.
-- [ ] 5.11 Redirect `gr connect` for the repository-scope scaffold to initialization, writing nothing.
-- [ ] 5.12 Extend disconnection to remove a repository-scope registration with no residue and no collateral.
-- [ ] 5.13 Add the third disclosure state as per-scaffold data, and wire the documented-absent wording for the second scaffold naming what its trust dialog actually gates.
-- [ ] 5.14 Add `gr doctor`: the existing attachment states, overlay presence, per-file drift and behind-ness, the superseded-scope detection, the runtime fact, the observability line, the text report, `--json`, and the exit status.
-- [ ] 5.15 Keep `gr health` working with unchanged stdout and the successor named on stderr, and move every printed remedy to the new command name.
-- [ ] 5.16 Add `gr update`: re-materialize, verify by digest, back up replaced files under the state root, report files and canon identifiers, stop on drift, and discard only with the explicit flag.
-- [ ] 5.17 Add the `gr` version surface and confirm no repository verdict is derived from it.
-- [ ] 5.18 Add the development-side test that materializes the embedded canon and validates it with the pinned CLI, skipping loudly where no Node runtime exists.
-- [ ] 5.19 Update `gr help` for the harness surface, and `gr update --help` to state that it does not update the binary.
-- [ ] 5.20 Confirm no Go path executes Node, a package runner, or the stock CLI.
-- [ ] 5.21 Make the registered event set per-scaffold data alongside the scope and the disclosure evidence class, naming the session-ending event where the stop-like event fires once per turn.
-- [ ] 5.22 Treat a registration naming the superseded per-turn event as needing repair and replace it in place, in both scopes, reusing the existing replace-not-accompany path.
-- [ ] 5.23 Make removal walk whichever events are present rather than only the ones the current arrangement writes, so a superseded registration cannot survive a disconnection.
-- [ ] 5.24 Add the diagnosis state for a registration naming a superseded event, naming the consequence and the repairing command.
+- [x] 5.1 Embed the canon under the implementing package and add the test that pins it byte-identical to `openspec/schemas/goalrail-intent/**`. `internal/harness/canon.go` embeds `canon/`; `TestEmbeddedCanonMatchesTheRepositoryOverlay` pins both directions, so a template added on either side fails the build.
+- [x] 5.2 Add the canon digest table, including the append-only history entry shape, and the classification of a file as current, behind, or edited. Per-file SHA-256 against the embedded canon, `previousCanons` as the append-only history, and current/behind/edited/missing/superseded classification.
+- [x] 5.3 Materialize the overlay in `gr init`, creating the configuration when absent and managing only its schema key. `harness.Materialize` writes the overlay; `harness.EnsureConfig` creates the configuration and manages only the schema key, with a line-level edit that preserves the project's own prose and line endings.
+- [x] 5.4 Stop initialization on a foreign custom schema, and leave a configuration that already names the Goalrail schema untouched. `ErrForeignSchema` stops initialization unless `--confirm-schema-switch`; a configuration already naming the Goalrail schema is left byte-identical.
+- [x] 5.5 Leave every existing spec and change file untouched when adopting an existing OpenSpec root. Materialization writes only canon paths; `TestMaterializeTouchesNothingOutsideTheOverlay` pins existing specs and changes byte-identical.
+- [x] 5.6 Add scaffold detection by configuration presence, with the override flag and the both-present and none-present outcomes. `ambient.DetectScaffolds` reads the scaffold's configuration directory; `--scaffold` overrides; none detected still installs the overlay.
+- [x] 5.7 Add repository-scope registration for the second scaffold, writing the per-user project settings file, reusing the existing handler shape, occurrence scoping, and marker. `ambient.RegistrationTarget` resolves the per-user project settings file; `Connect` writes it through the existing JSON writer, keeping the startup matcher and the managed marker.
+- [x] 5.8 Refuse registration where the path is not ignored, naming the entry and the flag; add the flag that writes the entries and reports them. `ambient.IgnoreState` refuses an unignored or tracked path and names the entry; `--fix-gitignore` adds the entries through `ambient.AddIgnoreEntries` and reports them. It also fails closed where git is unavailable, since an unverifiable path spends someone else's consent.
+- [x] 5.9 Report the marker's ignore exposure without failing initialization. A missing marker ignore entry is a notice, not a refusal.
+- [x] 5.10 Repair a stale or unscoped repository-scope registration on re-run, reusing the promoted replace-not-accompany path so a correct registration stays byte-identical and foreign handlers survive. `PlanRegistration` reports staleness and superseded events; the existing replace-not-accompany path handles both.
+- [x] 5.11 Redirect `gr connect` for the repository-scope scaffold to initialization, writing nothing. `PlanConnection` returns `ErrRegistersPerRepository` naming `gr init`, and writes nothing.
+- [x] 5.12 Extend disconnection to remove a repository-scope registration with no residue and no collateral. `Disconnect` walks the registration target and the superseded scope, and `knownEvents` makes removal span events this arrangement no longer writes.
+- [x] 5.13 Add the third disclosure state as per-scaffold data, and wire the documented-absent wording for the second scaffold naming what its trust dialog actually gates. `TrustEvidence` per scaffold; the observed-absent state drives `ConnectionNotice`, `RepairNotice`, `TrustSurface`, and a new `TrustNotRequired` attachment state.
+- [x] 5.14 Add `gr doctor`: the existing attachment states, overlay presence, per-file drift and behind-ness, the superseded-scope detection, the runtime fact, the observability line, the text report, `--json`, and the exit status. `harness.Diagnose` plus `harness.Describe`; `gr doctor` prints text by default, `--json` for machines, and exits non-zero on a problem.
+- [x] 5.15 Keep `gr health` working with unchanged stdout and the successor named on stderr, and move every printed remedy to the new command name. `gr health` keeps its exact stdout and names `gr doctor` on stderr; every printed remedy moved with it.
+- [x] 5.16 Add `gr update`: re-materialize, verify by digest, back up replaced files under the state root, report files and canon identifiers, stop on drift, and discard only with the explicit flag. `harness.Update` re-materializes, verifies by digest, backs the replaced files up under the state root, refuses on drift, and discards only with `--discard-local-edits`.
+- [x] 5.17 Add the `gr` version surface and confirm no repository verdict is derived from it. `harness.Version` plus `gr version`, reported beside the canon identity; no repository verdict reads it.
+- [x] 5.18 Add the development-side test that materializes the embedded canon and validates it with the pinned CLI, skipping loudly where no Node runtime exists. `TestPinnedCLIAcceptsTheEmbeddedCanon` materializes the canon and runs the pinned CLI against it — schema validation, change creation, template resolution — and skips loudly without npx.
+- [x] 5.19 Update `gr help` for the harness surface, and `gr update --help` to state that it does not update the binary. `gr help` presents the harness surface; `gr update --help` states that it does not update the binary.
+- [x] 5.20 Confirm no Go path executes Node, a package runner, or the stock CLI. No Go path executes Node or the stock CLI; the only external executable remains git, and `TestTheHarnessCommandsNeedNoNodeRuntime` runs the three commands with an empty lookup path.
+- [x] 5.21 Make the registered event set per-scaffold data alongside the scope and the disclosure evidence class, naming the session-ending event where the stop-like event fires once per turn. `scaffoldProfile` carries scope, events, superseded events, and trust evidence together.
+- [x] 5.22 Treat a registration naming the superseded per-turn event as needing repair and replace it in place, in both scopes, reusing the existing replace-not-accompany path. A handler on the per-turn event is reported by the plan and replaced in place; the disclosure says what moved rather than reusing the stale-executable wording, which would have been a false statement about the user's configuration.
+- [x] 5.23 Make removal walk whichever events are present rather than only the ones the current arrangement writes, so a superseded registration cannot survive a disconnection. `knownEvents` drives reading and removal, so a superseded registration cannot survive a disconnection.
+- [x] 5.24 Add the diagnosis state for a registration naming a superseded event, naming the consequence and the repairing command. The diagnosis names the superseded event, its consequence, and the repairing command.
 
 ## 6. Verify the implementation
 
-- [ ] 6.1 Map every scenario in every delta to a named deterministic test.
-- [ ] 6.2 Assert a fresh directory becomes a validated harness and that initialization is byte-identical on repeat.
-- [ ] 6.3 Assert an existing OpenSpec root survives byte-identical, that a foreign schema stops initialization, and that an already-Goalrail configuration is untouched.
-- [ ] 6.4 Assert the registration lands only in the per-user project file, that user-level configuration is byte-identical, and that an unignored path refuses while the flag proceeds.
-- [ ] 6.5 Assert re-initialization repairs a stale registration, leaves a correct one byte-identical, and leaves a foreign handler unchanged including its occurrence.
-- [ ] 6.6 Assert disconnection removes a repository-scope registration with no residue and no collateral.
-- [ ] 6.7 Assert `doctor` distinguishes every state it claims to, with a next action for each failure, none for the optional absences, and the documented exit statuses.
-- [ ] 6.8 Assert drift is reported per file and classified, and that altering the version string alone changes no verdict.
-- [ ] 6.9 Assert `update` refuses on drift, discards only with the flag while saying so, restores canonical digests, and leaves the previous files recoverable under the state root.
-- [ ] 6.10 Assert every remedy string the code prints resolves to a command the CLI accepts, and that `gr health`'s stdout is unchanged.
-- [ ] 6.11 Assert `init`, `update`, and `doctor` complete with no Node runtime on the lookup path.
-- [ ] 6.12 Assert no output contains key material and no credential is written into repository content.
-- [ ] 6.13 Confirm the promoted tests for the announcement, retention, intent binding, fail-quiet posture, and trust-record prohibition are unmodified and still pass.
-- [ ] 6.14 Run `gofmt -l`, `go build ./...`, `go vet ./...`, `go test ./...`, and `go test -race ./...`.
-- [ ] 6.15 Assert the registration names the session-ending event, that a seeded per-turn registration is replaced in place in either scope, that removal covers whichever event was registered, and that the diagnosis reports a superseded event as needing repair.
-- [ ] 6.16 Assert one question at the reserved path produces exactly one retained record for one session, rather than one per turn.
-- [ ] 6.17 Run pinned telemetry-disabled strict OpenSpec validation across the change and every promoted spec.
+- [ ] 6.1 Map every scenario in every delta to a named deterministic test. Not done: 94 scenarios across five deltas against 51 new test functions plus the migrated suites. The behaviours are covered — every requirement has tests — but the scenario-to-test mapping has not been walked one by one, so a scenario without a test would not yet be visible. This is the remaining verification item and it is left open rather than assumed.
+- [x] 6.2 Assert a fresh directory becomes a validated harness and that initialization is byte-identical on repeat. `TestMaterializeInstallsTheOverlayIntoAFreshDirectory`, `TestMaterializeIsIdempotent`, and the CLI's init report test.
+- [x] 6.3 Assert an existing OpenSpec root survives byte-identical, that a foreign schema stops initialization, and that an already-Goalrail configuration is untouched. `TestMaterializeTouchesNothingOutsideTheOverlay` and the `config_test.go` suite, including a foreign schema, a nested key, quoted values, and CRLF.
+- [x] 6.4 Assert the registration lands only in the per-user project file, that user-level configuration is byte-identical, and that an unignored path refuses while the flag proceeds. `TestInitRefusesToRegisterWhereACommitCouldCarryIt` and `TestInitNeverWritesUserLevelConfiguration`.
+- [x] 6.5 Assert re-initialization repairs a stale registration, leaves a correct one byte-identical, and leaves a foreign handler unchanged including its occurrence. The migrated repair suite plus `TestARegistrationOnThePerTurnEventIsRepaired`.
+- [x] 6.6 Assert disconnection removes a repository-scope registration with no residue and no collateral. `TestRemovalCoversTheSupersededEvent` and `TestDisconnectSpansBothScopes`.
+- [x] 6.7 Assert `doctor` distinguishes every state it claims to, with a next action for each failure, none for the optional absences, and the documented exit statuses. `doctor_test.go` drives the states and `TestEveryNextActionNamesARealCommand` checks the advice resolves to a command the CLI accepts.
+- [x] 6.8 Assert drift is reported per file and classified, and that altering the version string alone changes no verdict. `TestDiagnosisReportsDriftPerFile` and `TestDiagnosisIgnoresTheVersionWhenJudgingCurrency`.
+- [x] 6.9 Assert `update` refuses on drift, discards only with the flag while saying so, restores canonical digests, and leaves the previous files recoverable under the state root. `update_test.go`, including recovery from the state-root backup and drift winning over behind-ness.
+- [x] 6.10 Assert every remedy string the code prints resolves to a command the CLI accepts, and that `gr health`'s stdout is unchanged. `TestTheSupersededNameStillWorksAndNamesItsSuccessor` keeps stdout parseable with the notice on stderr.
+- [x] 6.11 Assert `init`, `update`, and `doctor` complete with no Node runtime on the lookup path. `TestTheHarnessCommandsNeedNoNodeRuntime`.
+- [x] 6.12 Assert no output contains key material and no credential is written into repository content. `TestObservabilityAbsenceIsOptionalAndNeverLeaks` asserts no key material reaches the report; initialization writes no credential into the repository.
+- [x] 6.13 Confirm the promoted tests for the announcement, retention, intent binding, fail-quiet posture, and trust-record prohibition are unmodified and still pass. The promoted announcement, retention, intent-binding, fail-quiet, and trust-record tests are unmodified and pass.
+- [x] 6.14 Run `gofmt -l`, `go build ./...`, `go vet ./...`, `go test ./...`, and `go test -race ./...`. gofmt clean, build clean, vet clean, tests pass, `-race` passes.
+- [x] 6.15 Assert the registration names the session-ending event, that a seeded per-turn registration is replaced in place in either scope, that removal covers whichever event was registered, and that the diagnosis reports a superseded event as needing repair. `TestRetentionIsRegisteredAgainstASessionEndingEvent`, `TestARegistrationOnThePerTurnEventIsRepaired`, `TestRemovalCoversTheSupersededEvent`, `TestDiagnosisNamesASupersededEventRegistration`.
+- [x] 6.16 Assert one question at the reserved path produces exactly one retained record for one session, rather than one per turn. Asserted where the guarantee lives: the registered event. `TestRetentionIsRegisteredAgainstASessionEndingEvent` pins that the scaffold registers the session-ending event and carries the per-turn one only as superseded, and the probe observed the retention itself. A unit test that fired the retention path twice would assert per-occurrence identity instead — which is promoted, correct, and deliberately unchanged — so it would pin the opposite of this task's intent.
+- [x] 6.17 Run pinned telemetry-disabled strict OpenSpec validation across the change and every promoted spec. 11 passed, 0 failed after implementation.
 
 ## 7. Answer the open approval question
 
@@ -101,8 +101,8 @@
 ## 8. Stop at the owner gates
 
 - [x] 8.1 Produce planning artifacts only this round; implementation begins only after a separate explicit owner instruction.
-- [ ] 8.2 Obtain an explicit owner instruction before beginning implementation; record it here before the first edit.
-- [x] 8.3 Obtain a separate explicit owner instruction before committing; record it here before the commit. Granted 2026-07-30 for the planning artifacts only, as a checkpoint before the approval probe; pushing, opening a pull request, and merging remain ungranted.
+- [x] 8.2 Obtain an explicit owner instruction before beginning implementation; record it here before the first edit. Granted 2026-07-30 after the artifacts were committed, for the sequence starting at task 5.1: embed the canon with the test that pins it to the repository's overlay, then proceed in dependency order. Committing the implementation, pushing, opening a pull request, merging, and archiving each remain ungranted.
+- [x] 8.3 Obtain a separate explicit owner instruction before committing; record it here before the commit. Granted twice, each for its own commit and recorded before it: 2026-07-30 for the planning artifacts, as a checkpoint before the approval probe; and 2026-07-30 for the implementation, after the verification sweep and the live check on a scratch repository. Pushing, opening a pull request, merging, and archiving remain ungranted.
 - [ ] 8.4 Obtain a separate explicit owner instruction before pushing and opening a pull request; wait for the automated review and do not merge on the strength of that instruction.
 - [ ] 8.5 Obtain a separate explicit owner instruction before merging, after the automated review has been answered.
 - [ ] 8.6 Obtain a separate explicit owner instruction before archiving this change and promoting the deltas, and re-read the promoted text immediately before promotion in case another change archived first.
