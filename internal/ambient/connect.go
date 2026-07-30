@@ -142,7 +142,7 @@ func isConnected(scaffold Scaffold, configPath string) (bool, error) {
 		// The connection is present only when every event is registered. A
 		// partial registration — say Stop was hand-removed — must read as
 		// absent, or re-running the consented command could never repair it.
-		return claudeCodeHasGoalrail(settings, "SessionStart") &&
+		return claudeCodeSessionStartIsScoped(settings) &&
 			claudeCodeHasGoalrail(settings, "Stop"), nil
 	default:
 		return false, fmt.Errorf("unsupported scaffold %q", scaffold)
@@ -171,6 +171,16 @@ func connectCodex(plan ConnectionPlan) error {
 	return appendToFile(plan.ConfigPath, block)
 }
 
+// openingSessionMatcher names the only session-start occurrence that opens a
+// session on a scaffold that distinguishes them. Resumption, clearing,
+// compaction, and forking all recur inside a session that has already started.
+//
+// An omitted matcher means "every occurrence" there, which would repeat the
+// announcement inside one session. The first supported scaffold avoids that in
+// its transport by inspecting the occurrence; this one gives the transport
+// nothing to inspect, so the constraint has to live in the registration.
+const openingSessionMatcher = "startup"
+
 // managedMarker travels inside our handler command so removal identifies the
 // exact handler connection installed, never a lookalike. The hook entry point
 // ignores arguments, so the marker is inert at run time.
@@ -193,24 +203,100 @@ func connectClaudeCode(plan ConnectionPlan) error {
 	if hooks == nil {
 		hooks = map[string]any{}
 	}
+	handler := func() any {
+		return map[string]any{
+			"type":    "command",
+			"command": managedCommand(plan.Executable),
+		}
+	}
+
+	// Session start is registered against the opening occurrence only. An
+	// existing registration of ours that is not so scoped is replaced rather
+	// than left alone: it would keep firing on every occurrence, and a user who
+	// connected with an earlier version would have no way to repair it.
+	if !claudeCodeSessionStartIsScoped(settings) {
+		groups := stripManagedHandlers(hooks["SessionStart"])
+		hooks["SessionStart"] = append(groups, map[string]any{
+			"matcher": openingSessionMatcher,
+			"hooks":   []any{handler()},
+		})
+	}
+
+	// Stop has no occurrence to distinguish, so it is registered plainly.
 	// Reconcile per event: a partially present registration gains only what is
 	// missing, so a repeated consented connection repairs rather than
 	// duplicates.
-	for _, event := range []string{"SessionStart", "Stop"} {
-		if claudeCodeHasGoalrail(settings, event) {
-			continue
-		}
-		existing, _ := hooks[event].([]any)
-		hooks[event] = append(existing, map[string]any{
-			"hooks": []any{map[string]any{
-				"type":    "command",
-				"command": managedCommand(plan.Executable),
-			}},
+	if !claudeCodeHasGoalrail(settings, "Stop") {
+		existing, _ := hooks["Stop"].([]any)
+		hooks["Stop"] = append(existing, map[string]any{
+			"hooks": []any{handler()},
 		})
-		settings["hooks"] = hooks
 	}
+
 	settings["hooks"] = hooks
 	return writeJSONObject(plan.ConfigPath, settings)
+}
+
+// claudeCodeSessionStartIsScoped reports whether our session-start handler is
+// registered against the opening occurrence and nowhere else.
+func claudeCodeSessionStartIsScoped(settings map[string]any) bool {
+	hooks, _ := settings["hooks"].(map[string]any)
+	groups, _ := hooks["SessionStart"].([]any)
+	scoped := false
+	for _, group := range groups {
+		asMap, _ := group.(map[string]any)
+		if !groupHasManagedHandler(group) {
+			continue
+		}
+		matcher, _ := asMap["matcher"].(string)
+		if matcher != openingSessionMatcher {
+			// Ours, but firing on occurrences that do not open a session.
+			return false
+		}
+		scoped = true
+	}
+	return scoped
+}
+
+func groupHasManagedHandler(group any) bool {
+	asMap, _ := group.(map[string]any)
+	handlers, _ := asMap["hooks"].([]any)
+	for _, entry := range handlers {
+		entryMap, _ := entry.(map[string]any)
+		command, _ := entryMap["command"].(string)
+		if isManagedCommand(command) {
+			return true
+		}
+	}
+	return false
+}
+
+// stripManagedHandlers removes our handlers from a group list, preserving
+// foreign handlers and any group that still holds one.
+func stripManagedHandlers(value any) []any {
+	groups, _ := value.([]any)
+	kept := make([]any, 0, len(groups))
+	for _, group := range groups {
+		asMap, _ := group.(map[string]any)
+		handlers, _ := asMap["hooks"].([]any)
+		keptHandlers := make([]any, 0, len(handlers))
+		for _, entry := range handlers {
+			entryMap, _ := entry.(map[string]any)
+			command, _ := entryMap["command"].(string)
+			if isManagedCommand(command) {
+				continue
+			}
+			keptHandlers = append(keptHandlers, entry)
+		}
+		if len(keptHandlers) == 0 && len(handlers) > 0 {
+			continue
+		}
+		if asMap != nil && len(handlers) > 0 {
+			asMap["hooks"] = keptHandlers
+		}
+		kept = append(kept, group)
+	}
+	return kept
 }
 
 func claudeCodeHasGoalrail(settings map[string]any, event string) bool {
