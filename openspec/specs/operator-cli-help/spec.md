@@ -15,9 +15,13 @@ or broader activation controls.
 
 Help SHALL additionally present background attachment as its own surface,
 distinct from that lifecycle: connecting a scaffold, initializing a repository,
-and disconnecting. It SHALL make plain that after connection ordinary work
-needs no Goalrail command, so an operator cannot mistake the wrapper lifecycle
-for something they must run per task.
+checking attachment health, and disconnecting. It SHALL make plain that after
+connection ordinary work needs no Goalrail command, so an operator cannot
+mistake the wrapper lifecycle for something they must run per task.
+
+The health command SHALL be discoverable from help, because the state it
+reports — hooks registered but not yet trusted — is otherwise indistinguishable
+from a broken installation.
 
 The hook entry point SHALL NOT appear in help. It is invoked by the scaffold,
 never by a person, and listing it would invite manual invocation of a
@@ -30,9 +34,13 @@ fail-quiet path whose silence would then read as breakage.
 
 #### Scenario: Operator looks for the background surface
 - **WHEN** an operator invokes `gr help`
-- **THEN** connection, initialization, and disconnection are presented as a
-  separate surface, and the text states that ordinary work needs no per-task
-  Goalrail command
+- **THEN** connection, initialization, health, and disconnection are presented
+  as a separate surface, and the text states that ordinary work needs no
+  per-task Goalrail command
+
+#### Scenario: Operator cannot tell untrusted from broken
+- **WHEN** an operator's attachment is registered but not yet trusted
+- **THEN** help points at the health command that names that exact state
 
 #### Scenario: Help would advertise the hook entry point
 - **WHEN** help text would list the scaffold-invoked hook entry point as an
