@@ -101,6 +101,18 @@ func runConnect(args []string, stdout, stderr io.Writer) error {
 		"applied":       changed,
 		"trust_surface": ambient.TrustSurface(selected),
 	}
+	// A repair changed the hook definition, so the trust record still sitting in
+	// the configuration was made against the command that was just replaced.
+	// Consulting it would report the attachment as active on the strength of a
+	// record already known to be stale — which is the failure this repair exists
+	// to remove, reappearing one layer down. This is the one moment the staleness
+	// is known rather than merely unverifiable, so it is stated here.
+	if plan.Repair {
+		response["repaired"] = true
+		response["active_now"] = false
+		response["notice"] = ambient.RepairNotice(selected, plan.RegisteredExecutable)
+		return writeJSON(stdout, response)
+	}
 	// Whether the hooks can run is a fact to observe, not to assume. Judge it by
 	// trust alone: connection answers for the scaffold, while whether any given
 	// repository participates is what `gr init` decides, and the current

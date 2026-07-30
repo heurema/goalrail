@@ -444,3 +444,80 @@ func TestRepeatedConnectDoesNotCallAWorkingAttachmentInert(t *testing.T) {
 		t.Fatalf("a working attachment was told to grant trust: %q", decoded.Notice)
 	}
 }
+
+func TestConnectDoesNotCallARepairedAttachmentActive(t *testing.T) {
+	// The trap this repair had to avoid. The scaffold's trust record survives a
+	// repair, keyed by event, and it was made against the command that was just
+	// replaced. Reading it would report the attachment as active — turning the
+	// silent stale path into a silent untrusted hook, the same symptom one layer
+	// down. The record below is deliberately present so that a report of "active"
+	// would be produced by exactly that mistake.
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	configPath := filepath.Join(home, ".codex", "config.toml")
+	const stale = "/old/gr"
+	managed := "'" + stale + `' hook --managed-by=goalrail`
+	config := "model = \"x\"\n" +
+		"# >>> goalrail ambient (managed) >>>\n" +
+		"[[hooks.SessionStart]]\n\n[[hooks.SessionStart.hooks]]\n" +
+		"type = \"command\"\ncommand = \"" + managed + "\"\n\n" +
+		"[[hooks.Stop]]\n\n[[hooks.Stop.hooks]]\n" +
+		"type = \"command\"\ncommand = \"" + managed + "\"\n" +
+		"# <<< goalrail ambient (managed) <<<\n"
+	for _, event := range []string{"session_start", "stop"} {
+		config += "\n[hooks.state.\"" + configPath + ":" + event + ":0:0\"]\n" +
+			"trusted_hash = \"sha256:" + strings.Repeat("a", 64) + "\"\n"
+	}
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout bytes.Buffer
+	if err := run(
+		context.Background(),
+		[]string{"connect", "--scaffold", "codex", "--yes"},
+		strings.NewReader(""),
+		&stdout,
+		&bytes.Buffer{},
+		productionService,
+	); err != nil {
+		t.Fatal(err)
+	}
+	var decoded struct {
+		Applied   bool   `json:"applied"`
+		Repaired  bool   `json:"repaired"`
+		ActiveNow bool   `json:"active_now"`
+		Notice    string `json:"notice"`
+		Plan      struct {
+			Repair               bool   `json:"repair"`
+			RegisteredExecutable string `json:"registered_executable"`
+		} `json:"plan"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if !decoded.Applied || !decoded.Repaired || !decoded.Plan.Repair {
+		t.Fatalf("connect did not report a repair: %+v", decoded)
+	}
+	if decoded.Plan.RegisteredExecutable != stale {
+		t.Fatalf("connect reported %q as replaced, want %q",
+			decoded.Plan.RegisteredExecutable, stale)
+	}
+	if decoded.ActiveNow {
+		t.Fatal("a repaired attachment was called active on the strength of a stale trust record")
+	}
+	if decoded.Notice == "" {
+		t.Fatal("the repair did not disclose that review applies again")
+	}
+	// The remedy actually happened, not just the report about it.
+	raw, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), stale) {
+		t.Fatalf("the stale registration survived the repair:\n%s", raw)
+	}
+}
