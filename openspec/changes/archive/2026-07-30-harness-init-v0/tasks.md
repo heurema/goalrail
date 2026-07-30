@@ -125,6 +125,13 @@
 - [x] 10.12 P2 — stop prescribing `--fix-gitignore` for an already tracked marker, where an ignore entry changes nothing; the notice now names the real remedy, as the registration path already did. Pinned by `TestInitAdviceForATrackedMarkerNamesTheRealRemedy`.
 - [x] 10.13 Re-run the full verification after the round: gofmt, build, vet, tests, `-race`, and strict OpenSpec validation.
 
+## 11. Answer the automated review on the archival pull request
+
+- [x] 11.1 Replace the generated `TBD` purposes in the three newly promoted capabilities with what each capability is for. `openspec/specs/**` is the repository's current capability reference, and a promoted file that still carries a generator placeholder — including its instruction to update it after archival — documents nothing.
+- [x] 11.2 Trace the clauses this change introduced to the intent that confirmed them: `OUT-11`/`SIG-13` on the connection requirement and on the diagnosis, `OUT-7`/`SIG-8` on the help requirement. The earlier convention kept only the originating change's IDs, which loses the trace exactly where a later change added normative text.
+- [x] 11.3 Resolve a real contradiction the review found in the promoted contract: the new rule makes connection write nothing for a repository-scope scaffold and name initialization, while a retained rule required repeating connection on a working attachment to report it as working — an outcome that command deliberately cannot produce. The rule now follows the consented command that owns the registration, which is initialization at repository scope and connection at user scope, matching what ships. Pinned by `TestInitReportsAWorkingAttachmentAsActiveOnRepeat`.
+- [x] 11.4 Apply each correction to the archived delta as well as the promoted spec, so the archived change stays the provenance of the promoted text rather than diverging from it. Both were corrected before the archival landed.
+
 ## 8. Stop at the owner gates
 
 - [x] 8.1 Produce planning artifacts only this round; implementation begins only after a separate explicit owner instruction.

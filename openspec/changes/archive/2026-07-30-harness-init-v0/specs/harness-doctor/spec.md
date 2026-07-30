@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: One diagnosis covers the whole harness
-**Intent IDs:** OUT-6, SIG-7
+**Intent IDs:** OUT-6, OUT-11, SIG-7, SIG-13
 
 Goalrail SHALL expose one diagnosis surface for a repository's harness, grown
 from attachment health rather than replacing it, and it SHALL report at least:

@@ -215,3 +215,24 @@ Worth recording about the review itself: the two symlink findings extended
 exactly the containment our own pre-PR round had introduced for the registration
 path. That round found the hole and closed it in one place; the automated review
 found the other three places it belonged. Both rounds were needed.
+
+## Addendum: the automated review on the archival pull request
+
+Three P2 findings, all taken. Two were about the promoted text documenting
+itself: the three new capabilities kept OpenSpec's generated `TBD` purpose —
+placeholder text, in the files that are the repository's capability reference —
+and the requirements this change extended kept only the originating change's
+intent IDs, losing the trace for the clauses it added. Both fixed in the promoted
+specs and in the archived deltas, so the archive stays the provenance of the
+canon rather than diverging from it.
+
+The third was a genuine contradiction inside one promoted requirement: the new
+rule makes connection write nothing for a repository-scope scaffold and name
+initialization, while a retained rule required repeating connection on a working
+attachment to report it as working — an outcome that command deliberately cannot
+produce, since it refuses before inspecting anything. The rule now follows the
+consented command that owns the registration: initialization at repository scope,
+connection at user scope. That is what already ships — a repeated `gr init`
+reports `active_now` on a current registration — and it is now pinned by
+`TestInitReportsAWorkingAttachmentAsActiveOnRepeat` rather than left as a
+contract nobody could satisfy.

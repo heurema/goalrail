@@ -1,10 +1,18 @@
 # harness-doctor Specification
 
 ## Purpose
-TBD - created by archiving change harness-init-v0. Update Purpose after archive.
+
+Define the single surface that answers "is this repository's harness intact, and
+if not, what do I run": attachment state per scaffold, overlay drift reported per
+file, currency decided by comparing digests rather than by trusting a recorded
+version, the checking toolchain reported as a fact rather than a fault, and
+observability reported once as optional without nagging or leaking. Every state
+that is not working names an action the tool can actually perform, and the report
+is readable by a machine as well as a person.
+
 ## Requirements
 ### Requirement: One diagnosis covers the whole harness
-**Intent IDs:** OUT-6, SIG-7
+**Intent IDs:** OUT-6, OUT-11, SIG-7, SIG-13
 
 Goalrail SHALL expose one diagnosis surface for a repository's harness, grown
 from attachment health rather than replacing it, and it SHALL report at least:

@@ -10,7 +10,7 @@ to the intent it belongs to, and a fail-quiet posture that never harms an
 ordinary session.
 ## Requirements
 ### Requirement: Connection is explicit, consented, and reversible
-**Intent IDs:** OUT-1, OUT-2, OUT-4, SIG-1, SIG-2, SIG-4
+**Intent IDs:** OUT-1, OUT-2, OUT-4, OUT-11, SIG-1, SIG-2, SIG-4, SIG-13
 
 Goalrail SHALL attach to a scaffold through one explicit consented command that
 registers persistent session hooks, and SHALL remove everything it added through
@@ -127,8 +127,14 @@ moment at which Goalrail knows a trust record no longer matches, because it
 made the change itself; reading the record cannot establish this, since
 reproducing the form it is recorded against is prohibited.
 
-Connection SHALL NOT describe an already-trusted attachment as inert. Repeating
-the command on a working attachment reports it as working.
+A working attachment SHALL NOT be described as inert. Repeating the consented
+command that registers a scaffold — connection where that is the one that writes,
+initialization where the registration lives in the repository — reports the
+attachment as working. The rule follows the command that owns the registration,
+not the word "connect": for a repository-scope scaffold, connection writes
+nothing and names initialization, so requiring connection itself to report a
+working attachment would demand an outcome from a command that deliberately
+inspects nothing.
 
 The second supported scaffold has now been exercised in a live session, and the
 record SHALL distinguish what that run established from what it did not. Observed:
@@ -273,7 +279,7 @@ scaffold.
 - **THEN** the disclosure states that as documented rather than observed, and names what the scaffold's adjacent consent surface actually gates instead of implying it gates hooks
 
 #### Scenario: Connection is repeated on a working attachment
-- **WHEN** the user reruns the consented command on an attachment that is already registered and trusted
+- **WHEN** the user reruns the consented command that registers this scaffold — connection at user scope, initialization at repository scope — on an attachment that is already registered and trusted
 - **THEN** the outcome reports it as active rather than describing it as not yet active
 
 #### Scenario: User disconnects

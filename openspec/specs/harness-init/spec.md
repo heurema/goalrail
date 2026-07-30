@@ -1,7 +1,15 @@
 # harness-init Specification
 
 ## Purpose
-TBD - created by archiving change harness-init-v0. Update Purpose after archive.
+
+Define what one initialization installs in one repository: the OpenSpec overlay
+carrying the Goalrail schema, materialized from a canon the binary holds; the
+participation marker; and the session hooks, registered where the scaffold's
+settings layer allows it and only where no commit could hand them to someone
+else. Also define what initialization refuses — a foreign custom schema, a
+shareable registration path — and that installing or maintaining the harness
+never depends on the runtime the checking toolchain needs.
+
 ## Requirements
 ### Requirement: One command installs the whole harness in one repository
 **Intent IDs:** OUT-1, SIG-1, SIG-2

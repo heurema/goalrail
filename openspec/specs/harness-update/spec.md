@@ -1,7 +1,14 @@
 # harness-update Specification
 
 ## Purpose
-TBD - created by archiving change harness-init-v0. Update Purpose after archive.
+
+Define how a repository's harness is brought to the canon the installed binary
+carries: one command, verified by comparing digests rather than by assuming the
+writes succeeded, with the replaced files kept outside the repository so recovery
+does not depend on them ever having been committed. A local edit stops the update
+rather than being overwritten, and the command never updates the binary itself or
+consults a release channel.
+
 ## Requirements
 ### Requirement: One command brings a repository's harness to the installed binary's canon
 **Intent IDs:** OUT-8, SIG-9
