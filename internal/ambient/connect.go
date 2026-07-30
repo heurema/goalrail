@@ -30,7 +30,28 @@ type ConnectionPlan struct {
 	ConfigPath     string   `json:"config_path"`
 	AlreadyPresent bool     `json:"already_present"`
 	Executable     string   `json:"executable"`
+
+	// Repair reports a registration that is recognisably ours but does not name
+	// the executable this connection was invoked with. It is tracked apart from
+	// plain absence because replacing a handler changes a hook definition the
+	// user may already have reviewed, which the caller has to disclose.
+	Repair bool `json:"repair"`
+
+	// RegisteredExecutable is the path the existing registration names, when it
+	// differs from the one being registered. Reported detail rather than a
+	// promoted contract: it says what a repair replaces.
+	RegisteredExecutable string `json:"registered_executable,omitempty"`
 }
+
+// managedEvents names the session events a connection registers. Every event
+// listed here must be present for the attachment to work, so presence, repair,
+// and removal all walk the same list.
+func managedEvents() []string { return []string{sessionStartEvent, stopEvent} }
+
+const (
+	sessionStartEvent = "SessionStart"
+	stopEvent         = "Stop"
+)
 
 // marker lines bracket everything a connection adds, so disconnection can
 // remove exactly that and nothing else. Editing a user's own configuration
@@ -65,12 +86,124 @@ func PlanConnection(scaffold Scaffold, home, executable string) (ConnectionPlan,
 	if err != nil {
 		return ConnectionPlan{}, err
 	}
+	// Presence and currency are separate questions. The marker test answers "is
+	// this registration ours", which is what health asks and must keep asking
+	// from whatever binary it happens to run as. Only connection can ask "does
+	// it name the executable I am", because only connection has that executable
+	// to compare against — and a registration naming a different one is not the
+	// registration this command would write.
+	stale, err := staleExecutable(scaffold, configPath, executable)
+	if err != nil {
+		return ConnectionPlan{}, err
+	}
 	return ConnectionPlan{
-		Scaffold:       scaffold,
-		ConfigPath:     configPath,
-		AlreadyPresent: present,
-		Executable:     executable,
+		Scaffold:             scaffold,
+		ConfigPath:           configPath,
+		AlreadyPresent:       present && stale == "",
+		Executable:           executable,
+		Repair:               stale != "",
+		RegisteredExecutable: stale,
 	}, nil
+}
+
+// staleExecutable returns the executable a managed handler names when it is not
+// the given one, and an empty string when every managed handler names it or
+// there is no managed handler at all.
+//
+// A handler whose executable cannot be extracted counts as neither: there is
+// nothing to compare, and rewriting a registration we cannot read would be a
+// guess.
+func staleExecutable(scaffold Scaffold, configPath, executable string) (string, error) {
+	registered, err := registeredExecutables(scaffold, configPath)
+	if err != nil {
+		return "", err
+	}
+	for _, candidate := range registered {
+		if candidate != executable {
+			return candidate, nil
+		}
+	}
+	return "", nil
+}
+
+// registeredExecutables returns the executable named by every managed handler,
+// read the way each scaffold stores it: from file content for the bracketed
+// block, and from decoded command strings for the settings object.
+func registeredExecutables(scaffold Scaffold, configPath string) ([]string, error) {
+	switch scaffold {
+	case ScaffoldCodex:
+		raw, err := os.ReadFile(configPath)
+		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				return nil, nil
+			}
+			return nil, err
+		}
+		return executablesInText(string(raw)), nil
+	case ScaffoldClaudeCode:
+		settings, err := readJSONObject(configPath)
+		if err != nil {
+			return nil, err
+		}
+		var found []string
+		for _, event := range managedEvents() {
+			forEachManagedCommand(settings, event, func(command string) {
+				found = append(found, executablesInText(command)...)
+			})
+		}
+		return found, nil
+	default:
+		return nil, fmt.Errorf("unsupported scaffold %q", scaffold)
+	}
+}
+
+// executablesInText extracts the executable of every managed command appearing
+// in the given text, which may be a whole configuration file or one command.
+func executablesInText(content string) []string {
+	var found []string
+	for offset := 0; ; {
+		index := strings.Index(content[offset:], managedMarker)
+		if index < 0 {
+			return found
+		}
+		index += offset
+		if path := executableBefore(content[:index]); path != "" {
+			found = append(found, path)
+		}
+		offset = index + len(managedMarker)
+	}
+}
+
+// executableBefore extracts the quoted executable a managed command opens with,
+// given everything that precedes the marker.
+func executableBefore(prefix string) string {
+	closing := strings.LastIndex(prefix, "'")
+	if closing < 0 {
+		return ""
+	}
+	opening := strings.LastIndex(prefix[:closing], "'")
+	if opening < 0 {
+		return ""
+	}
+	return prefix[opening+1 : closing]
+}
+
+// forEachManagedCommand visits every managed handler command registered for one
+// event in a settings object.
+func forEachManagedCommand(settings map[string]any, event string, visit func(command string)) {
+	hooks, _ := settings["hooks"].(map[string]any)
+	groups, _ := hooks[event].([]any)
+	for _, group := range groups {
+		asMap, _ := group.(map[string]any)
+		handlers, _ := asMap["hooks"].([]any)
+		for _, handler := range handlers {
+			handlerMap, _ := handler.(map[string]any)
+			command, _ := handlerMap["command"].(string)
+			if isManagedCommand(command) {
+				visit(command)
+			}
+		}
+	}
 }
 
 // Connect registers the persistent session hooks. It is idempotent: a second
@@ -143,13 +276,24 @@ func isConnected(scaffold Scaffold, configPath string) (bool, error) {
 		// partial registration — say Stop was hand-removed — must read as
 		// absent, or re-running the consented command could never repair it.
 		return claudeCodeSessionStartIsScoped(settings) &&
-			claudeCodeHasGoalrail(settings, "Stop"), nil
+			claudeCodeHasGoalrail(settings, stopEvent), nil
 	default:
 		return false, fmt.Errorf("unsupported scaffold %q", scaffold)
 	}
 }
 
 func connectCodex(plan ConnectionPlan) error {
+	// Remove any existing managed block before writing, unconditionally rather
+	// than only when repairing. This path is reached exactly when something must
+	// be written, so keeping an existing block is never right: appending beside
+	// it would leave two handlers per event — every hook firing twice — and a
+	// removal that finds only the first, so disconnection would leave residue
+	// that still looks like an attachment. Removal refuses on a block whose end
+	// marker is missing, which fails the repair loudly instead of writing beside
+	// something whose extent is unknown.
+	if _, err := removeManagedBlock(plan.ConfigPath); err != nil {
+		return err
+	}
 	command := managedCommand(plan.Executable)
 	block := strings.Join([]string{
 		"",
@@ -210,25 +354,28 @@ func connectClaudeCode(plan ConnectionPlan) error {
 		}
 	}
 
-	// Session start is registered against the opening occurrence only. An
-	// existing registration of ours that is not so scoped is replaced rather
-	// than left alone: it would keep firing on every occurrence, and a user who
-	// connected with an earlier version would have no way to repair it.
-	if !claudeCodeSessionStartIsScoped(settings) {
-		groups := stripManagedHandlers(hooks["SessionStart"])
-		hooks["SessionStart"] = append(groups, map[string]any{
+	// Session start is registered against the opening occurrence only, naming the
+	// current executable. An existing registration of ours that fails either test
+	// is replaced rather than left alone: an unscoped one keeps firing on every
+	// occurrence, and one naming a moved binary cannot run, and in both cases a
+	// user who connected with an earlier version or from a different binary would
+	// otherwise have no way to repair it.
+	if !claudeCodeSessionStartIsScoped(settings) ||
+		!claudeCodeEventIsCurrent(settings, sessionStartEvent, plan.Executable) {
+		groups := stripManagedHandlers(hooks[sessionStartEvent])
+		hooks[sessionStartEvent] = append(groups, map[string]any{
 			"matcher": openingSessionMatcher,
 			"hooks":   []any{handler()},
 		})
 	}
 
 	// Stop has no occurrence to distinguish, so it is registered plainly.
-	// Reconcile per event: a partially present registration gains only what is
-	// missing, so a repeated consented connection repairs rather than
-	// duplicates.
-	if !claudeCodeHasGoalrail(settings, "Stop") {
-		existing, _ := hooks["Stop"].([]any)
-		hooks["Stop"] = append(existing, map[string]any{
+	// Reconcile per event: an event that is missing gains a registration, a stale
+	// one is replaced, and one that is already correct keeps its exact bytes —
+	// and with them whatever review the user has already given it.
+	if !claudeCodeEventIsCurrent(settings, stopEvent, plan.Executable) {
+		groups := stripManagedHandlers(hooks[stopEvent])
+		hooks[stopEvent] = append(groups, map[string]any{
 			"hooks": []any{handler()},
 		})
 	}
@@ -300,20 +447,25 @@ func stripManagedHandlers(value any) []any {
 }
 
 func claudeCodeHasGoalrail(settings map[string]any, event string) bool {
-	hooks, _ := settings["hooks"].(map[string]any)
-	groups, _ := hooks[event].([]any)
-	for _, group := range groups {
-		asMap, _ := group.(map[string]any)
-		handlers, _ := asMap["hooks"].([]any)
-		for _, handler := range handlers {
-			handlerMap, _ := handler.(map[string]any)
-			command, _ := handlerMap["command"].(string)
-			if isManagedCommand(command) {
-				return true
+	found := false
+	forEachManagedCommand(settings, event, func(string) { found = true })
+	return found
+}
+
+// claudeCodeEventIsCurrent reports whether one event carries a registration of
+// ours and every handler in it names the given executable. An event with no
+// managed handler is not current: there is nothing there to keep.
+func claudeCodeEventIsCurrent(settings map[string]any, event, executable string) bool {
+	present, current := false, true
+	forEachManagedCommand(settings, event, func(command string) {
+		present = true
+		for _, path := range executablesInText(command) {
+			if path != executable {
+				current = false
 			}
 		}
-	}
-	return false
+	})
+	return present && current
 }
 
 func removeClaudeCodeHooks(configPath string) (bool, error) {
@@ -329,7 +481,7 @@ func removeClaudeCodeHooks(configPath string) (bool, error) {
 		return false, nil
 	}
 	removed := false
-	for _, event := range []string{"SessionStart", "Stop"} {
+	for _, event := range managedEvents() {
 		groups, _ := hooks[event].([]any)
 		keptGroups := make([]any, 0, len(groups))
 		for _, group := range groups {

@@ -55,7 +55,7 @@ func TestHealthReportsUnknownRatherThanGuessing(t *testing.T) {
 	// No trust record has been observed for this scaffold. Claiming either
 	// answer would be invention, and an optimistic guess is the worse one.
 	home, repo := t.TempDir(), initializedRepository(t)
-	applyConnection(t, ScaffoldClaudeCode, home)
+	applyConnection(t, ScaffoldClaudeCode, home, realExecutable(t))
 	state := inspect(t, ScaffoldClaudeCode, home, repo)
 	if state.Trust != TrustUnknown || state.Working {
 		t.Fatalf("state = %+v", state)
@@ -120,12 +120,12 @@ func TestNoTrustRecordIsEverWritten(t *testing.T) {
 	home, repo := t.TempDir(), initializedRepository(t)
 	configPath := filepath.Join(home, ".codex", "config.toml")
 
-	applyConnection(t, ScaffoldCodex, home)
+	applyConnection(t, ScaffoldCodex, home, realExecutable(t))
 	inspect(t, ScaffoldCodex, home, repo)
 	if _, err := Disconnect(ScaffoldCodex, home); err != nil {
 		t.Fatal(err)
 	}
-	applyConnection(t, ScaffoldCodex, home)
+	applyConnection(t, ScaffoldCodex, home, realExecutable(t))
 
 	raw, err := os.ReadFile(configPath)
 	if err != nil {
@@ -150,7 +150,7 @@ func inspect(t *testing.T, scaffold Scaffold, home, repo string) AttachmentState
 func connectedHome(t *testing.T) string {
 	t.Helper()
 	home := t.TempDir()
-	applyConnection(t, ScaffoldCodex, home)
+	applyConnection(t, ScaffoldCodex, home, realExecutable(t))
 	return home
 }
 
@@ -246,5 +246,104 @@ func mustMention(t *testing.T, text, fragment string) {
 	t.Helper()
 	if !strings.Contains(text, fragment) {
 		t.Fatalf("next action %q does not mention %q", text, fragment)
+	}
+}
+
+func TestHealthReportsWorkingAfterTheRepair(t *testing.T) {
+	// The whole point of the repair: health detects a moved binary, names it, and
+	// the remedy it prescribes now actually restores the attachment. Before this,
+	// the third step reported the same failure forever.
+	home, repo := t.TempDir(), initializedRepository(t)
+	old := realExecutable(t)
+	applyConnection(t, ScaffoldCodex, home, old)
+	grantTrust(t, home)
+	if state := inspect(t, ScaffoldCodex, home, repo); !state.Working {
+		t.Fatalf("a healthy attachment reported as broken: %+v", state)
+	}
+
+	if err := os.Remove(old); err != nil {
+		t.Fatal(err)
+	}
+	broken := inspect(t, ScaffoldCodex, home, repo)
+	if broken.Working {
+		t.Fatal("health reported working with the registered binary missing")
+	}
+	mustMention(t, broken.NextAction, "missing")
+	mustMention(t, broken.NextAction, "gr connect")
+
+	// Follow the advice health just gave.
+	current := realExecutable(t)
+	plan, err := PlanConnection(ScaffoldCodex, home, current)
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed, err := Connect(plan)
+	if err != nil || !changed {
+		t.Fatalf("the prescribed remedy changed = %v err = %v", changed, err)
+	}
+	if state := inspect(t, ScaffoldCodex, home, repo); !state.Working {
+		t.Fatalf("the attachment did not recover after the prescribed remedy: %+v", state)
+	}
+}
+
+func TestRepairNoticeMatchesWhatWasActuallyObserved(t *testing.T) {
+	// A repair discards the review the previous command was given, so it must say
+	// so — under the same discipline as the first-connection notice, because the
+	// certainty differs per scaffold.
+	codex := RepairNotice(ScaffoldCodex, "/old/gr")
+	if !strings.Contains(codex, "/old/gr") {
+		t.Fatalf("the notice does not say what was replaced: %s", codex)
+	}
+	for _, required := range []string{"no longer applies", "does nothing"} {
+		if !strings.Contains(strings.ToLower(codex), required) {
+			t.Fatalf("codex repair notice omits %q: %s", required, codex)
+		}
+	}
+
+	// For the scaffold whose gate was never observed, asserting that review is
+	// mandatory would invent an obstacle.
+	other := strings.ToLower(RepairNotice(ScaffoldClaudeCode, "/old/gr"))
+	if strings.Contains(other, "no longer applies") {
+		t.Fatalf("unverified scaffold repair notice asserts a trust gate: %s", other)
+	}
+	if !strings.Contains(other, "not been verified") {
+		t.Fatalf("unverified scaffold repair notice hides its uncertainty: %s", other)
+	}
+
+	// Either way the user must be told where to look, and the replacement must be
+	// named even when the previous path could not be read.
+	for _, scaffold := range SupportedScaffolds() {
+		if !strings.Contains(RepairNotice(scaffold, ""), TrustSurface(scaffold)) {
+			t.Fatalf("%s repair notice does not name the surface", scaffold)
+		}
+		if !strings.Contains(RepairNotice(scaffold, ""), "was replaced") {
+			t.Fatalf("%s repair notice does not say a replacement happened", scaffold)
+		}
+	}
+}
+
+func TestRepairWritesNoTrustRecord(t *testing.T) {
+	// The repair knows the stored record went stale. Knowing that must never
+	// become licence to write a fresh one: trust is standing consent to run a
+	// command in every session the user starts.
+	home := t.TempDir()
+	configPath := filepath.Join(home, ".codex", "config.toml")
+	old := realExecutable(t)
+	applyConnection(t, ScaffoldCodex, home, old)
+	if err := os.Remove(old); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := PlanConnection(ScaffoldCodex, home, realExecutable(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Connect(plan); err != nil {
+		t.Fatal(err)
+	}
+	raw := readFile(t, configPath)
+	for _, forbidden := range []string{"hooks.state", "trusted_hash"} {
+		if strings.Contains(raw, forbidden) {
+			t.Fatalf("the repair wrote a scaffold trust record (%q):\n%s", forbidden, raw)
+		}
 	}
 }

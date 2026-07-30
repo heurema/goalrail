@@ -100,6 +100,41 @@ func ConnectionNotice(scaffold Scaffold) string {
 	}
 }
 
+// RepairNotice is the disclosure a replaced registration requires.
+//
+// The scaffold records trust against the hook definition's current form, so
+// replacing a command discards whatever review the previous one was given. The
+// moment of repair is the only place this can be stated with certainty: Goalrail
+// made the change itself, whereas reading the stored record can never establish
+// it, because reproducing the form the record is kept against is prohibited.
+// Left unsaid here it is unsayable anywhere, and the silent stale path would
+// simply become a silent untrusted hook — the same symptom one layer down.
+//
+// The wording follows the same per-scaffold discipline as ConnectionNotice:
+// asserted where the trust gate was observed live, marked unverified where it was
+// not, because inventing a mandatory approval step sends the user hunting for a
+// screen that may not exist.
+func RepairNotice(scaffold Scaffold, previous string) string {
+	const check = " Run `gr health` to check."
+	replaced := "The registration named a different Goalrail executable"
+	if previous != "" {
+		replaced += " (" + previous + ")"
+	}
+	replaced += " and was replaced. "
+	switch scaffold {
+	case ScaffoldCodex:
+		return replaced + "Changing a hook command changes its definition, so the " +
+			"review you gave the previous one no longer applies — " + TrustSurface(scaffold) +
+			". Until then Goalrail does nothing in your sessions, and trust applies " +
+			"from the next session onward." + check
+	default:
+		return replaced + "Some scaffolds ask you to review a changed command before " +
+			"it runs; whether " + string(scaffold) + " does has not been verified here — " +
+			TrustSurface(scaffold) + ", and if Goalrail stays silent in your sessions " +
+			"that is the first thing to check." + check
+	}
+}
+
 // Inspect reports attachment health for one scaffold and one repository.
 // It never writes anything.
 func Inspect(scaffold Scaffold, home, repositoryRoot string) (AttachmentState, error) {
@@ -220,23 +255,20 @@ func checkRegisteredExecutable(scaffold Scaffold, configPath string) error {
 	return nil
 }
 
-// registeredExecutable extracts the binary path from a managed command.
+// registeredExecutable extracts the binary path from the first managed command
+// in the given content.
+//
+// It inspects only the first deliberately. Widening it to every registered
+// handler would change what health reports — a configuration hand-edited so one
+// event names a live binary and another a dead one would flip from working to
+// broken — and this change makes connection able to act on health's existing
+// diagnosis rather than altering the diagnosis.
 func registeredExecutable(content string) string {
 	index := strings.Index(content, managedMarker)
 	if index < 0 {
 		return ""
 	}
-	prefix := content[:index]
-	start := strings.LastIndex(prefix, "'")
-	if start < 0 {
-		return ""
-	}
-	remainder := prefix[:start]
-	open := strings.LastIndex(remainder, "'")
-	if open < 0 {
-		return ""
-	}
-	return remainder[open+1:]
+	return executableBefore(content[:index])
 }
 
 // Describe renders one line per state for a human reading terminal output.

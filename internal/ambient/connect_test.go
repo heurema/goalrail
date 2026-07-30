@@ -49,7 +49,10 @@ func TestCodexConnectionIsIdempotentAndResidueFree(t *testing.T) {
 	original := "model = \"gpt-5.6-sol\"\nsandbox_mode = \"workspace-write\"\n"
 	writeFile(t, configPath, original)
 
-	applyConnection(t, ScaffoldCodex, home)
+	// One executable across both connections: idempotency is a claim about the
+	// same binary, and a fresh path each time would exercise repair instead.
+	executable := realExecutable(t)
+	applyConnection(t, ScaffoldCodex, home, executable)
 	after := readFile(t, configPath)
 	if !strings.Contains(after, "hooks.SessionStart") || !strings.Contains(after, "hooks.Stop") {
 		t.Fatalf("connection did not register both events:\n%s", after)
@@ -59,7 +62,7 @@ func TestCodexConnectionIsIdempotentAndResidueFree(t *testing.T) {
 	}
 
 	// A second connection must change nothing.
-	plan, err := PlanConnection(ScaffoldCodex, home, realExecutable(t))
+	plan, err := PlanConnection(ScaffoldCodex, home, executable)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +102,7 @@ func TestClaudeCodeConnectionPreservesForeignHooks(t *testing.T) {
   }
 }`)
 
-	applyConnection(t, ScaffoldClaudeCode, home)
+	applyConnection(t, ScaffoldClaudeCode, home, realExecutable(t))
 	settings := readJSON(t, configPath)
 	if settings["theme"] != "dark" {
 		t.Fatal("connection disturbed unrelated settings")
@@ -154,9 +157,12 @@ func TestDisconnectOnAnUntouchedConfigurationDoesNothing(t *testing.T) {
 	}
 }
 
-func applyConnection(t *testing.T, scaffold Scaffold, home string) {
+// applyConnection connects from a named executable. Naming it is not incidental:
+// the helper used to mint a fresh path on every call, so a test that connected
+// and then planned again compared two different binaries without meaning to.
+func applyConnection(t *testing.T, scaffold Scaffold, home, executable string) {
 	t.Helper()
-	plan, err := PlanConnection(scaffold, home, realExecutable(t))
+	plan, err := PlanConnection(scaffold, home, executable)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -202,14 +208,17 @@ func TestConnectRepairsAPartialClaudeRegistration(t *testing.T) {
 	// consented command can restore it; otherwise questions are never retained
 	// at session stop and nothing reports why.
 	home := t.TempDir()
-	applyConnection(t, ScaffoldClaudeCode, home)
+	executable := realExecutable(t)
+	applyConnection(t, ScaffoldClaudeCode, home, executable)
 	configPath := filepath.Join(home, ".claude", "settings.json")
 	settings := readJSON(t, configPath)
 	hooks := settings["hooks"].(map[string]any)
 	delete(hooks, "Stop")
 	writeFile(t, configPath, marshalJSON(t, settings))
 
-	plan, err := PlanConnection(ScaffoldClaudeCode, home, realExecutable(t))
+	// The same executable throughout, so the missing event is the only reason
+	// the registration reads as incomplete.
+	plan, err := PlanConnection(ScaffoldClaudeCode, home, executable)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -242,7 +251,7 @@ func TestDisconnectRemovesOnlyOurHandlerFromAMixedGroup(t *testing.T) {
 	// handler, not drop its containing group.
 	home := t.TempDir()
 	configPath := filepath.Join(home, ".claude", "settings.json")
-	applyConnection(t, ScaffoldClaudeCode, home)
+	applyConnection(t, ScaffoldClaudeCode, home, realExecutable(t))
 	settings := readJSON(t, configPath)
 	hooks := settings["hooks"].(map[string]any)
 	group := hooks["SessionStart"].([]any)[0].(map[string]any)
@@ -294,7 +303,7 @@ func TestDisconnectRemovesAConfigurationFileConnectionCreated(t *testing.T) {
 	for _, scaffold := range SupportedScaffolds() {
 		t.Run(string(scaffold), func(t *testing.T) {
 			home := t.TempDir()
-			applyConnection(t, scaffold, home)
+			applyConnection(t, scaffold, home, realExecutable(t))
 			configPath, err := ConfigPath(scaffold, home)
 			if err != nil {
 				t.Fatal(err)
@@ -341,7 +350,7 @@ func TestClaudeCodeRegistersOnlyTheOpeningOccurrence(t *testing.T) {
 	// the only place the single-delivery rule can hold.
 	home := t.TempDir()
 	configPath := filepath.Join(home, ".claude", "settings.json")
-	applyConnection(t, ScaffoldClaudeCode, home)
+	applyConnection(t, ScaffoldClaudeCode, home, realExecutable(t))
 
 	groups := claudeCodeSessionStartGroups(t, configPath)
 	if len(groups) != 1 {
@@ -394,29 +403,36 @@ func TestClaudeCodeRepairsAnUnscopedRegistration(t *testing.T) {
 	if group["matcher"] != openingSessionMatcher {
 		t.Fatalf("repair left matcher = %v", group["matcher"])
 	}
-	// Scoped to this change: the unscoped session-start handler is gone. A
-	// stale executable path elsewhere in the registration is a separate defect,
-	// recorded rather than fixed here — connect currently reports "already
-	// present" for it, which makes health's "re-run connect" advice useless.
+	// The unscoped session-start handler is gone, and so is the stale executable
+	// path it carried — that second defect was recorded as issue #25 while this
+	// test was first written, and is now repaired, so nothing named /old/gr may
+	// survive anywhere in the configuration.
 	for _, group := range groups {
 		if strings.Contains(fmt.Sprint(group), "/old/gr") {
 			t.Fatal("the stale unscoped session-start handler survived the repair")
 		}
+	}
+	if strings.Contains(readFile(t, configPath), "/old/gr") {
+		t.Fatalf("a handler still names the old executable:\n%s", readFile(t, configPath))
 	}
 }
 
 func TestClaudeCodeScopedRegistrationIsIdempotent(t *testing.T) {
 	home := t.TempDir()
 	configPath := filepath.Join(home, ".claude", "settings.json")
-	applyConnection(t, ScaffoldClaudeCode, home)
+	executable := realExecutable(t)
+	applyConnection(t, ScaffoldClaudeCode, home, executable)
 	before := readFile(t, configPath)
 
-	plan, err := PlanConnection(ScaffoldClaudeCode, home, realExecutable(t))
+	plan, err := PlanConnection(ScaffoldClaudeCode, home, executable)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !plan.AlreadyPresent {
 		t.Fatal("a correctly scoped registration was not recognised")
+	}
+	if plan.Repair {
+		t.Fatal("a registration naming the current executable was reported as stale")
 	}
 	changed, err := Connect(plan)
 	if err != nil || changed {
@@ -441,7 +457,7 @@ func TestClaudeCodeRemovalSpansTheScopedRegistration(t *testing.T) {
   }
 }`
 	writeFile(t, configPath, original)
-	applyConnection(t, ScaffoldClaudeCode, home)
+	applyConnection(t, ScaffoldClaudeCode, home, realExecutable(t))
 
 	removed, err := Disconnect(ScaffoldClaudeCode, home)
 	if err != nil || !removed {
@@ -466,5 +482,321 @@ func TestClaudeCodeRemovalSpansTheScopedRegistration(t *testing.T) {
 	}
 	if strings.Contains(readFile(t, configPath), managedMarker) {
 		t.Fatal("a managed handler survived disconnection")
+	}
+}
+
+// seedStaleRegistration connects from a throwaway executable and then removes
+// it, producing exactly the state issue #25 describes: a registration that is
+// recognisably ours and cannot run.
+func seedStaleRegistration(t *testing.T, scaffold Scaffold, home string) string {
+	t.Helper()
+	old := realExecutable(t)
+	applyConnection(t, scaffold, home, old)
+	if err := os.Remove(old); err != nil {
+		t.Fatal(err)
+	}
+	return old
+}
+
+func TestConnectRepairsAStaleExecutable(t *testing.T) {
+	// Health detects a registration whose binary has moved and tells the user to
+	// re-run connection. Before this, connection found its own marker, called the
+	// attachment present, and wrote nothing — so the only remedy the tool offers
+	// was guaranteed to do nothing.
+	for _, scaffold := range SupportedScaffolds() {
+		t.Run(string(scaffold), func(t *testing.T) {
+			home := t.TempDir()
+			configPath, err := ConfigPath(scaffold, home)
+			if err != nil {
+				t.Fatal(err)
+			}
+			old := seedStaleRegistration(t, scaffold, home)
+
+			current := realExecutable(t)
+			plan, err := PlanConnection(scaffold, home, current)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if plan.AlreadyPresent {
+				t.Fatal("a registration naming a moved executable was reported as present")
+			}
+			if !plan.Repair {
+				t.Fatal("the plan did not report a repair")
+			}
+			if plan.RegisteredExecutable != old {
+				t.Fatalf("plan named %q as the stale executable, want %q",
+					plan.RegisteredExecutable, old)
+			}
+
+			changed, err := Connect(plan)
+			if err != nil || !changed {
+				t.Fatalf("repair changed = %v err = %v", changed, err)
+			}
+
+			after := readFile(t, configPath)
+			if strings.Contains(after, old) {
+				t.Fatalf("the stale executable survived the repair:\n%s", after)
+			}
+			if !strings.Contains(after, current) {
+				t.Fatalf("the repair did not register the current executable:\n%s", after)
+			}
+			// Replaced, not accompanied: a second registration would fire every
+			// hook twice and leave a removal that finds only one of them.
+			if count := strings.Count(after, managedMarker); count != len(managedEvents()) {
+				t.Fatalf("managed handlers = %d, want %d:\n%s",
+					count, len(managedEvents()), after)
+			}
+		})
+	}
+}
+
+func TestRepairIsNotTriggeredForTheCurrentExecutable(t *testing.T) {
+	// The repeat that must stay free. Rewriting a registration that already names
+	// the current binary would cost the user a review step for nothing.
+	for _, scaffold := range SupportedScaffolds() {
+		t.Run(string(scaffold), func(t *testing.T) {
+			home := t.TempDir()
+			configPath, err := ConfigPath(scaffold, home)
+			if err != nil {
+				t.Fatal(err)
+			}
+			executable := realExecutable(t)
+			applyConnection(t, scaffold, home, executable)
+			before := readFile(t, configPath)
+
+			plan, err := PlanConnection(scaffold, home, executable)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if plan.Repair || !plan.AlreadyPresent {
+				t.Fatalf("plan = %+v on an unchanged registration", plan)
+			}
+			if _, err := Connect(plan); err != nil {
+				t.Fatal(err)
+			}
+			if readFile(t, configPath) != before {
+				t.Fatal("a repeated connection rewrote a registration that was already current")
+			}
+		})
+	}
+}
+
+func TestRepairPreservesAForeignHandlerForTheSameEvent(t *testing.T) {
+	// A repair may replace only what the connection added. Dropping a foreign
+	// handler would silently disable another tool.
+	home := t.TempDir()
+	configPath := filepath.Join(home, ".claude", "settings.json")
+	writeFile(t, configPath, `{
+  "hooks": {
+    "SessionStart": [
+      {"matcher": "resume", "hooks": [{"type": "command", "command": "/usr/bin/other-tool"}]},
+      {"matcher": "startup", "hooks": [{"type": "command", "command": "'/old/gr' hook --managed-by=goalrail"}]}
+    ],
+    "Stop": [
+      {"hooks": [{"type": "command", "command": "'/old/gr' hook --managed-by=goalrail"}]}
+    ]
+  }
+}`)
+
+	current := realExecutable(t)
+	plan, err := PlanConnection(ScaffoldClaudeCode, home, current)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !plan.Repair {
+		t.Fatal("a stale registration beside a foreign handler was not reported as a repair")
+	}
+	if _, err := Connect(plan); err != nil {
+		t.Fatal(err)
+	}
+
+	groups := claudeCodeSessionStartGroups(t, configPath)
+	foreign := 0
+	for _, group := range groups {
+		asMap := group.(map[string]any)
+		handler := asMap["hooks"].([]any)[0].(map[string]any)
+		if handler["command"] == "/usr/bin/other-tool" {
+			foreign++
+			if asMap["matcher"] != "resume" {
+				t.Fatalf("the repair altered a foreign occurrence: %v", asMap["matcher"])
+			}
+		}
+	}
+	if foreign != 1 {
+		t.Fatalf("the foreign handler did not survive the repair: %v", groups)
+	}
+	if strings.Contains(readFile(t, configPath), "/old/gr") {
+		t.Fatal("the stale handler survived the repair")
+	}
+}
+
+func TestRepairLeavesAnEventThatIsAlreadyCurrent(t *testing.T) {
+	// Reconciliation is per event. An event that is already correct must keep its
+	// exact bytes, and with them whatever review the user has given it — the
+	// sentinel key below is something our writer never produces, so its survival
+	// proves the event was not rewritten.
+	home := t.TempDir()
+	configPath := filepath.Join(home, ".claude", "settings.json")
+	current := realExecutable(t)
+	writeFile(t, configPath, `{
+  "hooks": {
+    "SessionStart": [
+      {"matcher": "startup", "hooks": [{"type": "command", "command": "'/old/gr' hook --managed-by=goalrail"}]}
+    ],
+    "Stop": [
+      {"sentinel": "untouched", "hooks": [{"type": "command", "command": "'`+current+`' hook --managed-by=goalrail"}]}
+    ]
+  }
+}`)
+
+	plan, err := PlanConnection(ScaffoldClaudeCode, home, current)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !plan.Repair {
+		t.Fatal("a stale session-start registration was not reported as a repair")
+	}
+	if _, err := Connect(plan); err != nil {
+		t.Fatal(err)
+	}
+
+	settings := readJSON(t, configPath)
+	hooks := settings["hooks"].(map[string]any)
+	stops := hooks["Stop"].([]any)
+	if len(stops) != 1 {
+		t.Fatalf("the current stop registration was duplicated: %v", stops)
+	}
+	if stops[0].(map[string]any)["sentinel"] != "untouched" {
+		t.Fatalf("the stop event was rewritten although it was already current: %v", stops[0])
+	}
+	if strings.Contains(readFile(t, configPath), "/old/gr") {
+		t.Fatal("the stale session-start handler survived the repair")
+	}
+}
+
+func TestRepairKeepsSessionStartScoped(t *testing.T) {
+	// A registration can be both stale and unscoped — an earlier version, an
+	// older binary. The repair must fix both without widening the occurrence.
+	home := t.TempDir()
+	configPath := filepath.Join(home, ".claude", "settings.json")
+	writeFile(t, configPath, `{
+  "hooks": {
+    "SessionStart": [
+      {"hooks": [{"type": "command", "command": "'/old/gr' hook --managed-by=goalrail"}]}
+    ],
+    "Stop": [
+      {"hooks": [{"type": "command", "command": "'/old/gr' hook --managed-by=goalrail"}]}
+    ]
+  }
+}`)
+
+	current := realExecutable(t)
+	plan, err := PlanConnection(ScaffoldClaudeCode, home, current)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Connect(plan); err != nil {
+		t.Fatal(err)
+	}
+
+	groups := claudeCodeSessionStartGroups(t, configPath)
+	if len(groups) != 1 {
+		t.Fatalf("session-start groups after repair = %d, want one", len(groups))
+	}
+	if matcher := groups[0].(map[string]any)["matcher"]; matcher != openingSessionMatcher {
+		t.Fatalf("the repair left matcher = %v, want %q", matcher, openingSessionMatcher)
+	}
+	if strings.Contains(readFile(t, configPath), "/old/gr") {
+		t.Fatal("the stale handler survived the repair")
+	}
+}
+
+func TestRepairRefusesAnUnterminatedManagedBlock(t *testing.T) {
+	// The repair writes by removing first, and removal refuses to guess the
+	// extent of a half-written block rather than risk deleting user content. A
+	// reported error beats the silent no-op this state produced before.
+	home := t.TempDir()
+	configPath := filepath.Join(home, ".codex", "config.toml")
+	writeFile(t, configPath, "model = \"x\"\n"+blockBegin+"\n"+
+		"[[hooks.SessionStart.hooks]]\ncommand = \"'/old/gr' hook "+managedMarker+"\"\n"+
+		"[[hooks.Stop.hooks]]\ncommand = \"'/old/gr' hook "+managedMarker+"\"\n")
+
+	plan, err := PlanConnection(ScaffoldCodex, home, realExecutable(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !plan.Repair {
+		t.Fatal("a stale registration in an unterminated block was not reported as a repair")
+	}
+	if _, err := Connect(plan); err == nil {
+		t.Fatal("the repair wrote beside a block whose extent is unknown")
+	}
+}
+
+func TestRepairIgnoresALookalikeCommand(t *testing.T) {
+	// Another tool invoking an executable named gr must not make our attachment
+	// look stale: staleness is read from managed handlers only.
+	home := t.TempDir()
+	configPath := filepath.Join(home, ".claude", "settings.json")
+	writeFile(t, configPath, `{
+  "hooks": {
+    "SessionStart": [
+      {"hooks": [{"type": "command", "command": "'/opt/other/gr' hook"}]}
+    ]
+  }
+}`)
+	plan, err := PlanConnection(ScaffoldClaudeCode, home, realExecutable(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.Repair || plan.RegisteredExecutable != "" {
+		t.Fatalf("a foreign command was read as our stale registration: %+v", plan)
+	}
+}
+
+func TestConnectRepairsAPartialCodexBlockWithoutDuplicatingIt(t *testing.T) {
+	// A managed block missing one of its stanzas already reads as not connected,
+	// which is what health reports. Writing beside it would leave two blocks —
+	// every hook firing twice — and a removal that finds only the first, so
+	// disconnection would leave residue that still looks like an attachment.
+	// Removing before writing closes that path as well as the stale one.
+	home := t.TempDir()
+	configPath := filepath.Join(home, ".codex", "config.toml")
+	// Existing user content, so the repair's effect on it is observable too.
+	original := "model = \"gpt-5.6-sol\"\n"
+	writeFile(t, configPath, original)
+	executable := realExecutable(t)
+	applyConnection(t, ScaffoldCodex, home, executable)
+	writeFile(t, configPath,
+		strings.Replace(readFile(t, configPath), "[[hooks.Stop.hooks]]", "", 1))
+
+	plan, err := PlanConnection(ScaffoldCodex, home, executable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.AlreadyPresent {
+		t.Fatal("a block missing a stanza was reported as a complete registration")
+	}
+	if _, err := Connect(plan); err != nil {
+		t.Fatal(err)
+	}
+
+	after := readFile(t, configPath)
+	if count := strings.Count(after, blockBegin); count != 1 {
+		t.Fatalf("managed blocks after the repair = %d, want one:\n%s", count, after)
+	}
+	if count := strings.Count(after, managedMarker); count != len(managedEvents()) {
+		t.Fatalf("managed handlers = %d, want %d:\n%s", count, len(managedEvents()), after)
+	}
+	if !strings.HasPrefix(after, original) {
+		t.Fatalf("the repair disturbed the user's own configuration:\n%s", after)
+	}
+	// Removal must still find the whole thing, and leave the user's file as it was.
+	removed, err := Disconnect(ScaffoldCodex, home)
+	if err != nil || !removed {
+		t.Fatalf("disconnect removed = %v err = %v", removed, err)
+	}
+	if restored := readFile(t, configPath); restored != original {
+		t.Fatalf("disconnection after a repair left residue:\n%q\nwant:\n%q", restored, original)
 	}
 }
