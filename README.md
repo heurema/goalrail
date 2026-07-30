@@ -98,11 +98,15 @@ Goalrail is meant to be installed by the agent, not by hand. Paste this:
 > -c checksums.txt` on Linux. Extract `gr` into `~/.local/bin`: that one write
 > outside this repository is expected, and the binary has to stay there because
 > the session hooks record its absolute path. Then run `~/.local/bin/gr init` in
-> the repository root. If it refuses to register the session hooks because the
-> settings path is not ignored by git, read the reason it prints and re-run with
-> `~/.local/bin/gr init --fix-gitignore`. Finally run `~/.local/bin/gr doctor` and
-> show me its output verbatim. Apart from `~/.local/bin/gr` and a scratch download
-> directory you clean up, do not edit any file outside this repository.
+> the repository root. If its report says anything is not ignored by git — the
+> settings path it registers the hooks in, or the marker file — re-run with
+> `~/.local/bin/gr init --fix-gitignore`, which adds those entries. If it says no
+> supported scaffold was detected, tell me so plainly: that means this machine has
+> no agent scaffold configured, the harness is still installed, and the diagnosis
+> will report the attachment as missing for that reason rather than because
+> anything failed. Finally run `~/.local/bin/gr doctor` and show me its output
+> verbatim. Apart from `~/.local/bin/gr` and a scratch download directory you clean
+> up, do not edit any file outside this repository.
 
 The last step is the point: the agent proves the installation rather than
 claiming it.

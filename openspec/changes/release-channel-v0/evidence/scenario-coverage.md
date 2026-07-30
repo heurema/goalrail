@@ -6,8 +6,9 @@ evidence appear here, kept apart on purpose:
 - **test** — a Go test in this repository.
 - **local run** — a command run in this session against a scratch clone, a fake
   home, or a temporary directory, recorded with what it produced.
-- **after the first tag** — cannot be observed until a release exists. Listed so
-  the gap is visible rather than implied; task group 11 performs them.
+- **after the first tag** — could not be observed until a release existed. Task
+  group 11 performed these against `v0.1.1` on 2026-07-30; the rows below now
+  carry what was actually seen. What remains unobserved is named as such.
 
 The local runs used a scratch clone of this worktree, tagged `v0.1.0` locally and
 never pushed. Nothing here touched the owner's scaffold configuration.
@@ -27,10 +28,10 @@ never pushed. Nothing here touched the owner's scaffold configuration.
 
 | Scenario | Evidence |
 |---|---|
-| A tag is pushed | local run: the release job's build, packaging, and checksum steps executed against the tagged scratch clone produced `gr_v0.1.0_{darwin,linux}_{arm64,amd64}.tar.gz` plus `checksums.txt`, each archive holding `gr` and `LICENSE`. |
+| A tag is pushed | observed on the real release `v0.1.1`: four archives plus `checksums.txt`, nothing else, each archive holding `gr` and `LICENSE` at its root. |
 | One platform fails to build | local run: `set -euo pipefail` in every step plus `needs: [test, canon]` on the publishing job; a failing build exits the step before any `gh release create` runs. Observable in full only after a real failed release. |
 | A downloader verifies what they fetched | local run: `shasum -a 256 --ignore-missing -c checksums.txt` with one archive of four present exits `0`; without `--ignore-missing` it exits `1`. |
-| The current release must be found without knowing its version | local run: `curl -sI https://github.com/cli/cli/releases/latest/download/checksums.txt` returns `302` to the versioned asset (CTX-21), and the release publishes `checksums.txt` under that fixed name. Confirmed against this repository's own release after the first tag. |
+| The current release must be found without knowing its version | observed against this repository: `releases/latest/download/checksums.txt` returns `302` to the `v0.1.1` asset and names this release's four archives. |
 | The stable name would carry the version | local run: the packaging step writes `checksums.txt` with no version in the name; the archives carry the tag. |
 
 ### A binary reports the version it was built from, verbatim
@@ -39,7 +40,7 @@ never pushed. Nothing here touched the owner's scaffold configuration.
 |---|---|
 | A released binary reports itself | local run: built at the local tag `v0.1.0` in the scratch clone, `gr version` reports `v0.1.0`. Test: `TestVersionIsReportedExactlyAsTheBuildCarriesIt`. |
 | A binary is built between releases | local run: one commit after that tag, `gr version` reports `v0.1.1-0.20260730163543-9f1d30e6ec5d`. |
-| A second release follows a first | test: the resolver reads the build rather than a constant, so no version string exists to forget; `TestVersionIsReportedExactlyAsTheBuildCarriesIt` pins each shape. Fully observable at the second real release. |
+| A second release follows a first | observed: the `v0.1.0` run stamped `v0.1.0` into its artifacts and the `v0.1.1` run stamped `v0.1.1`, with no source change between them — nobody edited a version string, and neither run could have reported the other's number. |
 | The build carries no version at all | test: `TestVersionSaysUnknownWhenTheBuildCarriesNone`, over absent build information, a nil reader result, and an empty version string. |
 
 ### A release refuses an artifact whose stamped version is not its tag
@@ -64,19 +65,19 @@ never pushed. Nothing here touched the owner's scaffold configuration.
 
 | Scenario | Evidence |
 |---|---|
-| A user without Go installs | local run: with `PATH=/usr/bin:/bin:/usr/sbin:/sbin` and no `go` resolvable, the README's own commands discovered the archive name from `checksums.txt`, verified it, extracted `gr` into `~/.local/bin`, and `gr version` reported `v0.1.0`. |
+| A user without Go installs | observed against the published release, with no `go` resolvable: the README's own commands discovered the archive name from `checksums.txt`, downloaded and verified it, extracted `gr` into `~/.local/bin`, and `gr version` reported `v0.1.1`. `gr init` and `gr doctor` then reported `harness: working`, exit `0`, including after the download directory was removed. |
 | Only one archive was downloaded | local run: as above, one archive of four present, `--ignore-missing` exits `0`. |
-| The documentation names an artifact | local run: the four names in the README install table match the four the packaging step produced. Confirmed against the published asset list after the first tag. |
-| A user downloads through a browser | after the first tag: the browser path stamps the quarantine attribute that the command-line path does not (CTX-18), and the documented remedy is `xattr -d com.apple.quarantine`. The claim in the README is scoped to that path precisely because the command-line route was verified not to produce it. |
+| The documentation names an artifact | observed: the four placeholder names in the README install table match the four assets published for `v0.1.1`, and no fifth asset exists. |
+| A user downloads through a browser | half observed: the published archive fetched with `curl` and extracted carries no quarantine attribute — only `com.apple.provenance` — so the README's claim about the documented route holds against the real release. The browser half remains a manual check nobody has run; the README scopes the warning to it rather than asserting it universally. |
 | A remedy no longer works | local run: the README documents `xattr -d` and the System Settings route, and explicitly does not document Control-click, which stopped overriding Gatekeeper in macOS Sequoia (CTX-18). |
 
 ### The agent-facing prompt carries what an agent cannot guess
 
 | Scenario | Evidence |
 |---|---|
-| An agent installs from the prompt | after the first tag, and behind the provider-run gate (task 10.6). The human walkthrough of the same steps, with no Go on the path, is the local run above; what it cannot exercise is an agent following the prompt. |
-| The download location is cleaned afterwards | local run: initializing from `~/.local/bin/gr` and then removing the download directory leaves `gr doctor` reporting `harness: working` and exiting `0`; initializing from a temporary copy and then removing it makes the diagnosis report "the registered Goalrail executable is missing at …". Both states observed. |
-| The prompt forbids the placement it requires | local run: the rewritten prompt names `~/.local/bin` as expected and permits it explicitly, restricting only other writes outside the repository. |
+| An agent installs from the prompt | observed twice against the published `v0.1.1`, recorded in `agent-install-run-2026-07-30.md`: an agent given the prompt verbatim, forbidden to read any documentation, on a machine with no Go — discovery, download, verification, placement, initialization, and `gr doctor` reporting `harness: working` with exit `0`. The first run found the prompt naming only one of the two things initialization can report about git-ignoring, and saying nothing about a machine with no scaffold; both were corrected before the second run. |
+| The download location is cleaned afterwards | observed in the agent run: after the agent cleaned its scratch download directory, the registration still names the binary at the private home's `.local/bin` and `gr doctor` reports `harness: working` with exit `0`. The opposite case was observed locally too: initializing from a temporary copy and then removing it makes the diagnosis report "the registered Goalrail executable is missing at …". |
+| The prompt forbids the placement it requires | observed: the agent placed the binary in `~/.local/bin` without treating it as a violation, and touched nothing else outside the repository — verified by reading the filesystem back after the run rather than by taking its word. |
 
 ## harness-update
 
