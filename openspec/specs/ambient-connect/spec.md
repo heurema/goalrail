@@ -10,13 +10,20 @@ to the intent it belongs to, and a fail-quiet posture that never harms an
 ordinary session.
 ## Requirements
 ### Requirement: Connection is explicit, consented, and reversible
-**Intent IDs:** OUT-1, OUT-2, OUT-4, SIG-1, SIG-2, SIG-4
+**Intent IDs:** OUT-1, OUT-2, OUT-4, OUT-11, SIG-1, SIG-2, SIG-4, SIG-13
 
-Goalrail SHALL attach to a scaffold through one explicit connection command
-that registers persistent session hooks in the scaffold's user configuration.
-Registration MUST NOT happen without the user's explicit consent, and a
-matching disconnection command SHALL remove everything the connection added,
-leaving no residue. Both commands SHALL be safe to repeat.
+Goalrail SHALL attach to a scaffold through one explicit consented command that
+registers persistent session hooks, and SHALL remove everything it added through
+a matching command. Registration MUST NOT happen without the user's explicit
+consent. Both commands SHALL be safe to repeat.
+
+Which command that is, and which scope it writes, is a property of the scaffold
+rather than of attachment in general. Where a scaffold's settings layer permits
+registration inside the repository, the consented command is initialization, and
+the registration is written there. Where it does not, the consented command is
+connection, and the registration is written at user scope. For a scaffold that
+registers per repository, a separate connection step has no reason to exist:
+connection SHALL write nothing for it and SHALL name initialization instead.
 
 Where a scaffold distinguishes which session-start occurrence a hook applies
 to, registration SHALL name only the occurrences that open a session, and
@@ -45,21 +52,73 @@ every hook invocation and leaves a removal that finds only one of them. A
 registration that already names the current executable SHALL be left exactly as
 it is, and repair MUST NOT alter a handler the connection did not add, change a
 foreign entry's occurrence, or widen a repaired session-start entry beyond the
-occurrence that opens a session.
+occurrence that opens a session. This holds wherever the registration lives, so
+the command that registers per repository repairs on re-run under the same rule.
+
+The events a registration names SHALL carry the meaning the retention requirement
+already has. Retention belongs to a session ending, so where a scaffold
+distinguishes an event that fires once per turn from one that fires when the
+session ends, the registration MUST NOT name the per-turn event: a question left
+at the reserved path would be retained again on every turn, minting a record per
+turn from one session's single question, and per-occurrence identity — which is
+correct for two sessions asking the same thing — would then multiply one
+escalation instead of separating two. A registration naming such an
+event SHALL be treated as needing repair, through the consented command that
+owns its scope: at repository scope, re-running initialization replaces it in
+place with the session-scoped form; at user scope, where only the earlier
+arrangement wrote it, it is reported and removed through the consented
+disconnection command rather than rewritten by initialization. Removal SHALL
+cover whichever event was actually registered rather than only the event the
+current arrangement writes.
 
 Where a health report names re-running connection as the remedy for a defect,
 connection SHALL be able to repair that defect. A report that prescribes a
 command which cannot perform the repair is worse than no report: the user
 follows correct advice, observes no change, and has no remaining move.
 
-Registration alone does not make the attachment act. The scaffold requires the
-user to review and trust the exact hook definition before it runs, and records
-that trust against the definition's current form, so a changed command needs
-review again. Connection SHALL therefore disclose this: it states that the
-trust step is required, names the surface where the user performs it, and says
-plainly that the attachment does nothing until then. Silence here is the worst
-available outcome — the user connects, works, observes nothing, and reasonably
-concludes the product is broken.
+Consent MUST NOT be given on another person's behalf. A repository-scope
+registration SHALL be written only to a settings file the repository cannot
+supply to someone else, and only where that path is unshareable — ignored by the
+version control system, made so by the same act where that is possible. Trust is
+a standing consent to run a command in one's own sessions; a registration a commit
+could carry would install that command in every teammate's sessions on the
+strength of one user's decision, which is not the user's to give. Where the path
+cannot be made unshareable, the registration SHALL be refused with the reason
+named rather than written in the hope that nobody commits it.
+
+The scope a scaffold uses SHALL be recorded with the evidence that produced it,
+and a true observation about one provider MUST NOT be recorded as a property of
+attachment in general. On the first supported scaffold, registering inside the
+repository is externally blocked, because project-local hooks are silently
+skipped with no trust prompt even in a trusted project and the session-opening
+event has already passed by the time a user could grant trust; there, user scope
+is forced, the hook is invoked for every session the user starts anywhere, and
+confining action to initialized repositories is enforced by Goalrail's own first
+act rather than by absence. The second supported scaffold does not share that
+constraint — its project-level settings are an ordinary layer that merges with
+user settings — so there the registration lives in the repository, is never
+invoked in unrelated sessions at all, and the boundary is a property of where it
+is installed rather than of what Goalrail does first. A registration for that
+scaffold that remains at user scope from the earlier arrangement SHALL be
+reported rather than silently modified, and its removal SHALL pass through the
+consented command that owns user-level configuration.
+
+Registration alone does not make the attachment act where a scaffold gates it.
+Where the scaffold requires the user to review and trust the exact hook
+definition before it runs, and records that trust against the definition's
+current form, a changed command needs review again. Connection SHALL therefore
+disclose what is actually established for that scaffold, distinguishing four
+states: a gate observed in a live session is stated as required; a gate observed
+absent in a live session — a registered hook ran with no approval step — is
+stated as observed, and the disclosure sends the user nowhere to approve
+anything; a gate that the provider's own documentation records as absent without
+an observation is stated as documented, with the documented scope of any
+adjacent consent surface named so the user is not sent to a screen that gates
+something else; and a scaffold whose behaviour is neither observed nor
+documented is stated as unverified. Silence is the worst available outcome — the
+user connects, works, observes nothing, and reasonably concludes the product is
+broken — and inventing an obstacle is its own kind of misinformation, because it
+sends the user hunting for a screen that may not exist.
 
 A repair changes the hook definition, so it SHALL carry that same disclosure and
 SHALL NOT report the repaired attachment as active on the strength of a trust
@@ -68,29 +127,14 @@ moment at which Goalrail knows a trust record no longer matches, because it
 made the change itself; reading the record cannot establish this, since
 reproducing the form it is recorded against is prohibited.
 
-The disclosure SHALL match what was actually established for that scaffold.
-Where the gate was observed, it is stated. Where it was not, the disclosure
-SHALL say the behaviour is unverified instead of asserting a requirement:
-inventing an obstacle sends the user hunting for a screen that may not exist.
-This applies to the repair disclosure exactly as it applies to the first
-connection.
-
-Connection SHALL NOT describe an already-trusted attachment as inert. Repeating
-the command on a working attachment reports it as working.
-
-Attachment is registered at user scope, which means the hook is invoked for
-every session the user starts anywhere, and confining action to initialized
-repositories is enforced by Goalrail's own first act rather than by absence.
-This is a recorded limitation rather than a preference, and it SHALL be
-attributed to the scaffold whose evidence produced it: on the first supported
-scaffold, registering inside the repository is externally blocked, because
-project-local hooks are silently skipped with no trust prompt even in a trusted
-project and the session-opening event has already passed by the time a user
-could grant trust. The second supported scaffold does not share that
-constraint — its project-level hooks are an ordinary settings layer that merges
-with user settings — so a scaffold-specific route remains open there and is the
-first thing to revisit. A true observation about one provider MUST NOT be
-recorded as a property of attachment in general.
+A working attachment SHALL NOT be described as inert. Repeating the consented
+command that registers a scaffold — connection where that is the one that writes,
+initialization where the registration lives in the repository — reports the
+attachment as working. The rule follows the command that owns the registration,
+not the word "connect": for a repository-scope scaffold, connection writes
+nothing and names initialization, so requiring connection itself to report a
+working attachment would demand an outcome from a command that deliberately
+inspects nothing.
 
 The second supported scaffold has now been exercised in a live session, and the
 record SHALL distinguish what that run established from what it did not. Observed:
@@ -99,15 +143,20 @@ retained outside the repository with its own identity and an explicit unbound
 reason. The agent named the reserved path and the payload schema although the task
 mentioned neither, which is how delivery was established rather than assumed.
 
-Still unverified, and the record MUST keep saying so: whether that scaffold asks
-the user to approve a registered hook. No prompt appeared, and that is not
-evidence — the run was non-interactive, where the provider documents that the
-trust dialog is skipped, and the hooks were supplied for that run rather than
-registered in the user configuration. Both differences bear on precisely the
-question that remains open, so an absent prompt under those conditions says
-nothing about an interactive session. The registration shape itself still rests on
-the provider's published matcher contract together with an existing working
-configuration that agrees with it.
+The approval question that run left open has since been answered by observation,
+and the record SHALL say so at its own strength: in three interactive sessions
+with the hooks registered in the repository's per-user project settings file —
+the settings layer a real user's registration lives in, not a per-run supply —
+the registered hook ran with no approval step, and the announcement reached the
+agent. The disclosure for this scaffold therefore states the absence as
+observed. What those sessions did not capture MUST stay outside the claim: what
+the scaffold's startup screen displayed was not recorded, and the documented
+facts about its trust surfaces remain documentation — the provider records no
+approval step for a hook configured in a settings file, describes its hook
+browser as read-only, and gates its workspace trust dialog on permission rules
+and additional directories rather than on hooks. The registration shape itself
+still rests on the provider's published matcher contract together with an
+existing working configuration that agrees with it.
 
 An earlier attempt at live verification was abandoned on the belief that this
 scaffold's login state is tied to the home directory, which left only routes that
@@ -122,35 +171,59 @@ sessions are started, driven, and ended entirely by the user in their own
 scaffold.
 
 #### Scenario: User connects once
-- **WHEN** the user runs the connection command and consents
-- **THEN** the persistent session hooks are registered in the scaffold's user configuration and no further Goalrail command is needed for ordinary work
+- **WHEN** the user runs the consented command for a scaffold and consents
+- **THEN** the persistent session hooks are registered in the scope that scaffold's settings layer allows, and no further Goalrail command is needed for ordinary work
+
+#### Scenario: Registration scope follows the scaffold
+- **WHEN** a scaffold's settings layer permits registration inside the repository
+- **THEN** initialization is the consented command that registers it there, and the registration is not written at user scope
+
+#### Scenario: Connection is invoked for a scaffold that registers per repository
+- **WHEN** the user runs the connection command for a scaffold whose registration belongs in the repository
+- **THEN** nothing is written and the outcome names initialization as the command that registers it
+
+#### Scenario: Consent would be given on someone else's behalf
+- **WHEN** a repository-scope registration would be written to a settings file the repository could supply to a teammate, and the path cannot be made unshareable
+- **THEN** the registration is refused and the reason is named
 
 #### Scenario: A scaffold distinguishes session-start occurrences
-- **WHEN** connection registers session-start hooks on a scaffold whose registration names which occurrence applies
+- **WHEN** registration writes session-start hooks on a scaffold whose registration names which occurrence applies
 - **THEN** it registers only the occurrences that open a session, and registers no form that fires on every occurrence
 
 #### Scenario: An earlier registration fires on every occurrence
-- **WHEN** connection finds its own session-start registration present but not scoped to the opening occurrence
+- **WHEN** the consented command finds its own session-start registration present but not scoped to the opening occurrence
 - **THEN** it replaces that registration with the scoped form rather than reporting the attachment as already present, so a user who connected with an earlier version can repair it
 
 #### Scenario: Removal spans every registered occurrence
 - **WHEN** the user disconnects a scaffold whose session-start hooks were registered per occurrence
-- **THEN** every entry the connection added is removed, and any entry it did not add for the same event survives
+- **THEN** every entry the registration added is removed, and any entry it did not add for the same event survives
+
+#### Scenario: Removal spans a repository-scope registration
+- **WHEN** the user disconnects a scaffold whose hooks were registered inside the repository
+- **THEN** every entry that registration added is removed with no residue, and any entry it did not add survives unchanged
+
+#### Scenario: A registration names an event that fires once per turn
+- **WHEN** a registration of ours names a stop-like event that fires once per turn on a scaffold that also exposes a session-ending event
+- **THEN** it is treated as needing repair through the consented command that owns its scope — replaced in place at repository scope, reported and removed through consented disconnection at user scope — so one session's single question is retained once
+
+#### Scenario: Removal covers the event that was registered
+- **WHEN** the user disconnects a scaffold whose handlers were registered against an event the current arrangement no longer writes
+- **THEN** those handlers are removed too, so a superseded registration cannot survive a disconnection
 
 #### Scenario: The registration names a moved executable
-- **WHEN** connection finds its own registration present but naming an executable other than the one it was invoked with
+- **WHEN** the consented command finds its own registration present but naming an executable other than the one it was invoked with
 - **THEN** it reports the attachment as needing repair rather than as already present
 
 #### Scenario: A repair replaces the stale registration
-- **WHEN** connection repairs a registration that names a moved executable
+- **WHEN** the consented command repairs a registration that names a moved executable
 - **THEN** exactly one registration per event remains, naming the current executable, and no second registration or removal residue is left behind
 
 #### Scenario: The registration already names the current executable
-- **WHEN** the user reruns the consented connection command and every registered handler already names the executable it was invoked with
+- **WHEN** the user reruns the consented command and every registered handler already names the executable it was invoked with
 - **THEN** the scaffold configuration is left byte-identical
 
 #### Scenario: A repair meets a handler it did not add
-- **WHEN** a repair replaces a stale registration for an event that also carries a handler the connection did not add
+- **WHEN** a repair replaces a stale registration for an event that also carries a handler the registration did not add
 - **THEN** the foreign handler survives unchanged, including its occurrence, and only the stale registration is replaced
 
 #### Scenario: A repair meets an event that is already current
@@ -162,12 +235,16 @@ scaffold.
 - **THEN** the replacement names only the occurrence that opens a session, whatever shape the stale registration had
 
 #### Scenario: A health remedy names connection
-- **WHEN** a health report tells the user to re-run connection to repair a defect it detected
-- **THEN** connection performs that repair, rather than reporting the attachment as already present and changing nothing
+- **WHEN** a health report tells the user to re-run a consented command to repair a defect it detected
+- **THEN** that command performs the repair, rather than reporting the attachment as already present and changing nothing
 
 #### Scenario: A limitation is recorded from one scaffold's evidence
 - **WHEN** a scope limitation is recorded because one scaffold blocks a stronger arrangement
 - **THEN** the record names that scaffold rather than stating the limitation as a property of attachment in general
+
+#### Scenario: A user-scope registration remains from the earlier arrangement
+- **WHEN** a registration for a repository-scope scaffold is found at user scope from the earlier arrangement
+- **THEN** it is reported with the consented command that removes it, and initialization does not modify it
 
 #### Scenario: A scaffold has not been exercised live
 - **WHEN** a supported scaffold's end-to-end behaviour has not been observed in a live session
@@ -182,31 +259,39 @@ scaffold.
 - **THEN** the absence is not recorded as evidence, and the record names the conditions that make it inconclusive
 
 #### Scenario: Connection discloses the trust step
-- **WHEN** connection registers the hooks
+- **WHEN** the consented command registers the hooks on a scaffold whose trust gate was observed
 - **THEN** its output states that the scaffold requires the user to review and trust them, names the surface for doing so, and says the attachment does not act until then
 
 #### Scenario: A repair discloses that review applies again
-- **WHEN** connection replaces a stale registration
-- **THEN** its output states that the hook definition changed and needs the scaffold's review step again, names the surface for it, and does not report the attachment as active on the strength of the existing trust record
+- **WHEN** the consented command replaces a stale registration
+- **THEN** its output states that the hook definition changed and needs the scaffold's review step again where one applies, names the surface for it, and does not report the attachment as active on the strength of the existing trust record
 
 #### Scenario: The scaffold's trust behaviour is unverified
-- **WHEN** connection registers or repairs hooks on a scaffold whose trust gate has not been observed
+- **WHEN** registration or repair happens on a scaffold whose trust gate is neither observed nor documented
 - **THEN** the disclosure says the behaviour is unverified rather than asserting a mandatory approval step
 
+#### Scenario: The scaffold was observed to require no approval
+- **WHEN** registration or repair happens on a scaffold where a live session showed a registered hook running with no approval step
+- **THEN** the disclosure states that as observed, asserts no review step, and sends the user nowhere to approve anything
+
+#### Scenario: The scaffold documents no approval step
+- **WHEN** registration or repair happens on a scaffold whose documentation records no approval step for a hook configured in a settings file
+- **THEN** the disclosure states that as documented rather than observed, and names what the scaffold's adjacent consent surface actually gates instead of implying it gates hooks
+
 #### Scenario: Connection is repeated on a working attachment
-- **WHEN** the user reruns the connection command on an attachment that is already registered and trusted
+- **WHEN** the user reruns the consented command that registers this scaffold — connection at user scope, initialization at repository scope — on an attachment that is already registered and trusted
 - **THEN** the outcome reports it as active rather than describing it as not yet active
 
 #### Scenario: User disconnects
 - **WHEN** the user runs the disconnection command
-- **THEN** every registration the connection added is removed and no Goalrail residue remains in the scaffold configuration
+- **THEN** every registration the consented command added is removed and no Goalrail residue remains in the scaffold configuration
 
 #### Scenario: Commands are repeated
-- **WHEN** connection or disconnection runs a second time
+- **WHEN** registration or disconnection runs a second time
 - **THEN** the outcome is unchanged and nothing is duplicated or broken
 
 #### Scenario: Configuration would change without consent
-- **WHEN** any Goalrail path would modify scaffold user configuration outside the explicit consented connection command
+- **WHEN** any Goalrail path would modify scaffold configuration outside an explicit consented command
 - **THEN** that modification is refused
 
 ### Requirement: Attachment acts only in initialized directories
@@ -337,20 +422,26 @@ wrapper certifies a run, the background layer must first do no harm.
 **Intent IDs:** OUT-2, OUT-3, SIG-2, SIG-3
 
 A registered hook does not run until the scaffold's own trust step has been
-completed by the user, so registration alone does not make an attachment work.
-Goalrail SHALL therefore report attachment health on demand, distinguishing at
-least: the scaffold is not connected; this repository is not initialized; the
-hooks are registered but not yet trusted; the attachment is working. Each state
-that is not working SHALL name the next action.
+completed by the user, where the scaffold has one, so registration alone does not
+make an attachment work. Goalrail SHALL therefore report attachment health on
+demand, distinguishing at least: the scaffold is not connected; this repository is
+not initialized; the hooks are registered but not yet trusted; the attachment is
+working. Each state that is not working SHALL name the next action.
+
+Health SHALL be judged in the scope where that scaffold's registration belongs.
+Reporting a repository-scope scaffold as disconnected because user-level
+configuration holds nothing would be a confident wrong answer. Where a
+registration for such a scaffold survives at user scope from the earlier
+arrangement, the report SHALL name it and the consented command that removes it,
+and MUST NOT modify it.
 
 Goalrail MUST NOT write, compute, or reproduce the scaffold's hook-trust
 records, and MUST NOT automate, pre-approve, or simulate the user's approval by
-any means. Trust is a standing consent to run a command in every one of the
-user's sessions; it belongs to the user, granted through the scaffold's own
-surface. That this is technically possible, and is practised by other
-integrations, does not make it permissible here: it would depend on private
-implementation details and would convert an explicit consent into an assumed
-one.
+any means. Trust is a standing consent to run a command in the user's sessions;
+it belongs to the user, granted through the scaffold's own surface. That this is
+technically possible, and is practised by other integrations, does not make it
+permissible here: it would depend on private implementation details and would
+convert an explicit consent into an assumed one.
 
 Reporting trust state is observation and is permitted. Reading is not writing.
 
@@ -358,7 +449,9 @@ A report SHALL NOT claim more than it verified. Where the scaffold records
 trust against a form Goalrail may not reproduce, the report SHALL say that a
 record exists without claiming it still matches the current definition, and
 SHALL name that gap. Where a scaffold's trust behaviour has not been observed
-at all, the report SHALL say so rather than assert either answer.
+at all, the report SHALL say so rather than assert either answer, and where the
+provider documents that no approval step exists, the report SHALL distinguish
+that documented state from an observed one.
 
 Health SHALL be reported against everything a working attachment requires, not
 a proxy for it: every registered event, not one; the registered executable
@@ -378,6 +471,14 @@ scaffold the user never chose is worse than no answer.
 #### Scenario: Repository is not initialized
 - **WHEN** the user asks for attachment health in a directory Goalrail was never initialized in
 - **THEN** the report says so and names the next action, without treating the directory as participating
+
+#### Scenario: Health is judged in the scope the scaffold uses
+- **WHEN** the user asks for attachment health for a scaffold whose registration belongs inside the repository
+- **THEN** the report reads that scope, and does not call the attachment absent because user-level configuration holds nothing
+
+#### Scenario: A registration survives in the superseded scope
+- **WHEN** attachment health finds a registration for a repository-scope scaffold at user scope
+- **THEN** the report names it and the consented command that removes it, and changes nothing
 
 #### Scenario: Only part of the registration survives
 - **WHEN** one of the registered events is removed while the rest of the registration remains
@@ -400,7 +501,7 @@ scaffold the user never chose is worse than no answer.
 - **THEN** the report states that a record exists, names the unverified part, and does not claim the definition is trusted as it now stands
 
 #### Scenario: Attachment is working
-- **WHEN** the scaffold is connected, the repository initialized, and the hooks trusted
+- **WHEN** the scaffold is connected in the scope it uses, the repository initialized, and the hooks trusted where a trust step applies
 - **THEN** the report says the attachment is working and asks nothing further of the user
 
 #### Scenario: Trust would be written by Goalrail

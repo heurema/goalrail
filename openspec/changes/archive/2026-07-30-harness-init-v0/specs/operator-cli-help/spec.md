@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Gr exposes a concise lifecycle help surface
-**Intent IDs:** OUT-1, OUT-2
+**Intent IDs:** OUT-1, OUT-2, OUT-7, SIG-8
 
 The `gr help` command SHALL describe the `prepare → inspect → start → finish`
 lifecycle, state that start remains explicit and owner-assisted, and identify

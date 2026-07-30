@@ -532,3 +532,46 @@ type failingWriter struct{}
 func (failingWriter) Write([]byte) (int, error) {
 	return 0, errors.New("broken pipe")
 }
+
+// TestInitReportsAWorkingAttachmentAsActiveOnRepeat answers the archival review:
+// the promoted rule that a repeated consented command reports a working
+// attachment as active belongs to whichever command owns the registration. For a
+// repository-scope scaffold that is initialization, not connection — connection
+// there writes nothing and names initialization.
+func TestInitReportsAWorkingAttachmentAsActiveOnRepeat(t *testing.T) {
+	root, home := scratchRepository(t), t.TempDir()
+	t.Setenv("HOME", home)
+	if _, _, err := runCommand(t, "init", "--repo", root, "--scaffold", "claude-code", "--fix-gitignore"); err != nil {
+		t.Fatalf("first init: %v", err)
+	}
+	stdout, _, err := runCommand(t, "init", "--repo", root, "--scaffold", "claude-code")
+	if err != nil {
+		t.Fatalf("repeated init: %v", err)
+	}
+	var report struct {
+		Registration struct {
+			ActiveNow bool   `json:"active_now"`
+			Applied   bool   `json:"applied"`
+			Notice    string `json:"notice"`
+		} `json:"registration"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatal(err)
+	}
+	if !report.Registration.ActiveNow {
+		t.Error("a repeated initialization did not report the working attachment as active")
+	}
+	if report.Registration.Applied {
+		t.Error("a repeated initialization rewrote a registration that was already current")
+	}
+	if strings.Contains(strings.ToLower(report.Registration.Notice), "not yet active") {
+		t.Errorf("a working attachment was described as inert: %q", report.Registration.Notice)
+	}
+
+	// And connection for that scaffold still writes nothing and names the command
+	// that owns the registration.
+	_, _, connectErr := runCommand(t, "connect", "--scaffold", "claude-code", "--yes")
+	if connectErr == nil || !strings.Contains(connectErr.Error(), "gr init") {
+		t.Fatalf("connection did not redirect to initialization: %v", connectErr)
+	}
+}
