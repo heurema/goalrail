@@ -123,11 +123,20 @@ func RepairNotice(scaffold Scaffold, previous string) string {
 	replaced += " and was replaced. "
 	switch scaffold {
 	case ScaffoldCodex:
+		// Deliberately does not send the user to `gr health`. The scaffold's trust
+		// record survives a repair and still reads as present, so health would
+		// report this very attachment as working. Pointing at a surface that
+		// contradicts this notice would be worse than saying nothing.
 		return replaced + "Changing a hook command changes its definition, so the " +
 			"review you gave the previous one no longer applies — " + TrustSurface(scaffold) +
 			". Until then Goalrail does nothing in your sessions, and trust applies " +
-			"from the next session onward." + check
+			"from the next session onward. `gr health` cannot confirm this step: it " +
+			"will report the attachment as working, because the record it reads was " +
+			"written for the command that has just been replaced."
 	default:
+		// Here the health pointer is accurate: no trust record has been observed
+		// for this scaffold, so health reports the trust state as undetermined
+		// rather than claiming the attachment works.
 		return replaced + "Some scaffolds ask you to review a changed command before " +
 			"it runs; whether " + string(scaffold) + " does has not been verified here — " +
 			TrustSurface(scaffold) + ", and if Goalrail stays silent in your sessions " +
@@ -236,12 +245,26 @@ func inspectTrust(scaffold Scaffold, configPath string, state *AttachmentState) 
 
 // checkRegisteredExecutable confirms the command a registration points at still
 // exists and is executable.
+//
+// It inspects the first registered handler only. Widening it to every handler
+// would change what health reports — a configuration hand-edited so one event
+// names a live binary and another a dead one would flip from working to broken —
+// and this change makes connection able to act on health's existing diagnosis
+// rather than altering the diagnosis.
+//
+// The decoding, by contrast, is shared with connection deliberately. Reading the
+// path as raw text mishandled a path containing an apostrophe, which would report
+// a present binary as missing; two different answers to the same question in one
+// package is not a boundary worth preserving.
 func checkRegisteredExecutable(scaffold Scaffold, configPath string) error {
-	raw, err := os.ReadFile(configPath)
+	registered, err := registeredExecutables(scaffold, configPath)
 	if err != nil {
 		return fmt.Errorf("scaffold configuration is unreadable")
 	}
-	path := registeredExecutable(string(raw))
+	if len(registered) == 0 {
+		return nil
+	}
+	path := registered[0]
 	if path == "" {
 		return nil
 	}
@@ -253,22 +276,6 @@ func checkRegisteredExecutable(scaffold Scaffold, configPath string) error {
 		return fmt.Errorf("the registered Goalrail executable at %s is not runnable", path)
 	}
 	return nil
-}
-
-// registeredExecutable extracts the binary path from the first managed command
-// in the given content.
-//
-// It inspects only the first deliberately. Widening it to every registered
-// handler would change what health reports — a configuration hand-edited so one
-// event names a live binary and another a dead one would flip from working to
-// broken — and this change makes connection able to act on health's existing
-// diagnosis rather than altering the diagnosis.
-func registeredExecutable(content string) string {
-	index := strings.Index(content, managedMarker)
-	if index < 0 {
-		return ""
-	}
-	return executableBefore(content[:index])
 }
 
 // Describe renders one line per state for a human reading terminal output.

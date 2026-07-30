@@ -26,13 +26,14 @@
 - [x] 4.5 Record why the repair is the only moment the stale trust record can be known, and why omitting the disclosure would trade one silent failure for another.
 - [x] 4.6 Record why the disclosure stays per-scaffold.
 - [x] 4.7 Record that making the test helper's executable explicit exposes a previously unpinned guarantee.
-- [x] 4.8 Record the adjacent gap in health that is deliberately left alone.
-- [x] 4.9 Record the stop conditions and the rollback path.
+- [x] 4.8 Record that the repair disclosure does not survive into a later health check, that closing it contradicts confirmed non-goal NG-1 and confirmed signal SIG-5, and the observation-with-memory route that would close it under a new intent version.
+- [x] 4.9 Record the adjacent gap in health that is deliberately left alone.
+- [x] 4.10 Record the stop conditions and the rollback path.
 
 ## 5. Implement — blocked by a separate owner gate
 
-- [x] 5.1 Add executable extraction for every managed handler, per scaffold, reusing one shared parser for the command form. Shared `executableBefore` parses the command form; `registeredExecutables` reads it per scaffold.
-- [x] 5.2 Keep health's existing check byte-for-byte equivalent across that refactor, changing neither which handler it inspects nor what it reports. `registeredExecutable` still takes the first marker only, so its verdict is unchanged.
+- [x] 5.1 Add executable extraction for every managed handler, per scaffold, reusing one shared parser for the command form. `executableFromCommand` reverses the shell quoting; `registeredExecutables` reaches the commands through each scaffold's own encoding.
+- [x] 5.2 Keep health's existing check equivalent across that refactor, changing neither which handler it inspects nor what it reports. It still inspects the first handler only. Its verdict is unchanged except where the old text-scanning parser was wrong: a path containing an apostrophe was reported missing when present, and review made that a correction worth taking rather than a boundary worth keeping, since the same input would otherwise get two answers in one package.
 - [x] 5.3 Judge connection presence by both the marker test and the executable comparison, leaving the marker test's own meaning and its health caller unchanged. `isConnected` untouched; `staleExecutable` is a second, separate question only connection asks.
 - [x] 5.4 Carry the stale executable path in the plan as reported detail, not as a promoted contract. `ConnectionPlan.Repair` and `RegisteredExecutable`.
 - [x] 5.5 Replace in place on the first scaffold by removing any existing managed block before writing, unconditionally rather than only on the repair path, reusing disconnection's removal including its refusal on an unterminated block. Unconditional in `connectCodex`; a test pins that it also closes the partial-block duplication.
@@ -56,10 +57,20 @@
 - [x] 6.11 Run `gofmt -l`, `go build ./...`, `go vet ./...`, `go test ./...`, and `go test -race ./...`. All clean, including `-race`.
 - [x] 6.12 Run pinned telemetry-disabled strict OpenSpec validation across the change and every promoted spec. 11 passed, 0 failed.
 
-## 7. Stop at the owner gates
+## 7. Answer the review
 
-- [x] 7.1 Obtain an explicit owner instruction before beginning implementation. Recorded before the first edit.
-- [x] 7.2 Obtain a separate explicit owner instruction before committing; record it before the commit, not after. Recorded before the commit.
-- [x] 7.3 Obtain a separate explicit owner instruction before pushing and opening a pull request; merging remains ungranted. Recorded before the push.
-- [ ] 7.4 Obtain a separate explicit owner instruction before archiving this change and promoting the delta; re-read the promoted text immediately before promotion in case another change archived first.
-- [x] 7.5 Issue #25 closes on merge through the trailer in the commit message. The owner reviewed that and chose to keep it rather than gate the closure separately. Recorded because the ordering is visible: the issue closes at merge, while the delta is promoted in the step above, so there is a short window in which the fix is merged and its contract is not yet promoted.
+- [x] 7a.1 Decode the shell-quoted executable rather than reading the text between the last two apostrophes; a path containing an apostrophe otherwise reports every current registration as stale and rewrites it. Confirmed by probe before fixing, pinned by `TestRegistrationSurvivesAnApostropheInThePath`.
+- [x] 7a.2 Read the TOML scaffold's `command` assignments inside the managed block rather than scanning the file, so a copy of an old stanza outside the markers is not counted. Pinned by `TestStalenessIgnoresACommandOutsideTheManagedBlock`, whose first version did not isolate the fix and was rewritten after it passed with the defect restored.
+- [x] 7a.3 Remove every managed block before writing, not one; a configuration carrying two was reachable from the write path this change replaces. Confirmed by probe, pinned by `TestRepairRemovesEveryManagedBlock`.
+- [x] 7a.4 Point health's executable check at the same decoder so one input does not get two answers in one package, keeping its first-handler-only scope intact.
+- [x] 7a.5 Stop the repair notice from pointing at `gr health`, which reports the repaired attachment as working and so contradicts the notice. It now states that limit and why; the other scaffold keeps the pointer, where health reports the trust state as undetermined rather than working. Pinned by `TestRepairNoticeDoesNotSendTheUserToASurfaceThatContradictsIt`.
+- [ ] 7a.6 Decide whether the repaired-but-unreviewed state must also be observable to a later health check. Confirmed signal SIG-5 says health reports working after a repair and confirmed non-goal NG-1 excludes health's trust reporting, so closing it reverses a confirmed signal and needs its own intent version. Recorded in design decision 8 with the route.
+
+## 8. Stop at the owner gates
+
+- [x] 8.1 Obtain an explicit owner instruction before beginning implementation. Recorded before the first edit.
+- [x] 8.2 Obtain a separate explicit owner instruction before committing; record it before the commit, not after. Recorded before the commit.
+- [x] 8.3 Obtain a separate explicit owner instruction before pushing and opening a pull request; merging remains ungranted. Recorded before the push.
+- [x] 8.4 Obtain a separate explicit owner instruction before committing and pushing the review round. Recorded before the action. Pushed as its own commit rather than an amended one, so the pull request shows what changed in answer to the review.
+- [ ] 8.5 Obtain a separate explicit owner instruction before archiving this change and promoting the delta; re-read the promoted text immediately before promotion in case another change archived first.
+- [x] 8.6 Issue #25 closes on merge through the trailer in the commit message. The owner reviewed that and chose to keep it rather than gate the closure separately. Recorded because the ordering is visible: the issue closes at merge, while the delta is promoted in the step above, so there is a short window in which the fix is merged and its contract is not yet promoted.

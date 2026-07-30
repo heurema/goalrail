@@ -177,7 +177,49 @@ The helper therefore takes an explicit executable and the tests hold one path
 across both calls. This is not incidental cleanup: the byte-identical guarantee
 is one of this change's outcomes, and it had no real test before.
 
-### 8. An adjacent gap in health, left alone deliberately
+### 8. The disclosure does not survive into the next command, and that is unresolved
+
+Review raised this and the objection holds. Decision 5 establishes that the moment
+of repair is the only point where the stale trust record is *known* rather than
+merely unverifiable. Connection states it there — and then the knowledge is gone.
+The record itself stays in the configuration, keyed by event, so the next
+`gr health` reads it as present, finds the new executable in place, and reports
+the attachment working over a hook the scaffold will not run.
+
+That is the same shape as the defect this change removes: a real state with no
+surface that reports it.
+
+Reviewing this exposed a sharper fault in text written for this change. The repair
+notice ended by telling the user to run `gr health` — the one command certain to
+contradict it. Being told "review is needed" and then pointed at a report that says
+"working" is worse than either message alone, because it leaves no way to choose
+between them. The notice now states the limit instead: that health will report the
+attachment as working, and why. For the other scaffold the pointer is kept, because
+no trust record has been observed there and health reports the trust state as
+undetermined rather than working — the per-scaffold discipline doing real work
+again rather than being repeated as a formula.
+
+With that corrected the residual gap is narrower than review found it. The user is
+told at the moment of repair, and told what the adjacent command cannot see. What
+remains missing is that the state is not *observable* later: a user who repairs,
+forgets, and returns a week later has no way to ask. That is worth closing, and it
+is not a silent trap.
+
+Fixing it means health must learn that an invalidation happened, which confirmed
+non-goal NG-1 excludes: health's trust reporting is explicitly out of scope here.
+It also runs into confirmed signal SIG-5, which states that health reports working
+after a repair — so the correct fix contradicts a confirmed signal, not merely a
+non-goal, and cannot be reached by reinterpreting either.
+
+A route exists and is recorded rather than taken: the repair could store the trust
+record's observed value in Goalrail's own state root and later compare it with
+itself. A changed value means the user has reviewed the new definition; an
+unchanged one means they have not. That is observation with memory — no write to
+the scaffold, nothing computed, nothing reproduced — so it does not touch the
+forging prohibition. It does change what health reports, so it belongs to a new
+intent version and its own gate.
+
+### 9. An adjacent gap in health, left alone deliberately
 
 Health extracts the first managed executable it finds and checks that one. A
 hand-edited configuration where session start names a live binary and stop names
@@ -249,13 +291,18 @@ Recorded so the next reader does not have to rediscover it.
   as such. For the first scaffold, the removal routine the repair reuses is the
   one disconnection uses, and the registration it writes is the shape a live
   session exercised; the repair sequence itself has not been run live.
-- **[Extraction of the path from a command is textual]** → Parsing is done from
-  the decoded command string for the JSON scaffold and from file content for the
-  TOML one, matching how each was written. A path containing a quote character
-  would defeat it. That weakness predates this change in health's own extraction,
-  but this change does give it a second consumer whose verdict causes a write
-  rather than a report, so a malformed extraction there would produce a needless
-  repair rather than a wrong diagnosis. Bounded by the same test fixtures.
+- **[Reading the executable back out of a command]** → Each scaffold's own
+  encoding is reversed rather than scanned as text: the settings object's decoded
+  command string, and the TOML scaffold's `command` assignments inside the managed
+  block. Two failures found in review are closed by tests: a path containing an
+  apostrophe, which shell quoting encodes with an embedded sequence that the naive
+  read splits in the wrong place, and a copy of an old stanza outside the markers,
+  which is not a registration this command owns. A residual case stays open: an
+  orphaned managed stanza outside the block is a live hook that neither connection
+  nor health reports, because both scope themselves to what connection wrote.
+- **[The repair disclosure does not reach the next command]** → Open, recorded in
+  decision 8. It contradicts a confirmed signal, so it needs a new intent version
+  rather than a wider reading of this one.
 
 ## Rollback
 

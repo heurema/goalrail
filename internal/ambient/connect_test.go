@@ -800,3 +800,147 @@ func TestConnectRepairsAPartialCodexBlockWithoutDuplicatingIt(t *testing.T) {
 		t.Fatalf("disconnection after a repair left residue:\n%q\nwant:\n%q", restored, original)
 	}
 }
+
+func TestRegistrationSurvivesAnApostropheInThePath(t *testing.T) {
+	// shellQuote encodes an apostrophe in the path as '"'"'. Reading the text
+	// between the last two apostrophes then lands inside that sequence and
+	// returns only the tail, so a user whose home directory holds an apostrophe
+	// would have every connection call their current registration stale, rewrite
+	// it, and invalidate the review they had just given.
+	for _, scaffold := range SupportedScaffolds() {
+		t.Run(string(scaffold), func(t *testing.T) {
+			home := t.TempDir()
+			configPath, err := ConfigPath(scaffold, home)
+			if err != nil {
+				t.Fatal(err)
+			}
+			awkward := filepath.Join(t.TempDir(), "o'brien")
+			if err := os.MkdirAll(awkward, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			executable := filepath.Join(awkward, "gr")
+			if err := os.WriteFile(executable, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+
+			applyConnection(t, scaffold, home, executable)
+			before := readFile(t, configPath)
+
+			plan, err := PlanConnection(scaffold, home, executable)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if plan.Repair {
+				t.Fatalf("a registration naming %q was read as stale (%q)",
+					executable, plan.RegisteredExecutable)
+			}
+			if !plan.AlreadyPresent {
+				t.Fatalf("plan = %+v for an unchanged registration", plan)
+			}
+			if _, err := Connect(plan); err != nil {
+				t.Fatal(err)
+			}
+			if readFile(t, configPath) != before {
+				t.Fatal("a repeated connection rewrote a registration it should have kept")
+			}
+		})
+	}
+}
+
+func TestStalenessIgnoresACommandOutsideTheManagedBlock(t *testing.T) {
+	// A hand-kept copy of an older stanza — a backup, or residue from an earlier
+	// corrupt state — sits outside the markers and is not a registration this
+	// command owns. Counting it would report every repeated connection as a
+	// repair and demand a review each time, while rewriting the block leaves that
+	// stanza exactly where it was, so the loop would never converge.
+	//
+	// A commented-out copy is filtered earlier, by reading the file's own
+	// assignments rather than its text; this fixture is uncommented so the
+	// scoping to the managed block is what the assertion rests on.
+	home := t.TempDir()
+	configPath := filepath.Join(home, ".codex", "config.toml")
+	executable := realExecutable(t)
+	applyConnection(t, ScaffoldCodex, home, executable)
+	writeFile(t, configPath, readFile(t, configPath)+
+		"\n[[hooks.SessionStart.hooks]]\ntype = \"command\"\n"+
+		"command = \"'/old/gr' hook "+managedMarker+"\"\n")
+	before := readFile(t, configPath)
+
+	plan, err := PlanConnection(ScaffoldCodex, home, executable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.Repair {
+		t.Fatalf("a stanza outside the block was read as ours, naming %q",
+			plan.RegisteredExecutable)
+	}
+	if _, err := Connect(plan); err != nil {
+		t.Fatal(err)
+	}
+	if readFile(t, configPath) != before {
+		t.Fatal("a repeated connection rewrote the configuration over a foreign stanza")
+	}
+}
+
+func TestStalenessIgnoresACommentedOutCommand(t *testing.T) {
+	// Reading the file's assignments rather than scanning it as text: a commented
+	// copy of an old command carries the marker but registers nothing.
+	home := t.TempDir()
+	configPath := filepath.Join(home, ".codex", "config.toml")
+	executable := realExecutable(t)
+	applyConnection(t, ScaffoldCodex, home, executable)
+	writeFile(t, configPath, readFile(t, configPath)+
+		"\n# command = \"'/old/gr' hook "+managedMarker+"\"\n")
+
+	plan, err := PlanConnection(ScaffoldCodex, home, executable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.Repair {
+		t.Fatalf("a commented command was read as a registration naming %q",
+			plan.RegisteredExecutable)
+	}
+}
+
+func TestRepairRemovesEveryManagedBlock(t *testing.T) {
+	// Reachable from the write path this change replaces: a partial block caused
+	// reconnection to append a complete one, leaving two. Removal handles one
+	// block per call, so repairing by removing once and appending would leave the
+	// duplication exactly as it was — hooks still firing twice, and a later
+	// disconnect leaving a registration behind.
+	home := t.TempDir()
+	configPath := filepath.Join(home, ".codex", "config.toml")
+	original := "model = \"gpt-5.6-sol\"\n"
+	writeFile(t, configPath, original)
+	applyConnection(t, ScaffoldCodex, home, realExecutable(t))
+	registered := strings.TrimPrefix(readFile(t, configPath), original)
+	writeFile(t, configPath, original+registered+registered)
+	if count := strings.Count(readFile(t, configPath), blockBegin); count != 2 {
+		t.Fatalf("the fixture did not produce two blocks: %d", count)
+	}
+
+	current := realExecutable(t)
+	plan, err := PlanConnection(ScaffoldCodex, home, current)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Connect(plan); err != nil {
+		t.Fatal(err)
+	}
+
+	after := readFile(t, configPath)
+	if count := strings.Count(after, blockBegin); count != 1 {
+		t.Fatalf("managed blocks after the repair = %d, want one:\n%s", count, after)
+	}
+	if count := strings.Count(after, managedMarker); count != len(managedEvents()) {
+		t.Fatalf("managed handlers = %d, want %d:\n%s", count, len(managedEvents()), after)
+	}
+	// And removal must now leave nothing behind.
+	removed, err := Disconnect(ScaffoldCodex, home)
+	if err != nil || !removed {
+		t.Fatalf("disconnect removed = %v err = %v", removed, err)
+	}
+	if restored := readFile(t, configPath); restored != original {
+		t.Fatalf("disconnection left residue:\n%q\nwant:\n%q", restored, original)
+	}
+}

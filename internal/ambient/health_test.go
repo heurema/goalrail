@@ -281,6 +281,20 @@ func TestHealthReportsWorkingAfterTheRepair(t *testing.T) {
 	if err != nil || !changed {
 		t.Fatalf("the prescribed remedy changed = %v err = %v", changed, err)
 	}
+	// This is confirmed signal SIG-5: health reports working after the repair,
+	// having named the missing binary before it.
+	//
+	// Review disputes the signal itself, and the objection holds: the trust record
+	// still in the configuration was made against the command the repair replaced,
+	// so "working" here is reported over a hook the scaffold will not run until the
+	// user reviews it again. Connection discloses that at the moment of repair, but
+	// the knowledge does not survive into a later health check — which is the very
+	// command connection tells the user to run.
+	//
+	// Resolving it means health must learn about the invalidation, which the
+	// confirmed non-goal NG-1 excludes from this change. Left as the confirmed
+	// contract with the objection recorded, pending an owner decision on a new
+	// intent version; it is not a settled question.
 	if state := inspect(t, ScaffoldCodex, home, repo); !state.Working {
 		t.Fatalf("the attachment did not recover after the prescribed remedy: %+v", state)
 	}
@@ -345,5 +359,32 @@ func TestRepairWritesNoTrustRecord(t *testing.T) {
 		if strings.Contains(raw, forbidden) {
 			t.Fatalf("the repair wrote a scaffold trust record (%q):\n%s", forbidden, raw)
 		}
+	}
+}
+
+func TestRepairNoticeDoesNotSendTheUserToASurfaceThatContradictsIt(t *testing.T) {
+	// The scaffold's trust record survives a repair and still reads as present, so
+	// health reports the repaired attachment as working. A notice that says "review
+	// is needed" and then points at that command hands the user two answers and no
+	// way to choose between them.
+	codex := RepairNotice(ScaffoldCodex, "/old/gr")
+	if strings.Contains(codex, "Run `gr health` to check") {
+		t.Fatalf("the repair notice points at a command that contradicts it: %s", codex)
+	}
+	if !strings.Contains(codex, "cannot confirm") {
+		t.Fatalf("the repair notice hides that health cannot see this step: %s", codex)
+	}
+
+	// For the scaffold with no observed trust gate, health reports the trust state
+	// as undetermined rather than working, so the pointer stays accurate there.
+	other := RepairNotice(ScaffoldClaudeCode, "/old/gr")
+	if !strings.Contains(other, "gr health") {
+		t.Fatalf("the notice withholds an accurate pointer: %s", other)
+	}
+
+	// And the first-connection notice keeps its pointer: with no record yet, health
+	// reports trust as pending and names the review surface.
+	if !strings.Contains(ConnectionNotice(ScaffoldCodex), "gr health") {
+		t.Fatal("the first-connection notice lost an accurate pointer")
 	}
 }

@@ -127,8 +127,13 @@ func staleExecutable(scaffold Scaffold, configPath, executable string) (string, 
 }
 
 // registeredExecutables returns the executable named by every managed handler,
-// read the way each scaffold stores it: from file content for the bracketed
-// block, and from decoded command strings for the settings object.
+// read the way each scaffold stores it: from the commands inside the bracketed
+// block, and from the decoded command strings of the settings object.
+//
+// Both paths reach the command through that scaffold's own quoting rather than
+// scanning the file as text. Text scanning would also find a marker in a
+// commented-out or hand-kept copy of an old registration, and report a perfectly
+// current attachment as stale forever.
 func registeredExecutables(scaffold Scaffold, configPath string) ([]string, error) {
 	switch scaffold {
 	case ScaffoldCodex:
@@ -139,53 +144,118 @@ func registeredExecutables(scaffold Scaffold, configPath string) ([]string, erro
 			}
 			return nil, err
 		}
-		return executablesInText(string(raw)), nil
+		return executablesInCommands(managedBlockCommands(string(raw))), nil
 	case ScaffoldClaudeCode:
 		settings, err := readJSONObject(configPath)
 		if err != nil {
 			return nil, err
 		}
-		var found []string
+		var commands []string
 		for _, event := range managedEvents() {
 			forEachManagedCommand(settings, event, func(command string) {
-				found = append(found, executablesInText(command)...)
+				commands = append(commands, command)
 			})
 		}
-		return found, nil
+		return executablesInCommands(commands), nil
 	default:
 		return nil, fmt.Errorf("unsupported scaffold %q", scaffold)
 	}
 }
 
-// executablesInText extracts the executable of every managed command appearing
-// in the given text, which may be a whole configuration file or one command.
-func executablesInText(content string) []string {
+func executablesInCommands(commands []string) []string {
 	var found []string
-	for offset := 0; ; {
-		index := strings.Index(content[offset:], managedMarker)
-		if index < 0 {
-			return found
-		}
-		index += offset
-		if path := executableBefore(content[:index]); path != "" {
+	for _, command := range commands {
+		if path := executableFromCommand(command); path != "" {
 			found = append(found, path)
 		}
-		offset = index + len(managedMarker)
 	}
+	return found
 }
 
-// executableBefore extracts the quoted executable a managed command opens with,
-// given everything that precedes the marker.
-func executableBefore(prefix string) string {
-	closing := strings.LastIndex(prefix, "'")
-	if closing < 0 {
+// managedBlockCommands returns the managed handler commands registered inside the
+// marker-bracketed block, decoded from the file's own escaping.
+//
+// When the end marker is missing the block has no knowable extent, so everything
+// after the opening marker is considered. That is deliberate: it keeps a stale
+// registration visible in a corrupt file, and the write path refuses to act on
+// such a block rather than writing beside content it cannot delimit.
+func managedBlockCommands(content string) []string {
+	begin := strings.Index(content, blockBegin)
+	if begin < 0 {
+		return nil
+	}
+	block := content[begin:]
+	if end := strings.Index(block, blockEnd); end >= 0 {
+		block = block[:end]
+	}
+	var found []string
+	for _, line := range strings.Split(block, "\n") {
+		if command, ok := tomlCommandValue(line); ok && isManagedCommand(command) {
+			found = append(found, command)
+		}
+	}
+	return found
+}
+
+// tomlCommandValue decodes a `command = "..."` assignment, reversing tomlQuote.
+func tomlCommandValue(line string) (string, bool) {
+	rest := strings.TrimSpace(line)
+	if !strings.HasPrefix(rest, "command") {
+		return "", false
+	}
+	rest = strings.TrimSpace(strings.TrimPrefix(rest, "command"))
+	if !strings.HasPrefix(rest, "=") {
+		return "", false
+	}
+	rest = strings.TrimSpace(strings.TrimPrefix(rest, "="))
+	if len(rest) < 2 || !strings.HasPrefix(rest, `"`) || !strings.HasSuffix(rest, `"`) {
+		return "", false
+	}
+	body := rest[1 : len(rest)-1]
+	var decoded strings.Builder
+	for index := 0; index < len(body); index++ {
+		if body[index] == '\\' && index+1 < len(body) &&
+			(body[index+1] == '\\' || body[index+1] == '"') {
+			decoded.WriteByte(body[index+1])
+			index++
+			continue
+		}
+		decoded.WriteByte(body[index])
+	}
+	return decoded.String(), true
+}
+
+// executableFromCommand decodes the executable a managed command opens with,
+// reversing the shell quoting the command was written with.
+//
+// Reading the text between the last two apostrophes is wrong for a path that
+// contains one: shellQuote encodes such a path with the '"'"' sequence, the last
+// pair of apostrophes then lands inside that sequence, and only the tail of the
+// path comes back. A user whose home directory holds an apostrophe would have
+// every connection report their current registration as stale and rewrite it.
+func executableFromCommand(command string) string {
+	if !strings.HasPrefix(command, "'") {
 		return ""
 	}
-	opening := strings.LastIndex(prefix[:closing], "'")
-	if opening < 0 {
-		return ""
+	const literalQuote = `'"'"'`
+	var decoded strings.Builder
+	for index := 1; index < len(command); {
+		if command[index] != '\'' {
+			decoded.WriteByte(command[index])
+			index++
+			continue
+		}
+		// An apostrophe here either closes the quoted path or opens the sequence
+		// that stands for one literal apostrophe inside it.
+		if strings.HasPrefix(command[index:], literalQuote) {
+			decoded.WriteByte('\'')
+			index += len(literalQuote)
+			continue
+		}
+		return decoded.String()
 	}
-	return prefix[opening+1 : closing]
+	// Unterminated quoting: nothing can be read with confidence.
+	return ""
 }
 
 // forEachManagedCommand visits every managed handler command registered for one
@@ -283,16 +353,27 @@ func isConnected(scaffold Scaffold, configPath string) (bool, error) {
 }
 
 func connectCodex(plan ConnectionPlan) error {
-	// Remove any existing managed block before writing, unconditionally rather
+	// Remove every existing managed block before writing, unconditionally rather
 	// than only when repairing. This path is reached exactly when something must
 	// be written, so keeping an existing block is never right: appending beside
-	// it would leave two handlers per event — every hook firing twice — and a
+	// one would leave two handlers per event — every hook firing twice — and a
 	// removal that finds only the first, so disconnection would leave residue
-	// that still looks like an attachment. Removal refuses on a block whose end
-	// marker is missing, which fails the repair loudly instead of writing beside
-	// something whose extent is unknown.
-	if _, err := removeManagedBlock(plan.ConfigPath); err != nil {
-		return err
+	// that still looks like an attachment.
+	//
+	// The loop matters because removal handles one block per call, and a
+	// configuration can already carry more than one: an earlier write path
+	// appended a complete block beside a partial one. Removing a single block and
+	// appending a fresh one would leave that state exactly as broken as it was.
+	// Removal refuses on a block whose end marker is missing, which fails the
+	// write loudly instead of writing beside something it cannot delimit.
+	for {
+		removed, err := removeManagedBlock(plan.ConfigPath)
+		if err != nil {
+			return err
+		}
+		if !removed {
+			break
+		}
 	}
 	command := managedCommand(plan.Executable)
 	block := strings.Join([]string{
@@ -459,10 +540,11 @@ func claudeCodeEventIsCurrent(settings map[string]any, event, executable string)
 	present, current := false, true
 	forEachManagedCommand(settings, event, func(command string) {
 		present = true
-		for _, path := range executablesInText(command) {
-			if path != executable {
-				current = false
-			}
+		// A command whose executable cannot be read is neither current nor
+		// stale, matching staleExecutable: there is nothing to compare, and
+		// rewriting a registration we cannot read would be a guess.
+		if path := executableFromCommand(command); path != "" && path != executable {
+			current = false
 		}
 	})
 	return present && current
