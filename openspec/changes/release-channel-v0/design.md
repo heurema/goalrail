@@ -175,6 +175,21 @@ The publishing step runs with the job token in its environment. `contents: write
 on the job sets what the token may do; `gh` reads the credential itself and fails
 without it. It is the platform's own token, not a stored secret, so NG-7 holds.
 
+It also needs to know *which* repository. `gh` infers that from the git remote of
+the working directory, and the artifacts deliberately live outside the checkout,
+so the step passes `GH_REPO` explicitly and addresses the assets by absolute path
+rather than changing directory into them. The first release run established this
+the hard way: every other step succeeded and publication died on
+`fatal: not a git repository`.
+
+That run also exposed a defect in this block's own state read. Written as
+`gh release view … 2>/dev/null || echo none`, it collapsed every failure into
+"no release exists" — the answer that skips the protection the read exists for.
+It now separates three cases: a successful read decides, a "release not found"
+error means there is nothing to clean up, and any other failure refuses to
+publish blind. The step also counts the artifacts before publishing, so
+"only after every artifact exists" is checked rather than assumed.
+
 *Rejected:* raw REST calls, which would have to reimplement the draft-then-publish
 sequence, and third-party release actions, which NG-3 excludes.
 
