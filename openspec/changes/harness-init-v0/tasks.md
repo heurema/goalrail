@@ -1,0 +1,102 @@
+## 1. Establish confirmed intent
+
+- [x] 1.1 Record the Context Pack: what initialization installs today, the eight-file harness payload, the git-ignored marker, the absent version and release channel, the pinned invocation and its explicit-schema workaround, the dependency's own `init`/`update`/`doctor` and its provider prompt packs, the promoted user-scope limitation, what the live run did and did not establish, the second scaffold's documented hook and trust behaviour, its two project-scope arrangements, the read-only nature of the Langfuse adapter, the state root, the existing health surface, the remedies that name `gr health`, and the owner's session boundaries.
+- [x] 1.2 Write candidate Intent Snapshot version 1 covering one-command installation, the existing-OpenSpec case, repository-scope registration, removal, the approval answer, the grown diagnosis, the remedy-integrity rule, one-command update, a Goalrail version, and optional observability.
+- [x] 1.3 Present a plain-language owner-facing view of version 1 in the resolved owner language, including the two scope reductions the brief did not authorize.
+- [x] 1.4 Run the owner-directed critical review of version 1 and record its findings: destructive update on drift, a version recorded where it cannot be shared, an unignored settings path, the Node dependency, the superseded user-scope registration, and scaffold selection.
+- [x] 1.5 Amend to version 2 on the owner's four decisions — Node-free `gr`, drift stops an update, currency by digests, detection plus flag — and retain version 1 as `intent-v1.md` rather than rewriting it.
+- [x] 1.6 Answer the owner's question about whether the dependency is unavoidable by separating what parses artifacts in Go from what the stock CLI does, and confirm the terminology.
+- [x] 1.7 Obtain explicit owner confirmation of version 2 and record the confirmation receipt with the verification action.
+
+## 2. Compile the proposal from confirmed intent
+
+- [x] 2.1 Trace every proposed change to confirmed intent IDs and to the non-goal it preserves, and state that no change lies outside that table.
+- [x] 2.2 Mark the registration move as breaking for the second scaffold, since a user who connected at user scope keeps a registration this arrangement supersedes.
+- [x] 2.3 Name the capabilities: three new, two modified, with the modified ones justified by promoted text that this change contradicts rather than merely extends.
+- [x] 2.4 State the impact, including that the repository's own overlay becomes the source the embedded canon is taken from.
+
+## 3. State the contract as spec deltas
+
+- [x] 3.1 Add `harness-init`: one-command installation, the canon/config ownership split, the existing-OpenSpec case with the foreign-schema stop, registration with detection and the unshareable-path rule, repair on re-run, the no-Node rule, and no credential in the repository.
+- [x] 3.2 Add `harness-doctor`: one diagnosis with every state named, per-file drift, currency by digests, the toolchain as a fact, observability without nagging or leaking, machine-readable output, and the rule that every next action names a command the tool has.
+- [x] 3.3 Add `harness-update`: one command to the binary's canon, verified by digest, reversible through the state root, drift as a stop with an explicit discard flag, and no binary self-update or release lookup.
+- [x] 3.4 Modify `ambient-connect`'s connection requirement: scope becomes a per-scaffold property, connection redirects to initialization for the repository-scope scaffold, consent may not be spent on a teammate, removal spans repository scope, and the disclosure gains a documented state distinct from observed and unverified.
+- [x] 3.5 Modify `ambient-connect`'s health requirement: health is judged in the scope the scaffold uses, and a registration surviving in the superseded scope is reported rather than modified.
+- [x] 3.6 Modify `operator-cli-help`: the harness surface appears in help, the diagnosis command is discoverable by its current name, a superseded name keeps working and names its successor, and the hook entry point stays hidden.
+- [x] 3.7 Verify by set difference, per requirement, that no promoted scenario is dropped by a `MODIFIED` delta — 22 and 9 scenarios preserved in `ambient-connect`, 4 in `operator-cli-help` — because a `MODIFIED` requirement replaces the promoted one wholesale at archival and a dropped scenario is a silent deletion.
+- [x] 3.8 Carry no normative rule that traces to no confirmed outcome; the silent `.gitignore` repair drafted mid-writing was replaced with the confirmed refuse-plus-flag behaviour on exactly that ground.
+- [x] 3.9 Run pinned telemetry-disabled strict OpenSpec validation across this change and every promoted spec. 11 passed, 0 failed.
+
+## 4. Record the design
+
+- [x] 4.1 Record why the registration goes to the per-user project file, with the committed-project and user-scope alternatives and why each was rejected.
+- [x] 4.2 Record why an unignored path refuses rather than being silently fixed, and why the marker is treated more leniently than the registration.
+- [x] 4.3 Record the no-Node decision, where the canon is instead validated, and the two rejected alternatives.
+- [x] 4.4 Record the canon/config ownership split and its visible consequence for what counts as drift.
+- [x] 4.5 Record how the canon is embedded and how a test pins the embedded copy to the repository's own overlay.
+- [x] 4.6 Record how digests decide currency, why a repository-recorded version was rejected, and that `behind` is unreachable at v0 and is exercised against a synthetic history.
+- [x] 4.7 Record why drift stops an update, and that recovery does not lean on Git.
+- [x] 4.8 Record how `doctor` grows from `health`, how the alias avoids breaking a parser, and the exit-status contract.
+- [x] 4.9 Record why detection uses configuration presence rather than session environment, citing the live-run evidence that unsets those variables.
+- [x] 4.10 Record why migration off the superseded scope passes through the user's own act.
+- [x] 4.11 Record the third disclosure state and that the evidence class lives in code as data.
+- [x] 4.12 Record the worktree behaviour as correct rather than broken, and that disconnection does not delete the overlay.
+- [x] 4.13 Record correlation and evidence, measurement and stop conditions, risks with mitigations, rollback, and the two open questions.
+
+## 5. Implement — blocked by a separate owner gate
+
+- [ ] 5.1 Embed the canon under the implementing package and add the test that pins it byte-identical to `openspec/schemas/goalrail-intent/**`.
+- [ ] 5.2 Add the canon digest table, including the append-only history entry shape, and the classification of a file as current, behind, or edited.
+- [ ] 5.3 Materialize the overlay in `gr init`, creating the configuration when absent and managing only its schema key.
+- [ ] 5.4 Stop initialization on a foreign custom schema, and leave a configuration that already names the Goalrail schema untouched.
+- [ ] 5.5 Leave every existing spec and change file untouched when adopting an existing OpenSpec root.
+- [ ] 5.6 Add scaffold detection by configuration presence, with the override flag and the both-present and none-present outcomes.
+- [ ] 5.7 Add repository-scope registration for the second scaffold, writing the per-user project settings file, reusing the existing handler shape, occurrence scoping, and marker.
+- [ ] 5.8 Refuse registration where the path is not ignored, naming the entry and the flag; add the flag that writes the entries and reports them.
+- [ ] 5.9 Report the marker's ignore exposure without failing initialization.
+- [ ] 5.10 Repair a stale or unscoped repository-scope registration on re-run, reusing the promoted replace-not-accompany path so a correct registration stays byte-identical and foreign handlers survive.
+- [ ] 5.11 Redirect `gr connect` for the repository-scope scaffold to initialization, writing nothing.
+- [ ] 5.12 Extend disconnection to remove a repository-scope registration with no residue and no collateral.
+- [ ] 5.13 Add the third disclosure state as per-scaffold data, and wire the documented-absent wording for the second scaffold naming what its trust dialog actually gates.
+- [ ] 5.14 Add `gr doctor`: the existing attachment states, overlay presence, per-file drift and behind-ness, the superseded-scope detection, the runtime fact, the observability line, the text report, `--json`, and the exit status.
+- [ ] 5.15 Keep `gr health` working with unchanged stdout and the successor named on stderr, and move every printed remedy to the new command name.
+- [ ] 5.16 Add `gr update`: re-materialize, verify by digest, back up replaced files under the state root, report files and canon identifiers, stop on drift, and discard only with the explicit flag.
+- [ ] 5.17 Add the `gr` version surface and confirm no repository verdict is derived from it.
+- [ ] 5.18 Add the development-side test that materializes the embedded canon and validates it with the pinned CLI, skipping loudly where no Node runtime exists.
+- [ ] 5.19 Update `gr help` for the harness surface, and `gr update --help` to state that it does not update the binary.
+- [ ] 5.20 Confirm no Go path executes Node, a package runner, or the stock CLI.
+
+## 6. Verify the implementation
+
+- [ ] 6.1 Map every scenario in every delta to a named deterministic test.
+- [ ] 6.2 Assert a fresh directory becomes a validated harness and that initialization is byte-identical on repeat.
+- [ ] 6.3 Assert an existing OpenSpec root survives byte-identical, that a foreign schema stops initialization, and that an already-Goalrail configuration is untouched.
+- [ ] 6.4 Assert the registration lands only in the per-user project file, that user-level configuration is byte-identical, and that an unignored path refuses while the flag proceeds.
+- [ ] 6.5 Assert re-initialization repairs a stale registration, leaves a correct one byte-identical, and leaves a foreign handler unchanged including its occurrence.
+- [ ] 6.6 Assert disconnection removes a repository-scope registration with no residue and no collateral.
+- [ ] 6.7 Assert `doctor` distinguishes every state it claims to, with a next action for each failure, none for the optional absences, and the documented exit statuses.
+- [ ] 6.8 Assert drift is reported per file and classified, and that altering the version string alone changes no verdict.
+- [ ] 6.9 Assert `update` refuses on drift, discards only with the flag while saying so, restores canonical digests, and leaves the previous files recoverable under the state root.
+- [ ] 6.10 Assert every remedy string the code prints resolves to a command the CLI accepts, and that `gr health`'s stdout is unchanged.
+- [ ] 6.11 Assert `init`, `update`, and `doctor` complete with no Node runtime on the lookup path.
+- [ ] 6.12 Assert no output contains key material and no credential is written into repository content.
+- [ ] 6.13 Confirm the promoted tests for the announcement, retention, intent binding, fail-quiet posture, and trust-record prohibition are unmodified and still pass.
+- [ ] 6.14 Run `gofmt -l`, `go build ./...`, `go vet ./...`, `go test ./...`, and `go test -race ./...`.
+- [ ] 6.15 Run pinned telemetry-disabled strict OpenSpec validation across the change and every promoted spec.
+
+## 7. Answer the open approval question
+
+- [x] 7.1 Obtain an explicit owner instruction before running any provider session; record it here before the run. Granted 2026-07-30 for one interactive session: the owner approved preparing the stand and running the session themselves. The stand lives outside the repository, uses its own state root, writes nothing to the owner's working scaffold configuration, and exercises the shipping arrangement — a registration in the repository's per-user project settings file, read from the ordinary settings layer rather than supplied per run.
+- [ ] 7.2 Run one interactive session in a scratch repository initialized by `gr init`, with no write to the owner's working configuration, and observe whether the registered hook runs without an approval step.
+- [ ] 7.3 Record the observation under `evidence/`, stating what it establishes, what it does not, and the conditions that bound it.
+- [ ] 7.4 Reconcile the disclosure state and the diagnosis line with what was observed; if the observation contradicts confirmed signal SIG-11's assumption that both answers keep the same arrangement, stop and raise a new intent version instead of adjusting the text.
+
+## 8. Stop at the owner gates
+
+- [x] 8.1 Produce planning artifacts only this round; implementation begins only after a separate explicit owner instruction.
+- [ ] 8.2 Obtain an explicit owner instruction before beginning implementation; record it here before the first edit.
+- [x] 8.3 Obtain a separate explicit owner instruction before committing; record it here before the commit. Granted 2026-07-30 for the planning artifacts only, as a checkpoint before the approval probe; pushing, opening a pull request, and merging remain ungranted.
+- [ ] 8.4 Obtain a separate explicit owner instruction before pushing and opening a pull request; wait for the automated review and do not merge on the strength of that instruction.
+- [ ] 8.5 Obtain a separate explicit owner instruction before merging, after the automated review has been answered.
+- [ ] 8.6 Obtain a separate explicit owner instruction before archiving this change and promoting the deltas, and re-read the promoted text immediately before promotion in case another change archived first.
+- [ ] 8.7 Leave the owner's working `~/.claude/settings.json` and `~/.codex/config.toml` and the `codex/dogfood-run-v0` branch untouched throughout; every registration this change exercises goes to a scratch repository or a fake home.
