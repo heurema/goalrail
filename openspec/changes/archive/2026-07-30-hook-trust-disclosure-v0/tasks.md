@@ -63,5 +63,5 @@
 - [x] 8.2 Obtain a separate explicit owner instruction before committing. Recorded late: the instruction was given before the commit, but this box was ticked afterwards, so the repository briefly carried a commit with no recorded gate evidence. Review caught it.
 - [x] 8.3 Obtain a separate explicit owner instruction before pushing and opening a pull request; merging remains ungranted.
 - [x] 8.3a Obtain a separate explicit owner instruction before committing and pushing this round of review fixes; recorded before the commit this time.
-- [ ] 8.4 Obtain a separate explicit owner instruction before archiving this change and promoting the deltas; re-read the promoted text immediately before promotion in case another change archived first.
+- [x] 8.4 Obtain a separate explicit owner instruction before archiving this change and promoting the deltas; re-read the promoted text immediately before promotion in case another change archived first. The promoted specs were confirmed unchanged since the deltas were authored, so both modified requirements applied to the text they were written against.
 - [ ] 8.5 Revisit the recorded limitation when the external project-local hook defect is fixed; the structural boundary is the first thing to reconsider.
