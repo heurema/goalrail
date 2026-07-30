@@ -10,13 +10,22 @@ to the intent it belongs to, and a fail-quiet posture that never harms an
 ordinary session.
 ## Requirements
 ### Requirement: Connection is explicit, consented, and reversible
-**Intent IDs:** OUT-1, OUT-4, SIG-1, SIG-4
+**Intent IDs:** OUT-1, OUT-2, OUT-3, OUT-4, SIG-1, SIG-2, SIG-3, SIG-4
 
 Goalrail SHALL attach to a scaffold through one explicit connection command
 that registers persistent session hooks in the scaffold's user configuration.
 Registration MUST NOT happen without the user's explicit consent, and a
 matching disconnection command SHALL remove everything the connection added,
 leaving no residue. Both commands SHALL be safe to repeat.
+
+Where a scaffold distinguishes which session-start occurrence a hook applies
+to, registration SHALL name only the occurrences that open a session, and
+SHALL NOT register a form that fires on every occurrence. The single-delivery
+rule is a property of the announcement, so it MUST hold on every supported
+scaffold — including one whose transport does not inspect the occurrence and
+therefore cannot enforce it after the fact. Removal SHALL cover every
+occurrence the connection registered, and MUST leave entries it did not add
+untouched.
 
 Registration alone does not make the attachment act. The scaffold requires the
 user to review and trust the exact hook definition before it runs, and records
@@ -38,12 +47,23 @@ the command on a working attachment reports it as working.
 Attachment is registered at user scope, which means the hook is invoked for
 every session the user starts anywhere, and confining action to initialized
 repositories is enforced by Goalrail's own first act rather than by absence.
-This is a recorded limitation, not a preference: registering inside the
-repository would make the boundary structural, and that arrangement is
-externally blocked — project-local hooks are silently skipped with no trust
-prompt even in a trusted project, and the session-opening event has already
-passed by the time a user could grant trust. Should that change, this
-limitation is the first thing to revisit.
+This is a recorded limitation rather than a preference, and it SHALL be
+attributed to the scaffold whose evidence produced it: on the first supported
+scaffold, registering inside the repository is externally blocked, because
+project-local hooks are silently skipped with no trust prompt even in a trusted
+project and the session-opening event has already passed by the time a user
+could grant trust. The second supported scaffold does not share that
+constraint — its project-level hooks are an ordinary settings layer that merges
+with user settings — so a scaffold-specific route remains open there and is the
+first thing to revisit. A true observation about one provider MUST NOT be
+recorded as a property of attachment in general.
+
+The second supported scaffold's end-to-end behaviour has not been observed in a
+live session: its announcement delivery, question retention, and whether it
+prompts for any approval remain unverified, and no requirement here may be read
+as claiming otherwise. Its registration shape rests on the provider's published
+matcher contract together with an existing working configuration that agrees
+with it.
 
 After connection and trust, the user runs no Goalrail command per task:
 sessions are started, driven, and ended entirely by the user in their own
@@ -53,17 +73,37 @@ scaffold.
 - **WHEN** the user runs the connection command and consents
 - **THEN** the persistent session hooks are registered in the scaffold's user configuration and no further Goalrail command is needed for ordinary work
 
-#### Scenario: Connection is repeated on a working attachment
-- **WHEN** the connection command runs again after the user has completed the trust step
-- **THEN** it reports the attachment as active rather than telling the user to grant trust again
+#### Scenario: A scaffold distinguishes session-start occurrences
+- **WHEN** connection registers session-start hooks on a scaffold whose registration names which occurrence applies
+- **THEN** it registers only the occurrences that open a session, and registers no form that fires on every occurrence
 
-#### Scenario: The scaffold's trust behaviour is unverified
-- **WHEN** connection registers hooks in a scaffold whose trust gate has not been observed
-- **THEN** the disclosure says the behaviour is unverified rather than asserting a required approval step
+#### Scenario: An earlier registration fires on every occurrence
+- **WHEN** connection finds its own session-start registration present but not scoped to the opening occurrence
+- **THEN** it replaces that registration with the scoped form rather than reporting the attachment as already present, so a user who connected with an earlier version can repair it
+
+#### Scenario: Removal spans every registered occurrence
+- **WHEN** the user disconnects a scaffold whose session-start hooks were registered per occurrence
+- **THEN** every entry the connection added is removed, and any entry it did not add for the same event survives
+
+#### Scenario: A limitation is recorded from one scaffold's evidence
+- **WHEN** a scope limitation is recorded because one scaffold blocks a stronger arrangement
+- **THEN** the record names that scaffold rather than stating the limitation as a property of attachment in general
+
+#### Scenario: A scaffold has not been exercised live
+- **WHEN** a supported scaffold's end-to-end behaviour has not been observed in a live session
+- **THEN** that is recorded, and no requirement is read as claiming the scaffold is verified
 
 #### Scenario: Connection discloses the trust step
 - **WHEN** connection registers the hooks
 - **THEN** its output states that the scaffold requires the user to review and trust them, names the surface for doing so, and says the attachment does not act until then
+
+#### Scenario: The scaffold's trust behaviour is unverified
+- **WHEN** connection registers hooks on a scaffold whose trust gate has not been observed
+- **THEN** the disclosure says the behaviour is unverified rather than asserting a mandatory approval step
+
+#### Scenario: Connection is repeated on a working attachment
+- **WHEN** the user reruns the connection command on an attachment that is already registered and trusted
+- **THEN** the outcome reports it as active rather than describing it as not yet active
 
 #### Scenario: User disconnects
 - **WHEN** the user runs the disconnection command

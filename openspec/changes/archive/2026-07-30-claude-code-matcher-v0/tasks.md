@@ -47,6 +47,6 @@
 - [x] 7.1 Obtain an explicit owner instruction before beginning implementation.
 - [x] 7.2 Obtain a separate explicit owner instruction before committing; record it before the commit, not after. Recorded before the commit this time.
 - [x] 7.3 Obtain a separate explicit owner instruction before pushing and opening a pull request; merging remains ungranted. Recorded before the action.
-- [ ] 7.4 Obtain a separate explicit owner instruction before archiving this change and promoting the delta; re-read the promoted text immediately before promotion in case another change archived first.
+- [x] 7.4 Obtain a separate explicit owner instruction before archiving this change and promoting the delta; re-read the promoted text immediately before promotion in case another change archived first. The promoted spec was confirmed unchanged since the delta was authored.
 - [ ] 7.5 Exercise the second scaffold in a live session when the owner can run it in their own environment, and record the result; until then its end-to-end behaviour stays unobserved.
 - [ ] 7.6 Revisit project-level registration for the second scaffold as its own decision, with its own evidence.
