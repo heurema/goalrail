@@ -10,7 +10,7 @@ to the intent it belongs to, and a fail-quiet posture that never harms an
 ordinary session.
 ## Requirements
 ### Requirement: Connection is explicit, consented, and reversible
-**Intent IDs:** OUT-1, OUT-2, OUT-3, OUT-4, OUT-5, OUT-6, SIG-1, SIG-2, SIG-3, SIG-4, SIG-5, SIG-6
+**Intent IDs:** OUT-1, OUT-2, OUT-4, SIG-1, SIG-2, SIG-4
 
 Goalrail SHALL attach to a scaffold through one explicit connection command
 that registers persistent session hooks in the scaffold's user configuration.
@@ -92,12 +92,30 @@ with user settings — so a scaffold-specific route remains open there and is th
 first thing to revisit. A true observation about one provider MUST NOT be
 recorded as a property of attachment in general.
 
-The second supported scaffold's end-to-end behaviour has not been observed in a
-live session: its announcement delivery, question retention, and whether it
-prompts for any approval remain unverified, and no requirement here may be read
-as claiming otherwise. Its registration shape rests on the provider's published
-matcher contract together with an existing working configuration that agrees
-with it.
+The second supported scaffold has now been exercised in a live session, and the
+record SHALL distinguish what that run established from what it did not. Observed:
+the announcement reaches the agent, and a question left at the reserved path is
+retained outside the repository with its own identity and an explicit unbound
+reason. The agent named the reserved path and the payload schema although the task
+mentioned neither, which is how delivery was established rather than assumed.
+
+Still unverified, and the record MUST keep saying so: whether that scaffold asks
+the user to approve a registered hook. No prompt appeared, and that is not
+evidence — the run was non-interactive, where the provider documents that the
+trust dialog is skipped, and the hooks were supplied for that run rather than
+registered in the user configuration. Both differences bear on precisely the
+question that remains open, so an absent prompt under those conditions says
+nothing about an interactive session. The registration shape itself still rests on
+the provider's published matcher contract together with an existing working
+configuration that agrees with it.
+
+An earlier attempt at live verification was abandoned on the belief that this
+scaffold's login state is tied to the home directory, which left only routes that
+wrote into the owner's working configuration or copied an account file holding
+unrelated history. That belief was wrong: credentials live in the operating
+system keychain, and the provider's CLI accepts settings for a single run, so
+observation needed neither. No requirement here may rest on the withdrawn
+blocker.
 
 After connection and trust, the user runs no Goalrail command per task:
 sessions are started, driven, and ended entirely by the user in their own
@@ -154,6 +172,14 @@ scaffold.
 #### Scenario: A scaffold has not been exercised live
 - **WHEN** a supported scaffold's end-to-end behaviour has not been observed in a live session
 - **THEN** that is recorded, and no requirement is read as claiming the scaffold is verified
+
+#### Scenario: Part of a scaffold's behaviour has been observed
+- **WHEN** a live run establishes some of a scaffold's behaviour and leaves the rest unobserved
+- **THEN** the record states which part was observed and which was not, rather than describing the scaffold as verified or as unverified as a whole
+
+#### Scenario: An observation was made under conditions that do not settle a question
+- **WHEN** a live run produces no evidence of a behaviour under conditions where that behaviour would not appear anyway
+- **THEN** the absence is not recorded as evidence, and the record names the conditions that make it inconclusive
 
 #### Scenario: Connection discloses the trust step
 - **WHEN** connection registers the hooks
