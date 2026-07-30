@@ -9,6 +9,22 @@ import (
 	"testing"
 )
 
+// planRegistration plans a registration in the scope the scaffold actually uses.
+//
+// The tests pass one temporary directory as both the home and the repository root.
+// That is deliberate rather than lazy: for a user-scope scaffold the directory is
+// the configuration home, for a repository-scope one it is the repository, and in
+// both cases what is under test is the writer, the presence test, and the repair —
+// not which of the two the path came from.
+func planRegistration(t *testing.T, scaffold Scaffold, container, executable string) (ConnectionPlan, error) {
+	t.Helper()
+	target, err := RegistrationTarget(scaffold, container, container)
+	if err != nil {
+		return ConnectionPlan{}, err
+	}
+	return PlanRegistration(target, executable)
+}
+
 // realExecutable is a file that actually exists and is runnable: health now
 // verifies the registered binary, so a fictional path would fail for the wrong
 // reason.
@@ -25,7 +41,7 @@ func TestConnectionRequiresConsentAndIsPlannedFirst(t *testing.T) {
 	// Editing a user's own configuration is consented to as a concrete act:
 	// the plan is computed before anything is written.
 	home := t.TempDir()
-	plan, err := PlanConnection(ScaffoldCodex, home, realExecutable(t))
+	plan, err := planRegistration(t, ScaffoldCodex, home, realExecutable(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,7 +54,7 @@ func TestConnectionRequiresConsentAndIsPlannedFirst(t *testing.T) {
 }
 
 func TestPlanRejectsARelativeExecutable(t *testing.T) {
-	if _, err := PlanConnection(ScaffoldCodex, t.TempDir(), "gr"); err == nil {
+	if _, err := planRegistration(t, ScaffoldCodex, t.TempDir(), "gr"); err == nil {
 		t.Fatal("a relative executable was accepted for a persistent hook")
 	}
 }
@@ -62,7 +78,7 @@ func TestCodexConnectionIsIdempotentAndResidueFree(t *testing.T) {
 	}
 
 	// A second connection must change nothing.
-	plan, err := PlanConnection(ScaffoldCodex, home, executable)
+	plan, err := planRegistration(t, ScaffoldCodex, home, executable)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +93,7 @@ func TestCodexConnectionIsIdempotentAndResidueFree(t *testing.T) {
 		t.Fatal("a repeated connection modified the configuration")
 	}
 
-	removed, err := Disconnect(ScaffoldCodex, home)
+	removed, err := Disconnect(ScaffoldCodex, home, home)
 	if err != nil || !removed {
 		t.Fatalf("disconnect removed = %v err = %v", removed, err)
 	}
@@ -85,14 +101,14 @@ func TestCodexConnectionIsIdempotentAndResidueFree(t *testing.T) {
 	if restored := readFile(t, configPath); restored != original {
 		t.Fatalf("disconnection left residue:\n%q\nwant:\n%q", restored, original)
 	}
-	if again, err := Disconnect(ScaffoldCodex, home); err != nil || again {
+	if again, err := Disconnect(ScaffoldCodex, home, home); err != nil || again {
 		t.Fatalf("repeated disconnect removed = %v err = %v", again, err)
 	}
 }
 
 func TestClaudeCodeConnectionPreservesForeignHooks(t *testing.T) {
 	home := t.TempDir()
-	configPath := filepath.Join(home, ".claude", "settings.json")
+	configPath := filepath.Join(home, ".claude", "settings.local.json")
 	writeFile(t, configPath, `{
   "theme": "dark",
   "hooks": {
@@ -112,11 +128,11 @@ func TestClaudeCodeConnectionPreservesForeignHooks(t *testing.T) {
 	if len(starts) != 2 {
 		t.Fatalf("SessionStart groups = %d, want the foreign one plus ours", len(starts))
 	}
-	if _, ok := hooks["Stop"]; !ok {
-		t.Fatal("Stop was not registered")
+	if _, ok := hooks["SessionEnd"]; !ok {
+		t.Fatal("SessionEnd was not registered")
 	}
 
-	removed, err := Disconnect(ScaffoldClaudeCode, home)
+	removed, err := Disconnect(ScaffoldClaudeCode, home, home)
 	if err != nil || !removed {
 		t.Fatalf("disconnect removed = %v err = %v", removed, err)
 	}
@@ -132,8 +148,8 @@ func TestClaudeCodeConnectionPreservesForeignHooks(t *testing.T) {
 	if handler["command"] != "/usr/bin/other-tool" {
 		t.Fatal("disconnection removed a foreign hook")
 	}
-	if _, ok := hooks["Stop"]; ok {
-		t.Fatal("our Stop registration survived disconnection")
+	if _, ok := hooks["SessionEnd"]; ok {
+		t.Fatal("our SessionEnd registration survived disconnection")
 	}
 }
 
@@ -142,7 +158,7 @@ func TestDisconnectRefusesAnUnterminatedManagedBlock(t *testing.T) {
 	home := t.TempDir()
 	configPath := filepath.Join(home, ".codex", "config.toml")
 	writeFile(t, configPath, "model = \"x\"\n"+blockBegin+"\n[[hooks.SessionStart]]\n")
-	if _, err := Disconnect(ScaffoldCodex, home); err == nil {
+	if _, err := Disconnect(ScaffoldCodex, home, home); err == nil {
 		t.Fatal("an unterminated managed block was removed by guesswork")
 	}
 }
@@ -150,7 +166,7 @@ func TestDisconnectRefusesAnUnterminatedManagedBlock(t *testing.T) {
 func TestDisconnectOnAnUntouchedConfigurationDoesNothing(t *testing.T) {
 	home := t.TempDir()
 	for _, scaffold := range SupportedScaffolds() {
-		removed, err := Disconnect(scaffold, home)
+		removed, err := Disconnect(scaffold, home, home)
 		if err != nil || removed {
 			t.Fatalf("%s: removed = %v err = %v", scaffold, removed, err)
 		}
@@ -162,7 +178,7 @@ func TestDisconnectOnAnUntouchedConfigurationDoesNothing(t *testing.T) {
 // and then planned again compared two different binaries without meaning to.
 func applyConnection(t *testing.T, scaffold Scaffold, home, executable string) {
 	t.Helper()
-	plan, err := PlanConnection(scaffold, home, executable)
+	plan, err := planRegistration(t, scaffold, home, executable)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -210,15 +226,15 @@ func TestConnectRepairsAPartialClaudeRegistration(t *testing.T) {
 	home := t.TempDir()
 	executable := realExecutable(t)
 	applyConnection(t, ScaffoldClaudeCode, home, executable)
-	configPath := filepath.Join(home, ".claude", "settings.json")
+	configPath := filepath.Join(home, ".claude", "settings.local.json")
 	settings := readJSON(t, configPath)
 	hooks := settings["hooks"].(map[string]any)
-	delete(hooks, "Stop")
+	delete(hooks, "SessionEnd")
 	writeFile(t, configPath, marshalJSON(t, settings))
 
 	// The same executable throughout, so the missing event is the only reason
 	// the registration reads as incomplete.
-	plan, err := PlanConnection(ScaffoldClaudeCode, home, executable)
+	plan, err := planRegistration(t, ScaffoldClaudeCode, home, executable)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -230,7 +246,7 @@ func TestConnectRepairsAPartialClaudeRegistration(t *testing.T) {
 	}
 	settings = readJSON(t, configPath)
 	hooks = settings["hooks"].(map[string]any)
-	if _, ok := hooks["Stop"]; !ok {
+	if _, ok := hooks["SessionEnd"]; !ok {
 		t.Fatal("reconnection did not restore the missing Stop registration")
 	}
 	if starts := hooks["SessionStart"].([]any); len(starts) != 1 {
@@ -240,8 +256,8 @@ func TestConnectRepairsAPartialClaudeRegistration(t *testing.T) {
 
 func TestConnectTreatsAnEmptySettingsFileAsEmpty(t *testing.T) {
 	home := t.TempDir()
-	writeFile(t, filepath.Join(home, ".claude", "settings.json"), "")
-	if _, err := PlanConnection(ScaffoldClaudeCode, home, realExecutable(t)); err != nil {
+	writeFile(t, filepath.Join(home, ".claude", "settings.local.json"), "")
+	if _, err := planRegistration(t, ScaffoldClaudeCode, home, realExecutable(t)); err != nil {
 		t.Fatalf("an empty settings file blocked connection planning: %v", err)
 	}
 }
@@ -250,7 +266,7 @@ func TestDisconnectRemovesOnlyOurHandlerFromAMixedGroup(t *testing.T) {
 	// A group can mix our handler with a foreign one. Removal must filter the
 	// handler, not drop its containing group.
 	home := t.TempDir()
-	configPath := filepath.Join(home, ".claude", "settings.json")
+	configPath := filepath.Join(home, ".claude", "settings.local.json")
 	applyConnection(t, ScaffoldClaudeCode, home, realExecutable(t))
 	settings := readJSON(t, configPath)
 	hooks := settings["hooks"].(map[string]any)
@@ -260,7 +276,7 @@ func TestDisconnectRemovesOnlyOurHandlerFromAMixedGroup(t *testing.T) {
 	})
 	writeFile(t, configPath, marshalJSON(t, settings))
 
-	if _, err := Disconnect(ScaffoldClaudeCode, home); err != nil {
+	if _, err := Disconnect(ScaffoldClaudeCode, home, home); err != nil {
 		t.Fatal(err)
 	}
 	settings = readJSON(t, configPath)
@@ -280,7 +296,7 @@ func TestDisconnectIgnoresALookalikeCommand(t *testing.T) {
 	// Another tool that happens to invoke an executable named gr must not be
 	// treated as ours: removal keys on the managed marker, not the name.
 	home := t.TempDir()
-	configPath := filepath.Join(home, ".claude", "settings.json")
+	configPath := filepath.Join(home, ".claude", "settings.local.json")
 	writeFile(t, configPath, `{
   "hooks": {
     "SessionStart": [
@@ -288,7 +304,7 @@ func TestDisconnectIgnoresALookalikeCommand(t *testing.T) {
     ]
   }
 }`)
-	removed, err := Disconnect(ScaffoldClaudeCode, home)
+	removed, err := Disconnect(ScaffoldClaudeCode, home, home)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -304,14 +320,15 @@ func TestDisconnectRemovesAConfigurationFileConnectionCreated(t *testing.T) {
 		t.Run(string(scaffold), func(t *testing.T) {
 			home := t.TempDir()
 			applyConnection(t, scaffold, home, realExecutable(t))
-			configPath, err := ConfigPath(scaffold, home)
+			target, err := RegistrationTarget(scaffold, home, home)
 			if err != nil {
 				t.Fatal(err)
 			}
+			configPath := target.Path
 			if _, err := os.Stat(configPath); err != nil {
 				t.Fatal("connection did not create the configuration")
 			}
-			removed, err := Disconnect(scaffold, home)
+			removed, err := Disconnect(scaffold, home, home)
 			if err != nil || !removed {
 				t.Fatalf("disconnect removed = %v err = %v", removed, err)
 			}
@@ -349,7 +366,7 @@ func TestClaudeCodeRegistersOnlyTheOpeningOccurrence(t *testing.T) {
 	// The transport here has no occurrence to inspect, so the registration is
 	// the only place the single-delivery rule can hold.
 	home := t.TempDir()
-	configPath := filepath.Join(home, ".claude", "settings.json")
+	configPath := filepath.Join(home, ".claude", "settings.local.json")
 	applyConnection(t, ScaffoldClaudeCode, home, realExecutable(t))
 
 	groups := claudeCodeSessionStartGroups(t, configPath)
@@ -372,19 +389,19 @@ func TestClaudeCodeRepairsAnUnscopedRegistration(t *testing.T) {
 	// fires on every occurrence. Treating it as "already present" would leave
 	// them permanently unable to repair it.
 	home := t.TempDir()
-	configPath := filepath.Join(home, ".claude", "settings.json")
+	configPath := filepath.Join(home, ".claude", "settings.local.json")
 	writeFile(t, configPath, `{
   "hooks": {
     "SessionStart": [
       {"hooks": [{"type": "command", "command": "'/old/gr' hook --managed-by=goalrail"}]}
     ],
-    "Stop": [
+    "SessionEnd": [
       {"hooks": [{"type": "command", "command": "'/old/gr' hook --managed-by=goalrail"}]}
     ]
   }
 }`)
 
-	plan, err := PlanConnection(ScaffoldClaudeCode, home, realExecutable(t))
+	plan, err := planRegistration(t, ScaffoldClaudeCode, home, realExecutable(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -419,12 +436,12 @@ func TestClaudeCodeRepairsAnUnscopedRegistration(t *testing.T) {
 
 func TestClaudeCodeScopedRegistrationIsIdempotent(t *testing.T) {
 	home := t.TempDir()
-	configPath := filepath.Join(home, ".claude", "settings.json")
+	configPath := filepath.Join(home, ".claude", "settings.local.json")
 	executable := realExecutable(t)
 	applyConnection(t, ScaffoldClaudeCode, home, executable)
 	before := readFile(t, configPath)
 
-	plan, err := PlanConnection(ScaffoldClaudeCode, home, executable)
+	plan, err := planRegistration(t, ScaffoldClaudeCode, home, executable)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -447,7 +464,7 @@ func TestClaudeCodeRemovalSpansTheScopedRegistration(t *testing.T) {
 	// Removal matches on the managed marker rather than position, so it must
 	// widen with the registration and still leave foreign entries alone.
 	home := t.TempDir()
-	configPath := filepath.Join(home, ".claude", "settings.json")
+	configPath := filepath.Join(home, ".claude", "settings.local.json")
 	original := `{
   "theme": "dark",
   "hooks": {
@@ -459,7 +476,7 @@ func TestClaudeCodeRemovalSpansTheScopedRegistration(t *testing.T) {
 	writeFile(t, configPath, original)
 	applyConnection(t, ScaffoldClaudeCode, home, realExecutable(t))
 
-	removed, err := Disconnect(ScaffoldClaudeCode, home)
+	removed, err := Disconnect(ScaffoldClaudeCode, home, home)
 	if err != nil || !removed {
 		t.Fatalf("disconnect removed = %v err = %v", removed, err)
 	}
@@ -506,14 +523,15 @@ func TestConnectRepairsAStaleExecutable(t *testing.T) {
 	for _, scaffold := range SupportedScaffolds() {
 		t.Run(string(scaffold), func(t *testing.T) {
 			home := t.TempDir()
-			configPath, err := ConfigPath(scaffold, home)
+			target, err := RegistrationTarget(scaffold, home, home)
 			if err != nil {
 				t.Fatal(err)
 			}
+			configPath := target.Path
 			old := seedStaleRegistration(t, scaffold, home)
 
 			current := realExecutable(t)
-			plan, err := PlanConnection(scaffold, home, current)
+			plan, err := planRegistration(t, scaffold, home, current)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -542,9 +560,9 @@ func TestConnectRepairsAStaleExecutable(t *testing.T) {
 			}
 			// Replaced, not accompanied: a second registration would fire every
 			// hook twice and leave a removal that finds only one of them.
-			if count := strings.Count(after, managedMarker); count != len(managedEvents()) {
+			if count := strings.Count(after, managedMarker); count != len(managedEvents(ScaffoldCodex)) {
 				t.Fatalf("managed handlers = %d, want %d:\n%s",
-					count, len(managedEvents()), after)
+					count, len(managedEvents(ScaffoldCodex)), after)
 			}
 		})
 	}
@@ -556,15 +574,16 @@ func TestRepairIsNotTriggeredForTheCurrentExecutable(t *testing.T) {
 	for _, scaffold := range SupportedScaffolds() {
 		t.Run(string(scaffold), func(t *testing.T) {
 			home := t.TempDir()
-			configPath, err := ConfigPath(scaffold, home)
+			target, err := RegistrationTarget(scaffold, home, home)
 			if err != nil {
 				t.Fatal(err)
 			}
+			configPath := target.Path
 			executable := realExecutable(t)
 			applyConnection(t, scaffold, home, executable)
 			before := readFile(t, configPath)
 
-			plan, err := PlanConnection(scaffold, home, executable)
+			plan, err := planRegistration(t, scaffold, home, executable)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -585,21 +604,21 @@ func TestRepairPreservesAForeignHandlerForTheSameEvent(t *testing.T) {
 	// A repair may replace only what the connection added. Dropping a foreign
 	// handler would silently disable another tool.
 	home := t.TempDir()
-	configPath := filepath.Join(home, ".claude", "settings.json")
+	configPath := filepath.Join(home, ".claude", "settings.local.json")
 	writeFile(t, configPath, `{
   "hooks": {
     "SessionStart": [
       {"matcher": "resume", "hooks": [{"type": "command", "command": "/usr/bin/other-tool"}]},
       {"matcher": "startup", "hooks": [{"type": "command", "command": "'/old/gr' hook --managed-by=goalrail"}]}
     ],
-    "Stop": [
+    "SessionEnd": [
       {"hooks": [{"type": "command", "command": "'/old/gr' hook --managed-by=goalrail"}]}
     ]
   }
 }`)
 
 	current := realExecutable(t)
-	plan, err := PlanConnection(ScaffoldClaudeCode, home, current)
+	plan, err := planRegistration(t, ScaffoldClaudeCode, home, current)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -636,20 +655,20 @@ func TestRepairLeavesAnEventThatIsAlreadyCurrent(t *testing.T) {
 	// sentinel key below is something our writer never produces, so its survival
 	// proves the event was not rewritten.
 	home := t.TempDir()
-	configPath := filepath.Join(home, ".claude", "settings.json")
+	configPath := filepath.Join(home, ".claude", "settings.local.json")
 	current := realExecutable(t)
 	writeFile(t, configPath, `{
   "hooks": {
     "SessionStart": [
       {"matcher": "startup", "hooks": [{"type": "command", "command": "'/old/gr' hook --managed-by=goalrail"}]}
     ],
-    "Stop": [
+    "SessionEnd": [
       {"sentinel": "untouched", "hooks": [{"type": "command", "command": "'`+current+`' hook --managed-by=goalrail"}]}
     ]
   }
 }`)
 
-	plan, err := PlanConnection(ScaffoldClaudeCode, home, current)
+	plan, err := planRegistration(t, ScaffoldClaudeCode, home, current)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -662,7 +681,7 @@ func TestRepairLeavesAnEventThatIsAlreadyCurrent(t *testing.T) {
 
 	settings := readJSON(t, configPath)
 	hooks := settings["hooks"].(map[string]any)
-	stops := hooks["Stop"].([]any)
+	stops := hooks["SessionEnd"].([]any)
 	if len(stops) != 1 {
 		t.Fatalf("the current stop registration was duplicated: %v", stops)
 	}
@@ -678,20 +697,20 @@ func TestRepairKeepsSessionStartScoped(t *testing.T) {
 	// A registration can be both stale and unscoped — an earlier version, an
 	// older binary. The repair must fix both without widening the occurrence.
 	home := t.TempDir()
-	configPath := filepath.Join(home, ".claude", "settings.json")
+	configPath := filepath.Join(home, ".claude", "settings.local.json")
 	writeFile(t, configPath, `{
   "hooks": {
     "SessionStart": [
       {"hooks": [{"type": "command", "command": "'/old/gr' hook --managed-by=goalrail"}]}
     ],
-    "Stop": [
+    "SessionEnd": [
       {"hooks": [{"type": "command", "command": "'/old/gr' hook --managed-by=goalrail"}]}
     ]
   }
 }`)
 
 	current := realExecutable(t)
-	plan, err := PlanConnection(ScaffoldClaudeCode, home, current)
+	plan, err := planRegistration(t, ScaffoldClaudeCode, home, current)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -721,7 +740,7 @@ func TestRepairRefusesAnUnterminatedManagedBlock(t *testing.T) {
 		"[[hooks.SessionStart.hooks]]\ncommand = \"'/old/gr' hook "+managedMarker+"\"\n"+
 		"[[hooks.Stop.hooks]]\ncommand = \"'/old/gr' hook "+managedMarker+"\"\n")
 
-	plan, err := PlanConnection(ScaffoldCodex, home, realExecutable(t))
+	plan, err := planRegistration(t, ScaffoldCodex, home, realExecutable(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -737,7 +756,7 @@ func TestRepairIgnoresALookalikeCommand(t *testing.T) {
 	// Another tool invoking an executable named gr must not make our attachment
 	// look stale: staleness is read from managed handlers only.
 	home := t.TempDir()
-	configPath := filepath.Join(home, ".claude", "settings.json")
+	configPath := filepath.Join(home, ".claude", "settings.local.json")
 	writeFile(t, configPath, `{
   "hooks": {
     "SessionStart": [
@@ -745,7 +764,7 @@ func TestRepairIgnoresALookalikeCommand(t *testing.T) {
     ]
   }
 }`)
-	plan, err := PlanConnection(ScaffoldClaudeCode, home, realExecutable(t))
+	plan, err := planRegistration(t, ScaffoldClaudeCode, home, realExecutable(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -770,7 +789,7 @@ func TestConnectRepairsAPartialCodexBlockWithoutDuplicatingIt(t *testing.T) {
 	writeFile(t, configPath,
 		strings.Replace(readFile(t, configPath), "[[hooks.Stop.hooks]]", "", 1))
 
-	plan, err := PlanConnection(ScaffoldCodex, home, executable)
+	plan, err := planRegistration(t, ScaffoldCodex, home, executable)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -785,14 +804,14 @@ func TestConnectRepairsAPartialCodexBlockWithoutDuplicatingIt(t *testing.T) {
 	if count := strings.Count(after, blockBegin); count != 1 {
 		t.Fatalf("managed blocks after the repair = %d, want one:\n%s", count, after)
 	}
-	if count := strings.Count(after, managedMarker); count != len(managedEvents()) {
-		t.Fatalf("managed handlers = %d, want %d:\n%s", count, len(managedEvents()), after)
+	if count := strings.Count(after, managedMarker); count != len(managedEvents(ScaffoldCodex)) {
+		t.Fatalf("managed handlers = %d, want %d:\n%s", count, len(managedEvents(ScaffoldCodex)), after)
 	}
 	if !strings.HasPrefix(after, original) {
 		t.Fatalf("the repair disturbed the user's own configuration:\n%s", after)
 	}
 	// Removal must still find the whole thing, and leave the user's file as it was.
-	removed, err := Disconnect(ScaffoldCodex, home)
+	removed, err := Disconnect(ScaffoldCodex, home, home)
 	if err != nil || !removed {
 		t.Fatalf("disconnect removed = %v err = %v", removed, err)
 	}
@@ -810,10 +829,11 @@ func TestRegistrationSurvivesAnApostropheInThePath(t *testing.T) {
 	for _, scaffold := range SupportedScaffolds() {
 		t.Run(string(scaffold), func(t *testing.T) {
 			home := t.TempDir()
-			configPath, err := ConfigPath(scaffold, home)
+			target, err := RegistrationTarget(scaffold, home, home)
 			if err != nil {
 				t.Fatal(err)
 			}
+			configPath := target.Path
 			awkward := filepath.Join(t.TempDir(), "o'brien")
 			if err := os.MkdirAll(awkward, 0o755); err != nil {
 				t.Fatal(err)
@@ -826,7 +846,7 @@ func TestRegistrationSurvivesAnApostropheInThePath(t *testing.T) {
 			applyConnection(t, scaffold, home, executable)
 			before := readFile(t, configPath)
 
-			plan, err := PlanConnection(scaffold, home, executable)
+			plan, err := planRegistration(t, scaffold, home, executable)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -866,7 +886,7 @@ func TestStalenessIgnoresACommandOutsideTheManagedBlock(t *testing.T) {
 		"command = \"'/old/gr' hook "+managedMarker+"\"\n")
 	before := readFile(t, configPath)
 
-	plan, err := PlanConnection(ScaffoldCodex, home, executable)
+	plan, err := planRegistration(t, ScaffoldCodex, home, executable)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -892,7 +912,7 @@ func TestStalenessIgnoresACommentedOutCommand(t *testing.T) {
 	writeFile(t, configPath, readFile(t, configPath)+
 		"\n# command = \"'/old/gr' hook "+managedMarker+"\"\n")
 
-	plan, err := PlanConnection(ScaffoldCodex, home, executable)
+	plan, err := planRegistration(t, ScaffoldCodex, home, executable)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -920,7 +940,7 @@ func TestRepairRemovesEveryManagedBlock(t *testing.T) {
 	}
 
 	current := realExecutable(t)
-	plan, err := PlanConnection(ScaffoldCodex, home, current)
+	plan, err := planRegistration(t, ScaffoldCodex, home, current)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -932,11 +952,11 @@ func TestRepairRemovesEveryManagedBlock(t *testing.T) {
 	if count := strings.Count(after, blockBegin); count != 1 {
 		t.Fatalf("managed blocks after the repair = %d, want one:\n%s", count, after)
 	}
-	if count := strings.Count(after, managedMarker); count != len(managedEvents()) {
-		t.Fatalf("managed handlers = %d, want %d:\n%s", count, len(managedEvents()), after)
+	if count := strings.Count(after, managedMarker); count != len(managedEvents(ScaffoldCodex)) {
+		t.Fatalf("managed handlers = %d, want %d:\n%s", count, len(managedEvents(ScaffoldCodex)), after)
 	}
 	// And removal must now leave nothing behind.
-	removed, err := Disconnect(ScaffoldCodex, home)
+	removed, err := Disconnect(ScaffoldCodex, home, home)
 	if err != nil || !removed {
 		t.Fatalf("disconnect removed = %v err = %v", removed, err)
 	}

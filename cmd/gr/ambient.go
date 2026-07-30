@@ -13,6 +13,7 @@ import (
 
 	"github.com/heurema/goalrail/internal/adapters/codex"
 	"github.com/heurema/goalrail/internal/ambient"
+	"github.com/heurema/goalrail/internal/harness"
 	"github.com/heurema/goalrail/internal/localrun"
 )
 
@@ -21,10 +22,53 @@ import (
 // detail, never the question itself.
 const hookEnvironmentSession = "CODEX_SESSION_ID"
 
+// initReport is what initialization tells the user it did. Everything it changed,
+// everything it left alone, and every remaining step is named here: an install
+// that reports only success leaves the user guessing which half of the harness
+// they have.
+type initReport struct {
+	Repository string `json:"repository"`
+
+	Marker        string    `json:"marker"`
+	MarkerCreated bool      `json:"marker_created"`
+	InitializedAt time.Time `json:"initialized_at"`
+
+	Canon  string                `json:"canon"`
+	Config harness.ConfigOutcome `json:"config"`
+	Files  []harness.FileOutcome `json:"files"`
+	Ignore []string              `json:"ignore_entries_added,omitempty"`
+
+	Registration *registrationReport `json:"registration,omitempty"`
+
+	// Invocation is the exact command this repository is now driven by, including
+	// the explicit schema argument the pinned version's defect makes mandatory.
+	Invocation string `json:"invocation"`
+
+	Notices []string `json:"notices,omitempty"`
+	Next    []string `json:"next,omitempty"`
+}
+
+type registrationReport struct {
+	Scaffold  ambient.Scaffold `json:"scaffold"`
+	Scope     ambient.Scope    `json:"scope"`
+	Path      string           `json:"path"`
+	Events    []string         `json:"events"`
+	Applied   bool             `json:"applied"`
+	Repaired  bool             `json:"repaired,omitempty"`
+	Refused   string           `json:"refused,omitempty"`
+	ActiveNow bool             `json:"active_now"`
+	Notice    string           `json:"notice,omitempty"`
+}
+
 func runInit(args []string, stdout, stderr io.Writer) error {
 	set := flag.NewFlagSet("init", flag.ContinueOnError)
 	set.SetOutput(stderr)
 	repository := set.String("repo", ".", "repository to initialize")
+	scaffold := set.String("scaffold", "", "codex or claude-code; omit to detect")
+	confirmSchema := set.Bool("confirm-schema-switch", false,
+		"switch an OpenSpec configuration that names another custom schema")
+	fixIgnore := set.Bool("fix-gitignore", false,
+		"add the ignore entries the registration and the marker need")
 	if err := set.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
@@ -38,16 +82,235 @@ func runInit(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
+	// An explicitly named scaffold is validated before the first write: a typo in
+	// the flag must produce a usage error against an untouched repository, not a
+	// half-installed harness followed by one.
+	var explicit []ambient.Scaffold
+	if strings.TrimSpace(*scaffold) != "" {
+		one, parseErr := parseScaffold(*scaffold)
+		if parseErr != nil {
+			return parseErr
+		}
+		explicit = []ambient.Scaffold{one}
+	}
+	// The home directory matters only for detection and user-scope reporting; a
+	// repository-scope installation must not be blocked by its absence.
+	home, homeErr := os.UserHomeDir()
+	homeKnown := homeErr == nil
+
+	report := initReport{
+		Repository: root,
+		Marker:     ambient.MarkerPath,
+		Invocation: harness.PinnedNewChange,
+	}
+
+	// The configuration comes first: a foreign custom schema stops initialization
+	// before anything is written, so a refusal leaves the repository as it was.
+	config, err := harness.EnsureConfig(root, *confirmSchema)
+	if err != nil {
+		return err
+	}
+	report.Config = config
+
+	files, err := harness.Materialize(root, false)
+	if err != nil {
+		return err
+	}
+	report.Files = files
+	canon, err := harness.CurrentCanon()
+	if err != nil {
+		return err
+	}
+	report.Canon = canon.ID
+	for _, file := range files {
+		if file.Action == harness.ActionKept && file.State == harness.FileEdited {
+			report.Notices = append(report.Notices,
+				file.Path+" differs from the canon and was left alone; `gr doctor` names it")
+		}
+	}
+
 	marker, created, err := ambient.Initialize(root, time.Now)
 	if err != nil {
 		return err
 	}
-	return writeJSON(stdout, map[string]any{
-		"repository":     root,
-		"created":        created,
-		"initialized_at": marker.InitializedAt,
-		"marker":         ambient.MarkerPath,
-	})
+	report.MarkerCreated, report.InitializedAt = created, marker.InitializedAt
+
+	if *fixIgnore {
+		added, ignoreErr := ambient.AddIgnoreEntries(root, ambient.IgnoreEntries())
+		if ignoreErr != nil {
+			return ignoreErr
+		}
+		report.Ignore = added
+	}
+
+	selected := explicit
+	if selected == nil {
+		if homeKnown {
+			selected = ambient.DetectScaffolds(home)
+		} else {
+			report.Notices = append(report.Notices,
+				"the home directory could not be resolved, so no scaffold was detected; "+
+					"re-run with --scaffold <name> to register one")
+		}
+	}
+	if err := registerSelected(&report, selected, home, homeKnown, root); err != nil {
+		return err
+	}
+
+	// The marker is per clone, so committing it would make one user's
+	// initialization a shared repository fact. Unlike the registration this is not
+	// fatal: refusing to install the harness over an ignore rule would be a
+	// disproportionate response to a recoverable condition.
+	if ignored, markerErr := ambient.IgnoreState(root, ambient.MarkerPath); !ignored {
+		// The advice follows the cause, exactly as it does for the registration
+		// path: an ignore entry cannot protect a tracked file, and prescribing the
+		// flag there would be advice that changes nothing.
+		if markerErr != nil {
+			report.Notices = append(report.Notices,
+				"the marker at "+ambient.MarkerPath+" is committable and an ignore entry cannot "+
+					"protect it: "+markerErr.Error())
+		} else {
+			report.Notices = append(report.Notices,
+				"the marker at "+ambient.MarkerPath+" is not ignored, so a commit would make this "+
+					"repository initialized for everyone; `gr init --fix-gitignore` adds the entry")
+		}
+	}
+
+	report.Next = append(report.Next,
+		"commit the files above; they are yours, and Goalrail does not commit for you")
+	return writeJSON(stdout, report)
+}
+
+// registerSelected registers the repository-scope scaffold among the candidates
+// and names the separate command for any that registers at user scope.
+//
+// Installing the harness never depends on which agent environment happens to be
+// present: where nothing is detected, the overlay is still installed and the
+// report says which command attaches later.
+func registerSelected(
+	report *initReport,
+	candidates []ambient.Scaffold,
+	home string,
+	homeKnown bool,
+	root string,
+) error {
+	if len(candidates) == 0 {
+		report.Next = append(report.Next,
+			"no supported scaffold detected; run `gr init --scaffold <name>` or "+
+				"`gr connect --scaffold codex --yes` when you have one")
+		return nil
+	}
+
+	for _, candidate := range candidates {
+		scope, err := ambient.ScopeOf(candidate)
+		if err != nil {
+			return err
+		}
+		if scope != ambient.ScopeRepository {
+			// Registering inside the repository is externally blocked for this
+			// scaffold, so its one consented user-scope command stays a separate
+			// step rather than being implied as done.
+			report.Next = append(report.Next,
+				"run `gr connect --scaffold "+string(candidate)+" --yes` to attach "+
+					string(candidate)+"; it registers at user scope")
+			continue
+		}
+		if report.Registration != nil {
+			continue
+		}
+		registration, err := registerRepositoryScope(candidate, home, homeKnown, root)
+		if err != nil {
+			return err
+		}
+		report.Registration = registration
+	}
+	return nil
+}
+
+func registerRepositoryScope(
+	scaffold ambient.Scaffold,
+	home string,
+	homeKnown bool,
+	root string,
+) (*registrationReport, error) {
+	target, err := ambient.RegistrationTarget(scaffold, home, root)
+	if err != nil {
+		return nil, err
+	}
+	registration := &registrationReport{
+		Scaffold: scaffold,
+		Scope:    target.Scope,
+		Path:     target.Path,
+	}
+
+	// Consent to run a command in one's own sessions is not transferable, so a
+	// path a commit could carry is refused rather than written.
+	ignored, ignoreErr := ambient.IgnoreState(root, ambient.RepositorySettingsPath)
+	if !ignored {
+		// The advice follows the cause. An ordinary missing entry is what the
+		// flag adds; a tracked file or an unrunnable check is not, and telling the
+		// user to re-run with a flag that cannot help would be a remedy that
+		// prescribes itself.
+		if ignoreErr != nil {
+			registration.Refused = ignoreErr.Error() +
+				"; --fix-gitignore cannot repair this — untrack the path or make the check runnable first"
+		} else {
+			registration.Refused = "the registration path is not ignored by version control, so a commit " +
+				"would install these hooks in every teammate's sessions; add `" +
+				ambient.RepositorySettingsPath + "` to .gitignore, or re-run with --fix-gitignore"
+		}
+		return registration, nil
+	}
+
+	executable, err := currentExecutable()
+	if err != nil {
+		return nil, err
+	}
+	plan, err := ambient.PlanRegistration(target, executable)
+	if err != nil {
+		return nil, err
+	}
+	registration.Events = plan.Events
+	applied, err := ambient.Connect(plan)
+	if err != nil {
+		return nil, err
+	}
+	registration.Applied = applied
+	registration.Repaired = plan.Repair
+
+	// Attachment state consults the home directory for the superseded user-scope
+	// arrangement; where the home is unknown, the state is left unclaimed rather
+	// than computed against a fabricated path.
+	if homeKnown {
+		if state, inspectErr := ambient.Inspect(scaffold, home, root); inspectErr == nil {
+			registration.ActiveNow = state.Working
+		}
+	}
+	// A repair has two possible reasons and they are disclosed separately: saying
+	// the registration named a different executable when only the event changed
+	// would be a false statement about the user's own configuration.
+	var notices []string
+	if plan.RegisteredExecutable != "" {
+		notices = append(notices, ambient.RepairNotice(scaffold, plan.RegisteredExecutable))
+	}
+	if len(plan.SupersededPresent) > 0 {
+		notices = append(notices, ambient.SupersededEventNotice(scaffold, plan.SupersededPresent))
+	}
+	if len(notices) == 0 && applied {
+		notices = append(notices, ambient.ConnectionNotice(scaffold))
+	}
+	registration.Notice = strings.Join(notices, " ")
+	return registration, nil
+}
+
+// currentExecutable resolves the binary a registration must name, following
+// symlinks so a registration cannot point at a link that moves.
+func currentExecutable() (string, error) {
+	executable, err := os.Executable()
+	if err != nil {
+		return "", err
+	}
+	return filepath.EvalSymlinks(executable)
 }
 
 func runConnect(args []string, stdout, stderr io.Writer) error {
@@ -69,14 +332,14 @@ func runConnect(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	executable, err := os.Executable()
+	resolved, err := currentExecutable()
 	if err != nil {
 		return err
 	}
-	resolved, err := filepath.EvalSymlinks(executable)
-	if err != nil {
-		return err
-	}
+	// A scaffold whose registration belongs inside the repository is refused here
+	// rather than served: writing its hooks at user scope would invoke them in
+	// every session the user starts anywhere, which is the arrangement `gr init`
+	// replaced.
 	plan, err := ambient.PlanConnection(selected, home, resolved)
 	if err != nil {
 		return err
@@ -184,6 +447,7 @@ func runDisconnect(args []string, stdout, stderr io.Writer) error {
 	set := flag.NewFlagSet("disconnect", flag.ContinueOnError)
 	set.SetOutput(stderr)
 	scaffold := set.String("scaffold", "", "codex or claude-code")
+	repository := set.String("repo", ".", "repository whose registration to remove")
 	if err := set.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
@@ -198,11 +462,22 @@ func runDisconnect(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	removed, err := ambient.Disconnect(selected, home)
+	root, err := filepath.Abs(*repository)
 	if err != nil {
 		return err
 	}
-	return writeJSON(stdout, map[string]any{"scaffold": selected, "removed": removed})
+	// Removal spans every scope this scaffold's registration may occupy, including
+	// the one an earlier arrangement wrote: a registration nobody removes keeps
+	// firing, and this command is the migration path off that arrangement.
+	removed, err := ambient.Disconnect(selected, home, root)
+	if err != nil {
+		return err
+	}
+	return writeJSON(stdout, map[string]any{
+		"scaffold":   selected,
+		"repository": root,
+		"removed":    removed,
+	})
 }
 
 // runHook is the ambient entry point. It is fail-quiet by contract: every
@@ -246,7 +521,13 @@ func runHook(args []string, stdin io.Reader, stdout io.Writer) error {
 			return nil
 		}
 		fmt.Fprintln(stdout, rendered)
-	case "stop":
+	case "stop", "sessionend":
+		// Both names mean the same thing to retention: the session is over. The
+		// first scaffold signals it as Stop; the second fires Stop once per turn
+		// and signals the end of a session as SessionEnd, which is the event its
+		// registration names. Handling only one of them would make retention
+		// silently never fire on the other scaffold while every diagnosis reports
+		// the attachment as active.
 		if _, stopErr := ambient.StopSession(
 			store,
 			root,

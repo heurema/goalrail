@@ -27,9 +27,16 @@ func SupportedScaffolds() []Scaffold {
 // is written so the user consents to a concrete act rather than a promise.
 type ConnectionPlan struct {
 	Scaffold       Scaffold `json:"scaffold"`
+	Scope          Scope    `json:"scope"`
 	ConfigPath     string   `json:"config_path"`
 	AlreadyPresent bool     `json:"already_present"`
 	Executable     string   `json:"executable"`
+
+	// Events are the events this registration writes, and SupersededPresent
+	// reports a handler of ours sitting on an event this arrangement no longer
+	// writes — which fires on a cadence the retention rule was never written for.
+	Events            []string `json:"events"`
+	SupersededPresent []string `json:"superseded_present,omitempty"`
 
 	// Repair reports a registration that is recognisably ours but does not name
 	// the executable this connection was invoked with. It is tracked apart from
@@ -43,16 +50,6 @@ type ConnectionPlan struct {
 	RegisteredExecutable string `json:"registered_executable,omitempty"`
 }
 
-// managedEvents names the session events a connection registers. Every event
-// listed here must be present for the attachment to work, so presence, repair,
-// and removal all walk the same list.
-func managedEvents() []string { return []string{sessionStartEvent, stopEvent} }
-
-const (
-	sessionStartEvent = "SessionStart"
-	stopEvent         = "Stop"
-)
-
 // marker lines bracket everything a connection adds, so disconnection can
 // remove exactly that and nothing else. Editing a user's own configuration
 // demands a removal that is provably complete.
@@ -62,6 +59,10 @@ const (
 )
 
 // ConfigPath returns the user-level configuration file a scaffold reads.
+//
+// It stays meaningful for every scaffold, including one whose registration has
+// moved into the repository: that file is where a registration from the earlier
+// arrangement still sits, and reporting it is how the user learns to remove it.
 func ConfigPath(scaffold Scaffold, home string) (string, error) {
 	switch scaffold {
 	case ScaffoldCodex:
@@ -73,37 +74,99 @@ func ConfigPath(scaffold Scaffold, home string) (string, error) {
 	}
 }
 
-// PlanConnection reports what connecting would do, without doing it.
+// ErrRegistersPerRepository reports a scaffold whose registration belongs inside
+// a repository, so the connection command has nothing to do for it.
+var ErrRegistersPerRepository = errors.New("this scaffold registers per repository")
+
+// PlanConnection reports what the user-scope connection command would do,
+// without doing it.
+//
+// A scaffold that registers inside the repository is refused here rather than
+// served: writing its hooks at user scope would invoke them in every session the
+// user starts anywhere, which is the arrangement this version replaced.
 func PlanConnection(scaffold Scaffold, home, executable string) (ConnectionPlan, error) {
-	configPath, err := ConfigPath(scaffold, home)
+	scope, err := ScopeOf(scaffold)
 	if err != nil {
 		return ConnectionPlan{}, err
 	}
-	if !filepath.IsAbs(executable) {
-		return ConnectionPlan{}, errors.New("connection requires the absolute gr executable path")
+	if scope != ScopeUser {
+		return ConnectionPlan{}, fmt.Errorf("%w: run `gr init` in the repository instead", ErrRegistersPerRepository)
 	}
-	present, err := isConnected(scaffold, configPath)
+	target, err := RegistrationTarget(scaffold, home, "")
+	if err != nil {
+		return ConnectionPlan{}, err
+	}
+	return PlanRegistration(target, executable)
+}
+
+// PlanRegistration reports what registering at one concrete target would do.
+func PlanRegistration(target Target, executable string) (ConnectionPlan, error) {
+	if !filepath.IsAbs(executable) {
+		return ConnectionPlan{}, errors.New("registration requires the absolute gr executable path")
+	}
+	if target.Scope == ScopeRepository {
+		// A repository-scope write must land inside the repository. A settings
+		// directory or file that is a symlink resolves the write somewhere else —
+		// a repository shipping such a link would receive the registration into
+		// whatever it points at, including the user's own configuration.
+		if err := EnsureWriteWithinRepository(target.Repository, target.Path); err != nil {
+			return ConnectionPlan{}, err
+		}
+	}
+	present, err := isConnected(target.Scaffold, target.Path)
 	if err != nil {
 		return ConnectionPlan{}, err
 	}
 	// Presence and currency are separate questions. The marker test answers "is
 	// this registration ours", which is what health asks and must keep asking
-	// from whatever binary it happens to run as. Only connection can ask "does
-	// it name the executable I am", because only connection has that executable
+	// from whatever binary it happens to run as. Only registration can ask "does
+	// it name the executable I am", because only it has that executable
 	// to compare against — and a registration naming a different one is not the
 	// registration this command would write.
-	stale, err := staleExecutable(scaffold, configPath, executable)
+	stale, err := staleExecutable(target.Scaffold, target.Path, executable)
+	if err != nil {
+		return ConnectionPlan{}, err
+	}
+	// A handler of ours on an event this arrangement no longer writes is its own
+	// kind of staleness. On the scaffold that moved, the event it used to name
+	// fires once per turn, so a question left at the reserved path would be
+	// retained again on every turn — one session's single question multiplied
+	// rather than two sessions' questions separated.
+	superseded, err := supersededPresent(target.Scaffold, target.Path)
 	if err != nil {
 		return ConnectionPlan{}, err
 	}
 	return ConnectionPlan{
-		Scaffold:             scaffold,
-		ConfigPath:           configPath,
-		AlreadyPresent:       present && stale == "",
+		Scaffold:             target.Scaffold,
+		Scope:                target.Scope,
+		ConfigPath:           target.Path,
+		AlreadyPresent:       present && stale == "" && len(superseded) == 0,
 		Executable:           executable,
-		Repair:               stale != "",
+		Events:               managedEvents(target.Scaffold),
+		SupersededPresent:    superseded,
+		Repair:               stale != "" || len(superseded) > 0,
 		RegisteredExecutable: stale,
 	}, nil
+}
+
+// supersededPresent returns the events this arrangement no longer writes that
+// still carry a handler of ours.
+func supersededPresent(scaffold Scaffold, configPath string) ([]string, error) {
+	events := SupersededEvents(scaffold)
+	if len(events) == 0 {
+		return nil, nil
+	}
+	settings, err := readJSONObject(configPath)
+	if err != nil {
+		return nil, err
+	}
+	var found []string
+	for _, event := range events {
+		if claudeCodeHasGoalrail(settings, event) {
+			found = append(found, event)
+		}
+	}
+	return found, nil
 }
 
 // staleExecutable returns the executable a managed handler names when it is not
@@ -151,7 +214,7 @@ func registeredExecutables(scaffold Scaffold, configPath string) ([]string, erro
 			return nil, err
 		}
 		var commands []string
-		for _, event := range managedEvents() {
+		for _, event := range knownEvents(scaffold) {
 			forEachManagedCommand(settings, event, func(command string) {
 				commands = append(commands, command)
 			})
@@ -292,19 +355,55 @@ func Connect(plan ConnectionPlan) (bool, error) {
 	}
 }
 
-// Disconnect removes everything a connection added, leaving no residue.
-func Disconnect(scaffold Scaffold, home string) (bool, error) {
-	configPath, err := ConfigPath(scaffold, home)
+// Disconnect removes everything a registration added, leaving no residue.
+//
+// It spans every scope a scaffold's registration may occupy, not only the one
+// this version writes: a registration left behind by the earlier arrangement
+// still fires, and a disconnection that missed it would report success while the
+// hooks kept running. This is also the migration path off that arrangement, which
+// is why it belongs to the consented command that owns user configuration rather
+// than to initialization.
+func Disconnect(scaffold Scaffold, home, repositoryRoot string) (bool, error) {
+	target, err := RegistrationTarget(scaffold, home, repositoryRoot)
 	if err != nil {
+		// A repository-scope scaffold with no repository can still have a
+		// user-scope registration to clean up, so this is not fatal.
+		if superseded, present := SupersededTarget(scaffold, home); present {
+			return unregister(superseded)
+		}
 		return false, err
 	}
-	switch scaffold {
+	if target.Scope == ScopeRepository {
+		// Removal edits the same file registration writes, so it honours the same
+		// containment: a checkout shipping a symlinked settings path must not
+		// redirect a disconnect into the user's own configuration.
+		if containErr := EnsureWriteWithinRepository(target.Repository, target.Path); containErr != nil {
+			return false, containErr
+		}
+	}
+	removed, err := unregister(target)
+	if err != nil {
+		return removed, err
+	}
+	if superseded, present := SupersededTarget(scaffold, home); present {
+		alsoRemoved, supersededErr := unregister(superseded)
+		if supersededErr != nil {
+			return removed, supersededErr
+		}
+		removed = removed || alsoRemoved
+	}
+	return removed, nil
+}
+
+// unregister removes our handlers from one concrete target.
+func unregister(target Target) (bool, error) {
+	switch target.Scaffold {
 	case ScaffoldCodex:
-		return removeManagedBlock(configPath)
+		return removeManagedBlock(target.Path)
 	case ScaffoldClaudeCode:
-		return removeClaudeCodeHooks(configPath)
+		return removeClaudeCodeHooks(target.Scaffold, target.Path)
 	default:
-		return false, fmt.Errorf("unsupported scaffold %q", scaffold)
+		return false, fmt.Errorf("unsupported scaffold %q", target.Scaffold)
 	}
 }
 
@@ -325,8 +424,8 @@ func isConnected(scaffold Scaffold, configPath string) (bool, error) {
 		// The opening marker alone is not the registration. If a stanza is
 		// removed while the marker survives, the announcement or the question
 		// retention is gone while everything still looks installed.
-		for _, event := range []string{"[[hooks.SessionStart.hooks]]", "[[hooks.Stop.hooks]]"} {
-			if !strings.Contains(content, event) {
+		for _, event := range managedEvents(scaffold) {
+			if !strings.Contains(content, "[[hooks."+event+".hooks]]") {
 				return false, nil
 			}
 		}
@@ -342,11 +441,22 @@ func isConnected(scaffold Scaffold, configPath string) (bool, error) {
 		if err := json.Unmarshal(raw, &settings); err != nil {
 			return false, fmt.Errorf("scaffold settings are malformed: %w", err)
 		}
-		// The connection is present only when every event is registered. A
-		// partial registration — say Stop was hand-removed — must read as
-		// absent, or re-running the consented command could never repair it.
-		return claudeCodeSessionStartIsScoped(settings) &&
-			claudeCodeHasGoalrail(settings, stopEvent), nil
+		// The connection is present only when every event this arrangement
+		// registers carries a handler. A partial registration — say one event was
+		// hand-removed — must read as absent, or re-running the consented command
+		// could never repair it.
+		if !claudeCodeSessionStartIsScoped(settings) {
+			return false, nil
+		}
+		for _, event := range managedEvents(scaffold) {
+			if event == sessionStartEvent {
+				continue
+			}
+			if !claudeCodeHasGoalrail(settings, event) {
+				return false, nil
+			}
+		}
+		return true, nil
 	default:
 		return false, fmt.Errorf("unsupported scaffold %q", scaffold)
 	}
@@ -450,15 +560,39 @@ func connectClaudeCode(plan ConnectionPlan) error {
 		})
 	}
 
-	// Stop has no occurrence to distinguish, so it is registered plainly.
-	// Reconcile per event: an event that is missing gains a registration, a stale
-	// one is replaced, and one that is already correct keeps its exact bytes —
-	// and with them whatever review the user has already given it.
-	if !claudeCodeEventIsCurrent(settings, stopEvent, plan.Executable) {
-		groups := stripManagedHandlers(hooks[stopEvent])
-		hooks[stopEvent] = append(groups, map[string]any{
+	// The remaining events have no occurrence to distinguish, so they are
+	// registered plainly. Reconcile per event: an event that is missing gains a
+	// registration, a stale one is replaced, and one that is already correct keeps
+	// its exact bytes — and with them whatever review the user has already given
+	// it.
+	for _, event := range managedEvents(plan.Scaffold) {
+		if event == sessionStartEvent {
+			continue
+		}
+		if claudeCodeEventIsCurrent(settings, event, plan.Executable) {
+			continue
+		}
+		groups := stripManagedHandlers(hooks[event])
+		hooks[event] = append(groups, map[string]any{
 			"hooks": []any{handler()},
 		})
+	}
+
+	// A handler of ours on an event this arrangement no longer writes is removed
+	// rather than left beside the new one. On this scaffold that event fires once
+	// per turn, so leaving it would retain one session's single question again on
+	// every turn — and the user would see a growing pile of records for one
+	// question they asked once.
+	for _, event := range SupersededEvents(plan.Scaffold) {
+		if !claudeCodeHasGoalrail(settings, event) {
+			continue
+		}
+		remaining := stripManagedHandlers(hooks[event])
+		if len(remaining) == 0 {
+			delete(hooks, event)
+			continue
+		}
+		hooks[event] = remaining
 	}
 
 	settings["hooks"] = hooks
@@ -550,7 +684,7 @@ func claudeCodeEventIsCurrent(settings map[string]any, event, executable string)
 	return present && current
 }
 
-func removeClaudeCodeHooks(configPath string) (bool, error) {
+func removeClaudeCodeHooks(scaffold Scaffold, configPath string) (bool, error) {
 	settings, err := readJSONObject(configPath)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -563,7 +697,9 @@ func removeClaudeCodeHooks(configPath string) (bool, error) {
 		return false, nil
 	}
 	removed := false
-	for _, event := range managedEvents() {
+	// Removal walks every event a registration of ours may occupy, including one
+	// this arrangement no longer writes: an event nobody looks at keeps firing.
+	for _, event := range knownEvents(scaffold) {
 		groups, _ := hooks[event].([]any)
 		keptGroups := make([]any, 0, len(groups))
 		for _, group := range groups {

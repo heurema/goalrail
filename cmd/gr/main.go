@@ -43,6 +43,13 @@ func main() {
 		productionService,
 	); err != nil {
 		fmt.Fprintln(os.Stderr, err)
+		// An error may carry its own exit status — the diagnosis distinguishes
+		// "your harness needs attention" from "the command did not run", which an
+		// unattended check can only read from the code.
+		var coded interface{ ExitCode() int }
+		if errors.As(err, &coded) {
+			os.Exit(coded.ExitCode())
+		}
 		os.Exit(1)
 	}
 }
@@ -56,7 +63,7 @@ func run(
 	factory serviceFactory,
 ) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: gr <init|connect|health|disconnect|prepare|inspect|start|finish> [flags]; run gr help")
+		return fmt.Errorf("usage: gr <init|doctor|update|version|connect|disconnect|health|prepare|inspect|start|finish> [flags]; run gr help")
 	}
 	switch args[0] {
 	case "prepare":
@@ -73,8 +80,16 @@ func run(
 		return runConnect(args[1:], stdout, stderr)
 	case "disconnect":
 		return runDisconnect(args[1:], stdout, stderr)
+	case "doctor":
+		return runDoctor(args[1:], stdout, stderr)
+	case "update":
+		return runUpdate(args[1:], stdout, stderr)
+	case "version":
+		return runVersion(args[1:], stdout, stderr)
 	case "health":
-		return runHealth(args[1:], stdout, stderr)
+		// The superseded name keeps working and names its successor, because
+		// printed remedies and promoted help pointed at it.
+		return runHealthAlias(args[1:], stdout, stderr)
 	case "hook":
 		// Ambient entry point: fail-quiet by contract, so a Goalrail problem
 		// never breaks a session the user started for their own reasons.
@@ -86,7 +101,7 @@ func run(
 		if len(args) == 2 && isCommand(args[1]) {
 			return run(ctx, []string{args[1], "--help"}, stdin, stdout, stderr, factory)
 		}
-		return fmt.Errorf("usage: gr help [init|connect|health|disconnect|prepare|inspect|start|finish]")
+		return fmt.Errorf("usage: gr help [init|doctor|update|version|connect|disconnect|health|prepare|inspect|start|finish]")
 	case "-h", "--help":
 		return writeHelp(stdout)
 	default:
@@ -96,7 +111,8 @@ func run(
 
 func isCommand(value string) bool {
 	switch value {
-	case "prepare", "inspect", "start", "finish", "init", "connect", "disconnect", "health":
+	case "prepare", "inspect", "start", "finish",
+		"init", "doctor", "update", "connect", "disconnect", "health", "version":
 		return true
 	default:
 		return false
@@ -104,19 +120,26 @@ func isCommand(value string) bool {
 }
 
 func writeHelp(output io.Writer) error {
-	_, err := fmt.Fprint(output, `usage: gr <init|connect|health|disconnect|prepare|inspect|start|finish> [flags]
+	_, err := fmt.Fprint(output, `usage: gr <init|doctor|update|version|connect|disconnect|health|prepare|inspect|start|finish> [flags]
 
-Background attachment:
-  connect → init → work normally; ordinary work needs no Goalrail command
+The harness:
+  init → work normally; ordinary work needs no Goalrail command
 
-  connect     attach Goalrail to a scaffold's sessions; needs --yes
-  init        mark this repository as one Goalrail attaches to
-  health      report whether the attachment is active, and what is missing
-  disconnect  detach and remove everything connect added
+  init        install the harness here: the OpenSpec overlay with the Goalrail
+              schema, the repository marker, and the session hooks
+  doctor      report whether the harness is intact, and what to run if not
+  update      bring this repository's harness up to what this gr carries
+  connect     attach a scaffold that registers at user scope; needs --yes
+  disconnect  remove every registration, in whichever scope it lives
+  version     report this binary's version and the overlay it carries
 
-  After connecting, your scaffold asks you to review and trust the registered
-  commands; nothing runs until you do. "health" tells you if that step is
-  pending, which otherwise looks exactly like a broken install.
+  Most scaffolds register inside the repository, so "init" is the whole
+  attachment. Where a scaffold can only register at user scope, "init" says so
+  and names "connect" as the remaining step. "doctor" tells you if a review step
+  is pending or the overlay has drifted — states that otherwise look exactly
+  like a broken install.
+
+  "update" refreshes this repository's files. It does not update the gr binary.
 
 Wrapper lifecycle (benchmark and owner-driven runs):
   prepare → inspect → start → finish
