@@ -1,0 +1,59 @@
+name: verify
+
+# What this promises is visibility, not enforcement: `main` carries no branch
+# protection, so a red check is seen before a merge rather than blocking one.
+# Turning protection on is a repository settings decision of its own.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: vet and test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Both operating systems the project publishes binaries for. Compiling
+        # for darwin proves nothing about running there, and the file-locking and
+        # bounded-IO paths are platform-specific.
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          # The module declares no dependency, so there is nothing to cache and
+          # the cache step would look for a go.sum that does not exist.
+          cache: false
+      - run: go vet ./...
+      - run: go test ./...
+
+  build:
+    name: build every published platform
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: false
+      # Exactly the platforms the installation documentation claims. windows is
+      # absent by decision, not by omission: the escalation artifact is opened
+      # with flags that platform lacks, and those flags are how a promoted
+      # hygiene guarantee is implemented.
+      - name: Cross-compile the published platforms
+        run: |
+          set -euo pipefail
+          for target in darwin/arm64 darwin/amd64 linux/amd64 linux/arm64; do
+            goos="${target%/*}"
+            goarch="${target#*/}"
+            echo "::group::${target}"
+            CGO_ENABLED=0 GOOS="${goos}" GOARCH="${goarch}" \
+              go build -o "${RUNNER_TEMP}/gr-${goos}-${goarch}" ./cmd/gr
+            echo "::endgroup::"
+          done
