@@ -287,3 +287,78 @@ func prepareWorkingHarness(t *testing.T, root, home string) {
 // nowForTest is the clock the marker is written with. A fixed value keeps the
 // marker's contents out of what these tests compare.
 func nowForTest() time.Time { return time.Date(2026, 7, 30, 12, 0, 0, 0, time.UTC) }
+
+// TestDiagnosisReportsAnOverlayBehindTheCanon exercises the behind verdict at the
+// diagnosis level, against a synthetic history: the state is unreachable in the
+// field until a second canon ships, and its next action differs from an edit's.
+func TestDiagnosisReportsAnOverlayBehindTheCanon(t *testing.T) {
+	root, home := t.TempDir(), t.TempDir()
+	prepareWorkingHarness(t, root, home)
+
+	relative := OverlayDirectory + "/templates/context.md"
+	older := []byte("# an earlier canon's context template\n")
+	if err := os.WriteFile(filepath.Join(root, filepath.FromSlash(relative)), older, 0o644); err != nil {
+		t.Fatalf("write older content: %v", err)
+	}
+	restore := previousCanons
+	previousCanons = []Canon{{ID: "sha256:older", Files: []CanonFile{{Path: relative, Digest: Digest(older)}}}}
+	defer func() { previousCanons = restore }()
+
+	diagnosis := diagnoseFor(t, root, home, true, nil)
+	if !diagnosis.Overlay.Behind {
+		t.Fatalf("the overlay is not reported as behind: %+v", diagnosis.Overlay)
+	}
+	action, found := problemMentioning(diagnosis, "is behind the canon")
+	if !found {
+		t.Fatalf("the diagnosis does not name the behind file: %+v", diagnosis.Problems)
+	}
+	// The action must be the plain update, not the one that discards edits: nothing
+	// here is a local edit to lose.
+	if action != "run `gr update`" {
+		t.Errorf("next action for a behind file is %q", action)
+	}
+}
+
+// TestObservabilityConfigurationNeverEntersTheRepository pins that credentials
+// stay outside repository content even when an endpoint is configured.
+func TestObservabilityConfigurationNeverEntersTheRepository(t *testing.T) {
+	root, home := t.TempDir(), t.TempDir()
+	prepareWorkingHarness(t, root, home)
+	secrets := map[string]string{
+		"LANGFUSE_HOST":       "https://langfuse.example",
+		"LANGFUSE_PUBLIC_KEY": "pk-not-a-real-key",
+		"LANGFUSE_SECRET_KEY": "sk-not-a-real-key",
+	}
+	if _, err := Materialize(root, false); err != nil {
+		t.Fatalf("materialize: %v", err)
+	}
+	if _, err := EnsureConfig(root, false); err != nil {
+		t.Fatalf("ensure config: %v", err)
+	}
+	diagnosis := diagnoseFor(t, root, home, true, secrets)
+	if !diagnosis.Observability.Configured {
+		t.Fatal("a configured endpoint was not detected")
+	}
+
+	walkErr := filepath.Walk(root, func(walked string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return err
+		}
+		content, readErr := os.ReadFile(walked)
+		if readErr != nil {
+			return readErr
+		}
+		for name, value := range secrets {
+			if name == "LANGFUSE_HOST" {
+				continue
+			}
+			if strings.Contains(string(content), value) {
+				t.Errorf("%s carries key material", walked)
+			}
+		}
+		return nil
+	})
+	if walkErr != nil {
+		t.Fatalf("walk: %v", walkErr)
+	}
+}

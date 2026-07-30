@@ -337,3 +337,41 @@ func TestAddIgnoreEntriesIsAdditiveAndIdempotent(t *testing.T) {
 		t.Error("a repeated call modified the file")
 	}
 }
+
+// TestTheDocumentedAbsentDisclosureStatesItsOwnLimit exercises the third evidence
+// state.
+//
+// No supported scaffold is in it today — one gate was observed to exist and the
+// other observed not to — but the branch exists because a third scaffold will
+// arrive with documentation and no observation, and a disclosure that quietly
+// upgraded documentation to an observation is exactly the drift this discipline
+// forbids. The profile is injected rather than the wording asserted in isolation,
+// so the branch is reached the way production reaches it.
+func TestTheDocumentedAbsentDisclosureStatesItsOwnLimit(t *testing.T) {
+	const documented Scaffold = "documented-only"
+	profiles[documented] = scaffoldProfile{
+		scope:      ScopeRepository,
+		events:     []string{sessionStartEvent, sessionEndEvent},
+		trust:      TrustGateDocumentedAbsent,
+		configHome: ".documented",
+	}
+	defer delete(profiles, documented)
+
+	notice := strings.ToLower(ConnectionNotice(documented))
+	if !strings.Contains(notice, "documents no approval") {
+		t.Errorf("the notice does not say what the documentation records: %s", notice)
+	}
+	if !strings.Contains(notice, "not been observed") {
+		t.Errorf("the notice presents documentation as observation: %s", notice)
+	}
+	if strings.Contains(notice, "live session confirmed") {
+		t.Errorf("the notice claims an observation that was not made: %s", notice)
+	}
+
+	// And a repair on such a scaffold keeps the same limit rather than asserting a
+	// mandatory second review.
+	repair := strings.ToLower(RepairNotice(documented, "/old/gr"))
+	if strings.Contains(repair, "no longer applies") {
+		t.Errorf("the repair notice asserts a gate the documentation denies: %s", repair)
+	}
+}

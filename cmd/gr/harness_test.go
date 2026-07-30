@@ -246,3 +246,184 @@ func TestVersionReportsTheBinaryAndTheOverlay(t *testing.T) {
 		t.Fatalf("version reported %+v", reported)
 	}
 }
+
+// TestInitSelectsTheScaffoldByFlagAndByDetection pins both routes, and that
+// installing the harness never depends on which agent environment is present.
+func TestInitSelectsTheScaffoldByFlagAndByDetection(t *testing.T) {
+	type report struct {
+		Files        []struct{ Action string } `json:"files"`
+		Registration *struct {
+			Scaffold string `json:"scaffold"`
+			Applied  bool   `json:"applied"`
+		} `json:"registration"`
+		Next    []string `json:"next"`
+		Notices []string `json:"notices"`
+	}
+	decode := func(t *testing.T, stdout string) report {
+		t.Helper()
+		var decoded report
+		if err := json.Unmarshal([]byte(stdout), &decoded); err != nil {
+			t.Fatal(err)
+		}
+		return decoded
+	}
+
+	t.Run("named explicitly", func(t *testing.T) {
+		root, home := scratchRepository(t), t.TempDir()
+		t.Setenv("HOME", home)
+		// No scaffold configuration exists, so only the flag can select one.
+		stdout, _, err := runCommand(t, "init", "--repo", root, "--scaffold", "claude-code", "--fix-gitignore")
+		if err != nil {
+			t.Fatalf("init: %v", err)
+		}
+		decoded := decode(t, stdout)
+		if decoded.Registration == nil || !decoded.Registration.Applied {
+			t.Fatalf("the named scaffold was not registered: %+v", decoded.Registration)
+		}
+		if decoded.Registration.Scaffold != "claude-code" {
+			t.Errorf("registered %q", decoded.Registration.Scaffold)
+		}
+	})
+
+	t.Run("nothing detected", func(t *testing.T) {
+		root, home := scratchRepository(t), t.TempDir()
+		t.Setenv("HOME", home)
+		stdout, _, err := runCommand(t, "init", "--repo", root)
+		if err != nil {
+			t.Fatalf("init: %v", err)
+		}
+		decoded := decode(t, stdout)
+		if decoded.Registration != nil {
+			t.Fatalf("a registration was written with no scaffold detected: %+v", decoded.Registration)
+		}
+		if len(decoded.Files) == 0 {
+			t.Fatal("the overlay was not installed")
+		}
+		var named bool
+		for _, next := range decoded.Next {
+			if strings.Contains(next, "--scaffold") || strings.Contains(next, "gr connect") {
+				named = true
+			}
+		}
+		if !named {
+			t.Errorf("the report does not name what attaches later: %+v", decoded.Next)
+		}
+	})
+
+	t.Run("user-scope scaffold names its own command", func(t *testing.T) {
+		root, home := scratchRepository(t), t.TempDir()
+		t.Setenv("HOME", home)
+		stdout, _, err := runCommand(t, "init", "--repo", root, "--scaffold", "codex")
+		if err != nil {
+			t.Fatalf("init: %v", err)
+		}
+		decoded := decode(t, stdout)
+		if decoded.Registration != nil {
+			t.Fatalf("initialization registered a user-scope scaffold: %+v", decoded.Registration)
+		}
+		var named bool
+		for _, next := range decoded.Next {
+			if strings.Contains(next, "gr connect --scaffold codex") {
+				named = true
+			}
+		}
+		if !named {
+			t.Errorf("the report does not name the remaining consented step: %+v", decoded.Next)
+		}
+	})
+
+	t.Run("marker exposure is a notice", func(t *testing.T) {
+		root, home := scratchRepository(t), t.TempDir()
+		t.Setenv("HOME", home)
+		stdout, _, err := runCommand(t, "init", "--repo", root)
+		if err != nil {
+			t.Fatalf("init: %v", err)
+		}
+		decoded := decode(t, stdout)
+		var warned bool
+		for _, notice := range decoded.Notices {
+			if strings.Contains(notice, ambient.MarkerPath) && strings.Contains(notice, "--fix-gitignore") {
+				warned = true
+			}
+		}
+		if !warned {
+			t.Errorf("an exposed marker produced no notice: %+v", decoded.Notices)
+		}
+		// And it is a notice rather than a refusal: the harness is installed.
+		if len(decoded.Files) == 0 {
+			t.Fatal("an exposed marker blocked the installation")
+		}
+	})
+}
+
+// TestDoctorSeparatesHealthyFromNotForAMachine pins the machine-readable contract:
+// structured output plus an exit status a script can act on.
+func TestDoctorSeparatesHealthyFromNotForAMachine(t *testing.T) {
+	root, home := scratchRepository(t), t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("GOALRAIL_STATE_HOME", t.TempDir())
+
+	stdout, _, err := runCommand(t, "doctor", "--repo", root, "--json")
+	if err == nil {
+		t.Fatal("an unharnessed repository exited zero")
+	}
+	var exit interface{ ExitCode() int }
+	if !errorsAs(err, &exit) || exit.ExitCode() == 0 {
+		t.Fatalf("the failure carries no distinguishing exit status: %v", err)
+	}
+	var unharnessed struct {
+		Working  bool     `json:"working"`
+		Problems []string `json:"problems"`
+	}
+	if jsonErr := json.Unmarshal([]byte(stdout), &unharnessed); jsonErr != nil {
+		t.Fatalf("--json did not emit a report: %v", jsonErr)
+	}
+	if unharnessed.Working || len(unharnessed.Problems) == 0 {
+		t.Fatalf("report = %+v", unharnessed)
+	}
+
+	if _, _, initErr := runCommand(t, "init", "--repo", root, "--scaffold", "claude-code", "--fix-gitignore"); initErr != nil {
+		t.Fatalf("init: %v", initErr)
+	}
+	stdout, _, err = runCommand(t, "doctor", "--repo", root, "--scaffold", "claude-code", "--json")
+	if err != nil {
+		t.Fatalf("a harnessed repository did not exit zero: %v\n%s", err, stdout)
+	}
+	var harnessed struct {
+		Working bool `json:"working"`
+	}
+	if jsonErr := json.Unmarshal([]byte(stdout), &harnessed); jsonErr != nil {
+		t.Fatal(jsonErr)
+	}
+	if !harnessed.Working {
+		t.Errorf("a harnessed repository was not reported as working:\n%s", stdout)
+	}
+}
+
+func TestUpdateHelpSaysItDoesNotUpdateTheBinary(t *testing.T) {
+	// The word invites the other expectation, and a user who believes they upgraded
+	// Goalrail when they did not would misread every later version statement.
+	_, stderr, err := runCommand(t, "update", "--help")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(stderr, "does not update the gr binary") {
+		t.Errorf("update help does not disclaim the binary: %s", stderr)
+	}
+	if !strings.Contains(stderr, "no network request") {
+		t.Errorf("update help does not say it makes no network request: %s", stderr)
+	}
+}
+
+// errorsAs is a local shim so the test does not import errors purely for one call.
+func errorsAs(err error, target any) bool {
+	switch typed := target.(type) {
+	case *interface{ ExitCode() int }:
+		coded, ok := err.(interface{ ExitCode() int })
+		if ok {
+			*typed = coded
+		}
+		return ok
+	}
+	return false
+}
