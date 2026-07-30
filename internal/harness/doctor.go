@@ -9,15 +9,6 @@ import (
 	"github.com/heurema/goalrail/internal/ambient"
 )
 
-// Version is this binary's own version.
-//
-// It is the only version a user is asked to think about: the stock OpenSpec CLI's
-// version is an internal dependency, pinned inside a release and verified against
-// the canon before it ships. Nothing about a repository is decided by reading this
-// string — currency is decided by digests — so a version that is wrong misleads
-// nobody about their files.
-const Version = "0.1.0"
-
 // nodeExecutable is the runtime the stock OpenSpec CLI needs. Its presence is
 // looked up, never executed: `gr` runs no Node, and reporting a version would
 // require running one.

@@ -19,11 +19,36 @@ You run no Goalrail command per task. You start sessions the way you always do.
 
 ## Install
 
+No Go toolchain needed. Download the archive for your platform, verify it, and
+put the binary somewhere it will stay:
+
 ```sh
-go install github.com/heurema/goalrail/cmd/gr@latest
+base=https://github.com/heurema/goalrail/releases/latest/download
+curl -fsSLO "$base/checksums.txt"
+archive=$(awk '/darwin_arm64/ { print $2 }' checksums.txt)   # your platform, from the table below
+curl -fsSLO "$base/$archive"
+shasum -a 256 --ignore-missing -c checksums.txt              # Linux: sha256sum --ignore-missing -c
+mkdir -p ~/.local/bin && tar -xzf "$archive" -C ~/.local/bin gr
 ```
 
-Then, in the repository you want it in:
+`checksums.txt` is the only file whose name is the same in every release, so it
+is where you find the current archive names without knowing the version.
+`--ignore-missing` matters: without it the check fails over the three archives you
+did not download.
+
+| Platform | Archive |
+|---|---|
+| macOS, Apple silicon | `gr_<version>_darwin_arm64.tar.gz` |
+| macOS, Intel | `gr_<version>_darwin_amd64.tar.gz` |
+| Linux, x86-64 | `gr_<version>_linux_amd64.tar.gz` |
+| Linux, arm64 | `gr_<version>_linux_arm64.tar.gz` |
+
+Keep the binary where you put it. `gr init` records that exact path in the
+session hooks it registers, and `gr doctor` reports the attachment as broken if
+the file is no longer there — so a binary left in a downloads folder stops
+working the day you tidy up.
+
+Then, in the repository you want it in, with `~/.local/bin` on your `PATH`:
 
 ```sh
 gr init
@@ -32,18 +57,52 @@ gr init
 That is the whole installation for scaffolds whose settings layer allows it. `gr
 init` prints exactly what it created, what it changed, and what it left alone.
 
-Prebuilt binaries are not published yet — see [Status](#status).
+**macOS:** the binaries are not notarized. Downloaded with `curl` as above, they
+carry no quarantine flag and run without a prompt. Downloaded through a browser
+and extracted in Finder, they do carry one, and macOS refuses to run the binary
+until you clear it:
+
+```sh
+xattr -d com.apple.quarantine ~/.local/bin/gr
+```
+
+The graphical route is System Settings → Privacy & Security → Open Anyway.
+Control-clicking the file has not overridden Gatekeeper since macOS Sequoia.
+
+**Windows is not supported.** The escalation artifact is opened with
+`O_NOFOLLOW|O_NONBLOCK`, flags Windows does not have, and those flags are how the
+"never follow a link out of the repository" guarantee is implemented. A stub that
+compiled would drop that guarantee silently, so there is no Windows build until
+supporting it means keeping the guarantee. If you need one, say so.
+
+### Or install with Go
+
+```sh
+go install github.com/heurema/goalrail/cmd/gr@latest
+```
+
+Once a release is tagged, `@latest` resolves to that tag rather than to the tip of
+`main`. This route needs a Go toolchain; the download above does not.
 
 ### Or hand it to your agent
 
 Goalrail is meant to be installed by the agent, not by hand. Paste this:
 
-> Install Goalrail in this repository. Run `go install
-> github.com/heurema/goalrail/cmd/gr@latest`, then `gr init` in the repository
-> root. If it refuses to register the session hooks because the settings path is
-> not ignored by git, read the reason it prints and re-run with
-> `gr init --fix-gitignore`. Finally run `gr doctor` and show me its output
-> verbatim. Do not edit any file outside this repository.
+> Install Goalrail in this repository. Do not use `go install`; this machine may
+> have no Go toolchain. Fetch
+> `https://github.com/heurema/goalrail/releases/latest/download/checksums.txt`,
+> pick the archive matching this machine's operating system and architecture —
+> `darwin_arm64`, `darwin_amd64`, `linux_amd64`, or `linux_arm64` — and download
+> it from that same `releases/latest/download/` prefix. Verify it with `shasum -a
+> 256 --ignore-missing -c checksums.txt` on macOS or `sha256sum --ignore-missing
+> -c checksums.txt` on Linux. Extract `gr` into `~/.local/bin`: that one write
+> outside this repository is expected, and the binary has to stay there because
+> the session hooks record its absolute path. Then run `~/.local/bin/gr init` in
+> the repository root. If it refuses to register the session hooks because the
+> settings path is not ignored by git, read the reason it prints and re-run with
+> `~/.local/bin/gr init --fix-gitignore`. Finally run `~/.local/bin/gr doctor` and
+> show me its output verbatim. Apart from `~/.local/bin/gr` and a scratch download
+> directory you clean up, do not edit any file outside this repository.
 
 The last step is the point: the agent proves the installation rather than
 claiming it.
@@ -110,15 +169,16 @@ review and trust the hooks with `/hooks` inside Codex. Until you do, nothing run
 
 Early, and honest about it.
 
-**Works today:** installation, the diagnosis, the update path, the escalation loop
-end to end on Claude Code, and the intent-first workflow this repository is
-itself developed with.
+**Works today:** installation from a published binary or from source, the
+diagnosis, the update path, the escalation loop end to end on Claude Code, and the
+intent-first workflow this repository is itself developed with.
 
-**Not there yet:** no published release binaries — `go install` is the only
-route; observability is bring-your-own detection only, with no exporter; and
-`gr update` refreshes this repository's harness, never the `gr` binary.
+**Not there yet:** the binaries are not signed or notarized, and there is no
+package manager, install script, or Windows build; observability is bring-your-own
+detection only, with no exporter; and `gr update` refreshes this repository's
+harness, never the `gr` binary — nothing checks whether a newer release exists.
 
-Requires Go to install. The harness itself needs no Node, but validating and
+Installing needs no Go toolchain. The harness itself needs no Node, but validating and
 archiving changes uses the stock [OpenSpec](https://github.com/Fission-AI/OpenSpec)
 CLI, which does — `gr doctor` reports whether it is available and what its absence
 costs, and never fails because of it.

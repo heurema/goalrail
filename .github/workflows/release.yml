@@ -1,0 +1,192 @@
+name: release
+
+# A tag event carries no dependency on any earlier run: a tag can point at a
+# commit that never saw a pull request. So the checks run here, on the tagged
+# commit, as a prerequisite of building — that is what makes "nothing is
+# published unless the checks passed" true rather than hopeful.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: vet and test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: false
+      - run: go vet ./...
+      - run: go test ./...
+
+  canon:
+    name: the pinned CLI accepts the embedded canon
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: false
+      # The check the next steps enforce needs the stock CLI's runtime. `gr`
+      # itself never runs Node; this is the development-side verification that
+      # the canon `gr` embeds is one that CLI accepts.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      # The pinned package is derived from the binary's own report rather than
+      # copied into this file, so a pin bump in Go needs no edit here. The
+      # diagnosis exits non-zero against an empty scratch repository by design
+      # while still emitting the full report, so the exit status is ignored and
+      # an empty extraction is what fails the step.
+      - name: Derive the pinned package from the binary's own report
+        id: pin
+        run: |
+          set -euo pipefail
+          report="$(go run ./cmd/gr doctor -json -repo "$(mktemp -d)" || true)"
+          package="$(printf '%s' "${report}" \
+            | jq -r '.invocation // ""' \
+            | awk '{for (i = 1; i < NF; i++) if ($i == "--yes") { print $(i + 1); exit }}')"
+          if [ -z "${package}" ]; then
+            echo "could not read the pinned package out of the diagnosis; priming nothing would return this run to a skipped check" >&2
+            printf '%s\n' "${report}" >&2
+            exit 1
+          fi
+          echo "package=${package}" >> "${GITHUB_OUTPUT}"
+          echo "pinned package: ${package}"
+
+      # The check probes the npm cache with --offline so an ordinary `go test`
+      # never reaches the network. On a fresh runner that cache is empty, which
+      # is exactly how the guarantee would ship unverified.
+      - name: Prime the npm cache with the pinned package
+        run: npx --yes "${{ steps.pin.outputs.package }}" --version
+
+      # Stated positively on purpose: a gate that only looks for a skip passes
+      # when the stream carries no verdict at all — a rename, a build tag, a
+      # mistyped pattern — which is the same green-by-omission this exists to
+      # remove.
+      - name: Require the canon check to have run
+        run: |
+          set -euo pipefail
+          go test -json -run '^TestPinnedCLIAcceptsTheEmbeddedCanon$' ./internal/harness \
+            | tee "${RUNNER_TEMP}/canon.jsonl"
+          passed="$(jq -rs '[.[] | select(.Test == "TestPinnedCLIAcceptsTheEmbeddedCanon" and .Action == "pass")] | length' "${RUNNER_TEMP}/canon.jsonl")"
+          if [ "${passed}" != "1" ]; then
+            echo "the canon check did not pass: it reported ${passed} passes, so the canon is unverified" >&2
+            jq -rs '[.[] | select(.Test == "TestPinnedCLIAcceptsTheEmbeddedCanon") | .Action] | unique | @csv' "${RUNNER_TEMP}/canon.jsonl" >&2
+            exit 1
+          fi
+
+  publish:
+    name: build and publish
+    needs: [test, canon]
+    runs-on: ubuntu-latest
+    # Building and publishing are one job so the artifacts never leave the
+    # runner, and this is the only job that may write.
+    permissions:
+      contents: write
+    env:
+      # `contents: write` sets what the token may do; `gh` reads the credential
+      # itself. It is the platform's own token, not a stored secret.
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      # Default single-ref, no-tags fetch on purpose: a tag-following fetch that
+      # pulled a second tag pointing at this commit would stamp the higher one.
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      # Any untracked file marks the build modified, so a binary built after one
+      # is stamped `+dirty` while claiming to be a release. Artifacts are written
+      # outside the checkout for the same reason.
+      - name: Refuse to build from a modified tree
+        run: |
+          set -euo pipefail
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "the work tree is not clean, so every build here would be stamped as modified" >&2
+            git status --porcelain >&2
+            exit 1
+          fi
+
+      - name: Build every published platform outside the work tree
+        run: |
+          set -euo pipefail
+          dist="${RUNNER_TEMP}/dist"
+          mkdir -p "${dist}"
+          for target in darwin/arm64 darwin/amd64 linux/amd64 linux/arm64; do
+            goos="${target%/*}"
+            goarch="${target#*/}"
+            mkdir -p "${dist}/${goos}_${goarch}"
+            CGO_ENABLED=0 GOOS="${goos}" GOARCH="${goarch}" \
+              go build -o "${dist}/${goos}_${goarch}/gr" ./cmd/gr
+          done
+
+      # Read without executing: three of the four platforms cannot run here.
+      # Exact equality, because a tree dirtied by anything stamps `<tag>+dirty`,
+      # which a prefix match would publish.
+      - name: Require every artifact to carry this tag
+        run: |
+          set -euo pipefail
+          for binary in "${RUNNER_TEMP}"/dist/*/gr; do
+            stamped="$(go version -m "${binary}" | awk '$1 == "mod" { print $3; exit }')"
+            if [ "${stamped}" != "${GITHUB_REF_NAME}" ]; then
+              echo "${binary} reports ${stamped}, not ${GITHUB_REF_NAME}" >&2
+              exit 1
+            fi
+            echo "${binary}: ${stamped}"
+          done
+
+      # The licence travels with every distributed copy. Flat archive root, so
+      # `tar -xzf <archive> gr` takes only the binary.
+      - name: Assemble the archives and the checksums file
+        run: |
+          set -euo pipefail
+          dist="${RUNNER_TEMP}/dist"
+          for platform in "${dist}"/*/; do
+            name="$(basename "${platform}")"
+            cp LICENSE "${platform}/LICENSE"
+            tar -czf "${dist}/gr_${GITHUB_REF_NAME}_${name}.tar.gz" -C "${platform}" gr LICENSE
+          done
+          cd "${dist}"
+          sha256sum gr_*.tar.gz > checksums.txt
+          cat checksums.txt
+
+      # `gh release create` with assets stages a draft, uploads everything, and
+      # publishes last, so a failed upload leaves a draft rather than a partial
+      # public release. The refusal below is this workflow's own: release
+      # immutability is a repository setting that is not enabled here, so an
+      # unconditional delete would remove a good published release.
+      - name: Publish the release
+        run: |
+          set -euo pipefail
+          state="$(gh release view "${GITHUB_REF_NAME}" --json isDraft --jq .isDraft 2>/dev/null || echo none)"
+          case "${state}" in
+            none)
+              ;;
+            true)
+              echo "removing a leftover draft from an earlier attempt"
+              gh release delete "${GITHUB_REF_NAME}" --yes
+              ;;
+            *)
+              echo "a published release already exists for ${GITHUB_REF_NAME}; supersede it with a new tag rather than repairing it in place" >&2
+              exit 1
+              ;;
+          esac
+          cd "${RUNNER_TEMP}/dist"
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "${GITHUB_REF_NAME}" \
+            --notes "Install: download the archive for your platform, verify it against \`checksums.txt\`, and put \`gr\` somewhere durable. The README's install section has the exact commands. Every binary here reports \`${GITHUB_REF_NAME}\` from \`gr version\`." \
+            gr_*.tar.gz checksums.txt
