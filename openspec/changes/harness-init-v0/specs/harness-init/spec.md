@@ -108,10 +108,17 @@ fact. Where its ignore entry is missing, initialization SHALL still complete and
 SHALL say so, because refusing to install the harness over an ignore rule would
 be a disproportionate response to a recoverable condition.
 
-Re-running initialization SHALL repair a registration of ours that is stale or
-unscoped, under the same discipline connection follows: replace rather than
-accompany, leave a correct registration byte-identical, and leave a handler it
-did not add untouched.
+The events registered SHALL be the ones whose cadence matches the meaning they
+carry: the occurrence that opens a session, and the event that fires when a session
+ends. Where a scaffold's stop-like event fires once per turn instead, it MUST NOT
+be the one registered — a question left at the reserved path would be retained
+again on every turn, minting a record per turn out of one session's single
+question.
+
+Re-running initialization SHALL repair a registration of ours that is stale,
+unscoped, or naming a superseded event, under the same discipline connection
+follows: replace rather than accompany, leave a correct registration
+byte-identical, and leave a handler it did not add untouched.
 
 Initialization MUST NOT modify user-level scaffold configuration for any reason,
 including removing a registration that belongs to an earlier arrangement.
@@ -143,6 +150,14 @@ including removing a registration that belongs to an earlier arrangement.
 #### Scenario: The marker's ignore entry is missing
 - **WHEN** initialization writes the participation marker in a repository whose ignore rules do not cover it
 - **THEN** initialization completes and the report states that the marker is committable, so one user's initialization does not silently become a shared repository fact
+
+#### Scenario: The scaffold's stop-like event fires once per turn
+- **WHEN** initialization registers hooks on a scaffold whose stop-like event fires once per turn and which also exposes an event that fires when a session ends
+- **THEN** the session-ending event is registered and the per-turn event is not
+
+#### Scenario: Re-initialization meets a registration naming a per-turn event
+- **WHEN** initialization runs where its own registration names the per-turn event from an earlier arrangement
+- **THEN** that registration is replaced with the session-ending event, leaving exactly one registration per event and no residue
 
 #### Scenario: Re-initialization meets a stale registration
 - **WHEN** initialization runs where its own registration names an executable other than the one it was invoked with

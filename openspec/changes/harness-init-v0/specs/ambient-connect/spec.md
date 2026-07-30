@@ -46,6 +46,18 @@ foreign entry's occurrence, or widen a repaired session-start entry beyond the
 occurrence that opens a session. This holds wherever the registration lives, so
 the command that registers per repository repairs on re-run under the same rule.
 
+The events a registration names SHALL carry the meaning the retention requirement
+already has. Retention belongs to a session ending, so where a scaffold
+distinguishes an event that fires once per turn from one that fires when the
+session ends, the registration MUST NOT name the per-turn event: a question left
+at the reserved path would be retained again on every turn, minting a record per
+turn from one session's single question, and per-occurrence identity — which is
+correct for two sessions asking the same thing — would then multiply one
+escalation instead of separating two. A registration naming such an event SHALL be
+treated as needing repair and replaced with the session-scoped one, in whichever
+scope it lives, and removal SHALL cover whichever event was actually registered
+rather than only the event the current arrangement writes.
+
 Where a health report names re-running connection as the remedy for a defect,
 connection SHALL be able to repair that defect. A report that prescribes a
 command which cannot perform the repair is worse than no report: the user
@@ -166,6 +178,14 @@ scaffold.
 #### Scenario: Removal spans a repository-scope registration
 - **WHEN** the user disconnects a scaffold whose hooks were registered inside the repository
 - **THEN** every entry that registration added is removed with no residue, and any entry it did not add survives unchanged
+
+#### Scenario: A registration names an event that fires once per turn
+- **WHEN** a registration of ours names a stop-like event that fires once per turn on a scaffold that also exposes a session-ending event
+- **THEN** it is treated as needing repair and replaced with the session-ending event, so one session's single question is retained once
+
+#### Scenario: Removal covers the event that was registered
+- **WHEN** the user disconnects a scaffold whose handlers were registered against an event the current arrangement no longer writes
+- **THEN** those handlers are removed too, so a superseded registration cannot survive a disconnection
 
 #### Scenario: The registration names a moved executable
 - **WHEN** the consented command finds its own registration present but naming an executable other than the one it was invoked with

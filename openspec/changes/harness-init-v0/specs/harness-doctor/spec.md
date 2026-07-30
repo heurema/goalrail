@@ -8,8 +8,9 @@ from attachment health rather than replacing it, and it SHALL report at least:
 the repository is not initialized; the overlay is missing; one or more overlay
 files have drifted from the binary's canon; the overlay is behind that canon; the
 attachment is not registered; the attachment is registered; a registration for
-the scaffold exists in a scope this arrangement no longer uses; the checking
-toolchain's presence; observability's presence; and everything is working.
+the scaffold exists in a scope this arrangement no longer uses; a registration
+names an event this arrangement supersedes; the checking toolchain's presence;
+observability's presence; and everything is working.
 
 Every state that is not working SHALL name its next action. An optional facility
 that is simply absent SHALL be stated without a next action and without
@@ -48,6 +49,10 @@ remaining move.
 #### Scenario: A registration exists in the superseded scope
 - **WHEN** a registration for a repository-scope scaffold is found in user-level configuration
 - **THEN** the diagnosis names it, explains that it duplicates the repository-scope attachment, and names the consented command that removes it — without modifying it
+
+#### Scenario: A registration names a superseded event
+- **WHEN** a registration is found naming a stop-like event that fires once per turn, from an earlier arrangement
+- **THEN** the diagnosis reports it as needing repair, names the consequence of leaving it — one question retained again on every turn — and names the command that repairs it
 
 #### Scenario: Everything is working
 - **WHEN** the repository is initialized, the overlay matches the canon, and the attachment is registered

@@ -31,11 +31,20 @@ than of Goalrail's first act.
 - Registration is refused rather than shared: a settings path a repository could
   supply would install hooks in a teammate's sessions, and their consent is not
   the user's to give.
-- Re-running `gr init` repairs a registration that is stale or unscoped, under
-  the replace-not-accompany discipline connection already follows. A legacy
-  user-scope registration for the repository-scope scaffold is never modified by
-  initialization; the diagnosis names it and the consented command that removes
-  it.
+- The registered events match the meaning they carry. The approval probe
+  established, and the provider's documentation confirms, that the second
+  scaffold's stop-like event fires once per turn while a separate event fires when
+  a session ends; the existing registration was written against the first
+  scaffold's session-scoped stop, so a question left at the reserved path is
+  retained again on every turn. The session-ending event is registered instead, a
+  registration naming the per-turn event is repaired in place in either scope, and
+  removal covers whichever event was actually registered. The retained record's
+  shape, identity, binding, and bounded reading are untouched.
+- Re-running `gr init` repairs a registration that is stale, unscoped, or naming a
+  superseded event, under the replace-not-accompany discipline connection already
+  follows. A legacy user-scope registration for the repository-scope scaffold is
+  never modified by initialization; the diagnosis names it and the consented
+  command that removes it.
 - The scaffold is selected by detection with a flag override. Where none is
   detected the overlay is still installed and the report names the command that
   registers the attachment later.
@@ -67,7 +76,10 @@ than of Goalrail's first act.
 | An existing OpenSpec root survives; a foreign custom schema stops initialization. | OUT-2, SIG-3 | NG-4 |
 | The hook is registered per repository, in the per-user project file, only when Git ignores it. | OUT-3, SIG-5 | NG-6 |
 | Scaffold selection is detection plus a flag override; no scaffold still installs the overlay. | OUT-3, SIG-5 | NG-6 |
-| Re-running initialization repairs a stale or unscoped registration. | OUT-3, SIG-6 | NG-7 |
+| Registration names the session-ending event rather than the per-turn one, and a registration naming the per-turn event is repaired in either scope. | OUT-11, SIG-13 | NG-5 |
+| Removal covers whichever event was actually registered. | OUT-11, SIG-13 | NG-8 |
+| The diagnosis reports a registration naming a superseded event as needing repair. | OUT-11, OUT-6, SIG-13 | NG-7 |
+| Re-running initialization repairs a stale, unscoped, or superseded-event registration. | OUT-3, OUT-11, SIG-6 | NG-7 |
 | `gr connect` for the repository-scope scaffold writes nothing and names `gr init`. | OUT-3 | NG-6 |
 | Disconnection removes a repository-scope registration with no residue and no collateral. | OUT-4, SIG-6 | NG-8 |
 | A legacy user-scope registration is reported, never modified by initialization. | OUT-4 | NG-6 |
@@ -95,7 +107,10 @@ No proposed change lies outside this table.
 
 ### Modified Capabilities
 
-- `ambient-connect`: registration scope becomes a per-scaffold property —
+- `ambient-connect`: the events a registration names must carry the cadence the
+  retention requirement already assumes, so a per-turn event is treated as needing
+  repair and removal spans whichever event was registered; registration scope
+  becomes a per-scaffold property —
   repository scope during initialization where the settings layer allows it,
   user scope through the connection command where it does not; consent may never
   be given on a teammate's behalf; the trust disclosure gains a documented state

@@ -65,6 +65,10 @@
 - [ ] 5.18 Add the development-side test that materializes the embedded canon and validates it with the pinned CLI, skipping loudly where no Node runtime exists.
 - [ ] 5.19 Update `gr help` for the harness surface, and `gr update --help` to state that it does not update the binary.
 - [ ] 5.20 Confirm no Go path executes Node, a package runner, or the stock CLI.
+- [ ] 5.21 Make the registered event set per-scaffold data alongside the scope and the disclosure evidence class, naming the session-ending event where the stop-like event fires once per turn.
+- [ ] 5.22 Treat a registration naming the superseded per-turn event as needing repair and replace it in place, in both scopes, reusing the existing replace-not-accompany path.
+- [ ] 5.23 Make removal walk whichever events are present rather than only the ones the current arrangement writes, so a superseded registration cannot survive a disconnection.
+- [ ] 5.24 Add the diagnosis state for a registration naming a superseded event, naming the consequence and the repairing command.
 
 ## 6. Verify the implementation
 
@@ -82,14 +86,17 @@
 - [ ] 6.12 Assert no output contains key material and no credential is written into repository content.
 - [ ] 6.13 Confirm the promoted tests for the announcement, retention, intent binding, fail-quiet posture, and trust-record prohibition are unmodified and still pass.
 - [ ] 6.14 Run `gofmt -l`, `go build ./...`, `go vet ./...`, `go test ./...`, and `go test -race ./...`.
-- [ ] 6.15 Run pinned telemetry-disabled strict OpenSpec validation across the change and every promoted spec.
+- [ ] 6.15 Assert the registration names the session-ending event, that a seeded per-turn registration is replaced in place in either scope, that removal covers whichever event was registered, and that the diagnosis reports a superseded event as needing repair.
+- [ ] 6.16 Assert one question at the reserved path produces exactly one retained record for one session, rather than one per turn.
+- [ ] 6.17 Run pinned telemetry-disabled strict OpenSpec validation across the change and every promoted spec.
 
 ## 7. Answer the open approval question
 
 - [x] 7.1 Obtain an explicit owner instruction before running any provider session; record it here before the run. Granted 2026-07-30 for one interactive session: the owner approved preparing the stand and running the session themselves. The stand lives outside the repository, uses its own state root, writes nothing to the owner's working scaffold configuration, and exercises the shipping arrangement — a registration in the repository's per-user project settings file, read from the ordinary settings layer rather than supplied per run.
-- [ ] 7.2 Run one interactive session in a scratch repository initialized by `gr init`, with no write to the owner's working configuration, and observe whether the registered hook runs without an approval step.
-- [ ] 7.3 Record the observation under `evidence/`, stating what it establishes, what it does not, and the conditions that bound it.
-- [ ] 7.4 Reconcile the disclosure state and the diagnosis line with what was observed; if the observation contradicts confirmed signal SIG-11's assumption that both answers keep the same arrangement, stop and raise a new intent version instead of adjusting the text.
+- [x] 7.2 Run one interactive session in a scratch repository initialized by `gr init`, with no write to the owner's working configuration, and observe whether the registered hook runs without an approval step. Three sessions run; the hook fired in every one with no approval prompt, the announcement reached the agent in the authenticated one, and the stop handler retained a question. The owner's user-level configuration was confirmed afterwards to hold zero managed handlers, so nothing observed is attributable to a user-scope registration.
+- [x] 7.3 Record the observation under `evidence/`, stating what it establishes, what it does not, and the conditions that bound it. `evidence/approval-probe-2026-07-30.md`, including the authentication failure recorded as a property of the machine rather than a Goalrail finding.
+- [x] 7.4 Reconcile the disclosure state and the diagnosis line with what was observed; if the observation contradicts confirmed signal SIG-11's assumption that both answers keep the same arrangement, stop and raise a new intent version instead of adjusting the text. The observation agreed with the arrangement, so the disclosure moves from documented to observed for that scaffold; the promoted record keeps saying that what the startup screen displayed was not captured.
+- [x] 7.5 Decide the event this scaffold's registration names. The probe established, and the provider's documentation confirms, that `Stop` fires once per turn there while `SessionEnd` fires once per session; the existing registration was built against the first scaffold's session-scoped `Stop`, so a question left at the reserved path is retained again on every turn. Registration shape is this change's territory, but the correction changes behaviour on a path that already ships, so it needs an explicit owner decision before either folding it in or splitting it out. The owner chose to fold it in; recorded as confirmed intent version 3 with the session-ending event registered, repair in either scope, removal spanning whichever event was registered, and the retained record itself unchanged.
 
 ## 8. Stop at the owner gates
 

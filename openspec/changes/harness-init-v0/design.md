@@ -209,7 +209,36 @@ a screen that does something else.
 The evidence class per scaffold lives in code as data, not prose, so a disclosure
 cannot drift from what was established.
 
-### 13. Worktrees and the state root are left alone deliberately
+### 13. The registered events follow cadence, not name
+
+The approval probe retained a question thirty-five seconds into a session,
+immediately after the agent's single reply rather than at exit. The provider's
+documentation gives the mechanism: on that scaffold `SessionStart` and `SessionEnd`
+fire once per session while `UserPromptSubmit`, `Stop`, and `StopFailure` fire once
+per turn. The existing registration names `Stop`, which on the first scaffold means
+session end and here means end of turn.
+
+Left alone, one session's single question is retained again on every subsequent
+turn, and per-occurrence identity — correct when two sessions ask the same
+question — multiplies one escalation instead of separating two. So the registration
+names the session-ending event on that scaffold, a registration naming the per-turn
+event is repaired in place, and removal walks whichever events are present rather
+than only the ones the current arrangement writes.
+
+Alternatives considered. *Deleting the reserved file after retention*: would make
+`Stop` survivable, and rejected because the promoted requirement keeps the worktree
+file untouched and pins that retained bytes survive its later deletion; changing
+that would rewrite retention rather than fix an event mapping. *Deduplicating by
+digest within a session*: rejected for the same reason — per-occurrence identity is
+promoted contract, and suppressing occurrences to compensate for the wrong trigger
+hides the defect instead of removing it. *Leaving it for a separate change*: the
+owner chose to fold it in, since this change already rewrites that scaffold's
+registration and splitting it would do the same work twice.
+
+The event set therefore becomes per-scaffold data alongside the scope and the
+disclosure evidence class, so all three answers about a scaffold live in one place.
+
+### 14. Worktrees and the state root are left alone deliberately
 
 The marker and the per-user project settings file live in a working tree, so each
 worktree is initialized independently and `git check-ignore` answers per worktree.
@@ -217,7 +246,7 @@ That is correct rather than broken, and the diagnosis reports the directory it w
 run in. Nothing here shares state between worktrees, which keeps two agents in two
 worktrees from inheriting each other's attachment.
 
-### 14. Disconnection does not delete the overlay
+### 15. Disconnection does not delete the overlay
 
 Removal covers what was registered. The overlay is version-controlled repository
 content; deleting files a user may have committed, edited, or built on is not
@@ -289,10 +318,11 @@ command materializes it.
 
 ## Open Questions
 
-- Whether the second scaffold, in an interactive session, runs a repository-scoped
-  registered hook with no approval step (AMB-1). Documented as absent, not
-  observed. The observation is planned inside this change, behind its own owner
-  gate; both answers keep the same registration.
+- AMB-1 is closed by observation: the second scaffold runs a repository-scoped
+  registered hook with no approval step in an interactive session, and the
+  announcement reaches the agent there. What its startup screen displayed was not
+  captured, so no claim is made about it. Recorded in
+  `evidence/approval-probe-2026-07-30.md`.
 - Whether a harnessed repository needs a committed instruction file naming the
   pinned invocation, or whether `init`'s report and `doctor` printing it suffice
   (AMB-2). This slice answers "printing suffices". Revisit condition: an agent in a
