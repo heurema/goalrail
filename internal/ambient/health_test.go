@@ -42,7 +42,7 @@ func TestHealthDistinguishesEveryState(t *testing.T) {
 		home, repo := connectedHome(t), initializedRepository(t)
 		grantTrust(t, home)
 		state := inspect(t, ScaffoldCodex, home, repo)
-		if !state.Working || state.Trust != TrustGranted {
+		if !state.Working || state.Trust != TrustRecorded {
 			t.Fatalf("state = %+v", state)
 		}
 		if state.NextAction != "" {
@@ -63,18 +63,31 @@ func TestHealthReportsUnknownRatherThanGuessing(t *testing.T) {
 	mustMention(t, state.NextAction, "could not be determined")
 }
 
-func TestConnectionNoticeTellsTheUserWhatIsMissing(t *testing.T) {
-	for _, scaffold := range SupportedScaffolds() {
-		notice := ConnectionNotice(scaffold)
-		for _, required := range []string{"not yet active", "trust", "does nothing"} {
-			if !strings.Contains(strings.ToLower(notice), required) {
-				t.Fatalf("%s notice omits %q: %s", scaffold, required, notice)
-			}
+func TestConnectionNoticeMatchesWhatWasActuallyObserved(t *testing.T) {
+	// For the scaffold whose trust gate was observed live, the notice states the
+	// requirement outright.
+	codex := ConnectionNotice(ScaffoldCodex)
+	for _, required := range []string{"not yet active", "trust", "does nothing"} {
+		if !strings.Contains(strings.ToLower(codex), required) {
+			t.Fatalf("codex notice omits %q: %s", required, codex)
 		}
-		// Telling someone a step is required without saying where leaves them
-		// exactly as stuck.
-		if !strings.Contains(notice, TrustSurface(scaffold)) {
-			t.Fatalf("%s notice does not name the surface: %s", scaffold, notice)
+	}
+
+	// For the scaffold whose behaviour was not observed, asserting a mandatory
+	// approval step would send the user hunting for a screen that may not
+	// exist. Inventing an obstacle is its own kind of misinformation.
+	other := strings.ToLower(ConnectionNotice(ScaffoldClaudeCode))
+	if strings.Contains(other, "requires you to review") {
+		t.Fatalf("unverified scaffold notice asserts a trust gate: %s", other)
+	}
+	if !strings.Contains(other, "not been verified") {
+		t.Fatalf("unverified scaffold notice hides its uncertainty: %s", other)
+	}
+
+	// Either way the user must be told where to look.
+	for _, scaffold := range SupportedScaffolds() {
+		if !strings.Contains(ConnectionNotice(scaffold), TrustSurface(scaffold)) {
+			t.Fatalf("%s notice does not name the surface", scaffold)
 		}
 	}
 }
@@ -141,6 +154,75 @@ func connectedHome(t *testing.T) string {
 	return home
 }
 
+func TestHealthRefusesToReportWorkingWhenTheBinaryIsGone(t *testing.T) {
+	// A registration pointing at a missing binary satisfies every configuration
+	// check and still cannot run. A green result there is worse than no health
+	// command at all.
+	home, repo := t.TempDir(), initializedRepository(t)
+	executable := realExecutable(t)
+	plan, err := PlanConnection(ScaffoldCodex, home, executable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Connect(plan); err != nil {
+		t.Fatal(err)
+	}
+	grantTrust(t, home)
+	if state := inspect(t, ScaffoldCodex, home, repo); !state.Working {
+		t.Fatalf("healthy attachment reported as broken: %+v", state)
+	}
+
+	if err := os.Remove(executable); err != nil {
+		t.Fatal(err)
+	}
+	state := inspect(t, ScaffoldCodex, home, repo)
+	if state.Working {
+		t.Fatal("health reported working with the registered binary missing")
+	}
+	mustMention(t, state.NextAction, "missing")
+}
+
+func TestHealthReportsAHalfRemovedRegistration(t *testing.T) {
+	// If one stanza is removed while the marker survives, either the
+	// announcement or the question retention is silently gone.
+	home, repo := connectedHome(t), initializedRepository(t)
+	configPath := filepath.Join(home, ".codex", "config.toml")
+	grantTrust(t, home)
+	raw := readFile(t, configPath)
+	writeFile(t, configPath, strings.Replace(raw, "[[hooks.Stop.hooks]]", "", 1))
+
+	state := inspect(t, ScaffoldCodex, home, repo)
+	if state.Connected || state.Working {
+		t.Fatalf("a half-removed registration reported as connected: %+v", state)
+	}
+}
+
+func TestHealthSurfacesAnUnreadableConfiguration(t *testing.T) {
+	// Reporting "not connected" would recommend a connection that reads the
+	// same file and fails identically.
+	home, repo := t.TempDir(), initializedRepository(t)
+	writeFile(t, filepath.Join(home, ".claude", "settings.json"), "{not json")
+	state := inspect(t, ScaffoldClaudeCode, home, repo)
+	if state.ConfigError == "" {
+		t.Fatalf("an unreadable configuration was reported as an ordinary state: %+v", state)
+	}
+	if state.Working {
+		t.Fatal("an unreadable configuration reported as working")
+	}
+	mustMention(t, state.NextAction, "repair")
+}
+
+func TestHealthNamesWhatItCouldNotVerify(t *testing.T) {
+	// A green result must not read as "everything works" when it means
+	// "nothing detected".
+	home, repo := connectedHome(t), initializedRepository(t)
+	grantTrust(t, home)
+	state := inspect(t, ScaffoldCodex, home, repo)
+	if len(state.Unverifiable) == 0 {
+		t.Fatal("health hid its own blind spot about trust-record freshness")
+	}
+}
+
 // grantTrust simulates what the scaffold itself writes once the user has
 // reviewed the hooks. Tests may write it; Goalrail may not.
 func grantTrust(t *testing.T, home string) {
@@ -150,8 +232,11 @@ func grantTrust(t *testing.T, home string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	entry := "\n[hooks.state]\n\n[hooks.state.\"" + configPath +
-		":session_start:0:0\"]\ntrusted_hash = \"sha256:" + strings.Repeat("a", 64) + "\"\n"
+	entry := "\n[hooks.state]\n"
+	for _, event := range []string{"session_start", "stop"} {
+		entry += "\n[hooks.state.\"" + configPath + ":" + event + ":0:0\"]\n" +
+			"trusted_hash = \"sha256:" + strings.Repeat("a", 64) + "\"\n"
+	}
 	if err := os.WriteFile(configPath, append(raw, []byte(entry)...), 0o644); err != nil {
 		t.Fatal(err)
 	}

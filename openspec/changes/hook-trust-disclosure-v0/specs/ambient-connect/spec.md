@@ -21,6 +21,23 @@ one.
 
 Reporting trust state is observation and is permitted. Reading is not writing.
 
+A report SHALL NOT claim more than it verified. Where the scaffold records
+trust against a form Goalrail may not reproduce, the report SHALL say that a
+record exists without claiming it still matches the current definition, and
+SHALL name that gap. Where a scaffold's trust behaviour has not been observed
+at all, the report SHALL say so rather than assert either answer.
+
+Health SHALL be reported against everything a working attachment requires, not
+a proxy for it: every registered event, not one; the registered executable
+still present and runnable, since a registration pointing at a moved binary
+satisfies every configuration check and still cannot run; and a scaffold
+configuration that cannot be read or parsed reported as its own failure with
+its own action, because recommending connection would repeat the same failure.
+
+Where a health query does not name a scaffold, Goalrail SHALL report every
+supported scaffold rather than assume one. A confident diagnosis about a
+scaffold the user never chose is worse than no answer.
+
 #### Scenario: Attachment is not yet trusted
 - **WHEN** the user asks for attachment health after connecting but before trusting the hooks
 - **THEN** the report says the hooks are registered but not trusted, and names the next action
@@ -28,6 +45,26 @@ Reporting trust state is observation and is permitted. Reading is not writing.
 #### Scenario: Repository is not initialized
 - **WHEN** the user asks for attachment health in a directory Goalrail was never initialized in
 - **THEN** the report says so and names the next action, without treating the directory as participating
+
+#### Scenario: Only part of the registration survives
+- **WHEN** one of the registered events is removed while the rest of the registration remains
+- **THEN** the attachment is not reported as connected or working, because the missing event silently removes either the announcement or the retention of questions
+
+#### Scenario: The registered executable is gone
+- **WHEN** the binary a registration points at has been moved or removed
+- **THEN** the attachment is not reported as working, and the report names that cause
+
+#### Scenario: Scaffold configuration cannot be read
+- **WHEN** the scaffold configuration is unreadable or malformed
+- **THEN** the report names that as the failure with its own next action, rather than reporting an ordinary disconnected state
+
+#### Scenario: No scaffold is named
+- **WHEN** a health query names no scaffold
+- **THEN** every supported scaffold is reported, rather than one being assumed
+
+#### Scenario: Trust freshness cannot be established
+- **WHEN** a trust record exists but Goalrail cannot confirm it still matches the current hook definition
+- **THEN** the report states that a record exists, names the unverified part, and does not claim the definition is trusted as it now stands
 
 #### Scenario: Attachment is working
 - **WHEN** the scaffold is connected, the repository initialized, and the hooks trusted
@@ -57,6 +94,14 @@ plainly that the attachment does nothing until then. Silence here is the worst
 available outcome — the user connects, works, observes nothing, and reasonably
 concludes the product is broken.
 
+The disclosure SHALL match what was actually established for that scaffold.
+Where the gate was observed, it is stated. Where it was not, the disclosure
+SHALL say the behaviour is unverified instead of asserting a requirement:
+inventing an obstacle sends the user hunting for a screen that may not exist.
+
+Connection SHALL NOT describe an already-trusted attachment as inert. Repeating
+the command on a working attachment reports it as working.
+
 Attachment is registered at user scope, which means the hook is invoked for
 every session the user starts anywhere, and confining action to initialized
 repositories is enforced by Goalrail's own first act rather than by absence.
@@ -74,6 +119,14 @@ scaffold.
 #### Scenario: User connects once
 - **WHEN** the user runs the connection command and consents
 - **THEN** the persistent session hooks are registered in the scaffold's user configuration and no further Goalrail command is needed for ordinary work
+
+#### Scenario: Connection is repeated on a working attachment
+- **WHEN** the connection command runs again after the user has completed the trust step
+- **THEN** it reports the attachment as active rather than telling the user to grant trust again
+
+#### Scenario: The scaffold's trust behaviour is unverified
+- **WHEN** connection registers hooks in a scaffold whose trust gate has not been observed
+- **THEN** the disclosure says the behaviour is unverified rather than asserting a required approval step
 
 #### Scenario: Connection discloses the trust step
 - **WHEN** connection registers the hooks

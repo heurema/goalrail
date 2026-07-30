@@ -93,6 +93,54 @@ Announcement text, retention, intent binding, and the fail-quiet posture were
 proven by live session and keep their behaviour and their tests. This change
 adds disclosure and diagnosis around them.
 
+### 6. Corrections from automated review of the implementation
+
+Nine findings, all confirmed and all fixed. Eight technical, one procedural.
+
+The technical ones share a shape worth naming: **the health command could
+report green on an attachment that cannot work.** A diagnostic that lies is
+worse than no diagnostic, because it converts "something is wrong" into
+"something is wrong and the tool says it isn't".
+
+- **Trust was checked for one event, not both.** Connection registers session
+  start and stop; an untrusted stop hook means questions are never retained
+  while everything else looks healthy. Every registered event now needs a
+  record.
+- **A stale trust record read as current.** The scaffold records trust against
+  the definition's current form; a key can survive a command change while its
+  stored value no longer matches. The old check looked only for the key. Since
+  confirming the value would mean reproducing a hash this capability forbids,
+  the state is now reported as `recorded` — a record exists — with the
+  unverified part named, rather than as `granted`.
+- **A half-removed registration read as connected.** The opening marker alone
+  was treated as proof; removing one stanza left the marker and the green
+  result behind.
+- **A missing binary read as working.** A registration pointing at a moved or
+  deleted executable satisfies every configuration check and still cannot run —
+  routine after rebuilding or relocating a local binary.
+- **An unreadable configuration read as "not connected"**, recommending a
+  connection that reads the same file and fails identically. It is now its own
+  state with its own action.
+- **The unverified scaffold was told it has a trust gate.** The disclosure
+  asserted a mandatory approval step for a scaffold whose behaviour this change
+  itself records as unobserved — sending the user hunting for a screen that may
+  not exist. Inventing an obstacle is its own kind of misinformation, and the
+  wording now differs by what was actually established.
+- **A working attachment was called inert.** Rerunning the idempotent
+  connection reported `active_now=false` unconditionally. It is now observed,
+  and observed against trust rather than full health, because whether any
+  particular repository participates is what initialization decides.
+- **Health defaulted to one scaffold**, giving a user who connected the other a
+  confident diagnosis about a scaffold they never chose. With no way to infer
+  intent, an unqualified query now reports all of them.
+
+The procedural finding is about this change's own process: the implementation
+was committed while the tasks file still showed the pre-commit owner gate
+unchecked, so the repository briefly carried a commit with no recorded evidence
+that the gate had been passed. The instruction had been given; the record had
+not been written. Recorded now, and the ordering corrected: tick the gate
+before the action, not after.
+
 ## Correlation and Evidence
 
 - **Work identity:** confirmed intent `intent-hook-trust-disclosure-v0`

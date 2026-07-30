@@ -44,10 +44,24 @@
 - [x] 6.7 Run pinned telemetry-disabled strict OpenSpec validation across the change and every promoted spec.
 - [x] 6.8 Re-check on the live stand where the defect was first observed: health reports `pending` before trust and names `/hooks`, and connection output states that nothing runs until then.
 
-## 7. Stop at the owner gates
+## 7. Address review findings on the implementation
 
-- [x] 7.1 Obtain an explicit owner instruction before beginning implementation.
-- [ ] 7.2 Obtain a separate explicit owner instruction before committing.
-- [ ] 7.3 Obtain a separate explicit owner instruction before pushing, opening a pull request, or merging.
-- [ ] 7.4 Obtain a separate explicit owner instruction before archiving this change and promoting the deltas; re-read the promoted text immediately before promotion in case another change archived first.
-- [ ] 7.5 Revisit the recorded limitation when the external project-local hook defect is fixed; the structural boundary is the first thing to reconsider.
+- [x] 7.1 Require a trust record for every registered event, not one.
+- [x] 7.2 Report a trust record as recorded rather than granted, naming that its freshness cannot be confirmed without reproducing a prohibited hash.
+- [x] 7.3 Require every managed registration before reporting connected, so a half-removed block is not green.
+- [x] 7.4 Verify the registered executable is present and runnable before reporting working.
+- [x] 7.5 Report an unreadable or malformed scaffold configuration as its own state with its own action.
+- [x] 7.6 Make the connection disclosure match what was observed per scaffold instead of asserting an unverified trust gate.
+- [x] 7.7 Derive the active state on repeated connection from observation, judged by trust rather than full health.
+- [x] 7.8 Report every supported scaffold when a health query names none.
+- [x] 7.9 Record the missed pre-commit gate evidence and correct the ordering: tick the gate before the action.
+- [x] 7.10 Add a regression test per finding, state each new rule in the spec delta, and re-run the full verification set.
+
+## 8. Stop at the owner gates
+
+- [x] 8.1 Obtain an explicit owner instruction before beginning implementation.
+- [x] 8.2 Obtain a separate explicit owner instruction before committing. Recorded late: the instruction was given before the commit, but this box was ticked afterwards, so the repository briefly carried a commit with no recorded gate evidence. Review caught it.
+- [x] 8.3 Obtain a separate explicit owner instruction before pushing and opening a pull request; merging remains ungranted.
+- [x] 8.3a Obtain a separate explicit owner instruction before committing and pushing this round of review fixes; recorded before the commit this time.
+- [ ] 8.4 Obtain a separate explicit owner instruction before archiving this change and promoting the deltas; re-read the promoted text immediately before promotion in case another change archived first.
+- [ ] 8.5 Revisit the recorded limitation when the external project-local hook defect is fixed; the structural boundary is the first thing to reconsider.
