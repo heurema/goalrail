@@ -304,3 +304,71 @@ func TestUpdateNamesTheCanonItMovedFrom(t *testing.T) {
 		}
 	}
 }
+
+// TestBackupDirectoriesDoNotCollide answers the external review: two updates
+// inside one clock second must not share a backup directory, or the second
+// silently overwrites the first's recovery point.
+func TestBackupDirectoriesDoNotCollide(t *testing.T) {
+	state := t.TempDir()
+	makeDrifted := func() string {
+		root := t.TempDir()
+		if _, err := Materialize(root, false); err != nil {
+			t.Fatalf("materialize: %v", err)
+		}
+		target := filepath.Join(root, filepath.FromSlash(OverlayDirectory), "templates", "spec.md")
+		if err := os.WriteFile(target, []byte("mine\n"), 0o644); err != nil {
+			t.Fatalf("edit: %v", err)
+		}
+		return root
+	}
+	first, err := Update(UpdateInput{RepositoryRoot: makeDrifted(), StateRoot: state, DiscardLocalEdits: true, Now: fixedClock()})
+	if err != nil {
+		t.Fatalf("first update: %v", err)
+	}
+	second, err := Update(UpdateInput{RepositoryRoot: makeDrifted(), StateRoot: state, DiscardLocalEdits: true, Now: fixedClock()})
+	if err != nil {
+		t.Fatalf("second update: %v", err)
+	}
+	if first.Backup == second.Backup {
+		t.Fatalf("two updates in one second shared a backup directory: %s", first.Backup)
+	}
+	for _, backup := range []string{first.Backup, second.Backup} {
+		if _, err := os.Stat(filepath.Join(backup, "manifest.json")); err != nil {
+			t.Errorf("backup %s lost its manifest: %v", backup, err)
+		}
+	}
+}
+
+// TestUpdateKeepsTheReportWhenMaterializationFails answers the external review:
+// a write failure after the backup was made must not discard the report, because
+// the report is the only thing naming the backup.
+func TestUpdateKeepsTheReportWhenMaterializationFails(t *testing.T) {
+	root, state := t.TempDir(), t.TempDir()
+	if _, err := Materialize(root, false); err != nil {
+		t.Fatalf("materialize: %v", err)
+	}
+	target := filepath.Join(root, filepath.FromSlash(OverlayDirectory), "templates", "spec.md")
+	if err := os.WriteFile(target, []byte("mine\n"), 0o644); err != nil {
+		t.Fatalf("edit: %v", err)
+	}
+	// A read-only file makes the overwrite fail after the backup succeeded.
+	if err := os.Chmod(target, 0o400); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+	defer os.Chmod(target, 0o644)
+
+	report, err := Update(UpdateInput{RepositoryRoot: root, StateRoot: state, DiscardLocalEdits: true, Now: fixedClock()})
+	if err == nil {
+		t.Fatal("an unwritable overlay file did not fail the update")
+	}
+	if report.Backup == "" {
+		t.Fatal("the failed update discarded the report carrying the backup path")
+	}
+	recovered, readErr := os.ReadFile(filepath.Join(report.Backup, filepath.FromSlash(OverlayDirectory), "templates", "spec.md"))
+	if readErr != nil {
+		t.Fatalf("the backup is unreadable: %v", readErr)
+	}
+	if string(recovered) != "mine\n" {
+		t.Errorf("the backup does not hold the replaced content: %q", recovered)
+	}
+}

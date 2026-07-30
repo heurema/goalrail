@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -426,4 +427,108 @@ func errorsAs(err error, target any) bool {
 		return ok
 	}
 	return false
+}
+
+// TestInitValidatesTheScaffoldBeforeWriting answers the external review: a typo
+// in --scaffold must produce a usage error against an untouched repository, not
+// a half-installed harness followed by one.
+func TestInitValidatesTheScaffoldBeforeWriting(t *testing.T) {
+	root := scratchRepository(t)
+	t.Setenv("HOME", t.TempDir())
+	_, _, err := runCommand(t, "init", "--repo", root, "--scaffold", "clade-code")
+	if err == nil {
+		t.Fatal("a misspelled scaffold was accepted")
+	}
+	for _, path := range []string{"openspec", ".goalrail", ".claude"} {
+		if _, statErr := os.Stat(filepath.Join(root, path)); statErr == nil {
+			t.Errorf("%s was written before the flag was validated", path)
+		}
+	}
+}
+
+// TestInitInstallsWithoutAHomeDirectory answers the external review: a
+// repository-scope installation must not be blocked by an unresolvable home,
+// which only detection and user-scope reporting need.
+func TestInitInstallsWithoutAHomeDirectory(t *testing.T) {
+	root := scratchRepository(t)
+	t.Setenv("HOME", "")
+	stdout, _, err := runCommand(t, "init", "--repo", root, "--scaffold", "claude-code", "--fix-gitignore")
+	if err != nil {
+		t.Fatalf("init without a home directory failed: %v", err)
+	}
+	var report struct {
+		Registration *struct {
+			Applied bool `json:"applied"`
+		} `json:"registration"`
+		Files []struct{ Action string } `json:"files"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Files) == 0 {
+		t.Fatal("the overlay was not installed")
+	}
+	if report.Registration == nil || !report.Registration.Applied {
+		t.Fatalf("the repository-scope registration was not applied: %+v", report.Registration)
+	}
+}
+
+// TestInitAdviceForATrackedMarkerNamesTheRealRemedy answers the external review:
+// an ignore entry cannot protect a tracked file, so the notice must not
+// prescribe the flag that adds one.
+func TestInitAdviceForATrackedMarkerNamesTheRealRemedy(t *testing.T) {
+	root := scratchRepository(t)
+	t.Setenv("HOME", t.TempDir())
+	if _, _, err := runCommand(t, "init", "--repo", root); err != nil {
+		t.Fatalf("first init: %v", err)
+	}
+	add := exec.Command("git", "-C", root, "add", "-f", ".goalrail/ambient.json")
+	if output, err := add.CombinedOutput(); err != nil {
+		t.Fatalf("git add: %v\n%s", err, output)
+	}
+	stdout, _, err := runCommand(t, "init", "--repo", root)
+	if err != nil {
+		t.Fatalf("second init: %v", err)
+	}
+	var report struct {
+		Notices []string `json:"notices"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatal(err)
+	}
+	var honest bool
+	for _, notice := range report.Notices {
+		if strings.Contains(notice, "tracked") && !strings.Contains(notice, "--fix-gitignore") {
+			honest = true
+		}
+		if strings.Contains(notice, ambient.MarkerPath) && strings.Contains(notice, "--fix-gitignore") {
+			t.Errorf("the notice prescribes a flag that cannot protect a tracked file: %q", notice)
+		}
+	}
+	if !honest {
+		t.Errorf("no notice names the tracked-marker remedy: %+v", report.Notices)
+	}
+}
+
+// TestDoctorReportWriteFailureIsNotAHarnessProblem answers the external review:
+// a report that could not be written is a failed check (exit 2), not a failed
+// harness (exit 1).
+func TestDoctorReportWriteFailureIsNotAHarnessProblem(t *testing.T) {
+	root := scratchRepository(t)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("GOALRAIL_STATE_HOME", t.TempDir())
+	err := runDoctor([]string{"--repo", root, "--json"}, failingWriter{}, &bytes.Buffer{})
+	if err == nil {
+		t.Fatal("a failed report write returned success")
+	}
+	var coded interface{ ExitCode() int }
+	if !errorsAs(err, &coded) || coded.ExitCode() != 2 {
+		t.Fatalf("a failed report write does not exit 2: %v", err)
+	}
+}
+
+type failingWriter struct{}
+
+func (failingWriter) Write([]byte) (int, error) {
+	return 0, errors.New("broken pipe")
 }

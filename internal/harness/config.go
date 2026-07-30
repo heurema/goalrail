@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/heurema/goalrail/internal/ambient"
 )
 
 // ErrForeignSchema reports an OpenSpec configuration that names a custom schema
@@ -57,6 +59,13 @@ const newConfig = `schema: ` + SchemaName + `
 func EnsureConfig(repositoryRoot string, confirmForeignSwitch bool) (ConfigOutcome, error) {
 	absolute := filepath.Join(repositoryRoot, filepath.FromSlash(ConfigPath))
 	outcome := ConfigOutcome{Path: ConfigPath}
+
+	// The configuration honours the same containment as every repository-scope
+	// write: a symlinked openspec directory or config file would redirect this
+	// write outside the repository the user named.
+	if containErr := ambient.EnsureWriteWithinRepository(repositoryRoot, absolute); containErr != nil {
+		return outcome, containErr
+	}
 
 	raw, err := os.ReadFile(absolute)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -133,7 +142,17 @@ func schemaAssignment(content string) (string, int) {
 		if !strings.HasPrefix(trimmed, "schema:") {
 			continue
 		}
-		value := strings.TrimSpace(strings.TrimPrefix(trimmed, "schema:"))
+		rest := strings.TrimPrefix(trimmed, "schema:")
+		// YAML only reads a mapping key when the colon is followed by whitespace
+		// or ends the line. `schema:goalrail-intent` is a plain scalar the stock
+		// CLI reads no schema from — accepting it here would make gr report a
+		// configuration as correct while the CLI disagrees. The line is still
+		// where the key belongs, so its index is returned with no value and a
+		// rewrite repairs the malformed form.
+		if rest != "" && !strings.HasPrefix(rest, " ") && !strings.HasPrefix(rest, "\t") {
+			return "", index
+		}
+		value := strings.TrimSpace(rest)
 		if len(value) > 0 && (value[0] == '"' || value[0] == '\'') {
 			if end := strings.IndexByte(value[1:], value[0]); end >= 0 {
 				return value[1 : 1+end], index

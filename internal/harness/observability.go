@@ -90,9 +90,18 @@ func InspectObservability(stateRoot string, lookupEnvironment func(string) strin
 // the secret in the one line that promises not to.
 func redactedEndpoint(endpoint string) string {
 	parsed, err := url.Parse(endpoint)
-	if err != nil || parsed.User == nil {
+	// Fail closed: where the endpoint cannot be parsed into a hierarchical URL,
+	// there is no reliable way to tell userinfo from anything else — `u:s@host`
+	// parses as an opaque URL with no User at all — so anything that even looks
+	// like it carries credentials is withheld rather than reflected.
+	if err != nil || parsed.Host == "" || parsed.Opaque != "" {
+		if strings.Contains(endpoint, "@") {
+			return "(withheld: endpoint could not be safely redacted)"
+		}
 		return endpoint
 	}
-	parsed.User = nil
+	if parsed.User != nil {
+		parsed.User = nil
+	}
 	return parsed.String()
 }

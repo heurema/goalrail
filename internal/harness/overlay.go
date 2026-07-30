@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+
+	"github.com/heurema/goalrail/internal/ambient"
 )
 
 // previousCanons records overlay versions that shipped before the embedded one,
@@ -289,6 +291,12 @@ func Materialize(repositoryRoot string, overwrite bool) ([]FileOutcome, error) {
 			return nil, contentErr
 		}
 		absolute := filepath.Join(repositoryRoot, filepath.FromSlash(finding.Path))
+		// The overlay honours the same containment as the registration: a checkout
+		// can ship a symlink at any of these paths, and writing through one would
+		// land canonical content outside the repository the user named.
+		if containErr := ambient.EnsureWriteWithinRepository(repositoryRoot, absolute); containErr != nil {
+			return nil, containErr
+		}
 		if mkdirErr := os.MkdirAll(filepath.Dir(absolute), 0o755); mkdirErr != nil {
 			return nil, fmt.Errorf("create %s: %w", filepath.Dir(finding.Path), mkdirErr)
 		}

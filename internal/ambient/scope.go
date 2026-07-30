@@ -250,23 +250,26 @@ func DetectScaffolds(home string) []Scaffold {
 	return found
 }
 
-// repositoryScopePathContained verifies that writing the registration path stays
-// inside the repository. It resolves the deepest existing ancestor of the path
-// and refuses when that resolution leaves the resolved repository root, or when
-// the settings file itself is a link.
+// EnsureWriteWithinRepository verifies that writing one path stays inside the
+// repository. It resolves the deepest existing ancestor of the path and refuses
+// when that resolution leaves the resolved repository root, or when the file
+// itself is a link. Every repository-scope write goes through it — the
+// registration, the overlay, the configuration — because a checkout can ship a
+// symlink at any of those places and redirect the write into the user's own
+// files.
 //
 // The root is resolved too, so a repository that legitimately lives behind a
 // symlinked prefix (as /tmp does on macOS) is not refused for it.
-func repositoryScopePathContained(repositoryRoot, settingsPath string) error {
+func EnsureWriteWithinRepository(repositoryRoot, targetPath string) error {
 	resolvedRoot, err := filepath.EvalSymlinks(repositoryRoot)
 	if err != nil {
 		return fmt.Errorf("resolve repository root: %w", err)
 	}
-	if info, lstatErr := os.Lstat(settingsPath); lstatErr == nil && info.Mode()&os.ModeSymlink != 0 {
-		return fmt.Errorf("the registration path %s is a symbolic link; refusing to write through it", settingsPath)
+	if info, lstatErr := os.Lstat(targetPath); lstatErr == nil && info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("the path %s is a symbolic link; refusing to write through it", targetPath)
 	}
 	// Walk up to the deepest ancestor that exists and resolve that.
-	ancestor := filepath.Dir(settingsPath)
+	ancestor := filepath.Dir(targetPath)
 	for {
 		if _, statErr := os.Lstat(ancestor); statErr == nil {
 			break
@@ -284,7 +287,7 @@ func repositoryScopePathContained(repositoryRoot, settingsPath string) error {
 	separator := string(filepath.Separator)
 	if resolvedAncestor != resolvedRoot &&
 		!strings.HasPrefix(resolvedAncestor+separator, resolvedRoot+separator) {
-		return fmt.Errorf("the registration path resolves outside the repository (%s); refusing to write there",
+		return fmt.Errorf("the path resolves outside the repository (%s); refusing to write there",
 			resolvedAncestor)
 	}
 	return nil

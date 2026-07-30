@@ -233,3 +233,57 @@ func TestEnsureConfigTreatsACommentOnlyValueAsUnnamed(t *testing.T) {
 		t.Errorf("configuration names %q afterwards", named)
 	}
 }
+
+// TestEnsureConfigRefusesASymlinkedConfiguration answers the external review:
+// writing the managed key through a symlinked config file would edit a file
+// outside the repository the user named.
+func TestEnsureConfigRefusesASymlinkedConfiguration(t *testing.T) {
+	root, elsewhere := t.TempDir(), t.TempDir()
+	outside := filepath.Join(elsewhere, "config.yaml")
+	if err := os.WriteFile(outside, []byte("schema: spec-driven\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "openspec"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "openspec", "config.yaml")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := EnsureConfig(root, false); err == nil {
+		t.Fatal("the managed key was written through a symlink")
+	}
+	content, err := os.ReadFile(outside)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != "schema: spec-driven\n" {
+		t.Errorf("the external file was modified: %q", content)
+	}
+}
+
+// TestEnsureConfigRepairsAKeyWithoutASpace answers the external review: YAML
+// reads no mapping key from `schema:goalrail-intent`, so accepting it would make
+// gr report a configuration as correct while the stock CLI disagrees. The line
+// is repaired to the form both read.
+func TestEnsureConfigRepairsAKeyWithoutASpace(t *testing.T) {
+	root := t.TempDir()
+	absolute := writeConfig(t, root, "schema:goalrail-intent\ncontext: |\n  ours\n")
+	outcome, err := EnsureConfig(root, false)
+	if err != nil {
+		t.Fatalf("a malformed key was refused rather than repaired: %v", err)
+	}
+	if outcome.Action != ConfigSwitched {
+		t.Errorf("action is %q, expected switched", outcome.Action)
+	}
+	expected := "schema: " + SchemaName + "\ncontext: |\n  ours\n"
+	if actual := readFile(t, absolute); actual != expected {
+		t.Errorf("the malformed line was not repaired:\n%q", actual)
+	}
+	named, _, err := ConfiguredSchema(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if named != SchemaName {
+		t.Errorf("configuration names %q after the repair", named)
+	}
+}

@@ -183,3 +183,35 @@ no command; design decisions 6, 8, and 12 were reconciled with the code; tasks
 6.13 and 8.3 were corrected to say what actually happened; and intent version 4
 rewords OUT-11/SIG-13, whose "in either scope" overstated the shipped behaviour
 against NG-6.
+
+## Addendum: the automated review on the pull request
+
+The automated reviewer on pull request #34 raised eleven findings against commit
+`2d1cf17`. All eleven were taken; none was dismissed. Three were rated P1 and
+all three were real:
+
+| Finding | Fix pinned by |
+|---|---|
+| The repository-containment check guarded only the scaffold registration, so a symlink at `openspec/`, the configuration, or an overlay path let initialization and update write canonical content outside the repository | `TestMaterializeRefusesASymlinkedOverlayPath`, `TestEnsureConfigRefusesASymlinkedConfiguration` |
+| Disconnection reached the same files without that check, so a symlinked settings path could redirect a disconnect into user configuration | `TestDisconnectRefusesASymlinkedRepositoryScopePath` |
+| Endpoint redaction returned the input verbatim when parsing found no userinfo — and `user:secret@host` parses as an opaque URL with none — so a credential could reach the report | `TestObservabilityEndpointNeverEchoesEmbeddedCredentials` extended; unparseable endpoints that look credential-bearing are withheld |
+
+The eight P2 findings and their fixes: the schema key now requires the
+whitespace YAML requires, so `schema:goalrail-intent` is repaired rather than
+trusted (`TestEnsureConfigRepairsAKeyWithoutASpace`); the update report survives
+a materialization failure so the backup path is not lost
+(`TestUpdateKeepsTheReportWhenMaterializationFails`); backup directories are
+created exclusively with a collision suffix
+(`TestBackupDirectoriesDoNotCollide`); a failed report write exits 2 rather than
+1 (`TestDoctorReportWriteFailureIsNotAHarnessProblem`); the development-side
+canon check probes the npm cache offline and skips loudly instead of fetching;
+an explicit `--scaffold` is validated before the first write
+(`TestInitValidatesTheScaffoldBeforeWriting`); a repository-scope installation
+proceeds without a resolvable home (`TestInitInstallsWithoutAHomeDirectory`);
+and the marker notice no longer prescribes a flag that cannot protect a tracked
+file (`TestInitAdviceForATrackedMarkerNamesTheRealRemedy`).
+
+Worth recording about the review itself: the two symlink findings extended
+exactly the containment our own pre-PR round had introduced for the registration
+path. That round found the hole and closed it in one place; the automated review
+found the other three places it belonged. Both rounds were needed.

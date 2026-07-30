@@ -82,10 +82,21 @@ func runInit(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return err
+	// An explicitly named scaffold is validated before the first write: a typo in
+	// the flag must produce a usage error against an untouched repository, not a
+	// half-installed harness followed by one.
+	var explicit []ambient.Scaffold
+	if strings.TrimSpace(*scaffold) != "" {
+		one, parseErr := parseScaffold(*scaffold)
+		if parseErr != nil {
+			return parseErr
+		}
+		explicit = []ambient.Scaffold{one}
 	}
+	// The home directory matters only for detection and user-scope reporting; a
+	// repository-scope installation must not be blocked by its absence.
+	home, homeErr := os.UserHomeDir()
+	homeKnown := homeErr == nil
 
 	report := initReport{
 		Repository: root,
@@ -132,11 +143,17 @@ func runInit(args []string, stdout, stderr io.Writer) error {
 		report.Ignore = added
 	}
 
-	selected, err := selectScaffold(*scaffold, home)
-	if err != nil {
-		return err
+	selected := explicit
+	if selected == nil {
+		if homeKnown {
+			selected = ambient.DetectScaffolds(home)
+		} else {
+			report.Notices = append(report.Notices,
+				"the home directory could not be resolved, so no scaffold was detected; "+
+					"re-run with --scaffold <name> to register one")
+		}
 	}
-	if err := registerSelected(&report, selected, home, root); err != nil {
+	if err := registerSelected(&report, selected, home, homeKnown, root); err != nil {
 		return err
 	}
 
@@ -144,28 +161,24 @@ func runInit(args []string, stdout, stderr io.Writer) error {
 	// initialization a shared repository fact. Unlike the registration this is not
 	// fatal: refusing to install the harness over an ignore rule would be a
 	// disproportionate response to a recoverable condition.
-	if ignored, _ := ambient.IgnoreState(root, ambient.MarkerPath); !ignored {
-		report.Notices = append(report.Notices,
-			"the marker at "+ambient.MarkerPath+" is not ignored, so a commit would make this "+
-				"repository initialized for everyone; `gr init --fix-gitignore` adds the entry")
+	if ignored, markerErr := ambient.IgnoreState(root, ambient.MarkerPath); !ignored {
+		// The advice follows the cause, exactly as it does for the registration
+		// path: an ignore entry cannot protect a tracked file, and prescribing the
+		// flag there would be advice that changes nothing.
+		if markerErr != nil {
+			report.Notices = append(report.Notices,
+				"the marker at "+ambient.MarkerPath+" is committable and an ignore entry cannot "+
+					"protect it: "+markerErr.Error())
+		} else {
+			report.Notices = append(report.Notices,
+				"the marker at "+ambient.MarkerPath+" is not ignored, so a commit would make this "+
+					"repository initialized for everyone; `gr init --fix-gitignore` adds the entry")
+		}
 	}
 
 	report.Next = append(report.Next,
 		"commit the files above; they are yours, and Goalrail does not commit for you")
 	return writeJSON(stdout, report)
-}
-
-// selectScaffold resolves which scaffold to register, by explicit name or by
-// detection. Detection reads configuration presence, never session environment.
-func selectScaffold(named, home string) ([]ambient.Scaffold, error) {
-	if strings.TrimSpace(named) != "" {
-		one, err := parseScaffold(named)
-		if err != nil {
-			return nil, err
-		}
-		return []ambient.Scaffold{one}, nil
-	}
-	return ambient.DetectScaffolds(home), nil
 }
 
 // registerSelected registers the repository-scope scaffold among the candidates
@@ -177,7 +190,9 @@ func selectScaffold(named, home string) ([]ambient.Scaffold, error) {
 func registerSelected(
 	report *initReport,
 	candidates []ambient.Scaffold,
-	home, root string,
+	home string,
+	homeKnown bool,
+	root string,
 ) error {
 	if len(candidates) == 0 {
 		report.Next = append(report.Next,
@@ -203,7 +218,7 @@ func registerSelected(
 		if report.Registration != nil {
 			continue
 		}
-		registration, err := registerRepositoryScope(candidate, home, root)
+		registration, err := registerRepositoryScope(candidate, home, homeKnown, root)
 		if err != nil {
 			return err
 		}
@@ -214,7 +229,9 @@ func registerSelected(
 
 func registerRepositoryScope(
 	scaffold ambient.Scaffold,
-	home, root string,
+	home string,
+	homeKnown bool,
+	root string,
 ) (*registrationReport, error) {
 	target, err := ambient.RegistrationTarget(scaffold, home, root)
 	if err != nil {
@@ -261,9 +278,13 @@ func registerRepositoryScope(
 	registration.Applied = applied
 	registration.Repaired = plan.Repair
 
-	state, inspectErr := ambient.Inspect(scaffold, home, root)
-	if inspectErr == nil {
-		registration.ActiveNow = state.Working
+	// Attachment state consults the home directory for the superseded user-scope
+	// arrangement; where the home is unknown, the state is left unclaimed rather
+	// than computed against a fabricated path.
+	if homeKnown {
+		if state, inspectErr := ambient.Inspect(scaffold, home, root); inspectErr == nil {
+			registration.ActiveNow = state.Working
+		}
 	}
 	// A repair has two possible reasons and they are disclosed separately: saying
 	// the registration named a different executable when only the event changed

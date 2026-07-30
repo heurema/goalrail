@@ -213,8 +213,16 @@ func summarize(diagnosis Diagnosis) (problems []string, actions []string) {
 		}
 	}
 	if diagnosis.SchemaPresent && diagnosis.Schema != SchemaName {
-		add(fmt.Sprintf("the OpenSpec configuration names %q rather than %q", diagnosis.Schema, SchemaName),
-			"run `gr init` and confirm the schema switch")
+		if diagnosis.Schema == "" {
+			// A malformed or empty key is not a foreign schema: the stock CLI reads
+			// no schema from it at all, and saying it "names" something would be
+			// a diagnosis about a claim the file does not make.
+			add("the OpenSpec configuration names no schema the stock CLI can read",
+				"run `gr init`")
+		} else {
+			add(fmt.Sprintf("the OpenSpec configuration names %q rather than %q", diagnosis.Schema, SchemaName),
+				"run `gr init` and confirm the schema switch")
+		}
 	}
 	if !diagnosis.SchemaPresent {
 		add("there is no OpenSpec configuration", "run `gr init`")

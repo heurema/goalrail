@@ -364,3 +364,27 @@ func snapshotTree(t *testing.T, root string) map[string]string {
 	}
 	return tree
 }
+
+// TestMaterializeRefusesASymlinkedOverlayPath answers the external review: the
+// containment the registration honours applies to every repository-scope write,
+// or a checkout shipping a symlinked openspec directory would receive canonical
+// content into whatever the link points at.
+func TestMaterializeRefusesASymlinkedOverlayPath(t *testing.T) {
+	root, elsewhere := t.TempDir(), t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "openspec"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(elsewhere, filepath.Join(root, "openspec", "schemas")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Materialize(root, false); err == nil {
+		t.Fatal("materialization wrote through a symlinked overlay directory")
+	}
+	entries, err := os.ReadDir(elsewhere)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("content escaped the repository: %v", entries)
+	}
+}

@@ -59,10 +59,13 @@ func runDoctor(args []string, stdout, stderr io.Writer) error {
 	}
 	if *asJSON {
 		if err := writeJSON(stdout, diagnosis); err != nil {
-			return err
+			return doctorFailure{cause: err}
 		}
 	} else if _, err := fmt.Fprint(stdout, harness.Describe(diagnosis)); err != nil {
-		return err
+		// A report that could not be written is a failed check, not a failed
+		// harness: an unattended caller reading the exit status must not confuse
+		// a broken pipe with an unhealthy repository.
+		return doctorFailure{cause: err}
 	}
 	if !diagnosis.Working {
 		return diagnosisError{problems: len(diagnosis.Problems)}

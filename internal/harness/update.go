@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -135,7 +136,10 @@ func Update(input UpdateInput) (UpdateReport, error) {
 
 	outcomes, err := Materialize(input.RepositoryRoot, true)
 	if err != nil {
-		return UpdateReport{}, err
+		// The backup exists and earlier files may already be rewritten. The
+		// report is the only thing carrying the backup path, so it survives the
+		// error instead of being discarded at the moment it is needed most.
+		return report, err
 	}
 	report.Files = outcomes
 	if input.DiscardLocalEdits {
@@ -147,7 +151,7 @@ func Update(input UpdateInput) (UpdateReport, error) {
 	// claim this package exists to remove.
 	after, err := InspectOverlay(input.RepositoryRoot)
 	if err != nil {
-		return UpdateReport{}, err
+		return report, err
 	}
 	report.Verified = after.Settled()
 	if !report.Verified {
@@ -185,8 +189,25 @@ func backupReplaced(
 	if strings.TrimSpace(stateRoot) == "" {
 		return "", errors.New("an update needs a state root to keep the replaced files in")
 	}
-	directory := filepath.Join(stateRoot, filepath.FromSlash(BackupDirectory),
+	base := filepath.Join(stateRoot, filepath.FromSlash(BackupDirectory),
 		now().UTC().Format("20060102T150405Z"))
+	if err := os.MkdirAll(filepath.Dir(base), 0o700); err != nil {
+		return "", fmt.Errorf("create backup directory: %w", err)
+	}
+	// Exclusive creation, with a suffix on collision: two updates inside one
+	// second must not share a directory, or the second silently overwrites the
+	// first's recovery point.
+	directory := base
+	for attempt := 2; ; attempt++ {
+		mkdirErr := os.Mkdir(directory, 0o700)
+		if mkdirErr == nil {
+			break
+		}
+		if !errors.Is(mkdirErr, fs.ErrExist) {
+			return "", fmt.Errorf("create backup directory: %w", mkdirErr)
+		}
+		directory = fmt.Sprintf("%s-%d", base, attempt)
+	}
 	// A manifest beside the files records what the backup is a backup of, so a
 	// directory found months later answers its own questions.
 	manifest := struct {
@@ -199,9 +220,6 @@ func backupReplaced(
 	encoded, err := json.MarshalIndent(manifest, "", "  ")
 	if err != nil {
 		return "", err
-	}
-	if err := os.MkdirAll(directory, 0o700); err != nil {
-		return "", fmt.Errorf("create backup directory: %w", err)
 	}
 	if err := os.WriteFile(filepath.Join(directory, "manifest.json"), append(encoded, '\n'), 0o600); err != nil {
 		return "", fmt.Errorf("write backup manifest: %w", err)

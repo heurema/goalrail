@@ -29,6 +29,16 @@ func TestPinnedCLIAcceptsTheEmbeddedCanon(t *testing.T) {
 		t.Skip("skipping the pinned-CLI check: no npx on PATH, so the canon is unverified here; " +
 			"run it on a machine with Node 20.19+ before releasing a canon")
 	}
+	// The pinned package must already be in the npm cache: an ordinary `go test`
+	// run must never reach for the network, and an offline machine must skip
+	// loudly rather than fail. `--offline` makes npm error instead of fetching.
+	probe := exec.Command("npx", "--yes", "--offline", pinnedPackage, "--version")
+	probe.Env = append(os.Environ(), "OPENSPEC_TELEMETRY=0")
+	if output, err := probe.CombinedOutput(); err != nil {
+		t.Skipf("skipping the pinned-CLI check: %s is not in the npm cache, and this test never "+
+			"fetches the network; prime it with `npx --yes %s --version` before releasing a canon\n%s",
+			pinnedPackage, pinnedPackage, output)
+	}
 
 	root := t.TempDir()
 	if _, err := Materialize(root, false); err != nil {
@@ -42,7 +52,7 @@ func TestPinnedCLIAcceptsTheEmbeddedCanon(t *testing.T) {
 	// change created against it must pass strict validation — which is the whole
 	// path a repository takes on its first change.
 	run := func(arguments ...string) (string, error) {
-		command := exec.Command("npx", append([]string{"--yes", pinnedPackage}, arguments...)...)
+		command := exec.Command("npx", append([]string{"--yes", "--offline", pinnedPackage}, arguments...)...)
 		command.Dir = root
 		command.Env = append(os.Environ(), "OPENSPEC_TELEMETRY=0")
 		output, err := command.CombinedOutput()

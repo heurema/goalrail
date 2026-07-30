@@ -431,3 +431,34 @@ func TestRegistrationRefusesAPathThatResolvesOutsideTheRepository(t *testing.T) 
 		}
 	})
 }
+
+// TestDisconnectRefusesASymlinkedRepositoryScopePath answers the external
+// review: removal edits the same file registration writes, so it honours the
+// same containment — a checkout shipping a symlinked settings path must not
+// redirect a disconnect into the user's own configuration.
+func TestDisconnectRefusesASymlinkedRepositoryScopePath(t *testing.T) {
+	home, repo, elsewhere := t.TempDir(), t.TempDir(), t.TempDir()
+	executable := realExecutable(t)
+	outside := filepath.Join(elsewhere, "settings.local.json")
+	writeFile(t, outside, `{
+  "hooks": {
+    "SessionEnd": [
+      {"hooks": [{"type": "command", "command": "'`+executable+`' hook --managed-by=goalrail"}]}
+    ]
+  }
+}`)
+	if err := os.MkdirAll(filepath.Join(repo, ".claude"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(repo, ".claude", "settings.local.json")); err != nil {
+		t.Fatal(err)
+	}
+
+	before := readFile(t, outside)
+	if _, err := Disconnect(ScaffoldClaudeCode, home, repo); err == nil {
+		t.Fatal("disconnection followed a symlinked settings path")
+	}
+	if readFile(t, outside) != before {
+		t.Error("the external settings file was modified through the link")
+	}
+}

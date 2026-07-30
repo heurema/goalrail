@@ -109,7 +109,7 @@ func PlanRegistration(target Target, executable string) (ConnectionPlan, error) 
 		// directory or file that is a symlink resolves the write somewhere else —
 		// a repository shipping such a link would receive the registration into
 		// whatever it points at, including the user's own configuration.
-		if err := repositoryScopePathContained(target.Repository, target.Path); err != nil {
+		if err := EnsureWriteWithinRepository(target.Repository, target.Path); err != nil {
 			return ConnectionPlan{}, err
 		}
 	}
@@ -372,6 +372,14 @@ func Disconnect(scaffold Scaffold, home, repositoryRoot string) (bool, error) {
 			return unregister(superseded)
 		}
 		return false, err
+	}
+	if target.Scope == ScopeRepository {
+		// Removal edits the same file registration writes, so it honours the same
+		// containment: a checkout shipping a symlinked settings path must not
+		// redirect a disconnect into the user's own configuration.
+		if containErr := EnsureWriteWithinRepository(target.Repository, target.Path); containErr != nil {
+			return false, containErr
+		}
 	}
 	removed, err := unregister(target)
 	if err != nil {
