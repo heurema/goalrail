@@ -100,6 +100,11 @@ jobs:
       # `contents: write` sets what the token may do; `gh` reads the credential
       # itself. It is the platform's own token, not a stored secret.
       GH_TOKEN: ${{ github.token }}
+      # And it needs to know which repository it is talking about. Without this
+      # it infers one from the git remote of the working directory, which fails
+      # anywhere outside the checkout — including the artifact directory. The
+      # first release run died exactly there.
+      GH_REPO: ${{ github.repository }}
     steps:
       # Default single-ref, no-tags fetch on purpose: a tag-following fetch that
       # pulled a second tag pointing at this commit would stamp the higher one.
@@ -172,21 +177,41 @@ jobs:
       - name: Publish the release
         run: |
           set -euo pipefail
-          state="$(gh release view "${GITHUB_REF_NAME}" --json isDraft --jq .isDraft 2>/dev/null || echo none)"
-          case "${state}" in
-            none)
-              ;;
-            true)
-              echo "removing a leftover draft from an earlier attempt"
-              gh release delete "${GITHUB_REF_NAME}" --yes
-              ;;
-            *)
-              echo "a published release already exists for ${GITHUB_REF_NAME}; supersede it with a new tag rather than repairing it in place" >&2
-              exit 1
-              ;;
-          esac
-          cd "${RUNNER_TEMP}/dist"
+          shopt -s nullglob
+          dist="${RUNNER_TEMP}/dist"
+          archives=("${dist}"/gr_*.tar.gz)
+          # Publication happens only after every artifact exists. Counting them
+          # here is what makes that a check rather than an assumption.
+          if [ "${#archives[@]}" -ne 4 ] || [ ! -f "${dist}/checksums.txt" ]; then
+            echo "expected four archives and a checksums file; found:" >&2
+            ls -1 "${dist}" >&2
+            exit 1
+          fi
+
+          # A read that cannot distinguish "no release yet" from "the read
+          # failed" is worse than no read: the first release run turned a git
+          # resolution failure into "nothing is published", which is the answer
+          # that skips every protection this block exists for.
+          if state="$(gh release view "${GITHUB_REF_NAME}" --json isDraft --jq .isDraft 2>"${RUNNER_TEMP}/release-view.err")"; then
+            case "${state}" in
+              true)
+                echo "removing a leftover draft from an earlier attempt"
+                gh release delete "${GITHUB_REF_NAME}" --yes
+                ;;
+              *)
+                echo "a published release already exists for ${GITHUB_REF_NAME}; supersede it with a new tag rather than repairing it in place" >&2
+                exit 1
+                ;;
+            esac
+          elif grep -qi 'release not found' "${RUNNER_TEMP}/release-view.err"; then
+            echo "no release exists for ${GITHUB_REF_NAME} yet"
+          else
+            echo "could not read the release state for ${GITHUB_REF_NAME}; refusing to publish blind" >&2
+            cat "${RUNNER_TEMP}/release-view.err" >&2
+            exit 1
+          fi
+
           gh release create "${GITHUB_REF_NAME}" \
             --title "${GITHUB_REF_NAME}" \
             --notes "Install: download the archive for your platform, verify it against \`checksums.txt\`, and put \`gr\` somewhere durable. The README's install section has the exact commands. Every binary here reports \`${GITHUB_REF_NAME}\` from \`gr version\`." \
-            gr_*.tar.gz checksums.txt
+            "${archives[@]}" "${dist}/checksums.txt"

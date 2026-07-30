@@ -95,11 +95,28 @@
 
 ## 11. Verify the first real release
 
-Executed after gate 10.5 and before 10.7, because these are the checks nothing
-earlier can perform: until a release exists there is nothing to download.
+Executed after a release exists and before 10.7, because these are the checks
+nothing earlier can perform: until a release exists there is nothing to download.
+The `v0.1.0` run published nothing (section 12), so these run against the release
+the repaired workflow produces.
 
 - [ ] 11.1 List the published assets and diff them against every artifact name the README quotes and against the set the spec requires — four archives and one checksums file, nothing else.
 - [ ] 11.2 Download one archive and the checksums file on a machine with no Go on the path, and confirm the README's own verification command succeeds against the single archive fetched.
 - [ ] 11.3 Extract that archive and confirm its flat root carries the binary and the licence, and that the binary reports exactly the pushed tag.
 - [ ] 11.4 Confirm the checksums file resolves at the address that does not change between releases, and that it names the archives of this release.
 - [ ] 11.5 If any of the above fails, record what was published, and treat a corrective release as a new tag under its own owner gate rather than editing the published one.
+
+## 12. Repair what the first release run found
+
+The `v0.1.0` run is recorded in `evidence/first-release-attempt-2026-07-30.md`.
+Every job and every step succeeded except publication, including the canon gate,
+which had never run outside a development machine. Nothing was published.
+
+- [x] 12.1 Diagnose the failure: `gh` resolves the repository from the git remote of the working directory, and the step published from the artifact directory, which is deliberately outside the checkout. The token was present and correct; the addressing was missing.
+- [x] 12.2 Pass `GH_REPO` explicitly and address the assets by absolute path rather than changing directory into them, so publication does not depend on where it runs from.
+- [x] 12.3 Repair the state read the same failure exposed: `2>/dev/null || echo none` collapsed every failure into "no release exists", which is the answer that skips the protection the read exists for. It now separates a successful read, a "release not found" error, and any other failure, which refuses to publish blind.
+- [x] 12.4 Count the artifacts before publishing, so "only after every artifact exists" is checked rather than assumed.
+- [x] 12.5 Verify all three paths locally against the real repository with the mutating commands stubbed: `GH_REPO` set and no release for the tag proceeds with four archives and the checksums file; the original failing condition now fails loudly with the underlying error; a missing artifact refuses before touching the release.
+- [x] 12.6 Establish why the tag is not moved: `proxy.golang.org` already serves `v0.1.0` for this module at `b469386`, so re-creating that tag elsewhere would pin the proxy and the checksum database to content that no longer exists at that version. `v0.1.0` stands as a module version without binaries, and the repaired workflow publishes `v0.1.1` — the supersession the design already prescribes.
+- [x] 12.7 Obtain a separate explicit owner instruction before committing the repair, and before pushing, opening a pull request, and merging it; record each here before the action. Granted 2026-07-30 after the diagnosis and the local verification were presented, in one instruction covering the commit, the push, the pull request, and the merge. Recorded here before the commit. The merge still waits for the checks and for the automated review, as the first one did.
+- [x] 12.8 Obtain a separate explicit owner instruction before creating the `v0.1.1` tag. It is the act that publishes, and the failed first attempt does not carry over as authorization for a second. Granted 2026-07-30 in the same instruction, naming `v0.1.1` and its order after the merge. Recorded here before the tag. Any provider run and the archival keep their own gates.
