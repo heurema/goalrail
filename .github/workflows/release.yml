@@ -215,3 +215,26 @@ jobs:
             --title "${GITHUB_REF_NAME}" \
             --notes "Install: download the archive for your platform, verify it against \`checksums.txt\`, and put \`gr\` somewhere durable. The README's install section has the exact commands. Every binary here reports \`${GITHUB_REF_NAME}\` from \`gr version\`." \
             "${archives[@]}" "${dist}/checksums.txt"
+
+      # The module proxy is what `gr doctor` asks whether a newer release exists,
+      # and it discovers a tag late when nobody asks — measured on this repository
+      # at minutes to a quarter of an hour. Asking for the new version here is the
+      # documented way to collapse that window to about a minute.
+      #
+      # It runs last and cannot fail the release: the artifacts are already
+      # published, and a slow proxy is not a defective release.
+      - name: Ask the proxy for this version, so the check stops lagging it
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          module=github.com/heurema/goalrail
+          for attempt in 1 2 3; do
+            code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 \
+              "https://proxy.golang.org/${module}/@v/${GITHUB_REF_NAME}.info" || echo 000)"
+            echo "attempt ${attempt}: ${code}"
+            if [ "${code}" = "200" ]; then
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "the proxy has not ingested ${GITHUB_REF_NAME} yet; it will discover it on its own" >&2

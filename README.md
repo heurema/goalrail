@@ -134,6 +134,35 @@ possible. It never touches your user-level scaffold configuration.
 To remove the attachment: `gr disconnect --scaffold <name>`. The files above are
 ordinary repository content — deleting them is your act, not ours.
 
+## Checking for updates
+
+`gr doctor` tells you whether a newer Goalrail has been released. It is a line of
+information, not a demand: nothing about your repository changes because of it,
+and the exit code does not move.
+
+What leaves your machine is one request to `proxy.golang.org` — the same service
+`go install` already asks about this module — for the newest released version. It
+carries no identifier: not the tool's name, not its version, not your platform,
+not your repository, and no query parameter. What goes out is what the Go
+toolchain itself would send for the same module, which is why the report names
+the service it asked rather than the request naming you.
+
+The answer is remembered for a day, so repeated diagnoses ask nothing. A binary
+that is not itself a release — built from a checkout, from a modified tree — never
+asks at all: there would be nothing to conclude.
+
+**Turning it off.** Either of these is enough:
+
+```sh
+export GR_NO_UPDATE_CHECK=1        # this check only
+go env -w GOPROXY=off              # every module lookup on this machine, including this one
+```
+
+The second is not a special case Goalrail added. If you have already told the Go
+toolchain your module lookups stay home — with `GOPROXY`, `GOPRIVATE`, or
+`GONOPROXY` — this check reads that and does not ask. It also never runs in
+continuous integration.
+
 ## The loop
 
 1. A session opens. The agent is told, in one fixed line, that this repository
@@ -154,7 +183,7 @@ There is no second answering mechanism, no dialogue, no resume.
 | Command | What it does |
 |---|---|
 | `gr init` | Install the harness here, and register the session hooks where the scaffold allows it |
-| `gr doctor` | Report whether the harness is intact: attachment, overlay drift per file, toolchain, observability. Exits `0` healthy, `1` a problem you can act on, `2` the check itself did not run |
+| `gr doctor` | Report whether the harness is intact: attachment, overlay drift per file, toolchain, observability, and whether a newer release exists. Exits `0` healthy, `1` a problem you can act on, `2` the check itself did not run |
 | `gr update` | Bring this repository's harness up to what the installed `gr` carries. Stops rather than overwriting a local edit; keeps a recoverable copy |
 | `gr connect` | Attach a scaffold that can only register at user scope; needs `--yes` |
 | `gr disconnect` | Remove every registration, in whichever scope it lives |
@@ -184,7 +213,8 @@ intent-first workflow this repository is itself developed with.
 **Not there yet:** the binaries are not signed or notarized, and there is no
 package manager, install script, or Windows build; observability is bring-your-own
 detection only, with no exporter; and `gr update` refreshes this repository's
-harness, never the `gr` binary — nothing checks whether a newer release exists.
+harness, never the `gr` binary — `gr doctor` reports when a newer release exists,
+but applying it is still a new download or `go install`.
 
 Installing needs no Go toolchain. The harness itself needs no Node, but validating and
 archiving changes uses the stock [OpenSpec](https://github.com/Fission-AI/OpenSpec)
