@@ -118,11 +118,34 @@ being accepted, and all seven answered.
 - [x] 13.6 The README's privacy paragraph said the request carries "not the tool's name" while its URL names the module — which names the tool. Reworded: the module path is the request's one disclosure, the same one a `go install` of this tool already makes, and everything beyond it is what the toolchain would send anyway.
 - [x] 13.7 The agent paste-prompt forbade writes outside the repository that its own last step now performs: `gr doctor` writes the update-check cache into the state root. The prompt names that directory as the second permitted write instead of contradicting itself.
 
+## 14. Correct what the first release measured
+
+The `v0.1.2` release was the first to carry the check and the first to run the
+warm step. It closed the two scenarios nothing earlier could observe, and it
+falsified one claim in the process.
+
+- [x] 14.1 Measure the warm step against the two earlier tags: ingest four seconds after publication, against 3m45s and 16m41s of passive discovery. The step works.
+- [x] 14.2 Verify the check end to end against a real newer release rather than a fabricated one: the published `v0.1.2` binary, downloaded through the documented route and checksum-verified, reports nothing newer; a binary carrying the check and stamped `v0.1.1` reports that `v0.1.2` is released.
+- [x] 14.3 Record what that verification found: the step warmed `@v/<tag>.info` while the diagnosis reads `@latest`, a different answer with its own sixty-second cache, so for about two minutes after the ingest the check honestly reported "nothing newer" while a newer release existed. Observed live, not inferred.
+- [x] 14.4 Make the step ask for `@latest` as well, since that is the answer the check depends on. The remaining floor is that endpoint's own cache rather than discovery, and it is measured at the next release.
+- [x] 14.5 Correct the design and the coverage map to state what was measured instead of what was expected, and name the miss as the recurring shape it is — a true observation generalised past what was observed — cross-referenced to issue #43.
+
+## 15. Answer the review on the correction
+
+Four findings, all of them right, and two of them about the integrity of the
+measurement itself — the class this project keeps producing.
+
+- [x] 15.1 The `@latest` wait slept after its last request instead of before, so a cached answer with most of its sixty seconds left was never re-asked past the boundary: three attempts at 0, 20 and 40 seconds, then a sleep into expiry and a give-up unasked. The waits now sit between attempts, and the fourth lands at 65 seconds.
+- [x] 15.2 A prerelease tag can never equal `@latest`, which reports the newest stable version, so every prerelease release would have run the full wait and warned about a result that cannot occur. The ingest request still runs for it; only the equality wait is skipped.
+- [x] 15.3 The four-second result was compared against numbers measured from a different starting event. Recomputed from the same events: publication to proxy is 14m46s for `v0.1.1` against 4s for `v0.1.2` — the interval the step controls — while tag to proxy is 3m45s, 16m41s and 2m46s, most of the last being the release run. The overstatement is named where it happened rather than quietly corrected.
+- [x] 15.4 CTX-10's `14m46s` was labelled tag-to-cache and is publication-to-cache; tag-to-cache for that release is 16m41s. Both numbers are correct measurements of different intervals and the label was the error. Corrected by appending CTX-20, not by rewriting CTX-10.
+
 ## 11. Stop at the owner gates
 
 - [x] 11.1 Produce planning artifacts only this round; implementation begins only after a separate explicit owner instruction, recorded here before the first edit. Granted 2026-07-30 after the review round and after the owner chose the cheaper repair for the disclosure rule — cited to the non-goal that carries it, with the test kept as task 10.4a — over a further intent version. The grant covers sections 5 through 10 in dependency order. Committing, pushing, opening a pull request, merging, any release that would exercise the new workflow step, and archiving each remain ungranted.
 - [x] 11.2 Obtain a separate explicit owner instruction before committing; record it here before the commit. Granted 2026-07-31, after the corrected cost was put to the owner and the decision retaken on it, for one commit carrying the planning artifacts, the transport package, the diagnosis line, the confinement tests, the release workflow step, and the documentation. Recorded here before the commit. Pushing, opening a pull request, merging, any release exercising the new workflow step, and archiving each remain ungranted.
 - [x] 11.3 Obtain a separate explicit owner instruction before pushing and opening a pull request; wait for the automated review and do not merge on the strength of that instruction. Granted 2026-07-31, after the owner-directed pre-push review round of section 12 was answered in full. Recorded here before the push; merging, any release, and archiving each keep their own gates.
 - [x] 11.4 Obtain a separate explicit owner instruction before merging, after the automated review has been answered. Granted 2026-07-31, after all seven review findings were fixed, verified and answered in-thread, and every check passed on the answering commit. Recorded here before the merge. Any release exercising the new workflow step, and the archival, keep their own gates.
-- [ ] 11.5 Obtain a separate explicit owner instruction before any release that would exercise the new workflow step, and before archiving this change and promoting the deltas.
+- [x] 11.5a Obtain a separate explicit owner instruction before any release that would exercise the new workflow step. Granted 2026-07-31 for `v0.1.2`, on `main` at `08df584`. Recorded here before the tag. This release is the first to carry the update check at all, and the first to run the post-publication proxy request, so it is what closes the two scenarios nothing earlier could observe.
+- [ ] 11.5b Obtain a separate explicit owner instruction before archiving this change and promoting the deltas, and re-read the promoted text immediately before promotion in case another change archived first.
 - [ ] 11.6 Leave the owner's working scaffold configuration and the `codex/dogfood-run-v0` branch untouched throughout; every check, cache, and stand-in source this change exercises lives in a temporary directory or a fake state root.

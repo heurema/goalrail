@@ -1,10 +1,10 @@
 # Context Pack
 
 - **Context Pack ID:** context-doctor-update-check-v0
-- **Version:** 4
-- **Previous version:** 3
+- **Version:** 5
+- **Previous version:** 4
 - **Started at:** 2026-07-30T18:10:00Z
-- **Completed at:** 2026-07-31T07:50:00Z
+- **Completed at:** 2026-07-31T09:55:00Z
 - **Outcome:** sufficient
 
 Version 2 adds CTX-17, observed after the owner asked how the check is best done
@@ -46,6 +46,8 @@ toolchain traffic — is exactly what the narrower fact supports.
 | CTX-18 | repository | CTX-17's observation was made against a local cleartext server, so the literal string it recorded is the HTTP/1.1 default. The `go` command sets no agent string of its own; the standard library supplies its default for whichever protocol is negotiated, and the proxy the request actually reaches is served over HTTP/2. The fact that matters is the absence of anything set, not the literal recorded. | local:the capture in CTX-17 was plaintext HTTP/1.1 by construction; protocol negotiated against `proxy.golang.org` is HTTP/2 | 2026-07-30T19:38:00Z | Narrows CTX-17 before it could become a hard-coded literal in an implementation. The requirement is that Goalrail sets nothing, so the request is whatever the standard library would have sent anyway; pinning either string would invert the point. |
 
 | CTX-19 | repository | CTX-4's estimate was wrong by a factor of two, and wrong in a way worth naming: it measured *importing* a transport rather than *using* one. A declared but uncalled client is mostly eliminated by the linker, which is why it read +40.2%. The shipped check calls it, so the stack is retained whole — 78 further packages, 122 to 200 — and the binary grows from 4,969,826 to 9,869,954 bytes, +98.6%. What a user downloads grows with it: the compressed archive goes from 2,760,261 to 5,419,593 bytes, +96%. Plain HTTP measures identically, so the weight is the live HTTP stack rather than TLS alone. | local:build of `main` at `c498146` against the implemented branch, `go list -deps` on both, `tar -czf` on each binary | 2026-07-31T07:48:00Z | The price the owner accepted was half the real one. It was measured as task 10.4 requires, put to them with the corrected figure before anything was committed, and re-decided rather than absorbed. It also fixes the lesson for any future estimate here: measure a used dependency, never an imported one. |
+
+| CTX-20 | repository | CTX-10 reports `14m46s` for `v0.1.1` as the interval "between tag time and first cache". The number is right and the label is wrong: 14m46s is publication to first cache; tag to first cache is 16m41s. Measured across all three tags from the same starting events — tag to proxy: 3m45s, 16m41s, 2m46s; publication to proxy: not published, 14m46s, 4s; tag to publication, which is the release run itself: —, 1m55s, 2m42s. | local:tag times from `git`, publication times from the release API, first-cache times from `last-modified` on each `.mod` | 2026-07-31T09:52:00Z | Fixes which comparison the warm step may claim. Publication to proxy is the interval the release controls, and there the step is worth four seconds against fourteen minutes; tag to proxy improves much less, because most of what remains is the release run. Comparing a publication-based number against tag-based ones would have overstated the result — the same shape as CTX-19, one measurement standing in for a different one. |
 
 ## Material Unknowns
 

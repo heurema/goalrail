@@ -43,8 +43,8 @@ current release. Nothing outside the session's temporary directories was touched
 
 | Scenario | Evidence |
 |---|---|
-| A release is published | the release workflow's last step requests `@v/<tag>.info` after publication. Observable only at the next real release, which is behind its own owner gate. |
-| The source does not answer | by construction: the step carries `continue-on-error` and retries three times before giving up with a message. Observable in full only if the proxy is slow during a real release. |
+| A release is published | **observed on `v0.1.2`**: tag 09:31:52Z, published 09:34:34Z, the warm step's first attempt answered `200` at 09:34:38Z. Four seconds from publication, against 14m46s from publication on `v0.1.1` — the interval the step controls. From tag creation the same three releases read 3m45s, 16m41s and 2m46s, most of the last being the release run itself. |
+| The source does not answer | by construction: the step carries `continue-on-error` and bounded retries before giving up with a message. Observable in full only if the proxy is slow during a real release. |
 | The request would precede publication | by construction: the step is ordered after `gh release create` in the same job. |
 
 ## harness-update — the rule survives, its reason changes
@@ -55,8 +55,29 @@ current release. Nothing outside the session's temporary directories was touched
 | A release lookup would be attempted | test: the confinement tests above. The update command is in the same package as the diagnosis and is handed no transport, which is exactly why the assertion is about construction sites rather than imports. |
 | A release channel exists | the channel exists and is asked — by the diagnosis. The update command asks nothing, and the requirement now says so instead of calling the decision open. |
 
-## What is not yet observed
+## What the first release carrying this check established, and corrected
 
-- The post-publication request against a real release: it runs at the next tag.
-- The proxy's own lag closing to about a minute: measurable only at that release,
-  against the 3m45s and 14m46s recorded for the previous two.
+`v0.1.2` was the first release to ship the check and the first to run the warm
+step. Both worked, and one claim they were supposed to support did not survive
+contact:
+
+- The check works end to end against reality. The published `v0.1.2` binary,
+  downloaded through the documented route and verified against `checksums.txt`,
+  reports `update: nothing newer than v0.1.2 found as of … (asked
+  proxy.golang.org)`. A binary carrying the check but stamped `v0.1.1` reports
+  `update: v0.1.2 is released, this is v0.1.1`.
+- The warm step collapses ingest to seconds: four from publication, against
+  14m46s from publication on the previous release. Measured from the same
+  starting event on both, because the first draft of this row compared a
+  publication-based number against tag-based ones and overstated the result.
+- **But it warmed the wrong answer.** The step requested `@v/<tag>.info`, while
+  the diagnosis reads `@latest` — a different endpoint with its own sixty-second
+  cache. Between 09:34:38Z and about 09:37:1xZ the check honestly reported
+  "nothing newer" while a newer release existed, observed live. The design's
+  "about a minute" was written about ingest and read as though it were about the
+  check. The step now asks for `@latest` as well; the remaining floor is that
+  cache rather than discovery, and it is measured at the next release.
+
+That miss is the same shape this project keeps producing — a true observation
+generalised past what was observed — and is recorded in issue #43 with the
+others.
