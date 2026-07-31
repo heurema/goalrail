@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -340,11 +341,10 @@ func IgnoreState(repositoryRoot, relativePath string) (bool, error) {
 		return false, fmt.Errorf("%w: git is not available, so whether %s would be committed cannot be established",
 			ErrPathNotIgnored, relativePath)
 	}
-	if !isGitRepository(repositoryRoot) {
+	if !IsRepository(repositoryRoot) {
 		return true, nil
 	}
-	command := exec.Command("git", "-C", repositoryRoot, "check-ignore", "-q", "--", relativePath)
-	if err := command.Run(); err == nil {
+	if err := git(repositoryRoot, "check-ignore", "-q", "--", relativePath).Run(); err == nil {
 		return true, nil
 	}
 	// A tracked file is the dangerous case: it is already in the index, so an
@@ -355,35 +355,321 @@ func IgnoreState(repositoryRoot, relativePath string) (bool, error) {
 	return false, nil
 }
 
-func isGitRepository(repositoryRoot string) bool {
-	command := exec.Command("git", "-C", repositoryRoot, "rev-parse", "--git-dir")
-	return command.Run() == nil
+// IgnoreSource names the file whose rule decided that a path is not ignored, as
+// version control itself reports it, and is empty where no rule decided.
+//
+// It exists so a refusal can name the cause it actually has rather than the one
+// that is usually true. Asserting "a rule your repository shares overrides this"
+// about a repository that has no such rule is the same class of mistake the
+// diagnosis forbids everywhere else: claiming more than was verified.
+func IgnoreSource(repositoryRoot, relativePath string) string {
+	output, err := git(repositoryRoot, "check-ignore", "-v", "--no-index", "--", relativePath).Output()
+	if err != nil {
+		return ""
+	}
+	// `<source>:<line>:<pattern>\t<path>`, and the source may itself contain a
+	// colon on no platform this runs on, so the first field is the file.
+	line := strings.TrimSpace(string(output))
+	if line == "" {
+		return ""
+	}
+	return strings.SplitN(line, ":", 2)[0]
+}
+
+// git runs one version control command against a directory with the caller's own
+// repository selection removed from the environment.
+//
+// Those variables name a repository directly, and they override `-C`. A shell
+// that exported them — the bare "dotfiles repository" arrangement is the common
+// one — would otherwise have every question here answered about that repository
+// instead of the one the user named: the ignore rule would be written into it,
+// the check that reads the rule back would consult it, and the answer would be
+// "ignored" about a path this repository would carry in a commit. The question
+// asked here is always "what governs this directory", never "what did the
+// caller's shell select".
+func git(repositoryRoot string, arguments ...string) *exec.Cmd {
+	command := exec.Command("git", append([]string{"-C", repositoryRoot}, arguments...)...)
+	command.Env = environmentWithoutRepositorySelection()
+	return command
+}
+
+func environmentWithoutRepositorySelection() []string {
+	removed := map[string]bool{
+		"GIT_DIR":              true,
+		"GIT_WORK_TREE":        true,
+		"GIT_COMMON_DIR":       true,
+		"GIT_INDEX_FILE":       true,
+		"GIT_OBJECT_DIRECTORY": true,
+	}
+	environment := os.Environ()
+	kept := make([]string, 0, len(environment))
+	for _, entry := range environment {
+		name, _, found := strings.Cut(entry, "=")
+		if found && removed[name] {
+			continue
+		}
+		kept = append(kept, entry)
+	}
+	return kept
+}
+
+// IsRepository reports whether the directory is under version control at all.
+// Where it is not, no commit can carry anything out of it — which is why the
+// ignore question does not arise there, and why the caller that installs the
+// harness has to distinguish the two rather than reading "ignored" as safety.
+func IsRepository(repositoryRoot string) bool {
+	return git(repositoryRoot, "rev-parse", "--git-dir").Run() == nil
+}
+
+// WorkTreeRoot reports the top of the work tree the directory belongs to, and
+// false where the directory has none.
+//
+// Bareness is the wrong question to ask on its own: a bare repository has no
+// work tree, and so does the repository's own directory, and in both cases
+// repository content would land beside `HEAD`, `objects` and `refs`. This asks
+// the question that covers them together, and it also reports where the clone's
+// ignore rule is anchored, which is not the same directory the user named.
+func WorkTreeRoot(repositoryRoot string) (string, bool) {
+	if !IsRepository(repositoryRoot) {
+		return "", false
+	}
+	output, err := git(repositoryRoot, "rev-parse", "--show-toplevel").Output()
+	if err != nil {
+		return "", false
+	}
+	top := strings.TrimSpace(string(output))
+	if top == "" {
+		return "", false
+	}
+	return top, true
 }
 
 func tracked(repositoryRoot, relativePath string) bool {
-	command := exec.Command("git", "-C", repositoryRoot, "ls-files", "--error-unmatch", "--", relativePath)
-	return command.Run() == nil
+	return git(repositoryRoot, "ls-files", "--error-unmatch", "--", relativePath).Run() == nil
 }
 
-// AddIgnoreEntries appends the missing entries to the repository's ignore file
-// and reports which it added. It is only ever called for a user who asked.
+// IgnoreTargetState reports whether this clone can be given an ignore rule of
+// its own and, where it cannot, which reason applies. The three reasons are not
+// interchangeable: one is a condition the user will create later and should be
+// told about, one has nowhere for repository content to live at all, and one is
+// simply a machine this question cannot be asked on.
+type IgnoreTargetState int
+
+const (
+	// IgnoreTargetWritable reports a clone whose own rule can be written.
+	IgnoreTargetWritable IgnoreTargetState = iota
+	// IgnoreTargetNotARepository reports a directory not under version control.
+	IgnoreTargetNotARepository
+	// IgnoreTargetNoWorkTree reports a repository with no work tree.
+	IgnoreTargetNoWorkTree
+	// IgnoreTargetUnknown reports that version control could not be asked.
+	IgnoreTargetUnknown
+)
+
+// CloneIgnoreTarget reports where this clone's own ignore rule belongs, and what
+// the entries written there are anchored to.
+//
+// The location is asked of version control rather than assembled from a path.
+// In a linked worktree and in a submodule the repository's directory is a
+// regular file, so a joined path names nothing there; and the rule that is
+// actually consulted lives in the common directory rather than in the
+// per-worktree one, which has no `info` at all.
+func CloneIgnoreTarget(repositoryRoot string) (string, IgnoreTargetState) {
+	path, _, state := cloneIgnoreTarget(repositoryRoot)
+	return path, state
+}
+
+// cloneIgnoreTarget also reports the top of the work tree, because the rule is
+// anchored there rather than at the directory the caller named.
+func cloneIgnoreTarget(repositoryRoot string) (string, string, IgnoreTargetState) {
+	if _, err := exec.LookPath("git"); err != nil {
+		return "", "", IgnoreTargetUnknown
+	}
+	if !IsRepository(repositoryRoot) {
+		return "", "", IgnoreTargetNotARepository
+	}
+	workTree, hasWorkTree := WorkTreeRoot(repositoryRoot)
+	if !hasWorkTree {
+		return "", "", IgnoreTargetNoWorkTree
+	}
+	output, err := git(repositoryRoot, "rev-parse", "--git-common-dir").Output()
+	if err != nil {
+		return "", "", IgnoreTargetUnknown
+	}
+	// The answer is relative to the directory the command ran in, which is the
+	// repository root because that is what `-C` named.
+	common := strings.TrimSpace(string(output))
+	if common == "" {
+		return "", "", IgnoreTargetUnknown
+	}
+	if !filepath.IsAbs(common) {
+		common = filepath.Join(repositoryRoot, common)
+	}
+	// A version that does not know the question echoes it back and exits zero, so
+	// the answer is believed only where it names a directory that exists. Creating
+	// one called `--git-common-dir` inside the user's work tree is not a failure
+	// mode worth having.
+	if info, statErr := os.Stat(common); statErr != nil || !info.IsDir() {
+		return "", "", IgnoreTargetUnknown
+	}
+	return filepath.Join(common, "info", "exclude"), workTree, IgnoreTargetWritable
+}
+
+// AddCloneIgnoreEntries writes the missing entries to this clone's own ignore
+// rule — the one no commit can carry — and reports which of them took effect.
+//
+// Where there is nowhere to write it reports nothing and no error, and where the
+// write fails it reports the failure without acting on it: making a path
+// unshareable is a service initialization performs where it can, never a
+// precondition it imposes. What follows from not having done it is the caller's
+// existing refusal, which is reached either way — so the failure belongs in the
+// report, not in the exit status.
+//
+// Whether the clone's rule can cover a path is not knowable until it has been
+// written, because a rule the repository shares can outrank it and deciding that
+// in advance would mean reimplementing the precedence between ignore rules,
+// which this package deliberately leaves to version control. So the entries are
+// written, the state is read again, and any entry that turned out to achieve
+// nothing is taken back out — an entry with no effect is noise the user would
+// later have to diagnose.
+func AddCloneIgnoreEntries(repositoryRoot string, entries []string) ([]string, error) {
+	ignorePath, workTree, state := cloneIgnoreTarget(repositoryRoot)
+	if state != IgnoreTargetWritable {
+		return nil, nil
+	}
+	// The rule is anchored at the top of the work tree, and the caller may have
+	// named a directory below it. An entry containing a slash is matched from the
+	// anchor, so it has to carry the way back down or it names a path that does
+	// not exist.
+	anchored := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		anchored = append(anchored, anchorEntry(workTree, repositoryRoot, entry))
+	}
+	// Version control does not always create the directory this rule lives in.
+	// Some installations do, from their own template; this one does not.
+	if err := os.MkdirAll(filepath.Dir(ignorePath), 0o755); err != nil {
+		return nil, fmt.Errorf("make room for this clone's own ignore rule: %w", err)
+	}
+	// Every other write this package makes refuses a symlink, because following
+	// one leaves the repository the user named — and here it would also mean the
+	// take-back path removing a file the user owns.
+	if info, statErr := os.Lstat(ignorePath); statErr == nil && info.Mode()&os.ModeSymlink != 0 {
+		return nil, fmt.Errorf("this clone's own ignore rule at %s is a symbolic link, so writing it would leave this repository", ignorePath)
+	}
+	added, previous, existed, err := addIgnoreEntries(repositoryRoot, ignorePath, entries, anchored)
+	if err != nil {
+		return nil, err
+	}
+	if len(added) == 0 {
+		return nil, nil
+	}
+	var effective []string
+	for index, entry := range entries {
+		if !slices.Contains(added, anchored[index]) {
+			continue
+		}
+		if ignored, ignoreErr := IgnoreState(repositoryRoot, entry); ignored && ignoreErr == nil {
+			effective = append(effective, anchored[index])
+		}
+	}
+	if len(effective) == len(added) {
+		return effective, nil
+	}
+	if err := rewriteIgnoreFile(ignorePath, previous, existed, effective); err != nil {
+		// The write stands rather than being half taken back: a visible entry the
+		// report names is better than a silent partial state.
+		return added, nil
+	}
+	return effective, nil
+}
+
+// anchorEntry rewrites an entry so it means the same path when it is matched
+// from the top of the work tree rather than from the directory it describes.
+// An entry with no interior slash matches at any depth already, so it is left
+// alone; the anchoring only applies to one that carries a path.
+func anchorEntry(workTree, repositoryRoot, entry string) string {
+	if !strings.Contains(strings.TrimSuffix(entry, "/"), "/") {
+		return entry
+	}
+	// Version control answers with symbolic links resolved and the caller's path
+	// generally is not, so the two are made comparable before the distance
+	// between them is measured. On a platform whose temporary and system
+	// directories are links — which is every macOS — skipping this produces a
+	// relative path full of parent steps and an entry that matches nothing.
+	relative, err := filepath.Rel(resolved(workTree), resolved(repositoryRoot))
+	if err != nil || relative == "." || strings.HasPrefix(relative, "..") {
+		return entry
+	}
+	return filepath.ToSlash(relative) + "/" + entry
+}
+
+func resolved(path string) string {
+	if evaluated, err := filepath.EvalSymlinks(path); err == nil {
+		return evaluated
+	}
+	return path
+}
+
+// rewriteIgnoreFile puts the file back to what it was, plus only the entries
+// that were worth keeping.
+func rewriteIgnoreFile(ignorePath string, previous []byte, existed bool, keep []string) error {
+	if len(keep) == 0 {
+		if !existed {
+			return os.Remove(ignorePath)
+		}
+		// Nothing was kept, so the file goes back byte for byte — including a last
+		// line the user never terminated, which this must not silently terminate.
+		return os.WriteFile(ignorePath, previous, 0o644)
+	}
+	content := string(previous)
+	if content != "" && !strings.HasSuffix(content, "\n") {
+		content += "\n"
+	}
+	for _, entry := range keep {
+		content += entry + "\n"
+	}
+	return os.WriteFile(ignorePath, []byte(content), 0o644)
+}
+
+// AddIgnoreEntries appends the missing entries to the ignore rules the
+// repository shares with everyone who clones it, and reports which it added. It
+// is only ever called for a user who asked, because those rules are repository
+// content exactly as the overlay is.
 func AddIgnoreEntries(repositoryRoot string, entries []string) ([]string, error) {
+	if _, hasWorkTree := WorkTreeRoot(repositoryRoot); IsRepository(repositoryRoot) && !hasWorkTree {
+		// Nowhere for the rule to apply, and writing it would leave repository
+		// content beside `HEAD` and `objects`.
+		return nil, nil
+	}
 	ignorePath := filepath.Join(repositoryRoot, ".gitignore")
+	if info, statErr := os.Lstat(ignorePath); statErr == nil && info.Mode()&os.ModeSymlink != 0 {
+		return nil, fmt.Errorf("the ignore rules at %s are a symbolic link, so writing them would leave this repository", ignorePath)
+	}
+	added, _, _, err := addIgnoreEntries(repositoryRoot, ignorePath, entries, entries)
+	return added, err
+}
+
+// addIgnoreEntries appends what is missing to one ignore file. paths are the
+// paths whose state decides, and lines[i] is the text that would cover paths[i]
+// when matched from wherever this particular file is anchored.
+func addIgnoreEntries(repositoryRoot, ignorePath string, paths, lines []string) (
+	added []string, previous []byte, existed bool, err error,
+) {
 	existing, err := os.ReadFile(ignorePath)
 	if err != nil && !os.IsNotExist(err) {
-		return nil, fmt.Errorf("read .gitignore: %w", err)
+		return nil, nil, false, fmt.Errorf("read the ignore rules: %w", err)
 	}
+	existed = err == nil
 	present := make(map[string]bool)
 	for _, line := range strings.Split(string(existing), "\n") {
 		present[strings.TrimSpace(line)] = true
 	}
-	var added []string
 	var addition strings.Builder
-	for _, entry := range entries {
-		if present[entry] {
-			continue
-		}
-		ignored, ignoreErr := IgnoreState(repositoryRoot, entry)
+	for index, path := range paths {
+		// What decides is the state, never a matching line: a rule later in the
+		// same file can undo an earlier one, so a literal match proves nothing
+		// about whether the path is covered.
+		ignored, ignoreErr := IgnoreState(repositoryRoot, path)
 		if ignoreErr != nil {
 			// A tracked path, or a check that cannot run: an ignore entry would
 			// change nothing, and writing one anyway would dress the refusal that
@@ -394,19 +680,26 @@ func AddIgnoreEntries(repositoryRoot string, entries []string) ([]string, error)
 			// Already covered by a rule that does not name it literally.
 			continue
 		}
-		addition.WriteString(entry)
+		if present[lines[index]] {
+			// The line is already there and is demonstrably not what decides, so a
+			// second copy of it would change nothing but the file.
+			continue
+		}
+		addition.WriteString(lines[index])
 		addition.WriteString("\n")
-		added = append(added, entry)
+		added = append(added, lines[index])
 	}
 	if len(added) == 0 {
-		return nil, nil
+		return nil, existing, existed, nil
 	}
+	// A file whose last line was never terminated would otherwise have that line
+	// concatenated with the first entry, leaving neither path ignored.
 	content := string(existing)
 	if content != "" && !strings.HasSuffix(content, "\n") {
 		content += "\n"
 	}
 	if err := os.WriteFile(ignorePath, []byte(content+addition.String()), 0o644); err != nil {
-		return nil, fmt.Errorf("write .gitignore: %w", err)
+		return nil, nil, existed, fmt.Errorf("write the ignore rules: %w", err)
 	}
-	return added, nil
+	return added, existing, existed, nil
 }

@@ -142,6 +142,12 @@ func runUpdate(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
+	// The same boundary initialization holds: repository content has nowhere to
+	// live in a repository with no work tree, and update materializes the same
+	// overlay.
+	if err := refuseWhereThereIsNoWorkTree(root); err != nil {
+		return err
+	}
 	stateRoot, err := localrun.ResolveStateRoot(*stateDirectory)
 	if err != nil {
 		return err

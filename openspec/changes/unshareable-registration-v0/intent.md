@@ -1,0 +1,79 @@
+# Intent Snapshot
+
+- **Intent ID:** intent-unshareable-registration-v0
+- **Version:** 1
+- **Status:** confirmed
+- **Owner:** repository owner
+- **Context Pack:** context-unshareable-registration-v0 version 1
+- **Run references:** pending
+
+## Source Evidence
+
+- **SE-1 (owner):** Approved the first of four fixes found while walking the kata flow: initialization should stop needing an edit to a tracked ignore file, and should make the registration path unshareable by a rule that lives in the clone.
+- **SE-2 (owner):** Confirmed the recommendation that `--fix-gitignore` is kept rather than retired, before this snapshot was written.
+- **SE-3 (owner):** Settled that the kata will instruct nobody to install anything — a participant meets Goalrail later, on their own project, after seeing what it produced. The first run on an unprepared machine is therefore the product's first impression rather than an incidental path.
+- **SE-4 (repository, verified):** That first run currently fails at exactly this point. On a machine with no personal global ignore rule the registration is refused, the rest of the harness installs, and the tool is present and inert (CTX-1).
+- **SE-5 (repository, verified):** The defect is invisible to the owner, because their own global ignore file carries the entry. Reproducing a new user's state requires fabricating `HOME` and `XDG_CONFIG_HOME`; Goalrail's own repository reproduces the defect too (CTX-2, CTX-3).
+- **SE-6 (repository, verified):** The half that decides whether a path is unshareable needs no change: it asks `git check-ignore`, which already honours the per-clone exclude. Seeding that file by hand flips the registration from refused to applied with no code changed (CTX-4).
+- **SE-7 (repository):** No promoted requirement names any ignore file; the promoted vocabulary is provider-neutral. The behaviour is pinned instead by three sentences and two scenarios inside one requirement (CTX-5, CTX-6).
+- **SE-8 (repository):** The neighbouring promoted capability already anticipated this act — "made so by the same act where that is possible" — and stays true under the new behaviour, so it is owed no delta (CTX-7).
+- **SE-9 (external, verified):** The per-clone rule is not simply a better `.gitignore`. A tracked negation outranks it, and in those repositories only the tracked entry can restore the ignore (CTX-10).
+- **SE-10 (external, verified):** The most durable location is the user's global ignore file, which covers every repository they will ever clone and mutates none. It is also what hid this defect (CTX-11).
+- **SE-11 (repository, verified):** A writer that runs unconditionally breaks initialization in a directory that is not a repository and on a machine with no `git` on the lookup path. Neither failure is a stale test pin (CTX-12).
+- **SE-12 (external, verified):** Locating the file by joining `.git` is wrong in linked worktrees and submodules, where `.git` is a regular file; the parent directory is not guaranteed to exist; and a naive append corrupts a hand-maintained file, leaving neither path ignored (CTX-8, CTX-9, CTX-14).
+- **SE-13 (external, verified):** The per-clone rule does not travel with a working tree shipped without its `.git`, where the registration lands in a fresh clone stageable. A plain re-clone is safe, because the file was never committed and initialization runs again (CTX-15, CTX-20).
+- **SE-14 (repository, verified):** Two adjacent defects share the code this change touches: initialization in a bare repository writes harness content next to `HEAD` and `objects`, and initialization in a directory that is not yet a repository registers with no notice at all (CTX-13, CTX-16).
+- **SE-15 (repository):** Registering the first scaffold at user scope instead is excluded by a confirmed non-goal and by promoted text; it is not reopened here (CTX-18).
+- **SE-16 (owner):** Shown the four ambiguities with a proposed answer for each, the owner confirmed all four as proposed: the flag is kept, the silent non-repository case gains its notice, the work-tree condition is included so nothing is written inside a bare repository, and the diagnosis gains no state for a registration made shareable by copying a tree without its history.
+
+## Desired Outcomes
+
+| ID | Confirmed wording | Verification action | Evidence |
+|---|---|---|---|
+| OUT-1 | A first initialization on an unprepared machine registers and attaches. Initialization makes the registration path unshareable by its own act, using a rule that lives in the clone and that no commit can carry, so the user is not asked to change a file their teammates share in order to install something only they consented to. No tracked file is modified, and the participation marker is covered by the same act rather than left as a notice about a condition initialization could have fixed. | Run initialization in a fresh clone with a fabricated `HOME` and `XDG_CONFIG_HOME`, confirm the report says the registration applied, and confirm `git status --porcelain` shows no modification to any tracked file. | SE-1, SE-4, SE-5, CTX-1, CTX-2 |
+| OUT-2 | The consent property is exactly what it was. Nothing a commit could carry, and no registration written in the hope that nobody commits the file. Where the path still cannot be made unshareable — because it is already tracked, or because a rule the repository shares outranks the per-clone one — the registration is still refused, the rest of the harness still installs, and the report still names the reason, the entry that would make it possible, and the flag that adds it. | Track the settings path in one repository and add a negating rule to a tracked ignore file in another; confirm both still refuse and both name the remedy. | SE-2, SE-9, CTX-10 |
+| OUT-3 | The write fails open, so initialization acquires no dependency it did not have. In a directory that is not a repository and on a machine with no `git` on the lookup path, the write is skipped and the command completes exactly as it does today. A repository with no work tree is the one case that is not merely skipped: it has nowhere for repository content to live, so initialization refuses it with the reason named and writes nothing — no ignore rule, no overlay, no marker. Nothing Goalrail writes ever lands beside `HEAD` and `objects`, by any path including the explicit flag. | Run every command with an empty lookup path and run initialization in a plain directory, confirming each completes; run initialization against a bare repository with and without the flag, and confirm it refuses and the directory is unchanged. | SE-11, SE-14, CTX-12, CTX-13 |
+| OUT-4 | The location is asked of git rather than assumed, and an existing file survives being written to. Correct in a linked worktree and in a submodule, where the naive path does not exist; the parent directory is created where git did not; a hand-maintained file keeps every line it had, including one that ended without a newline; and re-running adds nothing. | Initialize from a linked worktree and from a submodule; seed a hand-written file whose last line has no newline, initialize twice, and confirm the file's own content survives and the second run leaves it byte-identical. | SE-12, CTX-8, CTX-9, CTX-14, CTX-17 |
+| OUT-5 | The user learns that initialization wrote inside their repository's own directory. The entries appear in the report among its changes, in the same voice as the files it materialized, because a write a user cannot see is one they cannot audit or undo. | Read the report of a first initialization and confirm the entries are named. | SE-1, CTX-4 |
+| OUT-6 | The one place the same harm still arrives quietly is spoken aloud. Where initialization runs in a directory that is not yet a repository, no rule can be written and none is needed yet — but the registration becomes committable the moment the directory becomes one, and the report says so. The command still completes, and nothing is refused: this is a statement of fact about a condition the user can create later, not a failure. | Initialize in a plain directory, read the report, then run `git init` and confirm the stated condition is the one that occurs. | SE-14, SE-16, CTX-16 |
+
+## Non-Goals
+
+| ID | Confirmed boundary | Evidence |
+|---|---|---|
+| NG-1 | The explicit flag is not retired. It remains the only remedy where a shared rule outranks the per-clone one, and removing it would trade a fixed defect for a lost capability. Its promoted sentence survives the delta rather than being deleted by it. | SE-2, SE-9, CTX-10 |
+| NG-2 | Nothing is written outside the repository. The user's global ignore file is the most durable of the three locations and is not touched: a repository-scoped act must not grant itself standing permission over every other repository the user will ever clone, and consent to initialize one repository is not consent to configure the machine. | SE-10, CTX-11 |
+| NG-3 | No change to registration scope, to which scaffold registers where, or to the events registered. The first scaffold's user-scope arrangement stays exactly as promoted, and the confirmed non-goal that forbids moving the second one there is not reopened. | SE-15, CTX-18 |
+| NG-4 | No change to how the ignore state is read. Initialization keeps asking git rather than parsing ignore files itself, including the precedence between them. | SE-6, CTX-4 |
+| NG-5 | No guarantee for a working tree shipped without its repository. A tree copied by `tar --exclude=.git` or `docker COPY` loses the rule and can stage the registration; that is a property of shipping a tree without its history, which carries every other ignored file the same way. The promise is about what a commit could carry, and a tar is not a commit. A plain re-clone is unaffected, because initialization runs again. | SE-13, CTX-15, CTX-20 |
+| NG-6 | No self-repair of a registration that has already become shareable, and no new diagnosis state for it. | SE-13, CTX-20 |
+| NG-7 | This snapshot authorizes no implementation, commit, push, pull request, merge, tag, release, provider run, or other external effect. Each keeps its own owner gate, recorded before the action. | SE-1 |
+
+## Observable Success Signals
+
+| ID | Signal | Measurement | Evidence |
+|---|---|---|---|
+| SIG-1 | The first run on an unprepared machine attaches. | A test initializes with a fabricated `HOME` and `XDG_CONFIG_HOME` and asserts the registration applied, the attachment is active, and no tracked file differs. | SE-4, CTX-1, CTX-2 |
+| SIG-2 | A path that genuinely cannot be made unshareable is still refused. | A test tracks the settings path, and a second test adds a negating rule to a tracked ignore file; both assert the refusal, and that the reason, the entry, and the flag are named. | SE-9, CTX-10 |
+| SIG-3 | Initialization needs neither a repository nor git, and never writes into one that has no work tree. | The existing tests that initialize in a plain directory and with an empty lookup path pass unmodified; a new test asserts a bare repository is refused and left byte-identical, with and without the flag. | SE-11, SE-14, CTX-12, CTX-13 |
+| SIG-4 | The file is found where git says it is. | A test initializes from a linked worktree and from a submodule and asserts the registration applied in each, in a layout where the joined path does not exist. | SE-12, CTX-8, CTX-17 |
+| SIG-5 | Writing to a file the user owns damages nothing. | A test seeds content whose last line lacks a newline, initializes twice, and asserts the original lines still match, both paths are ignored, and the second run changes no byte. | SE-12, CTX-9, CTX-14 |
+| SIG-6 | The write is disclosed. | A test asserts the report names the entries it added. | SE-1 |
+| SIG-7 | The quiet case is no longer quiet. | A test initializes in a directory that is not a repository and asserts the report carries the notice, the command completes, and nothing is refused. | SE-14, SE-16, CTX-16 |
+
+## Ambiguities and Unknowns
+
+| ID | Question | Evidence |
+|---|---|---|
+| AMB-1 | Whether the explicit flag is retired once the entries are written automatically. Proposed, and already settled with the owner: kept. It looks vestigial and is not — a tracked negation outranks the per-clone rule, and there the flag is the only move left. Retiring it also deletes a promoted sentence and breaks four further tests for no gain. | SE-2, SE-9, CTX-10 |
+| AMB-2 | Whether the silent case joins this change. In a directory that is not yet a repository, initialization registers with no notice at all, and a later `git init` makes the registration stageable — the same harm as the refusal, arrived at quietly. Proposed: include the notice only, saying the registration will be committable the moment the directory becomes a repository. It is one line and the code path is already open. The alternative was to leave it and record it, which would have kept this change to one defect. Resolved by owner confirmation of this version, and carried by OUT-6 and SIG-7. | SE-14, SE-16, CTX-16 |
+| AMB-3 | Whether the bare-repository fix counts as scope. The new writer needs a work-tree condition regardless, or it writes inside a bare repository; the same condition stops the existing flag doing what it does there today. Proposed: include it, because it falls out of a condition the change needs rather than being added to it. Resolved by owner confirmation of this version, and carried by OUT-3. | SE-14, SE-16, CTX-13 |
+| AMB-4 | Whether a registration that has become shareable should be detectable. The only case that reaches it is a working tree shipped without its `.git`, where the diagnosis would report the attachment as registered while a commit could now carry it. Proposed: no — declined as NG-5 and NG-6, because the condition is created by an act outside Goalrail that carries every other ignored file the same way, and a check for it would be a check on how the user copies directories. Resolved by owner confirmation of this version. | SE-13, SE-16, CTX-15, CTX-20 |
+
+## Confirmation
+
+- **Confirmed by:** repository owner
+- **Confirmed at:** 2026-07-31T13:20:00Z
+- **Verification action:** The owner read a plain-language view of this snapshot — what breaks on a first run, what the new act is, what stays unchanged, and the three boundaries it declines — and confirmed it together with the two open scope questions, answering both as proposed. The flag question had been settled separately beforehand, on the evidence that a tracked negation outranks the per-clone rule and leaves the flag as the only remaining remedy. Every fact this snapshot rests on was reproduced rather than reasoned: the refusal on a fabricated clean environment, the read path already accepting the per-clone rule with no code changed, the four negation shapes, the two commands a naive writer breaks, and the file corruption a naive append causes.
+- **Wording correction, 2026-07-31, before implementation:** OUT-3 and SIG-3 grouped the bare repository with the two cases where the write is merely skipped, and said the command "completes exactly as it does today". That contradicted the same outcome's next sentence and the promoted scenario this change adds, both of which require that nothing be written into a repository with no work tree — and it contradicted the answer the owner confirmed for AMB-3, which was that `.gitignore`, `.goalrail/` and `openspec/` stop being written beside `HEAD` and `objects`. A repository with no work tree has nowhere for repository content to live, so initialization refuses it. The confirmed decision is unchanged; only the wording that described it was wrong, so this version is preserved.
+- **Amendment rule:** A material change to outcomes, non-goals, or success signals creates a new version; wording-only edits preserve this version.

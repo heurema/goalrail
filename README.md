@@ -103,9 +103,9 @@ Goalrail is meant to be installed by the agent, not by hand. Paste this:
 > -c checksums.txt` on Linux. Extract `gr` into `~/.local/bin`: that one write
 > outside this repository is expected, and the binary has to stay there because
 > the session hooks record its absolute path. Then run `~/.local/bin/gr init` in
-> the repository root. If its report says anything is not ignored by git — the
-> settings path it registers the hooks in, or the marker file — re-run with
-> `~/.local/bin/gr init --fix-gitignore`, which adds those entries. If it says no
+> the repository root. If its report refuses the registration, show me the
+> `refused` text verbatim rather than acting on it: it names which of several
+> causes applies and whether `--fix-gitignore` can help at all. If it says no
 > supported scaffold was detected, tell me that verbatim without guessing why: the
 > harness is still installed, and the diagnosis will report the attachment as
 > missing for that reason rather than because anything failed. Finally run `~/.local/bin/gr doctor` and show me its output
@@ -128,10 +128,18 @@ commit could hand to a teammate.
 | `openspec/config.yaml` | Created if absent; afterwards only its `schema:` key is managed |
 | `.goalrail/ambient.json` | The marker that says this repository participates — git-ignored, per clone |
 | `.claude/settings.local.json` | The session hooks, in the per-user project file, **only if git ignores it** |
+| this clone's own exclude rule | The two entries that make the lines above ignored — kept wherever git keeps it for this clone, and named in the report; no commit can carry it |
 
 A registration a commit could carry would run in every teammate's session on your
-consent alone, so `gr init` refuses to write one and tells you what would make it
-possible. It never touches your user-level scaffold configuration.
+consent alone. So `gr init` makes those two paths unshareable itself, using the
+ignore rule that stays inside your clone — it never edits `.gitignore`, which
+your repository hands to everyone who clones it, and never touches your
+user-level scaffold configuration.
+
+Where that is not enough it refuses rather than guessing, and the refusal names
+the rule that actually decided. A settings path your repository already tracks
+cannot be fixed by any ignore rule; a shared rule that overrides this clone's can
+be, and `--fix-gitignore` is what adds the entries there.
 
 To remove the attachment: `gr disconnect --scaffold <name>`. The files above are
 ordinary repository content — deleting them is your act, not ours.
