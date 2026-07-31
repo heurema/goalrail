@@ -118,6 +118,18 @@ being accepted, and all seven answered.
 - [x] 13.6 The README's privacy paragraph said the request carries "not the tool's name" while its URL names the module — which names the tool. Reworded: the module path is the request's one disclosure, the same one a `go install` of this tool already makes, and everything beyond it is what the toolchain would send anyway.
 - [x] 13.7 The agent paste-prompt forbade writes outside the repository that its own last step now performs: `gr doctor` writes the update-check cache into the state root. The prompt names that directory as the second permitted write instead of contradicting itself.
 
+## 14. Correct what the first release measured
+
+The `v0.1.2` release was the first to carry the check and the first to run the
+warm step. It closed the two scenarios nothing earlier could observe, and it
+falsified one claim in the process.
+
+- [x] 14.1 Measure the warm step against the two earlier tags: ingest four seconds after publication, against 3m45s and 16m41s of passive discovery. The step works.
+- [x] 14.2 Verify the check end to end against a real newer release rather than a fabricated one: the published `v0.1.2` binary, downloaded through the documented route and checksum-verified, reports nothing newer; a binary carrying the check and stamped `v0.1.1` reports that `v0.1.2` is released.
+- [x] 14.3 Record what that verification found: the step warmed `@v/<tag>.info` while the diagnosis reads `@latest`, a different answer with its own sixty-second cache, so for about two minutes after the ingest the check honestly reported "nothing newer" while a newer release existed. Observed live, not inferred.
+- [x] 14.4 Make the step ask for `@latest` as well, since that is the answer the check depends on. The remaining floor is that endpoint's own cache rather than discovery, and it is measured at the next release.
+- [x] 14.5 Correct the design and the coverage map to state what was measured instead of what was expected, and name the miss as the recurring shape it is — a true observation generalised past what was observed — cross-referenced to issue #43.
+
 ## 11. Stop at the owner gates
 
 - [x] 11.1 Produce planning artifacts only this round; implementation begins only after a separate explicit owner instruction, recorded here before the first edit. Granted 2026-07-30 after the review round and after the owner chose the cheaper repair for the disclosure rule — cited to the non-goal that carries it, with the test kept as task 10.4a — over a further intent version. The grant covers sections 5 through 10 in dependency order. Committing, pushing, opening a pull request, merging, any release that would exercise the new workflow step, and archiving each remain ungranted.

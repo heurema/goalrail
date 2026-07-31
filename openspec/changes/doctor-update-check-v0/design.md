@@ -190,9 +190,18 @@ The proxy discovers a tag late when nobody asks: measured on this repository at
 passive path. Its documentation offers one remedy — explicitly request the
 version, after which it "should be available within one minute".
 
-So the release workflow requests `@v/<tag>.info` after `gh release create`
+So the release workflow requests the new version after `gh release create`
 succeeds. It runs last, and its failure does not fail the release: the artifacts
 are already public, and a slow proxy is not a defective release.
+
+It asks for two things, and the reason is a correction the `v0.1.2` release
+produced rather than a plan. Requesting `@v/<tag>.info` is what makes the proxy
+ingest the version — measured at four seconds after publication, against 3m45s
+and 16m41s of passive discovery on the two previous tags. But the diagnosis reads
+`@latest`, which is a different answer with its own sixty-second cache, and it
+still reported the previous release for about two minutes after the ingest. The
+step therefore asks for `@latest` as well, since that is the answer the check
+actually depends on. The remaining floor is that cache, not discovery.
 
 ### D8 — Shape in the report and in the JSON
 
