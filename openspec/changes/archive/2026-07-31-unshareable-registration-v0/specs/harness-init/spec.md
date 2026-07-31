@@ -113,7 +113,7 @@ to initialize one repository is not consent to configure the machine.
 - **WHEN** initialization runs for a scaffold whose repository-scope route is externally blocked
 - **THEN** the report names the separate consented connection command instead of implying the attachment is complete
 
-#### Scenario: The project settings path is not ignored yet
+#### Scenario: The project settings path is not ignored
 - **WHEN** initialization would register hooks in a per-user project settings file the version control system does not yet ignore, and the clone's own rule can cover it
 - **THEN** that rule is written, the registration proceeds, the report names the entries among its changes, and no rule the repository could supply to someone else is modified
 

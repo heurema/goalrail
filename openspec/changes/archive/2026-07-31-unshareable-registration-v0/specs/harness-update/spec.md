@@ -25,14 +25,26 @@ dislikes the result can return to what they had.
 Updating MUST NOT require a Node runtime, network access, or the stock OpenSpec
 CLI: the canon is already inside the binary.
 
-#### Scenario: A repository is behind the installed binary
-- **WHEN** the update runs where the overlay differs from the binary's canon
-- **THEN** every file is re-materialized, the result is verified against the canon by digest, and the report names each file with what it moved from and to
+#### Scenario: The overlay is behind the canon
+- **WHEN** the user runs the update in a repository whose overlay matches an older canon
+- **THEN** the overlay is re-materialized, the result is verified by digest, and the report names every rewritten file and the move from the old canon to the new one
+
+#### Scenario: The overlay is already current
+- **WHEN** the user runs the update where every overlay file already matches the canon
+- **THEN** nothing is rewritten and the report says the repository is already current
+
+#### Scenario: An update would run implicitly
+- **WHEN** any other command would apply an update as a side effect
+- **THEN** that violates this requirement
+
+#### Scenario: The previous state is wanted back
+- **WHEN** a user wants the pre-update overlay after an update
+- **THEN** what the command left behind is sufficient to restore it
+
+#### Scenario: No runtime or network is available
+- **WHEN** the update runs with no Node runtime and no network access
+- **THEN** it completes normally
 
 #### Scenario: The repository has no work tree
 - **WHEN** the update runs against a repository that has no work tree
 - **THEN** it is refused with the reason named, and nothing is written into it
-
-#### Scenario: An update is attempted as a side effect
-- **WHEN** any command other than the update would re-materialize the overlay
-- **THEN** that violates this requirement
