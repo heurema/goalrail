@@ -1,0 +1,62 @@
+# Scenario coverage — doctor-update-check-v0
+
+Every scenario in the three delta specs, and what exercises it.
+
+The end-to-end runs used binaries built at real tags in a scratch clone, so the
+check ran for real against `proxy.golang.org` rather than against a description
+of it. One reported `v0.0.1` — a release behind — and one reported `v0.1.1`, the
+current release. Nothing outside the session's temporary directories was touched.
+
+## harness-doctor — a newer release is a fact, never a problem
+
+| Scenario | Evidence |
+|---|---|
+| A newer release exists | end to end: a binary reporting `v0.0.1` asked the live proxy and printed `update: v0.1.1 is released, this is v0.0.1 (asked proxy.golang.org at 2026-07-31T07:44:04Z)` — no next action, and the exit code unchanged. Test: `TestAvailabilityReportsEachStateAsAFact`. |
+| The binary is current | end to end: a binary reporting `v0.1.1` printed `update: nothing newer than v0.1.1 found as of … (asked proxy.golang.org)`. The wording states what was found and when; `TestTheCheckNeverClaimsCurrency` pins that it never says the user is up to date. |
+| The running binary is not a release build | end to end: this worktree's own build reports a pseudo-version and printed `update: not checked (this build reports …, which is not a release)`. Test: `TestNoCheckIsMadeWhenThisBuildIsNotARelease`, which also asserts no request was made. |
+| The check produced no answer | test: `TestAvailabilityReportsEachStateAsAFact` for the failed case, `TestADeclinedCheckReadsDifferentlyFromAFailedOne` for the distinction the requirement asks for, and `TestAFailingCheckSaysNothingTheSourceSaid` for the rule that the source's own text never reaches a user. |
+| The answer comes from a cache that is not yet due | end to end: a second diagnosis left the cache file's modification time untouched, so nothing was asked, while the answer was still reported. Test: `TestAnAnswerFromTheCacheIsStillAnAnswer` asserts the reported answer carries the time it was obtained. |
+| A newer release would change the verdict | test: `TestTheUpdateLineChangesNoVerdict` drives every state through the summary and asserts the problem set never moves. End to end: a healthy repository reported `harness: working` beside the update line and exited `0`. |
+| A next action would be prescribed | test: `TestAvailabilityReportsEachStateAsAFact` asserts no state's line contains a prescribed command, and `TestTheReportCarriesOneUpdateLine` asserts the line never appears among the problems. |
+
+## release-channel — one bounded question, from one place
+
+| Scenario | Evidence |
+|---|---|
+| The same diagnosis runs twice | test: `TestTheComposedCheckAsksOnlyWhenTheCacheIsDue` drives the composed check against a stand-in source counting requests — a fresh cache answers with zero further requests. End to end: the cache file's modification time was unchanged by a second real run. |
+| The cache is stale | test: the same composed-check test ages the cache past the interval and observes exactly one further request and the file rewritten with the source's answer. End to end: ageing the real file made the next run rewrite it. |
+| The network is unavailable | test: `TestAvailabilityReportsEachStateAsAFact` with a failing check; the diagnosis completes and the exit code is unchanged. |
+| The source answers something unusable | test: `TestLatestAcceptsOnlyAnAnswerToTheQuestionAsked` over a pseudo-version, a `404` whose body carries the proxy's own paths, an empty body, and non-JSON — each rejected. |
+| Another command would reach the network | test: `TestOnlyTheTransportPackageImportsAnHTTPClient`, `TestOnlyTwoPackagesImportTheTransport`, and `TestTheRealCheckIsConstructedOnce`. The last is the one that carries the weight: the import graph cannot separate two functions in one package, so what confines the network is that the transport is handed in as a value from a single construction site. |
+| Asking would need an account | the request carries no credential and the proxy requires none — `TestTheRequestSaysNothingAboutTheInstallation` and its HTTP/2 twin assert the outgoing request carries no header beyond what the standard library sends, and `TestARedirectIsAFailureNotAHop` pins that the one request cannot be sent onward to another host. |
+
+## release-channel — refusals already expressed
+
+| Scenario | Evidence |
+|---|---|
+| The user has directed module lookups away from the proxy | end to end: `GOPROXY=off` printed `update: not checked (GOPROXY does not start with the public proxy)`, as did a private mirror in first position; `GOPRIVATE=github.com/heurema/*` printed `update: not checked (GOPRIVATE covers this module)`. Test: `TestDeclinedHonoursTheToolchainSettingWhereItActuallyLives` covers the case that matters most — a setting written by `go env -w`, which leaves the process environment empty — and `TestDeclinedReadsEachRefusal` covers the rest, including the first-entry rule for a list. |
+| The dedicated switch is set | end to end: `GR_NO_UPDATE_CHECK=1` printed `update: not checked (GR_NO_UPDATE_CHECK is set)`. Test: `TestADeclinedCheckNeverReachesTheTransport` asserts no request is made even with the source reachable. |
+| The diagnosis runs in continuous integration | end to end: `CI=true` printed `update: not checked (this is continuous integration)`. |
+| The request would identify the installation | test: `TestTheRequestSaysNothingAboutTheInstallation` observes the real outgoing request and asserts no agent string of ours, no query parameter, and no header the toolchain would not have sent. |
+
+## release-channel — a published release makes itself discoverable
+
+| Scenario | Evidence |
+|---|---|
+| A release is published | the release workflow's last step requests `@v/<tag>.info` after publication. Observable only at the next real release, which is behind its own owner gate. |
+| The source does not answer | by construction: the step carries `continue-on-error` and retries three times before giving up with a message. Observable in full only if the proxy is slow during a real release. |
+| The request would precede publication | by construction: the step is ordered after `gh release create` in the same job. |
+
+## harness-update — the rule survives, its reason changes
+
+| Scenario | Evidence |
+|---|---|
+| The user reads the command's help | unchanged behaviour; the promoted scenario is carried through the `MODIFIED` delta untouched. |
+| A release lookup would be attempted | test: the confinement tests above. The update command is in the same package as the diagnosis and is handed no transport, which is exactly why the assertion is about construction sites rather than imports. |
+| A release channel exists | the channel exists and is asked — by the diagnosis. The update command asks nothing, and the requirement now says so instead of calling the decision open. |
+
+## What is not yet observed
+
+- The post-publication request against a real release: it runs at the next tag.
+- The proxy's own lag closing to about a minute: measurable only at that release,
+  against the 3m45s and 14m46s recorded for the previous two.

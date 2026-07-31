@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/heurema/goalrail/internal/ambient"
+	"github.com/heurema/goalrail/internal/updatecheck"
 )
 
 // nodeExecutable is the runtime the stock OpenSpec CLI needs. Its presence is
@@ -61,6 +62,7 @@ type Diagnosis struct {
 	Attachments   []AttachmentDiagnosis `json:"attachments"`
 	Toolchain     ToolchainState        `json:"toolchain"`
 	Observability ObservabilityState    `json:"observability"`
+	Update        UpdateAvailability    `json:"update"`
 
 	// Invocation is the exact command the repository is driven by, printed so an
 	// agent working here does not have to guess it.
@@ -86,6 +88,13 @@ type DiagnoseInput struct {
 	// LookupEnvironment and LookPath are injectable for the same reason.
 	LookupEnvironment func(string) string
 	LookPath          func(string) (string, error)
+
+	// LatestRelease asks whether a newer release exists. It is a field rather
+	// than a call because that is what confines the network: nothing that is not
+	// handed one can reach it, and Go's import graph cannot make that
+	// distinction between two functions in this same package. A nil value means
+	// the caller asked for no check.
+	LatestRelease updatecheck.Check
 }
 
 // Diagnose assembles the report. It never writes anything.
@@ -139,6 +148,7 @@ func Diagnose(input DiagnoseInput) (Diagnosis, error) {
 	}
 
 	diagnosis.Observability = InspectObservability(input.StateRoot, input.LookupEnvironment)
+	diagnosis.Update = availability(input.LatestRelease, diagnosis.Version)
 
 	diagnosis.Problems, diagnosis.NextActions = summarize(diagnosis)
 	diagnosis.Working = len(diagnosis.Problems) == 0
@@ -292,6 +302,8 @@ func Describe(diagnosis Diagnosis) string {
 	} else {
 		fmt.Fprintf(&report, "%s\n", diagnosis.Observability.Note)
 	}
+
+	fmt.Fprintf(&report, "%s\n", diagnosis.Update.Note)
 
 	fmt.Fprintf(&report, "invocation: %s\n", diagnosis.Invocation)
 

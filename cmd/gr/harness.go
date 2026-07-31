@@ -10,6 +10,7 @@ import (
 
 	"github.com/heurema/goalrail/internal/harness"
 	"github.com/heurema/goalrail/internal/localrun"
+	"github.com/heurema/goalrail/internal/updatecheck"
 )
 
 // exitDiagnosis is the status a diagnosis returns when it found something the
@@ -95,6 +96,11 @@ func diagnose(repository, scaffold, stateDirectory string) (harness.Diagnosis, e
 	if resolved, resolveErr := localrun.ResolveStateRoot(stateDirectory); resolveErr == nil {
 		input.StateRoot = resolved
 	}
+	// The one place the real check is constructed. The diagnosis is handed a
+	// function and never builds one, which is what keeps the network out of every
+	// other command — and it is also why the diagnosis itself still writes
+	// nothing: remembering the answer happens in here, not in there.
+	input.LatestRelease = updatecheck.New(input.StateRoot, updatecheck.Environment{})
 	return harness.Diagnose(input)
 }
 
