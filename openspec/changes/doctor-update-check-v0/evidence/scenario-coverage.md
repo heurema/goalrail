@@ -43,7 +43,7 @@ current release. Nothing outside the session's temporary directories was touched
 
 | Scenario | Evidence |
 |---|---|
-| A release is published | **observed on `v0.1.2`**: tag at 09:31:52Z, release published 09:34:34Z, the warm step's first attempt answered `200` at 09:34:38Z, and the proxy carried the version immediately afterwards — four seconds, against 3m45s and 16m41s of passive discovery on the two previous tags. |
+| A release is published | **observed on `v0.1.2`**: tag 09:31:52Z, published 09:34:34Z, the warm step's first attempt answered `200` at 09:34:38Z. Four seconds from publication, against 14m46s from publication on `v0.1.1` — the interval the step controls. From tag creation the same three releases read 3m45s, 16m41s and 2m46s, most of the last being the release run itself. |
 | The source does not answer | by construction: the step carries `continue-on-error` and bounded retries before giving up with a message. Observable in full only if the proxy is slow during a real release. |
 | The request would precede publication | by construction: the step is ordered after `gh release create` in the same job. |
 
@@ -66,8 +66,10 @@ contact:
   reports `update: nothing newer than v0.1.2 found as of … (asked
   proxy.golang.org)`. A binary carrying the check but stamped `v0.1.1` reports
   `update: v0.1.2 is released, this is v0.1.1`.
-- The warm step collapses ingest to seconds: four, measured, against 3m45s and
-  16m41s passively.
+- The warm step collapses ingest to seconds: four from publication, against
+  14m46s from publication on the previous release. Measured from the same
+  starting event on both, because the first draft of this row compared a
+  publication-based number against tag-based ones and overstated the result.
 - **But it warmed the wrong answer.** The step requested `@v/<tag>.info`, while
   the diagnosis reads `@latest` — a different endpoint with its own sixty-second
   cache. Between 09:34:38Z and about 09:37:1xZ the check honestly reported

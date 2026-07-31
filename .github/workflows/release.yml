@@ -241,15 +241,30 @@ jobs:
           # diagnosis reads @latest — a different answer, with its own sixty
           # second cache. The v0.1.2 release measured the gap: ingest four
           # seconds after publication, @latest following about two minutes
-          # later. Asking for @latest too is what this step exists to warm, and
-          # costs one request.
-          for attempt in 1 2 3; do
+          # later. Asking for @latest too is what this step exists to warm.
+          #
+          # @latest reports the newest *stable* version, so a prerelease tag can
+          # never equal it while a stable release exists. The tag is published
+          # either way; only this equality wait is skipped for one.
+          case "${GITHUB_REF_NAME}" in
+            v[0-9]*.[0-9]*.[0-9]*)
+              ;;
+            *)
+              echo "${GITHUB_REF_NAME} is not a plain release tag; @latest will not report it, so there is nothing to wait for"
+              exit 0
+              ;;
+          esac
+          # The waits are between attempts, never after the last one: a cached
+          # answer can have most of its sixty seconds left when the first
+          # request lands, so the final attempt has to fall past that boundary
+          # rather than the loop sleeping into it and giving up unasked.
+          for wait in 0 20 20 25; do
+            [ "${wait}" = "0" ] || sleep "${wait}"
             reported="$(curl -sS --max-time 20 "https://proxy.golang.org/${module}/@latest" 2>/dev/null \
               | sed -n 's/.*"Version":"\([^"]*\)".*/\1/p')"
-            echo "latest attempt ${attempt}: ${reported:-none}"
+            echo "latest: ${reported:-none}"
             if [ "${reported}" = "${GITHUB_REF_NAME}" ]; then
               exit 0
             fi
-            sleep 20
           done
           echo "the proxy has not resolved ${GITHUB_REF_NAME} as latest yet; its own cache expires within about a minute" >&2

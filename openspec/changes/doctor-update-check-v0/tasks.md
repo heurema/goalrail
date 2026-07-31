@@ -130,6 +130,16 @@ falsified one claim in the process.
 - [x] 14.4 Make the step ask for `@latest` as well, since that is the answer the check depends on. The remaining floor is that endpoint's own cache rather than discovery, and it is measured at the next release.
 - [x] 14.5 Correct the design and the coverage map to state what was measured instead of what was expected, and name the miss as the recurring shape it is — a true observation generalised past what was observed — cross-referenced to issue #43.
 
+## 15. Answer the review on the correction
+
+Four findings, all of them right, and two of them about the integrity of the
+measurement itself — the class this project keeps producing.
+
+- [x] 15.1 The `@latest` wait slept after its last request instead of before, so a cached answer with most of its sixty seconds left was never re-asked past the boundary: three attempts at 0, 20 and 40 seconds, then a sleep into expiry and a give-up unasked. The waits now sit between attempts, and the fourth lands at 65 seconds.
+- [x] 15.2 A prerelease tag can never equal `@latest`, which reports the newest stable version, so every prerelease release would have run the full wait and warned about a result that cannot occur. The ingest request still runs for it; only the equality wait is skipped.
+- [x] 15.3 The four-second result was compared against numbers measured from a different starting event. Recomputed from the same events: publication to proxy is 14m46s for `v0.1.1` against 4s for `v0.1.2` — the interval the step controls — while tag to proxy is 3m45s, 16m41s and 2m46s, most of the last being the release run. The overstatement is named where it happened rather than quietly corrected.
+- [x] 15.4 CTX-10's `14m46s` was labelled tag-to-cache and is publication-to-cache; tag-to-cache for that release is 16m41s. Both numbers are correct measurements of different intervals and the label was the error. Corrected by appending CTX-20, not by rewriting CTX-10.
+
 ## 11. Stop at the owner gates
 
 - [x] 11.1 Produce planning artifacts only this round; implementation begins only after a separate explicit owner instruction, recorded here before the first edit. Granted 2026-07-30 after the review round and after the owner chose the cheaper repair for the disclosure rule — cited to the non-goal that carries it, with the test kept as task 10.4a — over a further intent version. The grant covers sections 5 through 10 in dependency order. Committing, pushing, opening a pull request, merging, any release that would exercise the new workflow step, and archiving each remain ungranted.

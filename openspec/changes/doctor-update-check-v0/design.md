@@ -195,13 +195,35 @@ succeeds. It runs last, and its failure does not fail the release: the artifacts
 are already public, and a slow proxy is not a defective release.
 
 It asks for two things, and the reason is a correction the `v0.1.2` release
-produced rather than a plan. Requesting `@v/<tag>.info` is what makes the proxy
-ingest the version — measured at four seconds after publication, against 3m45s
-and 16m41s of passive discovery on the two previous tags. But the diagnosis reads
-`@latest`, which is a different answer with its own sixty-second cache, and it
-still reported the previous release for about two minutes after the ingest. The
-step therefore asks for `@latest` as well, since that is the answer the check
-actually depends on. The remaining floor is that cache, not discovery.
+produced rather than a plan.
+
+Requesting `@v/<tag>.info` is what makes the proxy ingest the version. Measured
+across the three tags, from the same starting events rather than mixed ones:
+
+| Tag | tag → proxy | publication → proxy | tag → publication |
+|---|---|---|---|
+| `v0.1.0` | 3m45s | not published | — |
+| `v0.1.1` | 16m41s | 14m46s | 1m55s |
+| `v0.1.2` | 2m46s | **4s** | 2m42s |
+
+The comparison that belongs to this step is the middle column, because
+publication is the only moment the release controls: 14m46s becomes four
+seconds. The left column improves far less, and most of what remains there is
+the release run itself, which the step cannot affect.
+
+CTX-10 recorded `14m46s` for `v0.1.1` while describing it as tag-to-cache; the
+number was publication-to-cache, and tag-to-cache for that release is 16m41s.
+Both are correct measurements of different intervals, and the pack's label was
+the error. It is corrected by appending rather than by rewriting.
+
+But the diagnosis reads `@latest`, which is a different answer with its own
+sixty-second cache, and it still reported the previous release for about two
+minutes after the ingest. The step therefore asks for `@latest` as well, since
+that is the answer the check actually depends on, waiting past that cache
+boundary rather than giving up inside it. A prerelease tag skips the wait: the
+proxy's `@latest` reports the newest stable version, so a prerelease can never
+equal it while a stable release exists. The remaining floor is that cache, not
+discovery.
 
 ### D8 — Shape in the report and in the JSON
 
