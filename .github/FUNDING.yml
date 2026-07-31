@@ -1,0 +1,9 @@
+# Where the "Sponsor" button on this repository points.
+#
+# `custom` is the only field that can carry this: GitHub's named platforms are
+# payment processors it integrates with, and none of them settle in crypto. The
+# addresses themselves stay on the site rather than being listed here, so there
+# is one place to correct if one ever changes, and so the page can carry the
+# warnings an address needs — which network it is for, and that sending on
+# another one destroys the money.
+custom: ["https://goalrail.dev/support"]
