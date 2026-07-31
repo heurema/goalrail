@@ -944,8 +944,14 @@ func TestInitAsksAboutTheRepositoryTheUserNamed(t *testing.T) {
 	if content := cloneIgnoreContent(t, root); !strings.Contains(content, ambient.RepositorySettingsPath) {
 		t.Errorf("the named repository's own rule does not carry the entry: %q", content)
 	}
-	if _, err := os.Stat(filepath.Join(elsewhere, ".git", "info", "exclude")); err == nil {
-		t.Error("a rule was written into the repository the environment selected")
+	foreign, err := os.ReadFile(filepath.Join(elsewhere, ".git", "info", "exclude"))
+	if err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	for _, entry := range ambient.IgnoreEntries() {
+		if strings.Contains(string(foreign), entry) {
+			t.Errorf("%s was written into the repository the environment selected", entry)
+		}
 	}
 	// And the guarantee itself: nothing a commit could carry.
 	if ignored, err := ambient.IgnoreState(root, ambient.RepositorySettingsPath); !ignored || err != nil {
@@ -995,10 +1001,22 @@ func TestInitCompletesWhenTheCloneRuleCannotBeWritten(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(rule), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	// The file exists on installations that create it from a template and not on
+	// others, so both are denied: the directory to stop it being created, the
+	// file to stop it being written.
+	if err := os.WriteFile(rule, nil, 0o400); err != nil && !os.IsExist(err) {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(rule, 0o400); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.Chmod(filepath.Dir(rule), 0o500); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = os.Chmod(filepath.Dir(rule), 0o755) })
+	t.Cleanup(func() {
+		_ = os.Chmod(filepath.Dir(rule), 0o755)
+		_ = os.Chmod(rule, 0o644)
+	})
 
 	report := decodeInit(t, mustInit(t, root))
 	if len(report.Files) == 0 {
@@ -1009,6 +1027,16 @@ func TestInitCompletesWhenTheCloneRuleCannotBeWritten(t *testing.T) {
 	}
 	if report.Registration.Refused == "" {
 		t.Error("the registration was neither applied nor refused")
+	}
+	// And the user is told why, rather than left to infer it from the refusal.
+	var told bool
+	for _, notice := range report.Notices {
+		if strings.Contains(notice, "could not be written") {
+			told = true
+		}
+	}
+	if !told {
+		t.Errorf("the failure to write the rule is not reported: %+v", report.Notices)
 	}
 }
 
@@ -1025,6 +1053,11 @@ func TestInitDoesNotFollowASymlinkedCloneRule(t *testing.T) {
 	victim := filepath.Join(t.TempDir(), "shared-excludes")
 	writeFile(t, victim, "# somebody else's file\n*.log\n")
 	if err := os.MkdirAll(filepath.Dir(rule), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Some installations create this file from their own template, so the link
+	// replaces whatever is there rather than assuming nothing is.
+	if err := os.RemoveAll(rule); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Symlink(victim, rule); err != nil {

@@ -518,10 +518,12 @@ func cloneIgnoreTarget(repositoryRoot string) (string, string, IgnoreTargetState
 // AddCloneIgnoreEntries writes the missing entries to this clone's own ignore
 // rule — the one no commit can carry — and reports which of them took effect.
 //
-// Where there is nowhere to write, and where the write itself fails, it reports
-// nothing and no error: making a path unshareable is a service initialization
-// performs where it can, never a precondition it imposes. What follows from not
-// having done it is the caller's existing refusal, which is reached either way.
+// Where there is nowhere to write it reports nothing and no error, and where the
+// write fails it reports the failure without acting on it: making a path
+// unshareable is a service initialization performs where it can, never a
+// precondition it imposes. What follows from not having done it is the caller's
+// existing refusal, which is reached either way — so the failure belongs in the
+// report, not in the exit status.
 //
 // Whether the clone's rule can cover a path is not knowable until it has been
 // written, because a rule the repository shares can outrank it and deciding that
@@ -544,17 +546,21 @@ func AddCloneIgnoreEntries(repositoryRoot string, entries []string) ([]string, e
 		anchored = append(anchored, anchorEntry(workTree, repositoryRoot, entry))
 	}
 	// Version control does not always create the directory this rule lives in.
+	// Some installations do, from their own template; this one does not.
 	if err := os.MkdirAll(filepath.Dir(ignorePath), 0o755); err != nil {
-		return nil, nil
+		return nil, fmt.Errorf("make room for this clone's own ignore rule: %w", err)
 	}
 	// Every other write this package makes refuses a symlink, because following
 	// one leaves the repository the user named — and here it would also mean the
 	// take-back path removing a file the user owns.
 	if info, statErr := os.Lstat(ignorePath); statErr == nil && info.Mode()&os.ModeSymlink != 0 {
-		return nil, nil
+		return nil, fmt.Errorf("this clone's own ignore rule at %s is a symbolic link, so writing it would leave this repository", ignorePath)
 	}
 	added, previous, existed, err := addIgnoreEntries(repositoryRoot, ignorePath, entries, anchored)
-	if err != nil || len(added) == 0 {
+	if err != nil {
+		return nil, err
+	}
+	if len(added) == 0 {
 		return nil, nil
 	}
 	var effective []string
