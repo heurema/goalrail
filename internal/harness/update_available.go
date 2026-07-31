@@ -16,9 +16,11 @@ import (
 // and a repository whose harness is intact is working whether or not the binary
 // running the check is a release behind.
 type UpdateAvailability struct {
-	// State is one of: newer, current, not_applicable, declined, unavailable,
-	// not_checked. The last exists only when a caller supplied no check at all,
-	// which the shipped command never does.
+	// State is one of: newer, nothing_newer_found, not_applicable, declined,
+	// unavailable, not_checked. The second is deliberately not "current": this
+	// lookup can only say what it found, and a machine consumer reading
+	// "current" as authoritative would be trusting a source that measurably
+	// lags a fresh release.
 	State string `json:"state"`
 
 	// Latest is the newest released version, where one was learned.
@@ -40,7 +42,7 @@ type UpdateAvailability struct {
 
 const (
 	updateNewer         = "newer"
-	updateCurrent       = "current"
+	updateCurrent       = "nothing_newer_found"
 	updateNotApplicable = "not_applicable"
 	updateDeclined      = "declined"
 	updateUnavailable   = "unavailable"

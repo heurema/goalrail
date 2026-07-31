@@ -105,6 +105,19 @@ had already confirmed it before the review returned.
 - [x] 12.10 The CI-decline scenario's wording is aligned with the shipped design — one form, each decline naming its reason — and the README's Status section and doctor row stopped contradicting the new section.
 - [x] 12.11 Two receipts that overstated their artifacts were corrected rather than defended: 10.4a described a live go-command comparison the test does not make, and 7.2 called itself covered without naming what actually covers it.
 
+## 13. Answer the automated review on the pull request
+
+Seven findings, all seven verified against the toolchain or the code before
+being accepted, and all seven answered.
+
+- [x] 13.1 `GONOPROXY` replaces `GOPRIVATE` rather than adding to it — verified live: with `GONOPROXY=none` set, the toolchain does not consult `GOPRIVATE` for the proxy decision at all. The refusal now resolves the effective setting the way the toolchain does, so a user who granted proxying back with `none` gets the check back too, and the printed reason names the variable that actually decided.
+- [x] 13.2 The Go environment file honours the last assignment, as the toolchain's own reader does — verified live with a duplicated `GOPROXY` line. The parser previously returned the first match, which would have overridden a final `off` in a hand-merged file.
+- [x] 13.3 The environment file is now read with the same discipline as the cache — `O_NOFOLLOW`, `O_NONBLOCK`, a regular-file check — because a FIFO or device at `GOENV` could hang the diagnosis before any timeout applied.
+- [x] 13.4 The cache write could hang on a planted FIFO even after the read refused it: a write-only open blocks until a reader appears. `O_NONBLOCK` makes it fail immediately instead, and the write also verifies it holds a regular file. Pinned, with the environment-file and write-side FIFO plants, by three new tests.
+- [x] 13.5 The structured state `current` claimed what the wording rules forbid claiming: a machine consumer would read it as authoritative while the source measurably lags a fresh release. Renamed to `nothing_newer_found`, which says exactly what one lookup can say.
+- [x] 13.6 The README's privacy paragraph said the request carries "not the tool's name" while its URL names the module — which names the tool. Reworded: the module path is the request's one disclosure, the same one a `go install` of this tool already makes, and everything beyond it is what the toolchain would send anyway.
+- [x] 13.7 The agent paste-prompt forbade writes outside the repository that its own last step now performs: `gr doctor` writes the update-check cache into the state root. The prompt names that directory as the second permitted write instead of contradicting itself.
+
 ## 11. Stop at the owner gates
 
 - [x] 11.1 Produce planning artifacts only this round; implementation begins only after a separate explicit owner instruction, recorded here before the first edit. Granted 2026-07-30 after the review round and after the owner chose the cheaper repair for the disclosure rule — cited to the non-goal that carries it, with the test kept as task 10.4a — over a further intent version. The grant covers sections 5 through 10 in dependency order. Committing, pushing, opening a pull request, merging, any release that would exercise the new workflow step, and archiving each remain ungranted.

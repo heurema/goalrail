@@ -109,8 +109,10 @@ Goalrail is meant to be installed by the agent, not by hand. Paste this:
 > supported scaffold was detected, tell me that verbatim without guessing why: the
 > harness is still installed, and the diagnosis will report the attachment as
 > missing for that reason rather than because anything failed. Finally run `~/.local/bin/gr doctor` and show me its output
-> verbatim. Apart from `~/.local/bin/gr` and a scratch download directory you clean
-> up, do not edit any file outside this repository.
+> verbatim. Apart from `~/.local/bin/gr`, Goalrail's own state directory at
+> `~/.local/state/goalrail` — which `gr doctor` writes its update-check cache
+> into — and a scratch download directory you clean up, do not edit any file
+> outside this repository.
 
 The last step is the point: the agent proves the installation rather than
 claiming it.
@@ -141,11 +143,13 @@ information, not a demand: nothing about your repository changes because of it,
 and the exit code does not move.
 
 What leaves your machine is one request to `proxy.golang.org` — the same service
-`go install` already asks about this module — for the newest released version. It
-carries no identifier: not the tool's name, not its version, not your platform,
-not your repository, and no query parameter. What goes out is what the Go
-toolchain itself would send for the same module, which is why the report names
-the service it asked rather than the request naming you.
+`go install` already asks about this module — for the newest released version.
+The request's URL names the module, `github.com/heurema/goalrail`, because that
+is what it is asking about; that is its one disclosure, and it is the same one a
+`go install` of this tool already makes. Beyond it the request carries nothing:
+no version, no platform, no repository, no query parameter, and no header the Go
+toolchain itself would not send for the same module — which is why the report
+names the service it asked rather than the request naming you.
 
 The answer is remembered for a day, so repeated diagnoses ask nothing. A binary
 that is not itself a release — built from a checkout, from a modified tree — never

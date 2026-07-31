@@ -127,6 +127,10 @@ func TestDeclinedReadsEachRefusal(t *testing.T) {
 		{"a different organization", map[string]string{"GOPRIVATE": "github.com/other"}, false},
 		{"a prefix that stops mid-element", map[string]string{"GOPRIVATE": "github.com/heurema/goal"}, false},
 		{"a sibling that shares a prefix string", map[string]string{"GONOPROXY": "github.com/heurema-x"}, false},
+		// GONOPROXY replaces GOPRIVATE for the proxy decision, as the toolchain
+		// resolves it: `none` matches nothing, so proxying is granted back.
+		{"GONOPROXY set to none overrides a matching GOPRIVATE", map[string]string{"GOPRIVATE": "github.com/heurema", "GONOPROXY": "none"}, false},
+		{"GONOPROXY matching while GOPRIVATE does not", map[string]string{"GOPRIVATE": "example.com", "GONOPROXY": "github.com/heurema"}, true},
 		// And the GOPROXY shapes the go command normalizes before reading.
 		{"the public proxy without a scheme", map[string]string{"GOPROXY": "proxy.golang.org,direct"}, false},
 		{"a leading empty entry before the public proxy", map[string]string{"GOPROXY": ",https://proxy.golang.org,direct"}, false},
@@ -448,5 +452,78 @@ func TestAPlantedCacheCannotHangOrRedirectTheDiagnosis(t *testing.T) {
 	contents, err := os.ReadFile(secret)
 	if err != nil || string(contents) != `{"version":"v9.9.9"}` {
 		t.Errorf("a planted symlink redirected the cache write: %s, %v", contents, err)
+	}
+}
+
+// TestTheEnvFileHonoursTheLastAssignment pins what the toolchain does with a
+// duplicated setting: its reader overwrites while scanning, so the final line
+// decides. Verified against `go env` before being pinned here.
+func TestTheEnvFileHonoursTheLastAssignment(t *testing.T) {
+	configuration := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(configuration, "go"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	contents := "GOPROXY=https://proxy.golang.org\nGOPROXY=off\n"
+	if err := os.WriteFile(filepath.Join(configuration, "go", "env"), []byte(contents), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	environment := Environment{
+		Lookup:    func(string) string { return "" },
+		ConfigDir: func() (string, error) { return configuration, nil },
+	}
+	if _, declined := Declined(environment); !declined {
+		t.Error("the final GOPROXY=off assignment was not honoured")
+	}
+}
+
+// TestAPlantedEnvFileCannotHangTheDiagnosis extends the cache's file discipline
+// to the other file this check reads: a FIFO at the GOENV path must fail the
+// open rather than park the diagnosis.
+func TestAPlantedEnvFileCannotHangTheDiagnosis(t *testing.T) {
+	root := t.TempDir()
+	fifo := filepath.Join(root, "env")
+	if err := syscall.Mkfifo(fifo, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	environment := Environment{
+		Lookup: func(name string) string {
+			if name == "GOENV" {
+				return fifo
+			}
+			return ""
+		},
+		ConfigDir: func() (string, error) { return t.TempDir(), nil },
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		if _, declined := Declined(environment); declined {
+			t.Error("a planted FIFO produced a decline")
+		}
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("a planted FIFO at GOENV hung the refusal check")
+	}
+}
+
+// TestAPlantedFIFOCannotHangTheCacheWrite closes the write half of the hazard
+// the read half already refused: with no reader on the FIFO, the nonblocking
+// open fails immediately instead of waiting for one.
+func TestAPlantedFIFOCannotHangTheCacheWrite(t *testing.T) {
+	root := t.TempDir()
+	if err := syscall.Mkfifo(filepath.Join(root, cacheName), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		writeCache(root, "v0.1.1")
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("a planted FIFO hung the cache write")
 	}
 }

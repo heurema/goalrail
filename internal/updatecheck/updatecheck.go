@@ -132,10 +132,18 @@ func Declined(environment Environment) (string, bool) {
 	if proxy := goSetting("GOPROXY", environment); proxy != "" && !startsWithPublicProxy(proxy) {
 		return "GOPROXY does not start with the public proxy", true
 	}
-	for _, name := range []string{"GOPRIVATE", "GONOPROXY"} {
-		if patterns := goSetting(name, environment); matchesModule(patterns) {
-			return name + " covers this module", true
-		}
+	// GONOPROXY replaces GOPRIVATE rather than adding to it — verified against
+	// the toolchain: with GONOPROXY=none set, GOPRIVATE is not consulted for the
+	// proxy decision at all, so a user who granted proxying back with `none`
+	// gets it back here too.
+	deciding := "GONOPROXY"
+	patterns := goSetting("GONOPROXY", environment)
+	if patterns == "" {
+		deciding = "GOPRIVATE"
+		patterns = goSetting("GOPRIVATE", environment)
+	}
+	if matchesModule(patterns) {
+		return deciding + " covers this module", true
 	}
 	return "", false
 }
@@ -169,8 +177,8 @@ func goSetting(name string, environment Environment) string {
 }
 
 func goEnvFile(name string, environment Environment) string {
-	path := environment.lookup("GOENV")
-	switch path {
+	location := environment.lookup("GOENV")
+	switch location {
 	case "off":
 		return ""
 	case "":
@@ -178,21 +186,31 @@ func goEnvFile(name string, environment Environment) string {
 		if err != nil {
 			return ""
 		}
-		path = filepath.Join(configuration, "go", "env")
+		location = filepath.Join(configuration, "go", "env")
 	}
-	file, err := os.Open(path)
+	// The same discipline as the cache: a planted FIFO or device at this path
+	// must not hang the diagnosis, and a link is not followed. An unreadable
+	// file reads as an absent one.
+	file, err := os.OpenFile(location, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return ""
 	}
 	defer file.Close()
+	if info, statErr := file.Stat(); statErr != nil || !info.Mode().IsRegular() {
+		return ""
+	}
+	// The last assignment wins, as it does for the toolchain: its own reader
+	// overwrites while scanning, so a duplicated setting in a hand-merged file
+	// is decided by its final line.
+	value := ""
 	scanner := bufio.NewScanner(io.LimitReader(file, 1<<20))
 	for scanner.Scan() {
-		key, value, found := strings.Cut(scanner.Text(), "=")
+		key, assigned, found := strings.Cut(scanner.Text(), "=")
 		if found && strings.TrimSpace(key) == name {
-			return strings.TrimSpace(value)
+			value = strings.TrimSpace(assigned)
 		}
 	}
-	return ""
+	return value
 }
 
 // startsWithPublicProxy decides what "directs lookups elsewhere" means for a
@@ -432,12 +450,17 @@ func writeCache(stateRoot, version string) time.Time {
 	if err := os.MkdirAll(stateRoot, 0o700); err != nil {
 		return now
 	}
-	// The same refusal to follow a planted link applies on the way out.
-	file, err := os.OpenFile(filepath.Join(stateRoot, cacheName), os.O_WRONLY|os.O_CREATE|os.O_TRUNC|syscall.O_NOFOLLOW, 0o600)
+	// The same refusal to follow a planted link applies on the way out, and
+	// O_NONBLOCK keeps a planted FIFO from parking the write until a reader
+	// appears: with no reader the open fails immediately instead.
+	file, err := os.OpenFile(filepath.Join(stateRoot, cacheName), os.O_WRONLY|os.O_CREATE|os.O_TRUNC|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0o600)
 	if err != nil {
 		return now
 	}
 	defer file.Close()
+	if info, statErr := file.Stat(); statErr != nil || !info.Mode().IsRegular() {
+		return now
+	}
 	_, _ = file.Write(contents)
 	return now
 }
