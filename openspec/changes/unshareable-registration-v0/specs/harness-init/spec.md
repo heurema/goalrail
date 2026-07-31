@@ -1,0 +1,190 @@
+## MODIFIED Requirements
+
+### Requirement: Initialization registers the attachment where the scaffold allows it
+**Intent IDs:** OUT-1, OUT-2, OUT-3, OUT-4, OUT-5, OUT-6, SIG-1, SIG-2, SIG-3, SIG-4, SIG-5, SIG-6, SIG-7
+
+Initialization SHALL register the session hooks for a scaffold whose settings
+layer permits registration inside the repository, because marking a repository
+and attaching to its sessions are one act, and a registration that lives in the
+repository is never invoked in unrelated sessions at all.
+
+The scaffold SHALL be selected by detection, with an explicit flag override.
+Where no supported scaffold is detected, initialization SHALL still install the
+overlay and the marker, and the report SHALL name the command that registers the
+attachment later; installing the harness must not depend on which agent
+environment happens to be present. Where a supported scaffold registers only at
+user scope, the report SHALL name that separate consented command rather than
+implying the attachment is complete.
+
+The registration SHALL be written to the scaffold's per-user project settings
+file, and MUST NOT be written to a settings file the repository could supply to
+someone else. A registration a repository could carry would run in every
+teammate's session on the strength of one user's consent, and consent to run a
+command in one's own sessions is not transferable.
+
+Registration SHALL therefore happen only where that path is ignored by the
+version control system, and initialization SHALL make it so by the same act,
+using a rule that belongs to the clone alone and that no commit can carry. That
+rule is not repository content and needs nobody else's agreement, so writing it
+belongs to registering rather than to a separate thing the user must be asked
+for. The entries it adds SHALL be reported among initialization's changes,
+because a write the user cannot see is one they can neither audit nor undo.
+
+Initialization MUST NOT modify ignore rules the version control system would
+share with anyone else unasked, and MUST NOT register in the hope that nobody
+commits the file. Where the path cannot be made unshareable by the clone's own rule —
+because it is already tracked, or because a shared rule outranks the clone's —
+initialization SHALL install the rest of the harness, refuse the registration,
+and name the reason, the exact ignore entry that would make it possible, and the
+flag that adds it. An explicit flag SHALL add the missing entries to the shared
+rules and proceed, reporting them among its changes, because there they are
+repository content exactly as the overlay is, and because a shared rule that
+outranks the clone's is the one condition only shared content can answer.
+
+The clone's rule SHALL be located by asking the version control system where it
+belongs rather than by assuming a path, because the assumed path is not a
+directory in a linked worktree or a submodule and its parent is not guaranteed to
+exist anywhere. Every such question SHALL be asked about the directory
+initialization was given, with any repository the caller's environment selects
+disregarded: an answer about another repository would put the rule there and then
+read it back as though it governed this one. Writing the rule SHALL preserve what
+the user already put there, SHALL NOT follow a link out of the repository, and
+SHALL express each entry so that it covers the path from wherever that rule is
+read — which is not always the directory the user named. Re-running SHALL add
+nothing it has already added.
+
+Where the rule cannot be written — the directory is not a repository, the version
+control system is unavailable or unintelligible, the target is not a file
+initialization may write, or the write fails — initialization SHALL complete
+without it and let the refusal above answer for the consequence. Making a path
+unshareable is a service initialization performs where it can, never a
+precondition it imposes: the harness is inert repository content, and installing
+it has never required a repository or the tool that manages one.
+
+A repository with no work tree is the one case that is not merely skipped. It has
+nowhere for repository content to live, so no path that installs or maintains the
+harness SHALL write into it — not the overlay, not the marker, and not an ignore
+rule under any flag. That SHALL be refused with the reason named, before the
+first write.
+
+Where the directory is not a repository, no rule is needed and none can be
+written, but the registration becomes committable the moment the directory
+becomes one. Initialization SHALL state that and complete, because the exposure
+that earns a refusal elsewhere must not arrive here in silence.
+
+The participation marker carries the same exposure for a weaker reason: it is per
+clone, and committing it would make one user's initialization a shared repository
+fact. Its entry SHALL be written by the same act as the registration's. Where it
+cannot be, initialization SHALL still complete and SHALL say so, because refusing
+to install the harness over an ignore rule would be a disproportionate response
+to a recoverable condition.
+
+The events registered SHALL be the ones whose cadence matches the meaning they
+carry: the occurrence that opens a session, and the event that fires when a session
+ends. Where a scaffold's stop-like event fires once per turn instead, it MUST NOT
+be the one registered — a question left at the reserved path would be retained
+again on every turn, minting a record per turn out of one session's single
+question.
+
+Re-running initialization SHALL repair a registration of ours that is stale,
+unscoped, or naming a superseded event, under the same discipline connection
+follows: replace rather than accompany, leave a correct registration
+byte-identical, and leave a handler it did not add untouched.
+
+Initialization MUST NOT modify user-level scaffold configuration for any reason,
+including removing a registration that belongs to an earlier arrangement. It MUST
+NOT write an ignore rule outside the repository it was invoked on, including into
+configuration that would govern every other repository the user clones: consent
+to initialize one repository is not consent to configure the machine.
+
+#### Scenario: A scaffold is detected
+- **WHEN** initialization runs where exactly one supported repository-scope scaffold is present
+- **THEN** the hooks are registered for that scaffold in its per-user project settings file
+
+#### Scenario: The scaffold is named explicitly
+- **WHEN** the user names a scaffold with the override flag
+- **THEN** that scaffold is used regardless of what detection would have concluded
+
+#### Scenario: No scaffold is detected
+- **WHEN** initialization runs where no supported scaffold is present
+- **THEN** the overlay and the marker are still installed and the report names the command that registers the attachment later
+
+#### Scenario: The scaffold registers only at user scope
+- **WHEN** initialization runs for a scaffold whose repository-scope route is externally blocked
+- **THEN** the report names the separate consented connection command instead of implying the attachment is complete
+
+#### Scenario: The project settings path is not ignored yet
+- **WHEN** initialization would register hooks in a per-user project settings file the version control system does not yet ignore, and the clone's own rule can cover it
+- **THEN** that rule is written, the registration proceeds, the report names the entries among its changes, and no rule the repository could supply to someone else is modified
+
+#### Scenario: A shared rule outranks the clone's rule
+- **WHEN** initialization would register hooks in a path that a rule the repository shares keeps from being ignored, so the clone's own rule cannot cover it
+- **THEN** the registration is refused, the rest of the harness is installed, and the report names the reason, the exact ignore entry, and the flag that adds it
+
+#### Scenario: The project settings path is already tracked
+- **WHEN** initialization would register hooks in a per-user project settings file the repository already tracks
+- **THEN** the registration is refused with the reason named, because no ignore rule protects a tracked file
+
+#### Scenario: The user asks for the ignore entries to be added
+- **WHEN** initialization runs with the explicit flag that manages ignore rules
+- **THEN** the missing entries are added to the rules the repository shares, the registration proceeds, and the report names the entries among its changes
+
+#### Scenario: The repository's layout is not the assumed one
+- **WHEN** initialization runs in a linked worktree or a submodule, where the assumed location of the clone's rule is not a directory
+- **THEN** the rule is written where the version control system says it belongs, and the registration proceeds
+
+#### Scenario: The clone's rule file already has content
+- **WHEN** initialization writes the clone's rule into a file the user has already written in, including one whose last line has no terminator
+- **THEN** every line the user wrote still means what it meant, both entries take effect, and a second initialization changes no byte
+
+#### Scenario: The directory is not a repository
+- **WHEN** initialization runs where the version control system is available and the directory is not under version control
+- **THEN** the harness is installed, nothing is refused, no rule is written, and the report states that the registration becomes committable if the directory becomes a repository
+
+#### Scenario: The version control system is unavailable
+- **WHEN** initialization runs on a machine where the version control system cannot be executed
+- **THEN** initialization completes and installs the harness, because making a path unshareable is a service it performs where it can and never a precondition
+
+#### Scenario: The repository has no work tree
+- **WHEN** initialization runs against a repository that has no work tree, whether because it is bare or because the directory named is the repository's own
+- **THEN** it is refused with the reason named before the first write, and no ignore rule and no harness content are written into it, by any path including the explicit flag
+
+#### Scenario: The environment selects another repository
+- **WHEN** initialization runs where the caller's environment names a repository other than the directory it was given
+- **THEN** every question is asked and every rule written about the directory it was given, and the registration is refused unless that directory's own rules cover the path
+
+#### Scenario: The directory named is below the top of the work tree
+- **WHEN** initialization runs on a directory inside a repository rather than at the top of its work tree
+- **THEN** the entries written cover the paths under that directory, and no rule the repository shares is modified
+
+#### Scenario: The clone's rule cannot be written
+- **WHEN** the rule this clone would be given cannot be written, because the location is not a file initialization may write or the write fails
+- **THEN** the harness is still installed, the report says so, and the registration is refused with the reason named rather than the command failing
+
+#### Scenario: The marker's ignore entry is missing
+- **WHEN** initialization writes the participation marker where the clone's rule cannot cover it
+- **THEN** initialization completes and the report states that the marker is committable, so one user's initialization does not silently become a shared repository fact
+
+#### Scenario: The scaffold's stop-like event fires once per turn
+- **WHEN** initialization registers hooks on a scaffold whose stop-like event fires once per turn and which also exposes an event that fires when a session ends
+- **THEN** the session-ending event is registered and the per-turn event is not
+
+#### Scenario: Re-initialization meets a registration naming a per-turn event
+- **WHEN** initialization runs where its own registration names the per-turn event from an earlier arrangement
+- **THEN** that registration is replaced with the session-ending event, leaving exactly one registration per event and no residue
+
+#### Scenario: Re-initialization meets a stale registration
+- **WHEN** initialization runs where its own registration names an executable other than the one it was invoked with
+- **THEN** exactly one registration per event remains, naming the current executable, with no duplicate and no residue
+
+#### Scenario: Re-initialization meets a correct registration
+- **WHEN** initialization runs where its own registration already names the current executable and the correct occurrence
+- **THEN** the settings file is left byte-identical
+
+#### Scenario: A foreign handler shares the event
+- **WHEN** initialization registers or repairs an event that also carries a handler it did not add
+- **THEN** the foreign handler survives unchanged, including its occurrence
+
+#### Scenario: User-level configuration would be modified
+- **WHEN** any initialization path would write to user-level scaffold configuration, or would write an ignore rule outside the repository it was invoked on
+- **THEN** that modification is refused, including when it would remove a registration from an earlier arrangement

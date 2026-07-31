@@ -338,6 +338,72 @@ func TestAddIgnoreEntriesIsAdditiveAndIdempotent(t *testing.T) {
 	}
 }
 
+// TestCloneIgnoreEntriesNeedSomewhereToGo pins that making a path unshareable is
+// a service this package performs where it can, never a precondition it imposes.
+// A caller that treated "nowhere to write" as an error would break installing the
+// harness in a directory nobody has put under version control yet.
+func TestCloneIgnoreEntriesNeedSomewhereToGo(t *testing.T) {
+	t.Run("not a repository", func(t *testing.T) {
+		root := t.TempDir()
+		if _, state := CloneIgnoreTarget(root); state != IgnoreTargetNotARepository {
+			t.Errorf("target state = %v", state)
+		}
+		added, err := AddCloneIgnoreEntries(root, IgnoreEntries())
+		if err != nil || len(added) != 0 {
+			t.Errorf("added %v, err %v", added, err)
+		}
+	})
+
+	t.Run("no work tree", func(t *testing.T) {
+		bare := filepath.Join(t.TempDir(), "bare.git")
+		if output, err := exec.Command("git", "init", "-q", "--bare", bare).CombinedOutput(); err != nil {
+			t.Fatalf("git init --bare: %v\n%s", err, output)
+		}
+		if _, state := CloneIgnoreTarget(bare); state != IgnoreTargetNoWorkTree {
+			t.Errorf("target state = %v", state)
+		}
+		added, err := AddCloneIgnoreEntries(bare, IgnoreEntries())
+		if err != nil || len(added) != 0 {
+			t.Errorf("added %v, err %v", added, err)
+		}
+		// And the flag's writer is held to the same boundary, so no path leaves
+		// repository content beside HEAD, objects and refs.
+		shared, err := AddIgnoreEntries(bare, IgnoreEntries())
+		if err != nil || len(shared) != 0 {
+			t.Errorf("shared entries %v, err %v", shared, err)
+		}
+		if _, err := os.Stat(filepath.Join(bare, ".gitignore")); err == nil {
+			t.Error("an ignore file was written into a repository with no work tree")
+		}
+	})
+}
+
+// TestCloneIgnoreEntriesCreateTheirOwnDirectory pins a precondition the previous
+// target never had: the directory this rule lives in is not always created by
+// version control, and on this machine it is not.
+func TestCloneIgnoreEntriesCreateTheirOwnDirectory(t *testing.T) {
+	root := gitRepository(t, "")
+	rule, state := CloneIgnoreTarget(root)
+	if state != IgnoreTargetWritable {
+		t.Fatalf("target state = %v", state)
+	}
+	if err := os.RemoveAll(filepath.Dir(rule)); err != nil {
+		t.Fatal(err)
+	}
+	added, err := AddCloneIgnoreEntries(root, IgnoreEntries())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(added) != len(IgnoreEntries()) {
+		t.Fatalf("added %v", added)
+	}
+	for _, entry := range IgnoreEntries() {
+		if ignored, ignoreErr := IgnoreState(root, entry); !ignored || ignoreErr != nil {
+			t.Errorf("%s is not ignored: %v", entry, ignoreErr)
+		}
+	}
+}
+
 // TestTheDocumentedAbsentDisclosureStatesItsOwnLimit exercises the third evidence
 // state.
 //
