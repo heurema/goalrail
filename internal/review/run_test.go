@@ -407,3 +407,85 @@ func TestRefuteStoresBothReportsVerbatim(t *testing.T) {
 		t.Fatal("the refutation digest does not describe the stored refutation")
 	}
 }
+
+// A round that changes neither the commits nor the tree means the author acted
+// on nothing; the count is what a loop policy stops on, and Goalrail only
+// measures it.
+func TestStalemateCountsRoundsThatChangedNothing(t *testing.T) {
+	root := branchWithWork(t)
+	stateRoot := t.TempDir()
+	stubReviewer(t, "codex", `cat >/dev/null; echo round`)
+	selection := Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"}
+	input := Input{RepositoryRoot: root, StateRoot: stateRoot, BaseRef: "main", Selection: selection}
+
+	first, err := Run(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Receipt.UnchangedRounds != 0 {
+		t.Fatalf("the first round reported a stalemate: %d", first.Receipt.UnchangedRounds)
+	}
+
+	second, err := Run(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Receipt.UnchangedRounds != 1 {
+		t.Fatalf("an unchanged round did not count: %d", second.Receipt.UnchangedRounds)
+	}
+	third, err := Run(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if third.Receipt.UnchangedRounds != 2 {
+		t.Fatalf("consecutive unchanged rounds did not accumulate: %d", third.Receipt.UnchangedRounds)
+	}
+
+	// Acting on the findings resets it — that is what convergence looks like.
+	write(t, root, "fix.txt", "fixed\n")
+	commit(t, root, "act on the findings")
+	after, err := Run(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Receipt.UnchangedRounds != 0 {
+		t.Fatalf("a round after real work still reported a stalemate: %d", after.Receipt.UnchangedRounds)
+	}
+}
+
+// An uncommitted fix in progress is work, not a stalemate.
+func TestADirtyTreeIsNotAStalemate(t *testing.T) {
+	root := branchWithWork(t)
+	stateRoot := t.TempDir()
+	stubReviewer(t, "codex", `cat >/dev/null; echo round`)
+	selection := Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"}
+	input := Input{RepositoryRoot: root, StateRoot: stateRoot, BaseRef: "main", Selection: selection}
+
+	if _, err := Run(context.Background(), input); err != nil {
+		t.Fatal(err)
+	}
+	write(t, root, "in-progress.txt", "half a fix\n")
+	second, err := Run(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Receipt.UnchangedRounds != 0 {
+		t.Fatalf("work in progress was counted as a stalemate: %d", second.Receipt.UnchangedRounds)
+	}
+}
+
+// Goalrail's own materialized instructions file must not suppress Goalrail's
+// own stalemate signal in a repository that has not committed it yet.
+func TestTheMaterializedInstructionsFileIsNotTreatedAsWork(t *testing.T) {
+	root := repository(t)
+	if _, _, err := EnsureInstructions(root); err != nil {
+		t.Fatal(err)
+	}
+	clean, err := WorkingTreeClean(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !clean {
+		t.Fatal("the materialized instructions file was counted as uncommitted work")
+	}
+}

@@ -130,6 +130,7 @@ func runReview(ctx context.Context, args []string, stdout, stderr io.Writer) err
 		ModeReason:               result.Receipt.ModeReason,
 		ReviewedBase:             result.Receipt.ReviewedBase,
 		DurationSeconds:          result.Receipt.DurationSeconds,
+		UnchangedRounds:          result.Receipt.UnchangedRounds,
 		Refutation:               result.Receipt.Refutation,
 		Reviewer:                 result.Receipt.Reviewer,
 		BaseRef:                  result.Receipt.BaseRef,
@@ -141,10 +142,10 @@ func runReview(ctx context.Context, args []string, stdout, stderr io.Writer) err
 		Receipt:                  result.ReceiptPath,
 		InstructionsMaterialized: result.InstructionsMaterialized,
 		Report:                   result.Receipt.Report,
-		Notes: []string{
+		Notes: append([]string{
 			"the report is the reviewer's own text; Goalrail does not read, score, or act on it",
 			"this is one review, not a loop: re-run it after fixes, under a ceiling you declared",
-		},
+		}, stalemateNote(result.Receipt.UnchangedRounds)...),
 	})
 }
 
@@ -159,6 +160,7 @@ type reviewReport struct {
 	ModeReason               string   `json:"mode_reason"`
 	ReviewedBase             string   `json:"reviewed_base"`
 	DurationSeconds          int64    `json:"duration_seconds"`
+	UnchangedRounds          int      `json:"unchanged_rounds"`
 	Refutation               string   `json:"refutation,omitempty"`
 	Reviewer                 string   `json:"reviewer"`
 	BaseRef                  string   `json:"base_ref"`
@@ -220,4 +222,16 @@ func reviewStateFor(repositoryRoot, stateRoot string) harness.ReviewState {
 			branch, receipt.Reviewer, receipt.ReviewedAt)
 	}
 	return reported
+}
+
+// stalemateNote states the measurement without acting on it. A loop that keeps
+// spending while this climbs is not converging: the previous round's findings
+// were not acted on, and the next round reviews the same bytes again.
+func stalemateNote(rounds int) []string {
+	if rounds == 0 {
+		return nil
+	}
+	return []string{fmt.Sprintf(
+		"stalemate: %d consecutive round(s) reviewed the same head with a clean tree — nothing was acted on between them; stop and report the open findings",
+		rounds)}
 }

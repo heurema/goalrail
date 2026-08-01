@@ -69,6 +69,13 @@ type Receipt struct {
 	Author     string `json:"author"`
 	ReviewedAt string `json:"reviewed_at"`
 
+	// UnchangedRounds counts consecutive rounds that reviewed the same head with
+	// a clean working tree — the author acted on nothing between them. It is a
+	// measurement, not a reading of any report: a loop that keeps spending while
+	// this climbs is not converging, and the caller's policy decides where to
+	// stop. Zero means work moved since the previous round.
+	UnchangedRounds int `json:"unchanged_rounds"`
+
 	// DurationSeconds is measured wall time of the reviewer invocation(s), the
 	// number effort and deadline defaults get tuned against.
 	DurationSeconds int64 `json:"duration_seconds"`
@@ -348,4 +355,30 @@ func Status(stateRoot, repositoryRoot, branch string) (State, Receipt, error) {
 		return StateCurrent, receipt, nil
 	}
 	return StateStale, receipt, nil
+}
+
+// WorkingTreeClean reports whether the repository has no uncommitted or
+// untracked changes. It is half of the stalemate measurement: a round that
+// changed neither the commits nor the tree is a round the author acted on
+// nothing.
+func WorkingTreeClean(repositoryRoot string) (bool, error) {
+	status, err := git(repositoryRoot, "status", "--porcelain", "--untracked-files=all")
+	if err != nil {
+		return false, err
+	}
+	for _, line := range strings.Split(strings.TrimSpace(status), "\n") {
+		entry := strings.TrimSpace(line)
+		if entry == "" {
+			continue
+		}
+		// The instructions file Goalrail materialized is not the author's work.
+		// Counting it would let Goalrail's own artifact suppress Goalrail's own
+		// stalemate signal for every repository that has not committed it yet.
+		fields := strings.Fields(entry)
+		if len(fields) == 2 && fields[1] == InstructionsPath {
+			continue
+		}
+		return false, nil
+	}
+	return true, nil
 }

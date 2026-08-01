@@ -127,8 +127,18 @@ func Run(ctx context.Context, input Input) (Result, error) {
 	// into the failure this prevents — each round repaid the full price of all
 	// previous ones. The full pass stays one flag away.
 	reviewedBase := baseCommit
+	unchangedRounds := 0
 	if !input.Full {
 		if previous, found, readErr := ReadReceipt(input.StateRoot, input.RepositoryRoot, branch); readErr == nil && found {
+			// Stalemate: the same head, and nothing in the tree either. The
+			// previous round produced findings the author did not act on, and
+			// another round spends without converging. Measured, never read out
+			// of a report; the caller's loop policy decides what to do with it.
+			if previous.HeadCommit == headCommit {
+				if clean, cleanErr := WorkingTreeClean(input.RepositoryRoot); cleanErr == nil && clean {
+					unchangedRounds = previous.UnchangedRounds + 1
+				}
+			}
 			// Narrowing is only sound against the same base the chain was built
 			// on: a receipt taken against another ref proves nothing about the
 			// commits this base newly brings into range.
@@ -232,6 +242,7 @@ func Run(ctx context.Context, input Input) (Result, error) {
 		Reviewer:           string(input.Selection.Reviewer),
 		Author:             string(input.Author),
 		ReviewedAt:         now().UTC().Format(time.RFC3339),
+		UnchangedRounds:    unchangedRounds,
 		DurationSeconds:    int64(now().Sub(started) / time.Second),
 		Report:             report,
 		ReportSHA256:       digest([]byte(report)),

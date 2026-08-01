@@ -162,6 +162,39 @@ each with its own digest. Which findings survived is the reader's judgement.
 - **WHEN** a refuted receipt is inspected
 - **THEN** no field states which findings survived, were confirmed, or were dismissed
 
+### Requirement: A round that changed nothing is measured, not judged
+**Intent IDs:** OUT-3, OUT-5
+
+Where a round reviews the same head as the previous receipt and the working
+tree carries no change of the author's, the receipt SHALL record it as a
+consecutive unchanged round, counting up across such rounds and resetting to
+zero the moment work moves. The previous round produced findings the author
+acted on nothing about, and further rounds spend without converging — a loop
+needs a stop signal that does not require reading any report, and this is one
+that is measured.
+
+Goalrail SHALL report the count and MUST NOT act on it: it neither refuses the
+review nor ends any loop, because the loop belongs to the caller. The
+instructions file Goalrail itself materialized MUST NOT count as the author's
+work, or Goalrail's own artifact would suppress its own signal in every
+repository that has not committed it yet.
+
+#### Scenario: Consecutive rounds that changed nothing
+- **WHEN** a review runs twice against the same head with no change of the author's in the tree
+- **THEN** the second receipt records one consecutive unchanged round, and a third records two
+
+#### Scenario: Acting on the findings resets it
+- **WHEN** a commit lands after an unchanged round and the review runs again
+- **THEN** the count is zero
+
+#### Scenario: Work in progress is not a stalemate
+- **WHEN** the tree carries the author's uncommitted changes at the same head
+- **THEN** the count is zero
+
+#### Scenario: Goalrail's own artifact does not count
+- **WHEN** the instructions file was materialized and never committed
+- **THEN** it does not make the tree count as changed
+
 ### Requirement: The receipt is bound to what was reviewed, and to how
 **Intent IDs:** OUT-5, SIG-3
 

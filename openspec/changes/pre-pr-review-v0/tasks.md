@@ -65,3 +65,10 @@
 - [ ] 9.4 Incremental by default: where a receipt exists, the new round's base is the previous receipt's head; `--full` reviews the whole branch. The chain of receipts proves cumulative coverage.
 - [ ] 9.5 Refute round (`--refute`): a fresh session — the other runnable provider, else the same — receives the previous report and the diff with refuter instructions from the same committed file; both reports stored verbatim, each with its own digest. The gate runs again for it.
 - [ ] 9.6 Tests for each mode, the fallback reason, unknown author, incremental base selection, and the refuted receipt carrying two verbatim reports.
+
+## 10. Stalemate measurement (adopted from ralphex's review-patience)
+
+- [x] 10.1 Record consecutive rounds that reviewed the same head with no change of the author's in the tree, resetting to zero when work moves. Measured from the receipt chain and `git status`, never from a report.
+- [x] 10.2 Exclude the instructions file Goalrail materialized from the tree check, so its own artifact cannot suppress its own signal in a repository that has not committed it yet.
+- [x] 10.3 Report the count and act on nothing: the loop belongs to the caller, and the workspace policy is where "stop on a stalemate" lives.
+- [x] 10.4 Test the accumulation, the reset after a commit, a dirty tree as not-a-stalemate, and the materialized instructions file as not-work.
