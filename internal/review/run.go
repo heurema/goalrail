@@ -13,6 +13,15 @@ import (
 	"github.com/heurema/goalrail/internal/ambient"
 )
 
+// DefaultEffort is the reasoning effort a review runs at when the caller names
+// none.
+//
+// Moderate on purpose. A review is a step inside a loop that runs again after
+// every fix, so its cost is paid on every round; the highest setting turns a
+// loop into a batch job. Raising it is one flag away for the change that
+// deserves it.
+const DefaultEffort = "medium"
+
 // ErrGateRefused reports a configured budget gate that declined the review.
 var ErrGateRefused = errors.New("the configured review gate refused")
 
@@ -30,6 +39,11 @@ type Input struct {
 
 	// Reviewer is the provider performing the review.
 	Reviewer ambient.Scaffold
+
+	// Effort is the reviewer's reasoning effort. Empty means DefaultEffort:
+	// what a review in a loop needs, rather than what the machine's interactive
+	// configuration happens to say.
+	Effort string
 
 	// Gate is a command run before any reviewer is invoked. Empty means no
 	// gate, which is the ordinary case: absence of a gate is a choice the user
@@ -93,7 +107,11 @@ func Run(ctx context.Context, input Input) (Result, error) {
 		}
 	}
 
-	report, err := invoke(ctx, input.Reviewer, input.RepositoryRoot, input.BaseRef, instructions)
+	effort := strings.TrimSpace(input.Effort)
+	if effort == "" {
+		effort = DefaultEffort
+	}
+	report, err := invoke(ctx, input.Reviewer, input.RepositoryRoot, input.BaseRef, effort, instructions)
 	if err != nil {
 		// No receipt: one describing a review that did not happen is worse than
 		// none, because it reads as done.
@@ -173,15 +191,28 @@ func prompt(baseRef string, instructions []byte) string {
 // anything: the first live run of this feature failed on an argument
 // combination its vendor documents as legal, and a construction nobody can
 // inspect is one that breaks the same way twice.
-func reviewCommand(reviewer ambient.Scaffold, baseRef string, instructions []byte) (name string, arguments []string, stdin string, err error) {
+func reviewCommand(reviewer ambient.Scaffold, baseRef, effort string, instructions []byte) (name string, arguments []string, stdin string, err error) {
 	switch reviewer {
 	case ambient.ScaffoldCodex:
 		// `-` reads the instructions from stdin. No scope flag: it cannot be
 		// combined with them.
-		return "codex", []string{"review", "-"}, prompt(baseRef, instructions), nil
+		//
+		// The reasoning effort is stated rather than inherited. A review inside
+		// a loop has a different latency budget from the interactive session
+		// whose configuration file would otherwise decide it — measured here as
+		// a review still running after ten minutes because the machine's config
+		// named the highest setting for interactive work. The other reviewer
+		// needs no equivalent: its effort arrives in the environment, which is
+		// already stripped so the reviewer does not inherit the author's
+		// session. A configuration file is out of that reach.
+		return "codex", []string{
+			"-c", "model_reasoning_effort=" + effort,
+			"review", "-",
+		}, prompt(baseRef, instructions), nil
 	case ambient.ScaffoldClaudeCode:
 		// Only the tools a reviewer needs, and never an editing one: a reviewer
 		// that can change the work is no longer reviewing it.
+		_ = effort
 		return "claude", []string{
 			"-p", "--output-format", "text",
 			"--allowed-tools", "Bash(git *)", "Read", "Grep", "Glob",
@@ -197,8 +228,8 @@ func reviewCommand(reviewer ambient.Scaffold, baseRef string, instructions []byt
 // so every flag is a surface that can drift under it; a vendor's refusal is
 // surfaced to the caller unchanged rather than translated, because a wrapper
 // that smooths over a changed interface converts a loud break into a quiet one.
-func invoke(ctx context.Context, reviewer ambient.Scaffold, repositoryRoot, baseRef string, instructions []byte) (string, error) {
-	name, arguments, stdin, err := reviewCommand(reviewer, baseRef, instructions)
+func invoke(ctx context.Context, reviewer ambient.Scaffold, repositoryRoot, baseRef, effort string, instructions []byte) (string, error) {
+	name, arguments, stdin, err := reviewCommand(reviewer, baseRef, effort, instructions)
 	if err != nil {
 		return "", err
 	}

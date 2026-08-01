@@ -23,6 +23,13 @@ import (
 // one machine, not to everyone who downloads a release.
 const reviewGateEnvironment = "GOALRAIL_REVIEW_GATE"
 
+// reviewEffortEnvironment names the reviewer's reasoning effort.
+//
+// Stated rather than inherited: a review runs again on every round of a loop,
+// and the machine's interactive configuration was tuned for a session where one
+// answer is waited for once.
+const reviewEffortEnvironment = "GOALRAIL_REVIEW_EFFORT"
+
 // defaultBaseRef is what a branch is reviewed against when the caller says
 // nothing.
 const defaultBaseRef = "main"
@@ -41,6 +48,7 @@ func runReview(ctx context.Context, args []string, stdout, stderr io.Writer) err
 	base := set.String("base", defaultBaseRef, "ref the branch is reviewed against")
 	author := set.String("author", "", "authoring agent (codex or claude-code); omit to detect from the environment")
 	gate := set.String("gate", "", "command run before the review; a non-zero exit refuses it (default $"+reviewGateEnvironment+")")
+	effort := set.String("effort", "", "reviewer reasoning effort (default "+review.DefaultEffort+", or $"+reviewEffortEnvironment+")")
 	if err := set.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
@@ -85,10 +93,16 @@ func runReview(ctx context.Context, args []string, stdout, stderr io.Writer) err
 		configured = os.Getenv(reviewGateEnvironment)
 	}
 
+	chosenEffort := *effort
+	if strings.TrimSpace(chosenEffort) == "" {
+		chosenEffort = os.Getenv(reviewEffortEnvironment)
+	}
+
 	result, err := review.Run(ctx, review.Input{
 		RepositoryRoot: root,
 		StateRoot:      stateRoot,
 		BaseRef:        *base,
+		Effort:         chosenEffort,
 		Author:         authoring,
 		Reviewer:       reviewer,
 		Gate:           configured,

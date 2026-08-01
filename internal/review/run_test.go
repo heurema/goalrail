@@ -219,7 +219,7 @@ func TestRunRefusesADetachedHead(t *testing.T) {
 // --base and a custom prompt, and refuses them together. Reading its help was
 // not enough, so the shape is pinned rather than trusted.
 func TestCodexInvocationNeverCombinesAScopeFlagWithInstructions(t *testing.T) {
-	name, arguments, stdin, err := reviewCommand(ambient.ScaffoldCodex, "main", []byte("look for X"))
+	name, arguments, stdin, err := reviewCommand(ambient.ScaffoldCodex, "main", DefaultEffort, []byte("look for X"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -245,7 +245,7 @@ func TestCodexInvocationNeverCombinesAScopeFlagWithInstructions(t *testing.T) {
 
 // A reviewer that can edit is no longer reviewing.
 func TestClaudeInvocationCarriesNoEditingTool(t *testing.T) {
-	_, arguments, stdin, err := reviewCommand(ambient.ScaffoldClaudeCode, "main", []byte("look for X"))
+	_, arguments, stdin, err := reviewCommand(ambient.ScaffoldClaudeCode, "main", DefaultEffort, []byte("look for X"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -261,7 +261,7 @@ func TestClaudeInvocationCarriesNoEditingTool(t *testing.T) {
 }
 
 func TestUnknownReviewerHasNoInvocation(t *testing.T) {
-	if _, _, _, err := reviewCommand(ambient.Scaffold("something-else"), "main", nil); err == nil {
+	if _, _, _, err := reviewCommand(ambient.Scaffold("something-else"), "main", DefaultEffort, nil); err == nil {
 		t.Fatal("an unknown reviewer produced an invocation")
 	}
 }
