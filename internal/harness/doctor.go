@@ -46,6 +46,27 @@ type AttachmentDiagnosis struct {
 	SupersededEvents []string `json:"superseded_events,omitempty"`
 }
 
+// ReviewState is whether the branch's independent review still describes the
+// branch.
+//
+// It is a value rather than something this package computes, for the same
+// reason the release check is injected: deciding it means running git, and a
+// diagnosis that reaches for a repository on its own is one that cannot be
+// tested without one. An empty Note means the caller asked for no check and no
+// line is reported.
+type ReviewState struct {
+	// State is absent, current, or stale.
+	State      string `json:"state,omitempty"`
+	Branch     string `json:"branch,omitempty"`
+	Reviewer   string `json:"reviewer,omitempty"`
+	ReviewedAt string `json:"reviewed_at,omitempty"`
+
+	// Note is the reported line. It states a condition, never a fault: a branch
+	// with no review is an ordinary state, and the review is evidence rather
+	// than a gate, so nothing here touches the verdict or the exit status.
+	Note string `json:"note,omitempty"`
+}
+
 // Diagnosis is one report covering everything a working harness requires.
 type Diagnosis struct {
 	Repository  string `json:"repository"`
@@ -63,6 +84,7 @@ type Diagnosis struct {
 	Toolchain     ToolchainState        `json:"toolchain"`
 	Observability ObservabilityState    `json:"observability"`
 	Update        UpdateAvailability    `json:"update"`
+	Review        ReviewState           `json:"review"`
 
 	// Invocation is the exact command the repository is driven by, printed so an
 	// agent working here does not have to guess it.
@@ -88,6 +110,10 @@ type DiagnoseInput struct {
 	// LookupEnvironment and LookPath are injectable for the same reason.
 	LookupEnvironment func(string) string
 	LookPath          func(string) (string, error)
+
+	// Review is the branch's review state, computed by the caller because
+	// deciding it means running git. A zero value reports nothing.
+	Review ReviewState
 
 	// LatestRelease asks whether a newer release exists. It is a field rather
 	// than a call because that is what confines the network: nothing that is not
@@ -149,6 +175,7 @@ func Diagnose(input DiagnoseInput) (Diagnosis, error) {
 
 	diagnosis.Observability = InspectObservability(input.StateRoot, input.LookupEnvironment)
 	diagnosis.Update = availability(input.LatestRelease, diagnosis.Version)
+	diagnosis.Review = input.Review
 
 	diagnosis.Problems, diagnosis.NextActions = summarize(diagnosis)
 	diagnosis.Working = len(diagnosis.Problems) == 0
@@ -301,6 +328,10 @@ func Describe(diagnosis Diagnosis) string {
 		fmt.Fprintf(&report, "observability: configured at %s\n", diagnosis.Observability.Endpoint)
 	} else {
 		fmt.Fprintf(&report, "%s\n", diagnosis.Observability.Note)
+	}
+
+	if diagnosis.Review.Note != "" {
+		fmt.Fprintf(&report, "%s\n", diagnosis.Review.Note)
 	}
 
 	fmt.Fprintf(&report, "%s\n", diagnosis.Update.Note)
