@@ -443,11 +443,14 @@ func invoke(ctx context.Context, reviewer ambient.Scaffold, repositoryRoot, base
 			detail = err.Error()
 		}
 		// The vendor's message reaches the caller, but a megabyte of session
-		// transcript is not a message. The tail is where CLIs put the reason.
+		// transcript is not a message. Different CLIs put the reason at
+		// different ends — a panic leads, an exit summary trails — so both a
+		// bounded head and a bounded tail survive, and the process's own exit
+		// error is always stated because no truncation can lose it.
 		if len(detail) > 4096 {
-			detail = "… " + detail[len(detail)-4096:]
+			detail = detail[:1024] + "\n… [" + fmt.Sprint(len(detail)-4096) + " bytes elided] …\n" + detail[len(detail)-3072:]
 		}
-		return "", fmt.Errorf("the %s reviewer did not complete: %s", reviewer, detail)
+		return "", fmt.Errorf("the %s reviewer did not complete (%v): %s", reviewer, err, detail)
 	}
 	report := stdout.String()
 	if strings.TrimSpace(report) == "" {
@@ -472,20 +475,44 @@ func (b *boundedBuffer) Write(p []byte) (int, error) {
 
 func (b *boundedBuffer) String() string { return b.buffer.String() }
 
-// tailBuffer keeps the last limit bytes and never fails a write: it exists for
-// diagnostics, and diagnostics must not be able to kill the thing they
-// describe.
+// tailBuffer keeps a bounded head and a bounded tail and never fails a write:
+// it exists for diagnostics, and diagnostics must not be able to kill the
+// thing they describe. Both ends survive because vendors disagree about where
+// the reason goes — a panic leads, an exit summary trails — and a buffer that
+// keeps only one end silently discards the other kind of cause.
 type tailBuffer struct {
-	buffer []byte
+	head   []byte
+	tail   []byte
+	elided int
 	limit  int
 }
 
 func (b *tailBuffer) Write(p []byte) (int, error) {
-	b.buffer = append(b.buffer, p...)
-	if len(b.buffer) > b.limit {
-		b.buffer = b.buffer[len(b.buffer)-b.limit:]
+	// The full length is reported whatever was kept: a diagnostic buffer that
+	// under-reports a write makes the writer see a broken pipe and turns the
+	// diagnostics into the failure again, one layer up.
+	written := len(p)
+	if len(b.head) < b.limit {
+		take := min(b.limit-len(b.head), len(p))
+		b.head = append(b.head, p[:take]...)
+		p = p[take:]
 	}
-	return len(p), nil
+	if len(p) > 0 {
+		b.tail = append(b.tail, p...)
+		if len(b.tail) > b.limit {
+			b.elided += len(b.tail) - b.limit
+			b.tail = b.tail[len(b.tail)-b.limit:]
+		}
+	}
+	return written, nil
 }
 
-func (b *tailBuffer) String() string { return string(b.buffer) }
+func (b *tailBuffer) String() string {
+	if len(b.tail) == 0 {
+		return string(b.head)
+	}
+	if b.elided == 0 {
+		return string(b.head) + string(b.tail)
+	}
+	return string(b.head) + fmt.Sprintf("\n… [%d bytes elided] …\n", b.elided) + string(b.tail)
+}

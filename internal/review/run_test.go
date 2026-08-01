@@ -654,4 +654,29 @@ echo "FINAL-REASON" >&2; exit 3`)
 	if !strings.Contains(err.Error(), "FINAL-REASON") {
 		t.Fatalf("the tail lost the reason: %v", err)
 	}
+	if !strings.Contains(err.Error(), "exit status 3") {
+		t.Fatalf("the process's own exit error was lost: %v", err)
+	}
+}
+
+// And a reason printed before the noise survives too: vendors disagree about
+// which end carries the cause, so both bounded ends do.
+func TestAFailureReasonPrintedFirstSurvivesTheNoise(t *testing.T) {
+	root := branchWithWork(t)
+	stateRoot := t.TempDir()
+	stubReviewer(t, "codex", `cat >/dev/null
+echo "EARLY-PANIC: real cause" >&2
+i=0; while [ $i -lt 3000 ]; do printf '%0512d\n' $i >&2; i=$((i+1)); done
+exit 3`)
+
+	_, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: stateRoot, BaseRef: "main",
+		Selection: Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
+	})
+	if err == nil {
+		t.Fatal("a failing reviewer reported success")
+	}
+	if !strings.Contains(err.Error(), "EARLY-PANIC") {
+		t.Fatalf("a leading cause was truncated away: %d bytes", len(err.Error()))
+	}
 }
