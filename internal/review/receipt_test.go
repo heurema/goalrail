@@ -1,12 +1,15 @@
 package review
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/heurema/goalrail/internal/ambient"
 )
 
 // repository builds a scratch checkout with one commit on main and returns its
@@ -255,11 +258,12 @@ func TestStatusMovesWithTheBranchAndNeedsNobody(t *testing.T) {
 // The same branch name in two clones is two different pieces of work.
 func TestReceiptsAreKeyedByRepositoryAndBranchTogether(t *testing.T) {
 	stateRoot := t.TempDir()
-	first := receiptPath(stateRoot, "/a", "work")
-	second := receiptPath(stateRoot, "/b", "work")
-	third := receiptPath(stateRoot, "/a", "other")
-	if first == second || first == third || second == third {
-		t.Fatalf("receipt paths collide: %s %s %s", first, second, third)
+	first := receiptPath(stateRoot, "/a", "work", "h1")
+	second := receiptPath(stateRoot, "/b", "work", "h1")
+	third := receiptPath(stateRoot, "/a", "other", "h1")
+	fourth := receiptPath(stateRoot, "/a", "work", "h2")
+	if first == second || first == third || second == third || first == fourth {
+		t.Fatalf("receipt paths collide: %s %s %s %s", first, second, third, fourth)
 	}
 }
 
@@ -337,5 +341,103 @@ func TestReceiptStateIsNotReadableByOtherAccounts(t *testing.T) {
 	}
 	if directory.Mode().Perm()&0o077 != 0 {
 		t.Fatalf("the review state directory is open: %v", directory.Mode().Perm())
+	}
+}
+
+// A later round must not erase the evidence of an earlier one: the chain of
+// per-round receipts is what proves the whole branch was reviewed.
+func TestALaterRoundPreservesTheEarlierReceipt(t *testing.T) {
+	stateRoot := t.TempDir()
+	firstPath, err := WriteReceipt(stateRoot, Receipt{
+		Schema: ReceiptSchema, Repository: "/r", Branch: "work",
+		BaseCommit: "b", HeadCommit: "h1", Report: "round one",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := WriteReceipt(stateRoot, Receipt{
+		Schema: ReceiptSchema, Repository: "/r", Branch: "work",
+		BaseCommit: "b", HeadCommit: "h2", Report: "round two",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, statErr := os.Stat(firstPath); statErr != nil {
+		t.Fatal("round two erased round one's receipt")
+	}
+	latest, found, err := ReadReceipt(stateRoot, "/r", "work")
+	if err != nil || !found || latest.Report != "round two" {
+		t.Fatalf("the pointer does not follow the latest round: %+v (%v)", latest, err)
+	}
+}
+
+// Narrowing against a different base proves nothing about the commits that
+// base newly brings into range.
+func TestIncrementalNarrowingRequiresTheSameBase(t *testing.T) {
+	root := repository(t)
+	base, _ := Resolve(root, "main")
+	branch(t, root, "work")
+	write(t, root, "a.txt", "a\n")
+	commit(t, root, "a")
+	head1, _ := Resolve(root, "HEAD")
+	stateRoot := t.TempDir()
+	diff1, _ := DiffDigest(root, base, head1)
+	if _, err := WriteReceipt(stateRoot, Receipt{
+		Schema: ReceiptSchema, Repository: root, Branch: "work",
+		BaseRef: "main", BaseCommit: base, HeadCommit: head1, DiffSHA256: diff1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	write(t, root, "b.txt", "b\n")
+	commit(t, root, "b")
+
+	// Reviewing against a different resolved base must go full-range.
+	other, _ := Resolve(root, "main~0") // same commit — simulate same base first
+	_ = other
+	// A receipt whose BaseCommit differs from the requested base is ignored.
+	fake := Receipt{Schema: ReceiptSchema, Repository: root, Branch: "work",
+		BaseRef: "elsewhere", BaseCommit: "0000000000000000000000000000000000000000",
+		HeadCommit: head1, DiffSHA256: diff1}
+	if _, err := WriteReceipt(stateRoot, fake); err != nil {
+		t.Fatal(err)
+	}
+	stubReviewer(t, "codex", `cat >/dev/null; echo r`)
+	result, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: stateRoot, BaseRef: "main",
+		Selection: Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Receipt.ReviewedBase != base {
+		t.Fatalf("a foreign-base receipt narrowed the range: %q", result.Receipt.ReviewedBase)
+	}
+}
+
+// The repository's own .git/config must not steer the digest either.
+func TestDiffDigestIgnoresRepositoryLocalOrderFile(t *testing.T) {
+	root := repository(t)
+	base, _ := Resolve(root, "main")
+	branch(t, root, "work")
+	write(t, root, "z.txt", "z\n")
+	write(t, root, "a.txt", "a\n")
+	commit(t, root, "two files")
+	head, _ := Resolve(root, "HEAD")
+	before, err := DiffDigest(root, base, head)
+	if err != nil {
+		t.Fatal(err)
+	}
+	orderFile := filepath.Join(root, "order.txt")
+	if err := os.WriteFile(orderFile, []byte("z.txt\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := git(root, "config", "diff.orderFile", orderFile); err != nil {
+		t.Fatal(err)
+	}
+	after, err := DiffDigest(root, base, head)
+	if err != nil {
+		t.Fatalf("a local orderFile broke the digest: %v", err)
+	}
+	if after != before {
+		t.Fatal("a repository-local orderFile changed the digest of an unchanged branch")
 	}
 }

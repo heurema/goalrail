@@ -95,12 +95,12 @@ func digest(value []byte) string {
 // repository, and a digest taken there would describe someone else's changes.
 func git(repositoryRoot string, arguments ...string) (string, error) {
 	command := exec.Command("git", append([]string{"-C", repositoryRoot}, arguments...)...)
-	// Repository selectors are stripped, and the reader's own configuration is
-	// taken out of the answer entirely. Naming every key that can change a
-	// diff's bytes is a list that goes stale — `diff.orderFile` cannot even be
-	// neutralised by an override, because an empty value is a path git then
-	// fails to open. Ignoring the global and system files is what actually makes
-	// two machines agree.
+	// Repository selectors are stripped, and the reader's global and system
+	// configuration is taken out of the answer. The repository's own .git/config
+	// survives that, so the diff-affecting keys are additionally overridden on
+	// the command line — including diff.orderFile, whose "empty" form is
+	// /dev/null, a readable empty file, because an empty *value* is a path git
+	// fails to open.
 	command.Env = append(
 		strippedEnvironment(os.Environ(), []string{"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY"}),
 		"GIT_CONFIG_GLOBAL=/dev/null",
@@ -162,6 +162,7 @@ func canonicalDiffArguments(baseCommit, headCommit string) []string {
 		"-c", "diff.mnemonicPrefix=false",
 		"-c", "diff.relative=false",
 		"-c", "diff.indentHeuristic=true",
+		"-c", "diff.orderFile=/dev/null",
 		"-c", "core.abbrev=40",
 		"diff", "--no-ext-diff", "--no-color", "--no-textconv",
 		"--full-index", "--no-renames",
@@ -204,14 +205,27 @@ func CurrentBranch(repositoryRoot string) (string, error) {
 // state and never in the repository: it is evidence about one clone's branch at
 // one moment, and a receipt someone else received by pulling would assert a
 // review of a diff they may not have.
-func receiptPath(stateRoot, repositoryRoot, branch string) string {
-	key := digest([]byte(repositoryRoot + "\x00" + branch))
-	return filepath.Join(stateRoot, "reviews", key+".json")
+func branchKey(repositoryRoot, branch string) string {
+	return digest([]byte(repositoryRoot + "\x00" + branch))
 }
 
-// WriteReceipt stores one receipt.
+// receiptPath locates one round's receipt: one file per reviewed head, so a
+// later round never erases the evidence of an earlier one. The chain is what
+// lets an incremental receipt prove the rounds before it happened.
+func receiptPath(stateRoot, repositoryRoot, branch, headCommit string) string {
+	return filepath.Join(stateRoot, "reviews", branchKey(repositoryRoot, branch)+"-"+headCommit+".json")
+}
+
+// latestPath points at the branch's most recent receipt.
+func latestPath(stateRoot, repositoryRoot, branch string) string {
+	return filepath.Join(stateRoot, "reviews", branchKey(repositoryRoot, branch)+".latest")
+}
+
+// WriteReceipt stores one round's receipt and moves the branch pointer to it.
+// Earlier rounds' files stay: overwriting them would erase the only proof that
+// the start of the branch was ever reviewed.
 func WriteReceipt(stateRoot string, receipt Receipt) (string, error) {
-	path := receiptPath(stateRoot, receipt.Repository, receipt.Branch)
+	path := receiptPath(stateRoot, receipt.Repository, receipt.Branch, receipt.HeadCommit)
 	// The same protection the rest of the local state store uses. A receipt
 	// holds a verbatim review of private source; leaving it readable by every
 	// account on a shared machine would make this the one piece of Goalrail
@@ -235,13 +249,28 @@ func WriteReceipt(stateRoot string, receipt Receipt) (string, error) {
 	if err := os.WriteFile(path, append(encoded, '\n'), 0o600); err != nil {
 		return "", fmt.Errorf("write review receipt: %w", err)
 	}
+	if err := os.WriteFile(latestPath(stateRoot, receipt.Repository, receipt.Branch),
+		[]byte(filepath.Base(path)+"\n"), 0o600); err != nil {
+		return "", fmt.Errorf("write review pointer: %w", err)
+	}
 	return path, nil
 }
 
 // ReadReceipt returns one branch's receipt, reporting absence as a miss rather
 // than an error. A branch that was never reviewed is an ordinary state.
 func ReadReceipt(stateRoot, repositoryRoot, branch string) (Receipt, bool, error) {
-	path := receiptPath(stateRoot, repositoryRoot, branch)
+	pointer, err := boundedio.ReadRegularFile(latestPath(stateRoot, repositoryRoot, branch), "review pointer", 4096)
+	if errors.Is(err, fs.ErrNotExist) {
+		return Receipt{}, false, nil
+	}
+	if err != nil {
+		return Receipt{}, false, err
+	}
+	name := strings.TrimSpace(string(pointer))
+	if name != filepath.Base(name) || name == "" {
+		return Receipt{}, false, fmt.Errorf("review pointer names an invalid receipt %q", name)
+	}
+	path := filepath.Join(stateRoot, "reviews", name)
 	contents, err := boundedio.ReadRegularFile(path, "review receipt", receiptBound)
 	if errors.Is(err, fs.ErrNotExist) {
 		return Receipt{}, false, nil
