@@ -155,6 +155,12 @@ func strippedEnvironment(environment []string, remove []string) []string {
 // staleness into a property of whose machine asked.
 func canonicalDiffArguments(baseCommit, headCommit string) []string {
 	return []string{
+		// Attributes come from the digested head itself, not the checkout's
+		// moving HEAD: recomputing a historical range must not change with what
+		// is checked out today. Known residual: .git/info/attributes still
+		// outranks every configurable source; a clone that edits it diverges,
+		// and there is no git switch to exclude it — documented rather than
+		// papered over.
 		// Flags alone do not make a diff canonical: the repository's own
 		// configuration still decides context lines, the algorithm, prefixes and
 		// ordering. Left to it, changing `diff.context` after a review makes the
@@ -173,7 +179,7 @@ func canonicalDiffArguments(baseCommit, headCommit string) []string {
 		// differ" and a stable branch reads as stale. Both attribute sources are
 		// pointed at empty files for the digest.
 		"-c", "core.attributesFile=/dev/null",
-		"-c", "attr.tree=HEAD",
+		"-c", "attr.tree=" + headCommit,
 		"-c", "core.abbrev=40",
 		"diff", "--no-ext-diff", "--no-color", "--no-textconv",
 		"--full-index", "--no-renames",

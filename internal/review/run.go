@@ -132,7 +132,9 @@ func Run(ctx context.Context, input Input) (Result, error) {
 			// Narrowing is only sound against the same base the chain was built
 			// on: a receipt taken against another ref proves nothing about the
 			// commits this base newly brings into range.
-			if previous.BaseCommit == baseCommit && previous.HeadCommit != headCommit {
+			// A legacy receipt without the reviewed-range digest cannot anchor
+			// a chain link that proves its bytes; it does not narrow.
+			if previous.ReviewedDiffSHA256 != "" && previous.BaseCommit == baseCommit && previous.HeadCommit != headCommit {
 				if _, resolveErr := Resolve(input.RepositoryRoot, previous.HeadCommit); resolveErr == nil {
 					reviewedBase = previous.HeadCommit
 				}
