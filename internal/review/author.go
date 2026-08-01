@@ -135,29 +135,64 @@ func Executable(scaffold ambient.Scaffold) (string, bool) {
 // gone, and the review would fail somewhere further along with a message about
 // the wrong thing. The candidates are the ones a caller offers; the check is
 // whether each can be executed at all.
-func SelectReviewer(author ambient.Scaffold, candidates []ambient.Scaffold, lookPath func(string) (string, error)) (ambient.Scaffold, error) {
+// AuthorUnknown records that no authorship could be determined. The fresh
+// session provides the independence either way; detection only improves the
+// choice, so its failure is information for the receipt, not a reason to stop.
+const AuthorUnknown ambient.Scaffold = "unknown"
+
+// Selection is a reviewer together with how it was chosen — because "a
+// different vendor reviewed this" has to stay a provable claim, a cross that
+// quietly became fresh would be exactly the unprovable kind.
+type Selection struct {
+	Reviewer ambient.Scaffold
+	// Mode is "cross" where the reviewer is a different provider from the
+	// author, "fresh" where it is the same provider (or the author is unknown)
+	// in a clean session.
+	Mode string
+	// Reason states why this mode, in one sentence.
+	Reason string
+}
+
+func SelectReviewer(author ambient.Scaffold, candidates []ambient.Scaffold, lookPath func(string) (string, error)) (Selection, error) {
 	if lookPath == nil {
 		lookPath = exec.LookPath
 	}
-	var unrunnable []string
+	runnable := make([]ambient.Scaffold, 0, len(candidates))
+	var missing []string
 	for _, scaffold := range candidates {
-		if scaffold == author {
-			continue
-		}
 		name, defined := Executable(scaffold)
 		if !defined {
 			continue
 		}
 		if _, err := lookPath(name); err != nil {
-			unrunnable = append(unrunnable, fmt.Sprintf("%s (%s is not on PATH)", scaffold, name))
+			missing = append(missing, fmt.Sprintf("%s (%s is not on PATH)", scaffold, name))
 			continue
 		}
-		return scaffold, nil
+		runnable = append(runnable, scaffold)
 	}
-	if len(unrunnable) > 0 {
-		return "", fmt.Errorf("no reviewer other than the author's own provider (%s) can be run: %s",
-			author, strings.Join(unrunnable, ", "))
+	if len(runnable) == 0 {
+		return Selection{}, fmt.Errorf("no reviewer can be run at all: %s", strings.Join(missing, ", "))
 	}
-	return "", fmt.Errorf("no reviewer is available other than the author's own provider (%s); "+
-		"install a second agent scaffold, because reviewing with the author's provider reproduces the author's blind spots", author)
+	// Cross where possible: a provider that did not author the change adds
+	// different weights on top of the fresh context.
+	for _, scaffold := range runnable {
+		if scaffold != author {
+			mode, reason := "cross", fmt.Sprintf("%s did not author this change", scaffold)
+			if author == AuthorUnknown || author == "" {
+				// With no author there is no "other side"; the choice is fresh
+				// by definition and deterministic by candidate order.
+				mode, reason = "fresh", "the author is unknown, so the first runnable provider reviews in a clean session"
+			}
+			return Selection{Reviewer: scaffold, Mode: mode, Reason: reason}, nil
+		}
+	}
+	// Only the author's own provider runs. A clean session of the same provider
+	// is the ordinary single-tool case, not a degraded one — the mechanism is
+	// the fresh context, and a second vendor only strengthens it.
+	reason := fmt.Sprintf("only %s is runnable, so it reviews in a clean session", author)
+	if len(missing) > 0 {
+		reason = fmt.Sprintf("cross review was unavailable — %s — so %s reviews in a clean session",
+			strings.Join(missing, ", "), author)
+	}
+	return Selection{Reviewer: runnable[0], Mode: "fresh", Reason: reason}, nil
 }

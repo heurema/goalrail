@@ -19,7 +19,7 @@ Code session also carries a Codex companion variable.
 
 ## Goals / Non-Goals
 
-Goals, from the confirmed intent v3: run the review inside the author's loop
+Goals, from the confirmed intent (v4; the list below predates v4 and the v4 decisions further down supersede where they differ): run the review inside the author's loop
 with no question on the ordinary path (OUT-1); make the budget gate the only
 other refusal (OUT-2); close findings before the pull request opens under a
 declared ceiling (OUT-3); leave the user alone except for a divergence or a real
@@ -49,7 +49,7 @@ own statement, stored verbatim like the rest of the report; Goalrail neither
 requires it, validates it, nor acts on it. It exists so the calling agent has a
 cheap thing to look for, and a reviewer that omits it produces a valid receipt.
 
-**Authorship is detected, and ambiguity refuses.**
+**Authorship is detected. (v4 supersedes the refusal below: an undecidable author is recorded as `unknown` and refuses nothing.)**
 
 `CLAUDECODE` identifies a Claude Code session; a Codex session carries its own
 `CODEX_*` session marker. The rule is deliberately narrow: only a provider's
@@ -110,6 +110,39 @@ instructions cannot live there and remain shareable. They go to a dot-prefixed
 file at the repository root, outside that excluded directory, materialized with
 a default only when absent and never overwritten. Ratchet promotions are then
 ordinary edits, reviewable in the same pull requests as the code they protect.
+
+**v4: fresh mode is the default shape, and modes are recorded, not judged.**
+
+The owner's reframing (SE-10) inverted a premise: most users have one provider,
+so a design that refuses without a second one fails the ordinary case. The
+mechanism was never the second vendor — it is the fresh session. Selection is
+now: candidates are the supported providers, runnability (the executable
+resolving) makes one eligible, the non-author is preferred, and the receipt
+records mode and reason. The refusal survives only where nothing runs at all.
+
+**v4: the refute trigger is behavioural, not evaluative.**
+
+"Risky" required someone to judge riskiness — the author (biased) or the user
+(whom the loop must not disturb). The trigger is now a fact the calling agent
+already holds: findings exist and it is about to act on them. Goalrail neither
+triggers nor reads; the refuter gets the report verbatim, which is transport,
+not parsing.
+
+**v4: incremental re-review, with its limit stated.**
+
+Round cost was O(branch) per round, measured twice into owner stops. The next
+round's range starts at the previous receipt's head; the receipt carries both
+the round's range and the full branch digest, so staleness stays one comparison
+and the chain proves cumulative coverage. Accepted limit, stated: a later fix
+can break what an earlier round approved and the incremental diff will not show
+it — the limit human incremental review carries. The full pass remains a flag.
+
+**v4: the deadline bounds the tree.**
+
+`exec.CommandContext` kills the direct child; the reviewers are wrappers whose
+grandchildren hold the pipes, and a twenty-minute deadline was measured letting
+a run reach fifty-three. The child gets its own process group, cancellation
+signals the group, and a short wait-delay stops waiting on inherited pipes.
 
 ## Correlation and Evidence
 

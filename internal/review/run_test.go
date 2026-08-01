@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/heurema/goalrail/internal/ambient"
 )
@@ -41,7 +42,7 @@ func TestRunRecordsWhatTheReviewerSaid(t *testing.T) {
 
 	result, err := Run(context.Background(), Input{
 		RepositoryRoot: root, StateRoot: stateRoot, BaseRef: "main",
-		Author: ambient.ScaffoldClaudeCode, Reviewer: ambient.ScaffoldCodex,
+		Author: ambient.ScaffoldClaudeCode, Selection: Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
 	})
 	if err != nil {
 		t.Fatalf("review failed: %v", err)
@@ -83,7 +84,7 @@ func TestRunWritesNoReceiptWhenTheReviewerFails(t *testing.T) {
 
 			_, err := Run(context.Background(), Input{
 				RepositoryRoot: root, StateRoot: stateRoot, BaseRef: "main",
-				Author: ambient.ScaffoldCodex, Reviewer: reviewer.scaffold,
+				Author: ambient.ScaffoldCodex, Selection: Selection{Reviewer: reviewer.scaffold, Mode: "cross", Reason: "test"},
 			})
 			if err == nil {
 				t.Fatal("a failing reviewer reported success")
@@ -108,7 +109,7 @@ func TestRunRefusesAnEmptyReport(t *testing.T) {
 
 	if _, err := Run(context.Background(), Input{
 		RepositoryRoot: root, StateRoot: stateRoot, BaseRef: "main",
-		Author: ambient.ScaffoldClaudeCode, Reviewer: ambient.ScaffoldCodex,
+		Author: ambient.ScaffoldClaudeCode, Selection: Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
 	}); err == nil {
 		t.Fatal("an empty report was accepted")
 	}
@@ -125,7 +126,7 @@ func TestGateRefusesBeforeAnythingIsSpawned(t *testing.T) {
 
 	_, err := Run(context.Background(), Input{
 		RepositoryRoot: root, StateRoot: stateRoot, BaseRef: "main",
-		Author: ambient.ScaffoldClaudeCode, Reviewer: ambient.ScaffoldCodex,
+		Author: ambient.ScaffoldClaudeCode, Selection: Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
 		Gate: `echo "budget exhausted" >&2; exit 1`,
 	})
 	if !errors.Is(err, ErrGateRefused) {
@@ -154,7 +155,7 @@ func TestGatePermitsAndAbsenceOfAGateIsNotARefusal(t *testing.T) {
 
 			if _, err := Run(context.Background(), Input{
 				RepositoryRoot: root, StateRoot: stateRoot, BaseRef: "main",
-				Author: ambient.ScaffoldClaudeCode, Reviewer: ambient.ScaffoldCodex,
+				Author: ambient.ScaffoldClaudeCode, Selection: Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
 				Gate: gate,
 			}); err != nil {
 				t.Fatalf("%s refused the review: %v", name, err)
@@ -174,7 +175,7 @@ func TestTheReviewerDoesNotInheritTheAuthorsSessionIdentity(t *testing.T) {
 
 	result, err := Run(context.Background(), Input{
 		RepositoryRoot: root, StateRoot: stateRoot, BaseRef: "main",
-		Author: ambient.ScaffoldClaudeCode, Reviewer: ambient.ScaffoldCodex,
+		Author: ambient.ScaffoldClaudeCode, Selection: Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -193,7 +194,7 @@ func TestRunRefusesWhereThereIsNothingToReview(t *testing.T) {
 
 	_, err := Run(context.Background(), Input{
 		RepositoryRoot: root, StateRoot: stateRoot, BaseRef: "main",
-		Author: ambient.ScaffoldClaudeCode, Reviewer: ambient.ScaffoldCodex,
+		Author: ambient.ScaffoldClaudeCode, Selection: Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
 	})
 	if err == nil || !strings.Contains(err.Error(), "nothing to review") {
 		t.Fatalf("a branch identical to its base produced %v", err)
@@ -209,7 +210,7 @@ func TestRunRefusesADetachedHead(t *testing.T) {
 	}
 	if _, err := Run(context.Background(), Input{
 		RepositoryRoot: root, StateRoot: stateRoot, BaseRef: "main",
-		Author: ambient.ScaffoldClaudeCode, Reviewer: ambient.ScaffoldCodex,
+		Author: ambient.ScaffoldClaudeCode, Selection: Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
 	}); err == nil || !strings.Contains(err.Error(), "detached") {
 		t.Fatalf("a detached head produced %v", err)
 	}
@@ -219,7 +220,7 @@ func TestRunRefusesADetachedHead(t *testing.T) {
 // --base and a custom prompt, and refuses them together. Reading its help was
 // not enough, so the shape is pinned rather than trusted.
 func TestCodexInvocationNeverCombinesAScopeFlagWithInstructions(t *testing.T) {
-	name, arguments, stdin, err := reviewCommand(ambient.ScaffoldCodex, "main", DefaultEffort, []byte("look for X"))
+	name, arguments, stdin, err := reviewCommand(ambient.ScaffoldCodex, "main...HEAD", DefaultEffort, []byte("look for X"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -245,7 +246,7 @@ func TestCodexInvocationNeverCombinesAScopeFlagWithInstructions(t *testing.T) {
 
 // A reviewer that can edit is no longer reviewing.
 func TestClaudeInvocationCarriesNoEditingTool(t *testing.T) {
-	_, arguments, stdin, err := reviewCommand(ambient.ScaffoldClaudeCode, "main", DefaultEffort, []byte("look for X"))
+	_, arguments, stdin, err := reviewCommand(ambient.ScaffoldClaudeCode, "main...HEAD", DefaultEffort, []byte("look for X"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -270,7 +271,7 @@ func TestClaudeInvocationCarriesNoEditingTool(t *testing.T) {
 }
 
 func TestUnknownReviewerHasNoInvocation(t *testing.T) {
-	if _, _, _, err := reviewCommand(ambient.Scaffold("something-else"), "main", DefaultEffort, nil); err == nil {
+	if _, _, _, err := reviewCommand(ambient.Scaffold("something-else"), "main...HEAD", DefaultEffort, nil); err == nil {
 		t.Fatal("an unknown reviewer produced an invocation")
 	}
 }
@@ -294,4 +295,115 @@ func allowedTools(arguments []string) []string {
 		}
 	}
 	return allowed
+}
+
+// A deadline that only kills the direct child is not a deadline. The reviewers
+// are wrappers whose grandchild holds the same pipes, so this stubs that exact
+// shape: a script that backgrounds a long sleep inheriting stdout, then exits.
+// Without a process-group kill and a wait delay, Run blocks until the sleep is
+// done — measured in production as fifty-three minutes against a twenty-minute
+// deadline.
+func TestTheDeadlineBoundsAReviewerThatOutlivesItsChild(t *testing.T) {
+	root := branchWithWork(t)
+	stateRoot := t.TempDir()
+	stubReviewer(t, "codex", `cat >/dev/null; sleep 600 & sleep 600`)
+
+	started := time.Now()
+	_, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: stateRoot, BaseRef: "main",
+		Author: ambient.ScaffoldClaudeCode, Selection: Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
+		Deadline: 2 * time.Second,
+	})
+	elapsed := time.Since(started)
+
+	if err == nil {
+		t.Fatal("a reviewer past its deadline reported success")
+	}
+	if !strings.Contains(err.Error(), "deadline") {
+		t.Fatalf("the refusal does not name the deadline: %v", err)
+	}
+	// Generous, and still an order of magnitude below the hang it replaces.
+	if elapsed > 30*time.Second {
+		t.Fatalf("the deadline did not bound the review: took %s", elapsed)
+	}
+	if _, found, _ := ReadReceipt(stateRoot, root, "work"); found {
+		t.Fatal("a receipt was written for a review that ran out of time")
+	}
+}
+
+// A round costs what the round is about: the second review's range starts at
+// the first receipt's head. The full branch digest still guards staleness.
+func TestReReviewIsIncrementalByDefaultAndFullByFlag(t *testing.T) {
+	root := branchWithWork(t)
+	stateRoot := t.TempDir()
+	stubReviewer(t, "codex", `cat >/dev/null; echo round`)
+	selection := Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"}
+
+	first, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: stateRoot, BaseRef: "main", Selection: selection,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Receipt.ReviewedBase != first.Receipt.BaseCommit {
+		t.Fatalf("the first round did not cover the whole branch: %+v", first.Receipt)
+	}
+
+	write(t, root, "more.txt", "more\n")
+	commit(t, root, "more work")
+	second, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: stateRoot, BaseRef: "main", Selection: selection,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Receipt.ReviewedBase != first.Receipt.HeadCommit {
+		t.Fatalf("the second round did not start at the first round's head: %q vs %q",
+			second.Receipt.ReviewedBase, first.Receipt.HeadCommit)
+	}
+	// Staleness still guards the whole branch.
+	if state, _, _ := Status(stateRoot, root, "work"); state != StateCurrent {
+		t.Fatalf("an incremental receipt does not keep the branch current: %v", state)
+	}
+
+	write(t, root, "even-more.txt", "x\n")
+	commit(t, root, "even more")
+	full, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: stateRoot, BaseRef: "main", Selection: selection, Full: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if full.Receipt.ReviewedBase != full.Receipt.BaseCommit {
+		t.Fatalf("--full did not cover the whole branch: %+v", full.Receipt)
+	}
+}
+
+// The refuted receipt carries both reports verbatim; nothing is derived.
+func TestRefuteStoresBothReportsVerbatim(t *testing.T) {
+	root := branchWithWork(t)
+	stateRoot := t.TempDir()
+	stubReviewer(t, "codex", `cat >/dev/null; echo "the finding"`)
+	stubReviewer(t, "claude", `cat >/dev/null; echo "REFUTED: not real"`)
+
+	result, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: stateRoot, BaseRef: "main",
+		Selection: Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
+		Refute:    true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(result.Receipt.Report, "the finding") {
+		t.Fatalf("the review report was lost: %q", result.Receipt.Report)
+	}
+	if !strings.Contains(result.Receipt.Refutation, "REFUTED: not real") {
+		t.Fatalf("the refutation was lost: %q", result.Receipt.Refutation)
+	}
+	if result.Receipt.Mode != "refute" || result.Receipt.Refuter == "" {
+		t.Fatalf("the mode does not say what happened: %+v", result.Receipt)
+	}
+	if result.Receipt.RefutationSHA256 != digest([]byte(result.Receipt.Refutation)) {
+		t.Fatal("the refutation digest does not describe the stored refutation")
+	}
 }

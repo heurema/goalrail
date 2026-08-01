@@ -6,7 +6,11 @@
 Where a receipt exists for the current branch, the diagnosis SHALL report in one
 line whether that review still describes the branch: current where the branch's
 present diff digest matches the receipt's, stale where it does not. Where no
-receipt exists for the branch, it SHALL report that too. A review that was run
+receipt exists for the branch, it SHALL report that too. Where a receipt exists
+but cannot be read or its digest cannot be recomputed — truncated, malformed,
+oversized, an unknown schema, a pruned base commit — the diagnosis SHALL report
+it as unreadable and name the cause, because presenting "never reviewed" for a
+branch whose evidence is corrupt is the one wrong answer available here. A review that was run
 and then outrun by three more commits is worse than no review, because it reads
 as done.
 
@@ -42,3 +46,7 @@ would be noise.
 #### Scenario: The report is not reprinted
 - **WHEN** the line is reported for a branch whose receipt holds a long report
 - **THEN** no part of the report text appears in the diagnosis output
+
+#### Scenario: The receipt is unusable
+- **WHEN** diagnosis runs where a receipt exists but cannot be read or recomputed
+- **THEN** it reports the review as unreadable with the cause, and the overall verdict and exit status are unchanged

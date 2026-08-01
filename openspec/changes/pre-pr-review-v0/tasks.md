@@ -56,3 +56,12 @@
 - [ ] 8.2 Declare the round ceiling and the stop condition before the first round, and report reaching the ceiling with findings still open as the loop's honest result rather than absorbing it.
 - [ ] 8.3 Count user interactions across the run and assert zero on the clean path.
 - [ ] 8.4 Assert that initialization, review, and diagnosis produce unchanged machine-readable shape and exit status with no terminal attached, so nothing here became interactive.
+
+## 9. v4: modes, incremental rounds, refute (supersedes 1.3/2.2-2.3 refusal semantics)
+
+- [ ] 9.1 Fresh mode: with only the author's provider runnable, review with it in a clean session instead of refusing. The single refusal left is "no reviewer runs at all". Record mode (fresh/cross) and the selection reason in the receipt; a cross downgraded to fresh because the other CLI would not run must say so.
+- [ ] 9.2 Unknown author: undetectable authorship proceeds, records `author: unknown`, and picks the reviewer deterministically. The override still wins.
+- [ ] 9.3 Receipt v4 fields: mode, mode_reason, duration_seconds, reviewed base/head (this round) alongside the full branch digest used for staleness.
+- [ ] 9.4 Incremental by default: where a receipt exists, the new round's base is the previous receipt's head; `--full` reviews the whole branch. The chain of receipts proves cumulative coverage.
+- [ ] 9.5 Refute round (`--refute`): a fresh session — the other runnable provider, else the same — receives the previous report and the diff with refuter instructions from the same committed file; both reports stored verbatim, each with its own digest. The gate runs again for it.
+- [ ] 9.6 Tests for each mode, the fallback reason, unknown author, incremental base selection, and the refuted receipt carrying two verbatim reports.

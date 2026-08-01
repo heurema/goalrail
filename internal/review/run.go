@@ -8,10 +8,16 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/heurema/goalrail/internal/ambient"
 )
+
+// cancelGrace is how long a killed reviewer has before its inherited pipes stop
+// being waited on. Short: by this point the process group has been signalled,
+// and the only thing left to wait for is a descendant that ignored it.
+const cancelGrace = 5 * time.Second
 
 // DefaultDeadline bounds one review.
 //
@@ -46,8 +52,17 @@ type Input struct {
 	// explicit override replaces it.
 	Author ambient.Scaffold
 
-	// Reviewer is the provider performing the review.
-	Reviewer ambient.Scaffold
+	// Selection is the reviewer together with mode and reason.
+	Selection Selection
+
+	// Full forces a whole-branch review even where a previous receipt would
+	// make the round incremental.
+	Full bool
+
+	// Refute, when set, runs a second fresh session that receives the previous
+	// report and tries to refute its findings. The trigger is the caller's:
+	// findings exist and they are about to act on them.
+	Refute bool
 
 	// Deadline bounds the review. Zero means DefaultDeadline.
 	Deadline time.Duration
@@ -106,6 +121,22 @@ func Run(ctx context.Context, input Input) (Result, error) {
 		return Result{}, fmt.Errorf("the branch has no changes against %s, so there is nothing to review", input.BaseRef)
 	}
 
+	// A round costs what the round is about: where a previous receipt exists,
+	// the reviewed range starts at its head, and the chain of receipts proves
+	// cumulative coverage. Reviewing the whole branch every round was measured
+	// into the failure this prevents — each round repaid the full price of all
+	// previous ones. The full pass stays one flag away.
+	reviewedBase := baseCommit
+	if !input.Full {
+		if previous, found, readErr := ReadReceipt(input.StateRoot, input.RepositoryRoot, branch); readErr == nil && found {
+			if previous.HeadCommit != headCommit {
+				if _, resolveErr := Resolve(input.RepositoryRoot, previous.HeadCommit); resolveErr == nil {
+					reviewedBase = previous.HeadCommit
+				}
+			}
+		}
+	}
+
 	instructions, materialized, err := EnsureInstructions(input.RepositoryRoot)
 	if err != nil {
 		return Result{}, err
@@ -129,11 +160,35 @@ func Run(ctx context.Context, input Input) (Result, error) {
 	}
 	bounded, cancel := context.WithTimeout(ctx, deadline)
 	defer cancel()
-	report, err := invoke(bounded, input.Reviewer, input.RepositoryRoot, input.BaseRef, effort, instructions)
+	started := now()
+	rangeSpec := reviewedBase + "..." + headCommit
+	report, err := invoke(bounded, input.Selection.Reviewer, input.RepositoryRoot, rangeSpec, effort, instructions)
 	if err != nil {
 		// No receipt: one describing a review that did not happen is worse than
 		// none, because it reads as done.
 		return Result{InstructionsMaterialized: materialized}, err
+	}
+
+	mode, modeReason := input.Selection.Mode, input.Selection.Reason
+	var refutation, refuter string
+	if input.Refute {
+		// The refuter is a fresh session — the other runnable provider where one
+		// exists, the same one otherwise. Passing the report verbatim is
+		// transport, not parsing; which findings survive is the reader's call.
+		refuterSelection, refuteErr := SelectReviewer(input.Selection.Reviewer, ambient.SupportedScaffolds(), nil)
+		if refuteErr != nil {
+			return Result{InstructionsMaterialized: materialized}, refuteErr
+		}
+		refutePrompt := "You are refuting a review, not extending it. Below is a reviewer's report on a change.\n" +
+			"Try to REFUTE each finding against the actual code; do not add new findings.\n" +
+			"For each: state REFUTED or STANDS with the concrete evidence.\n\n--- REPORT UNDER CHALLENGE ---\n" + report
+		refutation, refuteErr = invoke(bounded, refuterSelection.Reviewer, input.RepositoryRoot, rangeSpec, effort, []byte(refutePrompt))
+		if refuteErr != nil {
+			return Result{InstructionsMaterialized: materialized}, refuteErr
+		}
+		refuter = string(refuterSelection.Reviewer)
+		mode = "refute"
+		modeReason = input.Selection.Reason + "; refuted by " + refuter + " in a fresh session"
 	}
 
 	diffDigest, err := DiffDigest(input.RepositoryRoot, baseCommit, headCommit)
@@ -148,12 +203,19 @@ func Run(ctx context.Context, input Input) (Result, error) {
 		BaseRef:            input.BaseRef,
 		BaseCommit:         baseCommit,
 		HeadCommit:         headCommit,
+		ReviewedBase:       reviewedBase,
 		DiffSHA256:         diffDigest,
-		Reviewer:           string(input.Reviewer),
+		Mode:               mode,
+		ModeReason:         modeReason,
+		Reviewer:           string(input.Selection.Reviewer),
 		Author:             string(input.Author),
 		ReviewedAt:         now().UTC().Format(time.RFC3339),
+		DurationSeconds:    int64(now().Sub(started) / time.Second),
 		Report:             report,
 		ReportSHA256:       digest([]byte(report)),
+		Refutation:         refutation,
+		RefutationSHA256:   refutationDigest(refutation),
+		Refuter:            refuter,
 		InstructionsSHA256: digest(instructions),
 	}
 	path, err := WriteReceipt(input.StateRoot, receipt)
@@ -196,11 +258,18 @@ func runGate(ctx context.Context, repositoryRoot, gate string) error {
 // running it, not by reading its help, which lists both without saying so. The
 // instructions are not optional here: they carry what the findings ratchet has
 // promoted, so a review without them is a review of the wrong things.
-func prompt(baseRef string, instructions []byte) string {
+func prompt(rangeSpec string, instructions []byte) string {
 	return string(instructions) +
-		"\n\nReview the changes this branch introduces against `" + baseRef + "`" +
-		" — the three-dot range `" + baseRef + "...HEAD`, not the working tree.\n" +
-		"Use git to read the diff. Do not modify anything.\n"
+		"\n\nReview exactly the range `" + rangeSpec + "` — not the working tree.\n" +
+		"Use git to read that diff. You may read any file for context. Do not modify anything.\n"
+}
+
+// refutationDigest digests a refutation, or nothing where there is none.
+func refutationDigest(refutation string) string {
+	if refutation == "" {
+		return ""
+	}
+	return digest([]byte(refutation))
 }
 
 // reviewCommand builds one reviewer's invocation.
@@ -263,6 +332,25 @@ func invoke(ctx context.Context, reviewer ambient.Scaffold, repositoryRoot, base
 	command := exec.CommandContext(ctx, name, arguments...)
 	command.Stdin = strings.NewReader(stdin)
 	command.Dir = repositoryRoot
+
+	// A deadline that only kills the direct child is not a deadline. The
+	// reviewers are wrappers — `codex` is a Node process that launches a native
+	// binary — and the grandchild holds the same stdout and stderr, so killing
+	// the parent leaves those pipes open and Wait blocks forever. Measured: a
+	// review with a twenty-minute deadline was still running at fifty-three
+	// minutes with its reviewer already gone.
+	//
+	// Two things fix it together: the child gets its own process group so the
+	// whole tree can be signalled, and WaitDelay stops waiting on inherited
+	// pipes shortly after the kill rather than until whoever holds them exits.
+	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	command.Cancel = func() error {
+		if command.Process == nil {
+			return nil
+		}
+		return syscall.Kill(-command.Process.Pid, syscall.SIGKILL)
+	}
+	command.WaitDelay = cancelGrace
 	// The reviewer must not inherit the author's session identity. A spawned
 	// agent that reads the parent's markers believes it is a continuation of the
 	// session that wrote the code, which is exactly the shared context this

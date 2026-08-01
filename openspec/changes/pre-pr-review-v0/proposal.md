@@ -11,14 +11,27 @@ loop rather than a stage that begins when the work is already exposed.
 ## What Changes
 
 - A new command runs an independent review of the current branch **inside the
-  author's loop**, without asking anyone. It infers the author's provider from
-  the invoking environment, selects the other installed provider as reviewer,
-  assembles the instructions, runs the review, and writes a receipt.
-- Authorship is detected, not demanded. `CLAUDECODE` identifies a Claude Code
-  session and `CODEX_*` a Codex one. Where both primary markers are present, or
-  neither is, the command refuses and names the override rather than guessing —
-  a companion variable from one tool inside another's session is real and is
-  exactly how a silent wrong choice would happen.
+  author's loop**, without asking anyone. The mechanism is a fresh session that
+  never sees the author's context; a different provider strengthens it but is
+  not its precondition. One runnable provider → **fresh** (the same provider in
+  a clean session — the ordinary case, because most users have one tool); two →
+  **cross** (the non-author). A cross that falls back to fresh because the other
+  CLI will not run is recorded with its reason, never silent.
+- Authorship is detected, not demanded, matching primary session markers only —
+  a companion variable of one tool inside another's session must not count.
+  An override wins; an undetectable author is recorded as `unknown` and refuses
+  nothing. The single refusal is that no reviewer runs at all.
+- A **refute** round is available in every mode on the caller's flag, under one
+  stated rule: findings exist and the caller is about to act on them. A fresh
+  session (the other provider where one exists) tries to refute the findings
+  rather than add new ones; both reports are stored verbatim.
+- A re-review is **incremental by default**: it covers the range since the
+  previous receipt's head, so a round costs what the round is about. The
+  receipt records both that range and the full branch digest, and the chain of
+  receipts proves cumulative coverage. A full pass stays available by flag.
+- Every review runs under a deadline that bounds the whole process tree, with
+  the reasoning effort stated rather than inherited from interactive
+  configuration.
 - The only machine refusal besides that is a **configurable budget gate**: a
   command named in configuration, run first, whose non-zero exit stops the
   review and is reported as the reason. No personal budget path is built into
@@ -40,6 +53,8 @@ loop rather than a stage that begins when the work is already exposed.
 - Nothing existing is removed or repurposed, so nothing is breaking.
 
 ## Intent Coverage
+
+*(recompiled against intent v4)*
 
 | Change | Intent IDs | How it preserves the boundaries |
 |---|---|---|

@@ -46,6 +46,8 @@ func runReview(ctx context.Context, args []string, stdout, stderr io.Writer) err
 	repository := set.String("repo", ".", "repository whose branch to review")
 	stateDirectory := set.String("state-dir", "", "Goalrail local state directory")
 	base := set.String("base", defaultBaseRef, "ref the branch is reviewed against")
+	full := set.Bool("full", false, "review the whole branch even where a previous receipt would make the round incremental")
+	refute := set.Bool("refute", false, "run a second fresh session that tries to refute the findings; use when findings exist and you are about to act on them")
 	author := set.String("author", "", "authoring agent (codex or claude-code); omit to detect from the environment")
 	gate := set.String("gate", "", "command run before the review; a non-zero exit refuses it (default $"+reviewGateEnvironment+")")
 	effort := set.String("effort", "", "reviewer reasoning effort (default "+review.DefaultEffort+", or $"+reviewEffortEnvironment+")")
@@ -67,17 +69,20 @@ func runReview(ctx context.Context, args []string, stdout, stderr io.Writer) err
 		return err
 	}
 
-	// Detection first, because getting it wrong hands the work back to its own
-	// author and reports success while doing it.
-	authoring, err := resolveAuthor(*author)
-	if err != nil {
-		return err
+	// Detection improves the choice; its failure is recorded, never fatal. The
+	// fresh session provides the independence either way.
+	authoring := review.AuthorUnknown
+	if resolved, resolveErr := resolveAuthor(*author); resolveErr == nil {
+		authoring = resolved
+	} else if strings.TrimSpace(*author) != "" {
+		// An explicit override that does not parse is a typo, not an unknown.
+		return resolveErr
 	}
 
 	// Every supported provider is a candidate, and being runnable is what makes
 	// one a reviewer. A configuration directory is evidence that a scaffold was
 	// used here, not that its command exists now.
-	reviewer, err := review.SelectReviewer(authoring, ambient.SupportedScaffolds(), nil)
+	selection, err := review.SelectReviewer(authoring, ambient.SupportedScaffolds(), nil)
 	if err != nil {
 		return err
 	}
@@ -103,7 +108,9 @@ func runReview(ctx context.Context, args []string, stdout, stderr io.Writer) err
 		BaseRef:        *base,
 		Effort:         chosenEffort,
 		Author:         authoring,
-		Reviewer:       reviewer,
+		Selection:      selection,
+		Full:           *full,
+		Refute:         *refute,
 		Gate:           configured,
 	})
 	if err != nil {
@@ -119,6 +126,11 @@ func runReview(ctx context.Context, args []string, stdout, stderr io.Writer) err
 		Repository:               result.Receipt.Repository,
 		Branch:                   result.Receipt.Branch,
 		Author:                   result.Receipt.Author,
+		Mode:                     result.Receipt.Mode,
+		ModeReason:               result.Receipt.ModeReason,
+		ReviewedBase:             result.Receipt.ReviewedBase,
+		DurationSeconds:          result.Receipt.DurationSeconds,
+		Refutation:               result.Receipt.Refutation,
 		Reviewer:                 result.Receipt.Reviewer,
 		BaseRef:                  result.Receipt.BaseRef,
 		BaseCommit:               result.Receipt.BaseCommit,
@@ -143,6 +155,11 @@ type reviewReport struct {
 	Repository               string   `json:"repository"`
 	Branch                   string   `json:"branch"`
 	Author                   string   `json:"author"`
+	Mode                     string   `json:"mode"`
+	ModeReason               string   `json:"mode_reason"`
+	ReviewedBase             string   `json:"reviewed_base"`
+	DurationSeconds          int64    `json:"duration_seconds"`
+	Refutation               string   `json:"refutation,omitempty"`
 	Reviewer                 string   `json:"reviewer"`
 	BaseRef                  string   `json:"base_ref"`
 	BaseCommit               string   `json:"base_commit"`

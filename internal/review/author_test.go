@@ -91,32 +91,71 @@ func TestDetectAuthorTreatsAnEmptyMarkerAsAbsent(t *testing.T) {
 	}
 }
 
-func TestSelectReviewerNeverReturnsTheAuthor(t *testing.T) {
+func TestSelectReviewerPrefersCrossWhereBothRun(t *testing.T) {
 	both := []ambient.Scaffold{ambient.ScaffoldCodex, ambient.ScaffoldClaudeCode}
-	reviewer, err := SelectReviewer(ambient.ScaffoldClaudeCode, both, alwaysRunnable)
-	if err != nil || reviewer != ambient.ScaffoldCodex {
-		t.Fatalf("selected %q for a Claude Code author (%v)", reviewer, err)
+	selection, err := SelectReviewer(ambient.ScaffoldClaudeCode, both, alwaysRunnable)
+	if err != nil || selection.Reviewer != ambient.ScaffoldCodex || selection.Mode != "cross" {
+		t.Fatalf("selected %+v for a Claude Code author (%v)", selection, err)
 	}
-	reviewer, err = SelectReviewer(ambient.ScaffoldCodex, both, alwaysRunnable)
-	if err != nil || reviewer != ambient.ScaffoldClaudeCode {
-		t.Fatalf("selected %q for a Codex author (%v)", reviewer, err)
+	selection, err = SelectReviewer(ambient.ScaffoldCodex, both, alwaysRunnable)
+	if err != nil || selection.Reviewer != ambient.ScaffoldClaudeCode || selection.Mode != "cross" {
+		t.Fatalf("selected %+v for a Codex author (%v)", selection, err)
 	}
 }
 
-// Refusing is the requirement rather than a fallback: reviewing with the
-// author's own provider reproduces the author's blind spots while reporting
-// success, which is the one failure this feature exists to prevent.
-func TestSelectReviewerRefusesWhenOnlyTheAuthorIsInstalled(t *testing.T) {
-	_, err := SelectReviewer(ambient.ScaffoldClaudeCode, []ambient.Scaffold{ambient.ScaffoldClaudeCode}, alwaysRunnable)
-	if err == nil {
-		t.Fatal("selection accepted the author as its own reviewer")
+// The single-tool machine is the ordinary case, not a degraded one. The
+// mechanism is the fresh session; a second vendor only strengthens it.
+func TestSelectReviewerFallsToFreshWithOnlyTheAuthorsProvider(t *testing.T) {
+	selection, err := SelectReviewer(ambient.ScaffoldClaudeCode,
+		[]ambient.Scaffold{ambient.ScaffoldClaudeCode}, alwaysRunnable)
+	if err != nil {
+		t.Fatalf("a single-provider machine refused: %v", err)
 	}
-	if !strings.Contains(err.Error(), string(ambient.ScaffoldClaudeCode)) {
-		t.Fatalf("the refusal does not name the author's provider: %v", err)
+	if selection.Reviewer != ambient.ScaffoldClaudeCode || selection.Mode != "fresh" {
+		t.Fatalf("expected fresh mode with the author's provider, got %+v", selection)
 	}
+	if selection.Reason == "" {
+		t.Fatal("a fresh selection carries no reason")
+	}
+}
 
+// An unknown author still reviews; the choice is deterministic.
+func TestSelectReviewerHandlesAnUnknownAuthor(t *testing.T) {
+	both := []ambient.Scaffold{ambient.ScaffoldCodex, ambient.ScaffoldClaudeCode}
+	selection, err := SelectReviewer(AuthorUnknown, both, alwaysRunnable)
+	if err != nil || selection.Mode != "fresh" || selection.Reviewer != ambient.ScaffoldCodex {
+		t.Fatalf("unknown author produced %+v (%v)", selection, err)
+	}
+}
+
+// The one refusal left: nothing runs at all.
+func TestSelectReviewerRefusesOnlyWhenNothingRuns(t *testing.T) {
+	_, err := SelectReviewer(ambient.ScaffoldCodex,
+		[]ambient.Scaffold{ambient.ScaffoldCodex, ambient.ScaffoldClaudeCode},
+		func(string) (string, error) { return "", errors.New("not found") })
+	if err == nil {
+		t.Fatal("a machine with no runnable reviewer did not refuse")
+	}
 	if _, err := SelectReviewer(ambient.ScaffoldCodex, nil, alwaysRunnable); err == nil {
-		t.Fatal("selection accepted an empty installation")
+		t.Fatal("an empty candidate list did not refuse")
+	}
+}
+
+// A cross that quietly became fresh is an unprovable claim; the reason says it.
+func TestFreshFallbackNamesWhatWasUnavailable(t *testing.T) {
+	selection, err := SelectReviewer(ambient.ScaffoldClaudeCode,
+		[]ambient.Scaffold{ambient.ScaffoldCodex, ambient.ScaffoldClaudeCode},
+		func(name string) (string, error) {
+			if name == "codex" {
+				return "", errors.New("not found")
+			}
+			return "/usr/bin/claude", nil
+		})
+	if err != nil || selection.Mode != "fresh" {
+		t.Fatalf("expected a fresh fallback, got %+v (%v)", selection, err)
+	}
+	if !strings.Contains(selection.Reason, "codex") {
+		t.Fatalf("the fallback reason does not name what was unavailable: %q", selection.Reason)
 	}
 }
 
@@ -155,15 +194,4 @@ func TestStrippedEnvironmentRemovesOnlyWhatItWasGiven(t *testing.T) {
 // alwaysRunnable stands in for a PATH where every reviewer exists.
 func alwaysRunnable(string) (string, error) { return "/usr/bin/stub", nil }
 
-// A configuration directory left behind by an uninstall is not a reviewer.
-func TestSelectReviewerRefusesAProviderWhoseCommandIsGone(t *testing.T) {
-	_, err := SelectReviewer(ambient.ScaffoldClaudeCode,
-		[]ambient.Scaffold{ambient.ScaffoldCodex, ambient.ScaffoldClaudeCode},
-		func(string) (string, error) { return "", errors.New("not found") })
-	if err == nil {
-		t.Fatal("a reviewer with no executable was selected")
-	}
-	if !strings.Contains(err.Error(), "PATH") {
-		t.Fatalf("the refusal does not say what is missing: %v", err)
-	}
-}
+

@@ -49,13 +49,33 @@ type Receipt struct {
 	// a belief.
 	DiffSHA256 string `json:"diff_sha256"`
 
+	// ReviewedBase..HeadCommit is the range this round actually covered. On an
+	// incremental round it starts at the previous receipt's head, and the chain
+	// of receipts is what proves cumulative coverage; DiffSHA256 above always
+	// digests the full branch so staleness stays one comparison.
+	ReviewedBase string `json:"reviewed_base"`
+
+	// Mode is fresh, cross, or refute; ModeReason states why in one sentence,
+	// because a cross that quietly became fresh is an unprovable claim.
+	Mode       string `json:"mode"`
+	ModeReason string `json:"mode_reason"`
+
 	Reviewer   string `json:"reviewer"`
 	Author     string `json:"author"`
 	ReviewedAt string `json:"reviewed_at"`
 
-	// Report is verbatim, and ReportSHA256 digests exactly those bytes.
-	Report       string `json:"report"`
-	ReportSHA256 string `json:"report_sha256"`
+	// DurationSeconds is measured wall time of the reviewer invocation(s), the
+	// number effort and deadline defaults get tuned against.
+	DurationSeconds int64 `json:"duration_seconds"`
+
+	// Report is verbatim, and ReportSHA256 digests exactly those bytes. On a
+	// refute round Refutation carries the second report the same way; which
+	// findings survived is the reader's judgement, never a field.
+	Report           string `json:"report"`
+	ReportSHA256     string `json:"report_sha256"`
+	Refutation       string `json:"refutation,omitempty"`
+	RefutationSHA256 string `json:"refutation_sha256,omitempty"`
+	Refuter          string `json:"refuter,omitempty"`
 
 	// InstructionsSHA256 records which instructions produced this review, so a
 	// receipt from before a ratchet promotion is distinguishable from one after.
