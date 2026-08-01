@@ -50,7 +50,8 @@ func runReview(ctx context.Context, args []string, stdout, stderr io.Writer) err
 	refute := set.Bool("refute", false, "run a second fresh session that tries to refute the findings; use when findings exist and you are about to act on them")
 	author := set.String("author", "", "authoring agent (codex or claude-code); omit to detect from the environment")
 	gate := set.String("gate", "", "command run before the review; a non-zero exit refuses it (default $"+reviewGateEnvironment+")")
-	effort := set.String("effort", "", "reviewer reasoning effort (default "+review.DefaultEffort+", or $"+reviewEffortEnvironment+")")
+	effort := set.String("effort", "", "reviewer reasoning effort (default "+review.DefaultEffort+", "+review.FullEffort+" with --full, or $"+reviewEffortEnvironment+")")
+	deadline := set.Duration("deadline", 0, "bound on the whole review (default "+review.DefaultDeadline.String()+", "+review.FullDeadline.String()+" with --full)")
 	if err := set.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
@@ -112,6 +113,7 @@ func runReview(ctx context.Context, args []string, stdout, stderr io.Writer) err
 		StateRoot:      stateRoot,
 		BaseRef:        *base,
 		Effort:         chosenEffort,
+		Deadline:       *deadline,
 		Author:         authoring,
 		Selection:      selection,
 		Full:           *full,

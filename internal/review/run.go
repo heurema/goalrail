@@ -19,6 +19,25 @@ import (
 // and the only thing left to wait for is a descendant that ignored it.
 const cancelGrace = 5 * time.Second
 
+// FullEffort and FullDeadline are what a full pass runs at when the caller
+// names neither.
+//
+// A full pass is the thoroughness pass by definition, and the loop's cheap
+// defaults are wrong for it. Measured on a 5000-line branch, one range, one set
+// of instructions, only the effort changed: medium reviewed clean in 272s and
+// missed three real defects, two of them P1; high found them in 565s. A cheap
+// full pass is a contradiction that produces a confident wrong verdict, which
+// is the most expensive output this command has.
+//
+// The longer deadline travels with it because the two are one decision: raising
+// the effort without raising the bound just moves the failure from a false
+// clean verdict to a deadline. Measured at the same time — ultra reached the
+// twenty-minute bound and returned nothing at all.
+const (
+	FullEffort   = "high"
+	FullDeadline = 45 * time.Minute
+)
+
 // DefaultDeadline bounds one review.
 //
 // A bound is required and cannot be per-vendor: `claude` carries no turn limit
@@ -183,13 +202,21 @@ func Run(ctx context.Context, input Input) (Result, error) {
 		}
 	}
 
+	// The caller's word always wins; these are the defaults for a pass nobody
+	// parameterized.
 	effort := strings.TrimSpace(input.Effort)
 	if effort == "" {
 		effort = DefaultEffort
+		if input.Full {
+			effort = FullEffort
+		}
 	}
 	deadline := input.Deadline
 	if deadline <= 0 {
 		deadline = DefaultDeadline
+		if input.Full {
+			deadline = FullDeadline
+		}
 	}
 	bounded, cancel := context.WithTimeout(ctx, deadline)
 	defer cancel()

@@ -680,3 +680,70 @@ exit 3`)
 		t.Fatalf("a leading cause was truncated away: %d bytes", len(err.Error()))
 	}
 }
+
+// A full pass is the thoroughness pass, so it must not inherit the loop's cheap
+// defaults — measured: at medium the same range reviewed clean and missed three
+// real defects that high found.
+func TestAFullPassIsThoroughByDefaultAndTheCallerStillWins(t *testing.T) {
+	root := branchWithWork(t)
+	selection := Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"}
+
+	// The stub reports the effort it was actually invoked with.
+	stubReviewer(t, "codex", `args="$*"; cat >/dev/null; echo "invoked with: $args"`)
+
+	full, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: t.TempDir(), BaseRef: "main",
+		Selection: selection, Full: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(full.Receipt.Report, "model_reasoning_effort="+FullEffort) {
+		t.Fatalf("a full pass did not run at %s: %q", FullEffort, full.Receipt.Report)
+	}
+
+	incremental, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: t.TempDir(), BaseRef: "main",
+		Selection: selection,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(incremental.Receipt.Report, "model_reasoning_effort="+DefaultEffort) {
+		t.Fatalf("an ordinary round did not run at %s: %q", DefaultEffort, incremental.Receipt.Report)
+	}
+
+	// An explicit effort always wins, full pass or not.
+	stated, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: t.TempDir(), BaseRef: "main",
+		Selection: selection, Full: true, Effort: "low",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(stated.Receipt.Report, "model_reasoning_effort=low") {
+		t.Fatalf("the caller's effort was overridden: %q", stated.Receipt.Report)
+	}
+}
+
+// Raising the effort without raising the bound only moves the failure from a
+// false clean verdict to a deadline — measured: ultra reached the twenty-minute
+// bound and returned nothing.
+func TestAFullPassCarriesTheLongerDeadlineAndTheCallerStillWins(t *testing.T) {
+	root := branchWithWork(t)
+	stubReviewer(t, "codex", `cat >/dev/null; echo r`)
+	selection := Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"}
+
+	if FullDeadline <= DefaultDeadline {
+		t.Fatalf("a full pass is bounded no better than a loop round: %s vs %s", FullDeadline, DefaultDeadline)
+	}
+	// The caller's bound wins: a deliberately short one still refuses.
+	stubReviewer(t, "codex", `cat >/dev/null; sleep 600 & sleep 600`)
+	_, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: t.TempDir(), BaseRef: "main",
+		Selection: selection, Full: true, Deadline: 2 * time.Second,
+	})
+	if err == nil || !strings.Contains(err.Error(), "deadline") {
+		t.Fatalf("an explicit deadline was ignored on a full pass: %v", err)
+	}
+}
