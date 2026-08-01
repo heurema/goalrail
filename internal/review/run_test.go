@@ -610,3 +610,48 @@ func TestALegacyReceiptWithoutTreeStateNeverCountsAsAStalemate(t *testing.T) {
 		t.Fatal("this round measured a clean tree and did not record it")
 	}
 }
+
+// Codex streams its whole session transcript to stderr — over a megabyte on an
+// ordinary large branch — and a refusing bound there killed the first real
+// field review. Diagnostics keep a tail; only the report may refuse.
+func TestAVerboseReviewerStderrDoesNotKillTheReview(t *testing.T) {
+	root := branchWithWork(t)
+	stateRoot := t.TempDir()
+	stubReviewer(t, "codex", `cat >/dev/null
+i=0; while [ $i -lt 3000 ]; do printf '%0512d\n' $i >&2; i=$((i+1)); done
+echo "the report"`)
+
+	result, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: stateRoot, BaseRef: "main",
+		Selection: Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
+	})
+	if err != nil {
+		t.Fatalf("a verbose stderr failed the review: %v", err)
+	}
+	if !strings.Contains(result.Receipt.Report, "the report") {
+		t.Fatalf("the report was lost: %q", result.Receipt.Report)
+	}
+}
+
+// And when the reviewer does fail, the error carries a tail, not a transcript.
+func TestAFailureDetailIsATailNotATranscript(t *testing.T) {
+	root := branchWithWork(t)
+	stateRoot := t.TempDir()
+	stubReviewer(t, "codex", `cat >/dev/null
+i=0; while [ $i -lt 3000 ]; do printf '%0512d\n' $i >&2; i=$((i+1)); done
+echo "FINAL-REASON" >&2; exit 3`)
+
+	_, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: stateRoot, BaseRef: "main",
+		Selection: Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
+	})
+	if err == nil {
+		t.Fatal("a failing reviewer reported success")
+	}
+	if len(err.Error()) > 8192 {
+		t.Fatalf("the error is a transcript, not a message: %d bytes", len(err.Error()))
+	}
+	if !strings.Contains(err.Error(), "FINAL-REASON") {
+		t.Fatalf("the tail lost the reason: %v", err)
+	}
+}

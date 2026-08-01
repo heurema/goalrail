@@ -423,8 +423,12 @@ func invoke(ctx context.Context, reviewer ambient.Scaffold, repositoryRoot, base
 	// The streams are bounded while being collected: the receipt bound checked
 	// at write time cannot protect the running process from a reviewer that
 	// floods stdout, and an unbounded buffer turns that into memory exhaustion.
+	// Only the report refuses on overflow. stderr is a reviewer's running
+	// commentary — Codex streams its whole session transcript there, over a
+	// megabyte on an ordinary large branch — and refusing that write killed the
+	// first real field review. Diagnostics keep a tail; they never fail a run.
 	stdout := &boundedBuffer{limit: receiptBound}
-	stderr := &boundedBuffer{limit: 1 << 20}
+	stderr := &tailBuffer{limit: 64 * 1024}
 	command.Stdout = stdout
 	command.Stderr = stderr
 	if err := command.Run(); err != nil {
@@ -437,6 +441,11 @@ func invoke(ctx context.Context, reviewer ambient.Scaffold, repositoryRoot, base
 		}
 		if detail == "" {
 			detail = err.Error()
+		}
+		// The vendor's message reaches the caller, but a megabyte of session
+		// transcript is not a message. The tail is where CLIs put the reason.
+		if len(detail) > 4096 {
+			detail = "… " + detail[len(detail)-4096:]
 		}
 		return "", fmt.Errorf("the %s reviewer did not complete: %s", reviewer, detail)
 	}
@@ -462,3 +471,21 @@ func (b *boundedBuffer) Write(p []byte) (int, error) {
 }
 
 func (b *boundedBuffer) String() string { return b.buffer.String() }
+
+// tailBuffer keeps the last limit bytes and never fails a write: it exists for
+// diagnostics, and diagnostics must not be able to kill the thing they
+// describe.
+type tailBuffer struct {
+	buffer []byte
+	limit  int
+}
+
+func (b *tailBuffer) Write(p []byte) (int, error) {
+	b.buffer = append(b.buffer, p...)
+	if len(b.buffer) > b.limit {
+		b.buffer = b.buffer[len(b.buffer)-b.limit:]
+	}
+	return len(p), nil
+}
+
+func (b *tailBuffer) String() string { return string(b.buffer) }
