@@ -214,3 +214,54 @@ func TestRunRefusesADetachedHead(t *testing.T) {
 		t.Fatalf("a detached head produced %v", err)
 	}
 }
+
+// The first live run of this feature died here: `codex review` documents both
+// --base and a custom prompt, and refuses them together. Reading its help was
+// not enough, so the shape is pinned rather than trusted.
+func TestCodexInvocationNeverCombinesAScopeFlagWithInstructions(t *testing.T) {
+	name, arguments, stdin, err := reviewCommand(ambient.ScaffoldCodex, "main", []byte("look for X"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if name != "codex" {
+		t.Fatalf("invoked %q", name)
+	}
+	for _, forbidden := range []string{"--base", "--uncommitted", "--commit"} {
+		for _, argument := range arguments {
+			if argument == forbidden {
+				t.Fatalf("%s was passed alongside custom instructions: %v", forbidden, arguments)
+			}
+		}
+	}
+	// The range has to survive somewhere, and with no scope flag the only place
+	// left is the prose.
+	if !strings.Contains(stdin, "main...HEAD") {
+		t.Fatalf("the reviewed range is not stated to the reviewer: %q", stdin)
+	}
+	if !strings.Contains(stdin, "look for X") {
+		t.Fatal("the repository's instructions did not reach the reviewer")
+	}
+}
+
+// A reviewer that can edit is no longer reviewing.
+func TestClaudeInvocationCarriesNoEditingTool(t *testing.T) {
+	_, arguments, stdin, err := reviewCommand(ambient.ScaffoldClaudeCode, "main", []byte("look for X"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(arguments, " ")
+	for _, forbidden := range []string{"Edit", "Write", "NotebookEdit"} {
+		if strings.Contains(joined, forbidden) {
+			t.Fatalf("the reviewer was given %s: %v", forbidden, arguments)
+		}
+	}
+	if !strings.Contains(stdin, "main...HEAD") || !strings.Contains(stdin, "look for X") {
+		t.Fatalf("the prompt lost the range or the instructions: %q", stdin)
+	}
+}
+
+func TestUnknownReviewerHasNoInvocation(t *testing.T) {
+	if _, _, _, err := reviewCommand(ambient.Scaffold("something-else"), "main", nil); err == nil {
+		t.Fatal("an unknown reviewer produced an invocation")
+	}
+}

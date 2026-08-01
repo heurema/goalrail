@@ -151,6 +151,46 @@ func runGate(ctx context.Context, repositoryRoot, gate string) error {
 	return nil
 }
 
+// prompt is what a reviewer is told: the repository's instructions, then the
+// range to read.
+//
+// The range travels in the prose rather than in a flag, because `codex review`
+// refuses `--base` together with custom instructions — its preset scopes and a
+// caller's own instructions are alternatives, not a pair. That was found by
+// running it, not by reading its help, which lists both without saying so. The
+// instructions are not optional here: they carry what the findings ratchet has
+// promoted, so a review without them is a review of the wrong things.
+func prompt(baseRef string, instructions []byte) string {
+	return string(instructions) +
+		"\n\nReview the changes this branch introduces against `" + baseRef + "`" +
+		" — the three-dot range `" + baseRef + "...HEAD`, not the working tree.\n" +
+		"Use git to read the diff. Do not modify anything.\n"
+}
+
+// reviewCommand builds one reviewer's invocation.
+//
+// Separate from running it so the argument shape is testable without spawning
+// anything: the first live run of this feature failed on an argument
+// combination its vendor documents as legal, and a construction nobody can
+// inspect is one that breaks the same way twice.
+func reviewCommand(reviewer ambient.Scaffold, baseRef string, instructions []byte) (name string, arguments []string, stdin string, err error) {
+	switch reviewer {
+	case ambient.ScaffoldCodex:
+		// `-` reads the instructions from stdin. No scope flag: it cannot be
+		// combined with them.
+		return "codex", []string{"review", "-"}, prompt(baseRef, instructions), nil
+	case ambient.ScaffoldClaudeCode:
+		// Only the tools a reviewer needs, and never an editing one: a reviewer
+		// that can change the work is no longer reviewing it.
+		return "claude", []string{
+			"-p", "--output-format", "text",
+			"--allowed-tools", "Bash(git *)", "Read", "Grep", "Glob",
+		}, prompt(baseRef, instructions), nil
+	default:
+		return "", nil, "", fmt.Errorf("no review invocation is defined for %q", reviewer)
+	}
+}
+
 // invoke runs one reviewer through its vendor's own non-interactive interface.
 //
 // Minimum documented flags on purpose. Neither CLI can be pinned by Goalrail,
@@ -158,27 +198,12 @@ func runGate(ctx context.Context, repositoryRoot, gate string) error {
 // surfaced to the caller unchanged rather than translated, because a wrapper
 // that smooths over a changed interface converts a loud break into a quiet one.
 func invoke(ctx context.Context, reviewer ambient.Scaffold, repositoryRoot, baseRef string, instructions []byte) (string, error) {
-	var command *exec.Cmd
-	switch reviewer {
-	case ambient.ScaffoldCodex:
-		// `-` reads the review instructions from stdin, and --base makes the
-		// reviewed range the branch's own changes.
-		command = exec.CommandContext(ctx, "codex", "review", "--base", baseRef, "-")
-		command.Stdin = bytes.NewReader(instructions)
-	case ambient.ScaffoldClaudeCode:
-		// The general agent gets the same instructions plus the range to read,
-		// and only the tools a reviewer needs. It must never edit: a reviewer
-		// that can change the work is no longer reviewing it.
-		prompt := string(instructions) + "\n\nReview the changes this branch introduces against `" + baseRef + "`.\n" +
-			"Use git to read the diff. Do not modify anything.\n"
-		command = exec.CommandContext(ctx, "claude", "-p",
-			"--output-format", "text",
-			"--allowed-tools", "Bash(git *)", "Read", "Grep", "Glob")
-		command.Stdin = strings.NewReader(prompt)
-	default:
-		return "", fmt.Errorf("no review invocation is defined for %q", reviewer)
+	name, arguments, stdin, err := reviewCommand(reviewer, baseRef, instructions)
+	if err != nil {
+		return "", err
 	}
-
+	command := exec.CommandContext(ctx, name, arguments...)
+	command.Stdin = strings.NewReader(stdin)
 	command.Dir = repositoryRoot
 	// The reviewer must not inherit the author's session identity. A spawned
 	// agent that reads the parent's markers believes it is a continuation of the
