@@ -71,6 +71,13 @@ End your report with exactly one of these lines, alone on the last line:
     REVIEW-VERDICT: nothing-material
 
 That line is your statement, not a verdict anyone else computes.
+
+## Refute round
+
+When this file is handed to you together with a prior report, you are refuting
+that review, not extending it. Try to REFUTE each finding against the actual
+code; do not add new findings. For each: state REFUTED or STANDS with the
+concrete evidence.
 `
 
 // EnsureInstructions returns the reviewer instructions for one repository,
@@ -96,6 +103,11 @@ func EnsureInstructions(repositoryRoot string) (contents []byte, materialized bo
 
 	if writeErr := os.WriteFile(absolute, []byte(defaultInstructions), 0o644); writeErr != nil {
 		return nil, false, fmt.Errorf("write %s: %w", InstructionsPath, writeErr)
+	}
+	// Instructions the repository ignores never reach collaborators, and the
+	// ratchet's promotions would stay local while looking shared.
+	if _, err := git(repositoryRoot, "check-ignore", "-q", InstructionsPath); err == nil {
+		return nil, true, fmt.Errorf("%s is ignored by this repository's rules; review instructions must be committable — adjust the ignore rules", InstructionsPath)
 	}
 	return []byte(defaultInstructions), true, nil
 }

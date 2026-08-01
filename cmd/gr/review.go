@@ -68,6 +68,11 @@ func runReview(ctx context.Context, args []string, stdout, stderr io.Writer) err
 	if err := refuseWhereThereIsNoWorkTree(root); err != nil {
 		return err
 	}
+	// A subdirectory invocation must not mint a second identity: instructions
+	// and receipts belong to the worktree root git itself names.
+	if toplevel, topErr := review.WorktreeRoot(root); topErr == nil && toplevel != "" {
+		root = toplevel
+	}
 
 	// Detection improves the choice; its failure is recorded, never fatal. The
 	// fresh session provides the independence either way.

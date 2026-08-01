@@ -195,7 +195,18 @@ func Run(ctx context.Context, input Input) (Result, error) {
 	defer cancel()
 	started := now()
 	rangeSpec := reviewedBase + "..." + headCommit
-	report, err := invoke(bounded, input.Selection.Reviewer, input.RepositoryRoot, rangeSpec, effort, instructions)
+	// The Claude reviewer has no shell, so the diff it reviews is rendered
+	// here — the same canonical form the digest measures — and embedded.
+	invokeInstructions := instructions
+	if input.Selection.Reviewer == ambient.ScaffoldClaudeCode {
+		rendered, renderErr := git(input.RepositoryRoot, canonicalDiffArguments(reviewedBase, headCommit)...)
+		if renderErr != nil {
+			return Result{InstructionsMaterialized: materialized}, renderErr
+		}
+		invokeInstructions = append(append([]byte{}, instructions...),
+			[]byte("\n\n--- DIFF UNDER REVIEW ---\n"+rendered)...)
+	}
+	report, err := invoke(bounded, input.Selection.Reviewer, input.RepositoryRoot, rangeSpec, effort, invokeInstructions)
 	if err != nil {
 		// No receipt: one describing a review that did not happen is worse than
 		// none, because it reads as done.
@@ -223,10 +234,9 @@ func Run(ctx context.Context, input Input) (Result, error) {
 		// did — the receipt hashes those instructions, and a refuter that never
 		// saw the repository's own rules could refute findings those rules
 		// require.
-		refutePrompt := string(instructions) +
-			"\n\nYou are refuting a review, not extending it. Below is a reviewer's report on this change.\n" +
-			"Try to REFUTE each finding against the actual code; do not add new findings.\n" +
-			"For each: state REFUTED or STANDS with the concrete evidence.\n\n--- REPORT UNDER CHALLENGE ---\n" + report
+		// The whole policy, including the refute directives, comes from the
+		// committed file the receipt hashes; the binary adds only the report.
+		refutePrompt := string(instructions) + "\n\n--- REPORT UNDER CHALLENGE ---\n" + report
 		refutation, refuteErr = invoke(bounded, refuterSelection.Reviewer, input.RepositoryRoot, rangeSpec, effort, []byte(refutePrompt))
 		if refuteErr != nil {
 			return Result{InstructionsMaterialized: materialized}, refuteErr
@@ -356,14 +366,15 @@ func reviewCommand(reviewer ambient.Scaffold, baseRef, effort string, instructio
 		// admitted `git reset`, `git checkout` and `git clean`, and `git -c
 		// alias.x='!sh -c ...'` would have run an arbitrary shell through it —
 		// a read-only contract that the permission it granted did not keep.
+		// No shell at all. The git allowlist was defeated twice — `git *`, then
+		// `git diff --output=<path>` through the per-subcommand rule — and a
+		// race against git's flag surface is one this boundary keeps losing.
+		// The diff travels in the prompt instead; reading files stays allowed.
 		return "claude", []string{
 			"-p", "--output-format", "text",
 			"--effort", effort,
-			"--allowed-tools",
-			"Bash(git diff:*)", "Bash(git log:*)", "Bash(git show:*)",
-			"Bash(git status:*)", "Bash(git rev-parse:*)", "Bash(git ls-files:*)",
-			"Read", "Grep", "Glob",
-			"--disallowed-tools", "Edit", "Write", "NotebookEdit",
+			"--allowed-tools", "Read", "Grep", "Glob",
+			"--disallowed-tools", "Bash", "Edit", "Write", "NotebookEdit",
 		}, prompt(baseRef, instructions), nil
 	default:
 		return "", nil, "", fmt.Errorf("no review invocation is defined for %q", reviewer)

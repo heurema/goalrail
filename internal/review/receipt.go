@@ -200,8 +200,9 @@ func canonicalDiffArguments(baseCommit, headCommit string) []string {
 		"-c", "core.attributesFile=/dev/null",
 		"-c", "attr.tree=" + headCommit,
 		"-c", "core.abbrev=40",
+		"-c", "diff.ignoreSubmodules=none",
 		"diff", "--no-ext-diff", "--no-color", "--no-textconv",
-		"--full-index", "--no-renames",
+		"--full-index", "--no-renames", "--ignore-submodules=none",
 		baseCommit + "..." + headCommit,
 	}
 }
@@ -248,8 +249,14 @@ func branchKey(repositoryRoot, branch string) string {
 // receiptPath locates one round's receipt: one file per reviewed head, so a
 // later round never erases the evidence of an earlier one. The chain is what
 // lets an incremental receipt prove the rounds before it happened.
-func receiptPath(stateRoot, repositoryRoot, branch, headCommit string) string {
-	return filepath.Join(stateRoot, "reviews", branchKey(repositoryRoot, branch)+"-"+headCommit+".json")
+func receiptPath(stateRoot, repositoryRoot, branch, headCommit, reportDigest string) string {
+	suffix := headCommit
+	if len(reportDigest) >= 12 {
+		// Rounds at the same head are distinct rounds; keying by head alone let
+		// a repeated round erase the evidence the stalemate count refers to.
+		suffix += "-" + reportDigest[:12]
+	}
+	return filepath.Join(stateRoot, "reviews", branchKey(repositoryRoot, branch)+"-"+suffix+".json")
 }
 
 // latestPath points at the branch's most recent receipt.
@@ -261,7 +268,7 @@ func latestPath(stateRoot, repositoryRoot, branch string) string {
 // Earlier rounds' files stay: overwriting them would erase the only proof that
 // the start of the branch was ever reviewed.
 func WriteReceipt(stateRoot string, receipt Receipt) (string, error) {
-	path := receiptPath(stateRoot, receipt.Repository, receipt.Branch, receipt.HeadCommit)
+	path := receiptPath(stateRoot, receipt.Repository, receipt.Branch, receipt.HeadCommit, receipt.ReportSHA256)
 	// The same protection the rest of the local state store uses. A receipt
 	// holds a verbatim review of private source; leaving it readable by every
 	// account on a shared machine would make this the one piece of Goalrail
@@ -326,6 +333,17 @@ func ReadReceipt(stateRoot, repositoryRoot, branch string) (Receipt, bool, error
 	}
 	if receipt.Schema != ReceiptSchema {
 		return Receipt{}, false, fmt.Errorf("review receipt has schema %q, not %q", receipt.Schema, ReceiptSchema)
+	}
+	// Corrupted or edited evidence must read as unreadable, not as current: a
+	// receipt is only evidence while its own bindings hold.
+	if receipt.Repository != repositoryRoot || receipt.Branch != branch {
+		return Receipt{}, false, fmt.Errorf("review receipt describes %s@%s, not this branch", receipt.Repository, receipt.Branch)
+	}
+	if receipt.ReportSHA256 != digest([]byte(receipt.Report)) {
+		return Receipt{}, false, fmt.Errorf("review receipt report does not match its digest")
+	}
+	if receipt.Refutation != "" && receipt.RefutationSHA256 != digest([]byte(receipt.Refutation)) {
+		return Receipt{}, false, fmt.Errorf("review receipt refutation does not match its digest")
 	}
 	return receipt, true, nil
 }
@@ -393,4 +411,10 @@ func WorkingTreeClean(repositoryRoot string) (bool, error) {
 		return false, nil
 	}
 	return true, nil
+}
+
+// WorktreeRoot names the repository root git recognizes for a path, so an
+// invocation from a subdirectory does not key state to the subdirectory.
+func WorktreeRoot(path string) (string, error) {
+	return git(path, "rev-parse", "--show-toplevel")
 }

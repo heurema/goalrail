@@ -221,7 +221,7 @@ func TestStatusMovesWithTheBranchAndNeedsNobody(t *testing.T) {
 	if _, err := WriteReceipt(stateRoot, Receipt{
 		Schema: ReceiptSchema, Repository: root, Branch: "work",
 		BaseRef: "main", BaseCommit: base, HeadCommit: head, DiffSHA256: diff,
-		Reviewer: "codex", Author: "claude-code",
+		Reviewer: "codex", Author: "claude-code", Report: "r", ReportSHA256: digest([]byte("r")),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -245,7 +245,7 @@ func TestStatusMovesWithTheBranchAndNeedsNobody(t *testing.T) {
 	if _, err := WriteReceipt(stateRoot, Receipt{
 		Schema: ReceiptSchema, Repository: root, Branch: "work",
 		BaseRef: "main", BaseCommit: base, HeadCommit: movedHead, DiffSHA256: movedDiff,
-		Reviewer: "codex", Author: "claude-code",
+		Reviewer: "codex", Author: "claude-code", Report: "r2", ReportSHA256: digest([]byte("r2")),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -258,10 +258,10 @@ func TestStatusMovesWithTheBranchAndNeedsNobody(t *testing.T) {
 // The same branch name in two clones is two different pieces of work.
 func TestReceiptsAreKeyedByRepositoryAndBranchTogether(t *testing.T) {
 	stateRoot := t.TempDir()
-	first := receiptPath(stateRoot, "/a", "work", "h1")
-	second := receiptPath(stateRoot, "/b", "work", "h1")
-	third := receiptPath(stateRoot, "/a", "other", "h1")
-	fourth := receiptPath(stateRoot, "/a", "work", "h2")
+	first := receiptPath(stateRoot, "/a", "work", "h1", "d000000000001")
+	second := receiptPath(stateRoot, "/b", "work", "h1", "d000000000001")
+	third := receiptPath(stateRoot, "/a", "other", "h1", "d000000000001")
+	fourth := receiptPath(stateRoot, "/a", "work", "h2", "d000000000001")
 	if first == second || first == third || second == third || first == fourth {
 		t.Fatalf("receipt paths collide: %s %s %s %s", first, second, third, fourth)
 	}
@@ -350,14 +350,14 @@ func TestALaterRoundPreservesTheEarlierReceipt(t *testing.T) {
 	stateRoot := t.TempDir()
 	firstPath, err := WriteReceipt(stateRoot, Receipt{
 		Schema: ReceiptSchema, Repository: "/r", Branch: "work",
-		BaseCommit: "b", HeadCommit: "h1", Report: "round one",
+		BaseCommit: "b", HeadCommit: "h1", Report: "round one", ReportSHA256: digest([]byte("round one")),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := WriteReceipt(stateRoot, Receipt{
 		Schema: ReceiptSchema, Repository: "/r", Branch: "work",
-		BaseCommit: "b", HeadCommit: "h2", Report: "round two",
+		BaseCommit: "b", HeadCommit: "h2", Report: "round two", ReportSHA256: digest([]byte("round two")),
 	}); err != nil {
 		t.Fatal(err)
 	}
