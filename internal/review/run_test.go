@@ -527,7 +527,7 @@ func TestDiscardedWorkDoesNotCountAsAStalemate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if dirty.Receipt.TreeCleanAtReview {
+	if dirty.Receipt.TreeCleanAtReview == nil || *dirty.Receipt.TreeCleanAtReview {
 		t.Fatal("a dirty round recorded a clean tree")
 	}
 
@@ -573,5 +573,40 @@ func TestEditingACommittedInstructionsFileCountsAsWork(t *testing.T) {
 	}
 	if clean {
 		t.Fatal("an edit to the committed instructions file was skipped as if Goalrail had made it")
+	}
+}
+
+// Absent and false are different facts: a receipt written before the tree
+// field existed knows nothing about that round, and inferring "dirty" from its
+// silence would record an unknown as a measurement.
+func TestALegacyReceiptWithoutTreeStateNeverCountsAsAStalemate(t *testing.T) {
+	root := branchWithWork(t)
+	stateRoot := t.TempDir()
+	stubReviewer(t, "codex", `cat >/dev/null; echo round`)
+	head, _ := Resolve(root, "HEAD")
+	base, _ := Resolve(root, "main")
+	diff, _ := DiffDigest(root, base, head)
+
+	// A receipt as an earlier version would have written it: no tree state.
+	if _, err := WriteReceipt(stateRoot, Receipt{
+		Schema: ReceiptSchema, Repository: root, Branch: "work",
+		BaseRef: "main", BaseCommit: base, HeadCommit: head,
+		DiffSHA256: diff, ReviewedBase: base, ReviewedDiffSHA256: diff,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	result, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: stateRoot, BaseRef: "main",
+		Selection: Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Receipt.UnchangedRounds != 0 {
+		t.Fatalf("a receipt that knew nothing about its tree counted as a stalemate: %d",
+			result.Receipt.UnchangedRounds)
+	}
+	if result.Receipt.TreeCleanAtReview == nil || !*result.Receipt.TreeCleanAtReview {
+		t.Fatal("this round measured a clean tree and did not record it")
 	}
 }

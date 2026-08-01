@@ -80,7 +80,13 @@ type Receipt struct {
 	// round ran. Without it the count cannot tell two rounds over identical
 	// state from a round that followed discarded work, and a stop signal that
 	// cannot be audited is one nobody should stop on.
-	TreeCleanAtReview bool `json:"tree_clean_at_review"`
+	//
+	// A pointer because absent and false are different facts. A receipt written
+	// before this field existed knows nothing about that round's tree, and a
+	// failed `git status` measured nothing — collapsing either into `false`
+	// would record an unknown as a measurement, which is the one thing a
+	// receipt must never do. Nil never counts toward a stalemate.
+	TreeCleanAtReview *bool `json:"tree_clean_at_review,omitempty"`
 
 	// DurationSeconds is measured wall time of the reviewer invocation(s), the
 	// number effort and deadline defaults get tuned against.

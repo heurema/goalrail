@@ -178,7 +178,10 @@ both rounds at the same head, and neither carrying work of the author's. Work
 that was written and then discarded moved between the rounds even though
 nothing landed, and a stop signal that cannot tell that apart is one nobody
 should stop on — so the receipt SHALL record whether the tree was clean when
-each round ran. The measurement SHALL be taken regardless of the reviewed
+each round ran, and SHALL distinguish "not known" from "not clean". A receipt
+written before that field existed, or a round whose tree could not be measured,
+knows nothing about that state; recording either as unclean would state an
+unknown as a measurement, and a round it cannot vouch for SHALL never count. The measurement SHALL be taken regardless of the reviewed
 scope: a full pass changes what is read, not whether anything moved.
 
 Goalrail SHALL report the count and MUST NOT act on it: it neither refuses the
@@ -212,6 +215,10 @@ changing the review rules is a change.
 #### Scenario: Discarded work is not a stalemate
 - **WHEN** a round ran with the author's work in the tree and that work is discarded before the next round at the same head
 - **THEN** the count is zero, and only the round after that can begin counting
+
+#### Scenario: An unknown tree state never counts
+- **WHEN** the previous receipt carries no tree state, or this round's tree cannot be measured
+- **THEN** the count is zero and the receipt records the state as unknown rather than as unclean
 
 #### Scenario: A full pass is measured too
 - **WHEN** an unchanged round is repeated with the full-review flag

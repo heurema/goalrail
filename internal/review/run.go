@@ -126,9 +126,11 @@ func Run(ctx context.Context, input Input) (Result, error) {
 	// cumulative coverage. Reviewing the whole branch every round was measured
 	// into the failure this prevents — each round repaid the full price of all
 	// previous ones. The full pass stays one flag away.
-	treeClean, treeErr := WorkingTreeClean(input.RepositoryRoot)
-	if treeErr != nil {
-		treeClean = false
+	// An unmeasurable tree stays unmeasured: the review still runs, and the
+	// receipt says it does not know rather than claiming a dirty tree.
+	var treeClean *bool
+	if measured, treeErr := WorkingTreeClean(input.RepositoryRoot); treeErr == nil {
+		treeClean = &measured
 	}
 
 	reviewedBase := baseCommit
@@ -148,7 +150,9 @@ func Run(ctx context.Context, input Input) (Result, error) {
 		//
 		// Deliberately outside the incremental branch: --full changes the
 		// reviewed scope, not whether anything moved.
-		if previous.HeadCommit == headCommit && treeClean && previous.TreeCleanAtReview {
+		if previous.HeadCommit == headCommit &&
+			treeClean != nil && *treeClean &&
+			previous.TreeCleanAtReview != nil && *previous.TreeCleanAtReview {
 			unchangedRounds = previous.UnchangedRounds + 1
 		}
 	}
