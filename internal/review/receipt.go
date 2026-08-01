@@ -55,6 +55,11 @@ type Receipt struct {
 	// digests the full branch so staleness stays one comparison.
 	ReviewedBase string `json:"reviewed_base"`
 
+	// ReviewedDiffSHA256 digests the range this round actually covered, so the
+	// receipt proves the exact bytes reviewed even when the round was
+	// incremental; DiffSHA256 stays the full-branch digest staleness compares.
+	ReviewedDiffSHA256 string `json:"reviewed_diff_sha256"`
+
 	// Mode is fresh, cross, or refute; ModeReason states why in one sentence,
 	// because a cross that quietly became fresh is an unprovable claim.
 	Mode       string `json:"mode"`
@@ -163,6 +168,12 @@ func canonicalDiffArguments(baseCommit, headCommit string) []string {
 		"-c", "diff.relative=false",
 		"-c", "diff.indentHeuristic=true",
 		"-c", "diff.orderFile=/dev/null",
+		// Working-tree attributes steer a commit-range diff too: an uncommitted
+		// .gitattributes "binary" rule flips a textual patch to "Binary files
+		// differ" and a stable branch reads as stale. Both attribute sources are
+		// pointed at empty files for the digest.
+		"-c", "core.attributesFile=/dev/null",
+		"-c", "attr.tree=HEAD",
 		"-c", "core.abbrev=40",
 		"diff", "--no-ext-diff", "--no-color", "--no-textconv",
 		"--full-index", "--no-renames",
@@ -272,6 +283,12 @@ func ReadReceipt(stateRoot, repositoryRoot, branch string) (Receipt, bool, error
 	}
 	path := filepath.Join(stateRoot, "reviews", name)
 	contents, err := boundedio.ReadRegularFile(path, "review receipt", receiptBound)
+	if errors.Is(err, fs.ErrNotExist) {
+		// A pointer to a receipt that is gone is corrupted evidence, not an
+		// unreviewed branch: reporting absence here would present "never
+		// reviewed" for a branch whose record was destroyed.
+		return Receipt{}, false, fmt.Errorf("the review pointer names %s, which does not exist", name)
+	}
 	if errors.Is(err, fs.ErrNotExist) {
 		return Receipt{}, false, nil
 	}

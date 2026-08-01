@@ -175,6 +175,13 @@ func Run(ctx context.Context, input Input) (Result, error) {
 	mode, modeReason := input.Selection.Mode, input.Selection.Reason
 	var refutation, refuter string
 	if input.Refute {
+		// The refutation is a second paid run: the gate's answer may have
+		// changed while the first one spent, so it is asked again.
+		if strings.TrimSpace(input.Gate) != "" {
+			if gateErr := runGate(ctx, input.RepositoryRoot, input.Gate); gateErr != nil {
+				return Result{InstructionsMaterialized: materialized}, gateErr
+			}
+		}
 		// The refuter is a fresh session — the other runnable provider where one
 		// exists, the same one otherwise. Passing the report verbatim is
 		// transport, not parsing; which findings survive is the reader's call.
@@ -182,7 +189,12 @@ func Run(ctx context.Context, input Input) (Result, error) {
 		if refuteErr != nil {
 			return Result{InstructionsMaterialized: materialized}, refuteErr
 		}
-		refutePrompt := "You are refuting a review, not extending it. Below is a reviewer's report on a change.\n" +
+		// The refuter draws from the same committed instructions the reviewer
+		// did — the receipt hashes those instructions, and a refuter that never
+		// saw the repository's own rules could refute findings those rules
+		// require.
+		refutePrompt := string(instructions) +
+			"\n\nYou are refuting a review, not extending it. Below is a reviewer's report on this change.\n" +
 			"Try to REFUTE each finding against the actual code; do not add new findings.\n" +
 			"For each: state REFUTED or STANDS with the concrete evidence.\n\n--- REPORT UNDER CHALLENGE ---\n" + report
 		refutation, refuteErr = invoke(bounded, refuterSelection.Reviewer, input.RepositoryRoot, rangeSpec, effort, []byte(refutePrompt))
@@ -198,6 +210,10 @@ func Run(ctx context.Context, input Input) (Result, error) {
 	if err != nil {
 		return Result{InstructionsMaterialized: materialized}, err
 	}
+	reviewedDigest, err := DiffDigest(input.RepositoryRoot, reviewedBase, headCommit)
+	if err != nil {
+		return Result{InstructionsMaterialized: materialized}, err
+	}
 
 	receipt := Receipt{
 		Schema:             ReceiptSchema,
@@ -207,6 +223,7 @@ func Run(ctx context.Context, input Input) (Result, error) {
 		BaseCommit:         baseCommit,
 		HeadCommit:         headCommit,
 		ReviewedBase:       reviewedBase,
+		ReviewedDiffSHA256: reviewedDigest,
 		DiffSHA256:         diffDigest,
 		Mode:               mode,
 		ModeReason:         modeReason,
@@ -360,9 +377,13 @@ func invoke(ctx context.Context, reviewer ambient.Scaffold, repositoryRoot, base
 	// review exists to avoid.
 	command.Env = strippedEnvironment(os.Environ(), AuthorMarkers())
 
-	var stdout, stderr bytes.Buffer
-	command.Stdout = &stdout
-	command.Stderr = &stderr
+	// The streams are bounded while being collected: the receipt bound checked
+	// at write time cannot protect the running process from a reviewer that
+	// floods stdout, and an unbounded buffer turns that into memory exhaustion.
+	stdout := &boundedBuffer{limit: receiptBound}
+	stderr := &boundedBuffer{limit: 1 << 20}
+	command.Stdout = stdout
+	command.Stderr = stderr
 	if err := command.Run(); err != nil {
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			return "", fmt.Errorf("the %s reviewer did not finish within the review deadline", reviewer)
@@ -382,3 +403,19 @@ func invoke(ctx context.Context, reviewer ambient.Scaffold, repositoryRoot, base
 	}
 	return report, nil
 }
+
+// boundedBuffer collects up to limit bytes and refuses the rest, so a flooding
+// child fails the review instead of exhausting memory.
+type boundedBuffer struct {
+	buffer bytes.Buffer
+	limit  int
+}
+
+func (b *boundedBuffer) Write(p []byte) (int, error) {
+	if b.buffer.Len()+len(p) > b.limit {
+		return 0, fmt.Errorf("output exceeded the %d-byte bound", b.limit)
+	}
+	return b.buffer.Write(p)
+}
+
+func (b *boundedBuffer) String() string { return b.buffer.String() }
