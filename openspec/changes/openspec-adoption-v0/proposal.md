@@ -16,9 +16,11 @@ nothing in the toolchain would ever report it.
   facts and no judgement:
   - the artifact-level difference between the replaced schema and the adopted
     one — artifacts added or removed, dependencies changed, instructions
-    changed;
+    changed — where both are files in the repository, and a stated reason where
+    the replaced one is not, as a stock schema resolving from the installed
+    package never is;
   - how many rules the configuration carries, reproduced verbatim, with a plain
-    statement that they were written against the replaced schema and that
+    statement that they were present when the schema was replaced and that
     Goalrail neither interprets nor edits them;
   - how many open and archived changes still pin the replaced schema, so
     whether its directory may be removed is counted rather than guessed.

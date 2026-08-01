@@ -20,17 +20,33 @@ to adopt; it does not tell the user what they have adopted, and the difference
 between those two is where a repository silently ends up running rules written
 against a schema that is gone.
 
-That section SHALL state the artifact-level difference between the replaced
-schema and the adopted one: which artifacts exist only in one of them, whose
+Where both schemas are files in the repository, that section SHALL state the
+artifact-level difference between them: which artifacts exist only in one, whose
 dependencies differ, and whose instructions differ. It SHALL report that an
-instruction differs and MUST NOT characterise what the difference means. Both
-schemas are files on disk and their structure is comparable; their prose is
-English written for another project's purpose, and a mechanical reading of it
-would produce confident nonsense.
+instruction differs and MUST NOT characterise what the difference means. Their
+structure is comparable; their prose is English written for another project's
+purpose, and a mechanical reading of it would produce confident nonsense.
+
+The adopted side of that comparison SHALL be the schema the repository will
+actually compile against — the overlay file on disk once initialization has
+finished with it — and not the copy embedded in the binary. Initialization
+leaves an edited overlay file alone by design, and OpenSpec then uses that file;
+describing the embedded copy instead would report differences for a schema the
+switch did not adopt.
+
+Where the replaced schema is not a file in the repository, the section SHALL
+state that the comparison could not be made and why, and the rules disclosure
+and the pin count SHALL still be produced. A schema shipped with the stock CLI
+resolves from the installed package rather than from the repository, and
+reaching into that package would make the harness depend on the Node runtime it
+is required to work without. Partial disclosure is the honest outcome there; a
+comparison against something the repository does not contain is not.
 
 That section SHALL also report the rules the configuration carries: how many
-there are, each of them verbatim, and a plain statement that they were written
-against the replaced schema and that Goalrail neither interprets nor edits them.
+there are, each of them verbatim, and a plain statement that they were present
+when the schema was replaced and that Goalrail neither interprets nor edits
+them. Their presence at that moment is what the repository proves; when they
+were written, and against which schema, it does not.
 Rules are the one part of the configuration Goalrail deliberately does not own —
 which is why the schema key is rewritten a line at a time — so disclosing them
 is the whole of what it may do. Nothing else in the toolchain validates a rule
@@ -64,9 +80,17 @@ presence MUST NOT make initialization interactive or change its exit status.
 - **WHEN** initialization switches a repository from another schema to Goalrail's
 - **THEN** the report names every artifact present in only one of the two schemas, every artifact whose dependencies differ, and every artifact whose instructions differ
 
+#### Scenario: The replaced schema is not a file in the repository
+- **WHEN** a switch replaced a schema that ships with the stock CLI rather than living in the repository
+- **THEN** the report states that the schemas could not be compared and why, and still reports the rules and the count of changes naming the replaced schema
+
+#### Scenario: The overlay on disk differs from the embedded copy
+- **WHEN** a switch happens in a repository whose overlay schema file was edited and is therefore left alone
+- **THEN** the comparison describes that file rather than the copy embedded in the binary
+
 #### Scenario: The rules are disclosed without being judged
 - **WHEN** a switch replaced a schema in a repository whose configuration carries rules
-- **THEN** the report states their count, reproduces each rule verbatim, states that they were written against the replaced schema, and states that Goalrail neither interprets nor edits them
+- **THEN** the report states their count, reproduces each rule verbatim, states that they were present when the schema was replaced, and states that Goalrail neither interprets nor edits them
 - **AND** the report renders no verdict on any individual rule and the configuration's rules are byte-identical afterwards
 
 #### Scenario: Whether the replaced schema may be removed is counted

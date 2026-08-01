@@ -38,7 +38,7 @@
 | ID | Confirmed wording | Verification action | Evidence |
 |---|---|---|---|
 | OUT-1 | When Goalrail switches a repository from another schema to its own, the initialization report states what the switch mechanically changed: which artifacts the adopted schema adds or removes, which artifact dependencies changed, and which artifact instructions differ. | Read the report from a real switch and compare it against a hand-made diff of the two schema files. | SE-1, CTX-13 |
-| OUT-2 | The same report states how many project rules the configuration carries, echoes them verbatim, and says plainly that they were written against the previous schema and that Goalrail neither interprets nor edits them. | Read the report on a repository whose rules are known to be stale, and confirm it neither judges nor omits them. | SE-1, SE-4, SE-5, SE-6 |
+| OUT-2 | The same report states how many project rules the configuration carries, echoes them verbatim, and says plainly that they were present when the schema was replaced and that Goalrail neither interprets nor edits them. | Read the report on a repository whose rules are known to be stale, and confirm it neither judges nor omits them. | SE-1, SE-4, SE-5, SE-6 |
 | OUT-3 | The same report states how many open and archived changes still pin the previous schema, so "can I delete it" has a computed answer rather than an opinion. | Read the count on Baseline and compare it against the `.openspec.yaml` files that name `intent-driven`. | SE-2, SE-7, SE-8 |
 | OUT-4 | The adoption is recorded where Goalrail already keeps its own state — which schema was replaced, when, and a digest of the rules block as it stood — so the fact outlives the session that performed the switch. | Inspect the recorded state after a switch and confirm it names the previous schema and a digest. | SE-9 |
 | OUT-5 | The diagnosis carries one advisory line for as long as the rules block is unchanged since adoption, and stops carrying it once the rules are edited, without the user having to dismiss anything. | Run the diagnosis after a switch, edit the rules, run it again, and confirm the line appears and then disappears. | SE-1, SE-9 |
@@ -78,3 +78,13 @@ directory will never become removable, because its archive keeps pinning it.
 - **Confirmed at:** 2026-08-01
 - **Verification action:** The owner was shown a plain-language view in Russian covering every outcome, boundary and success signal in this version, together with the three accepted weaknesses of the approach, and confirmed it without amendment.
 - **Amendment rule:** A material change to outcomes, non-goals, or success signals creates a new version; wording-only edits preserve this version.
+
+### Corrections preserving this version
+
+- **OUT-2, 2026-08-01.** The wording required the report to claim the rules were
+  "written against the previous schema". A configuration cannot prove that — a
+  user may add schema-independent rules the hour before switching — so the claim
+  was replaced with what the repository does prove: they were present when the
+  schema was replaced. The confirmed meaning is unchanged and is what forced the
+  correction: an outcome whose purpose is honest disclosure cannot be served by
+  an unprovable claim.

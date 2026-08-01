@@ -31,21 +31,35 @@ Non-goals restated because they constrain the implementation, not just the
 scope: no per-rule verdict (NG-1), no write into the rules block (NG-2), no
 interaction (NG-3), no removal of the replaced schema directory (NG-4).
 
-Additional non-goal adopted here as a design boundary: **no new dependency, and
-no YAML round-trip of any file Goalrail does not own.** The line-level rewrite in
-`EnsureConfig` exists for this reason; a parser introduced for reporting would
-end up reformatting the same file a rewrite is forbidden from touching.
+One boundary is asserted here and belongs here rather than in the intent, which
+names none about dependencies: **no new dependency, and no YAML round-trip of any
+file Goalrail does not own.** The module has none today, and the line-level
+rewrite in `EnsureConfig` exists precisely so that a file Goalrail must not
+reformat is never parsed and re-serialized. This is a design choice and is
+revisable as one — reversing it costs a first dependency, which is worth taking
+deliberately rather than acquiring as a side effect of adding a report.
 
 ## Decisions
 
 **Compare schemas by scanning, and degrade honestly rather than guess.**
 
-The adopted schema is Goalrail's embedded canon, so one side is always known.
-The replaced side is an arbitrary file. A bounded line-oriented reader extracts,
-for each entry of the top-level `artifacts:` sequence, its `id`, its `requires`
-list, and the raw byte span of its `instruction`. Comparison then yields:
-artifacts present in only one schema, artifacts whose `requires` sets differ, and
-artifacts whose instruction spans differ by digest.
+Both sides are read from the repository, and neither is assumed present. The
+adopted side is the materialized overlay file, not the embedded canon:
+`Materialize(root, false)` reaches `ActionKept` for an overlay file the user has
+edited (`internal/harness/overlay.go`), and OpenSpec compiles against whatever is
+on disk, so comparing the canon would describe a schema the switch did not
+adopt. The replaced side is a file only when the repository materialized it —
+a schema shipped with the stock CLI resolves from the installed package
+(`openspec schema which spec-driven` reports `Source: package`), and reading it
+there would put a Node package path on the harness's critical path, which the
+no-Node requirement forbids. That case reports "could not compare" and why; it is
+not a defect to be engineered away.
+
+A bounded line-oriented reader extracts, for each entry of the top-level
+`artifacts:` sequence, its `id`, its `requires` list, and the raw byte span of
+its `instruction`. Comparison then yields: artifacts present in only one schema,
+artifacts whose `requires` sets differ, and artifacts whose instruction spans
+differ by digest.
 
 Digesting the instruction span rather than reading it is what keeps this within
 the boundary: the requirement is to report *that* an instruction differs, never
@@ -61,14 +75,23 @@ writing, not about aborting after.
 
 **Extract the rules block textually; do not parse it.**
 
-The block runs from a `rules:` key at column zero to the next column-zero key or
-end of file — the same column-zero discipline `schemaAssignment` already applies
-to `schema:`, and for the same reason: an indented `rules:` belongs to something
-else. That span is what gets reproduced verbatim and what gets digested.
+The block runs from a `rules:` key at column zero to the next column-zero key —
+the same column-zero discipline `schemaAssignment` already applies to `schema:`,
+and for the same reason: an indented `rules:` belongs to something else. That
+span is what gets reproduced verbatim and what gets digested.
 
-The rule count is the number of sequence items within the span. It is a count of
-what a reader sees, which is exactly the claim being made about it, and it needs
-no interpretation of any rule's content.
+Where `rules:` is the last key, the span ends at the last line belonging to its
+value rather than at end of file. Trailing column-zero comments and blank lines
+are not part of the value, and including them would let an edit to an unrelated
+note at the bottom of the configuration change the digest — silencing the
+advisory in a case the specification says leaves it standing.
+
+The rule count is the number of sequence items within the span. That holds for
+the block style every configuration in evidence uses, and it silently reports
+zero for a legal flow mapping such as `rules: {intent: ["a", "b"]}`. The reader
+therefore gets the same refusal the schema reader has: a shape it cannot count
+confidently is reported as uncountable, and the rules are still reproduced
+verbatim. A count is a claim, and a wrong count is worse than an absent one.
 
 **Digest the rules block alone, not the configuration.**
 
@@ -86,6 +109,17 @@ The count covers active changes and the archive, because both keep a schema
 alive. Reuse rather than a second reader: two readers of the same file would
 eventually disagree, and the one used for reporting would be the one nobody
 tested.
+
+Reuse requires hardening it first. `readChangeSchema` trims whitespace and
+quotes but never strips an inline comment, so `schema: intent-driven # legacy`
+reads as `intent-driven # legacy` and matches nothing
+(`internal/adapters/openspec/adapter.go:209-217`). The sibling
+`schemaAssignment` in `internal/harness/config.go` already handles comments and
+quoting correctly, and its treatment is the one to carry over. Left as it is,
+the count would miss a change that pins the schema and the report would say the
+directory may be removed — advice that breaks the change it failed to see. This
+is the one place where being wrong destroys something, so the count is only
+trustworthy after the reader is.
 
 **Store the adoption in the marker, optional by construction.**
 
