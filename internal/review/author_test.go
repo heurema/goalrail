@@ -93,11 +93,11 @@ func TestDetectAuthorTreatsAnEmptyMarkerAsAbsent(t *testing.T) {
 
 func TestSelectReviewerNeverReturnsTheAuthor(t *testing.T) {
 	both := []ambient.Scaffold{ambient.ScaffoldCodex, ambient.ScaffoldClaudeCode}
-	reviewer, err := SelectReviewer(ambient.ScaffoldClaudeCode, both)
+	reviewer, err := SelectReviewer(ambient.ScaffoldClaudeCode, both, alwaysRunnable)
 	if err != nil || reviewer != ambient.ScaffoldCodex {
 		t.Fatalf("selected %q for a Claude Code author (%v)", reviewer, err)
 	}
-	reviewer, err = SelectReviewer(ambient.ScaffoldCodex, both)
+	reviewer, err = SelectReviewer(ambient.ScaffoldCodex, both, alwaysRunnable)
 	if err != nil || reviewer != ambient.ScaffoldClaudeCode {
 		t.Fatalf("selected %q for a Codex author (%v)", reviewer, err)
 	}
@@ -107,7 +107,7 @@ func TestSelectReviewerNeverReturnsTheAuthor(t *testing.T) {
 // author's own provider reproduces the author's blind spots while reporting
 // success, which is the one failure this feature exists to prevent.
 func TestSelectReviewerRefusesWhenOnlyTheAuthorIsInstalled(t *testing.T) {
-	_, err := SelectReviewer(ambient.ScaffoldClaudeCode, []ambient.Scaffold{ambient.ScaffoldClaudeCode})
+	_, err := SelectReviewer(ambient.ScaffoldClaudeCode, []ambient.Scaffold{ambient.ScaffoldClaudeCode}, alwaysRunnable)
 	if err == nil {
 		t.Fatal("selection accepted the author as its own reviewer")
 	}
@@ -115,7 +115,7 @@ func TestSelectReviewerRefusesWhenOnlyTheAuthorIsInstalled(t *testing.T) {
 		t.Fatalf("the refusal does not name the author's provider: %v", err)
 	}
 
-	if _, err := SelectReviewer(ambient.ScaffoldCodex, nil); err == nil {
+	if _, err := SelectReviewer(ambient.ScaffoldCodex, nil, alwaysRunnable); err == nil {
 		t.Fatal("selection accepted an empty installation")
 	}
 }
@@ -149,5 +149,21 @@ func TestStrippedEnvironmentRemovesOnlyWhatItWasGiven(t *testing.T) {
 		if !strings.Contains(joined, expected) {
 			t.Fatalf("%s was removed unasked: %v", expected, kept)
 		}
+	}
+}
+
+// alwaysRunnable stands in for a PATH where every reviewer exists.
+func alwaysRunnable(string) (string, error) { return "/usr/bin/stub", nil }
+
+// A configuration directory left behind by an uninstall is not a reviewer.
+func TestSelectReviewerRefusesAProviderWhoseCommandIsGone(t *testing.T) {
+	_, err := SelectReviewer(ambient.ScaffoldClaudeCode,
+		[]ambient.Scaffold{ambient.ScaffoldCodex, ambient.ScaffoldClaudeCode},
+		func(string) (string, error) { return "", errors.New("not found") })
+	if err == nil {
+		t.Fatal("a reviewer with no executable was selected")
+	}
+	if !strings.Contains(err.Error(), "PATH") {
+		t.Fatalf("the refusal does not say what is missing: %v", err)
 	}
 }

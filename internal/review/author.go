@@ -11,6 +11,7 @@ package review
 import (
 	"errors"
 	"fmt"
+	"os/exec"
 	"sort"
 	"strings"
 
@@ -114,19 +115,49 @@ func AuthorMarkers() []string {
 	}
 }
 
-// SelectReviewer picks the reviewer for one author out of what is installed.
+// executables names the command each provider is reviewed with.
+var executables = map[ambient.Scaffold]string{
+	ambient.ScaffoldCodex:      "codex",
+	ambient.ScaffoldClaudeCode: "claude",
+}
+
+// Executable reports the command one provider is invoked as.
+func Executable(scaffold ambient.Scaffold) (string, bool) {
+	name, known := executables[scaffold]
+	return name, known
+}
+
+// SelectReviewer picks the reviewer for one author out of the providers whose
+// command can actually be run.
 //
-// The reviewer is any installed provider that is not the author's. Where none
-// exists the answer is a refusal rather than a fallback to the author's own
-// provider: reviewing with the author's provider would reproduce the author's
-// blind spots, which is the one outcome this exists to avoid, and it would do
-// so while reporting success.
-func SelectReviewer(author ambient.Scaffold, installed []ambient.Scaffold) (ambient.Scaffold, error) {
-	for _, scaffold := range installed {
-		if scaffold != author {
-			return scaffold, nil
-		}
+// Runnability is checked rather than assumed. A configuration directory left
+// behind by an uninstall would otherwise select a provider whose binary is
+// gone, and the review would fail somewhere further along with a message about
+// the wrong thing. The candidates are the ones a caller offers; the check is
+// whether each can be executed at all.
+func SelectReviewer(author ambient.Scaffold, candidates []ambient.Scaffold, lookPath func(string) (string, error)) (ambient.Scaffold, error) {
+	if lookPath == nil {
+		lookPath = exec.LookPath
 	}
-	return "", fmt.Errorf("no reviewer is installed other than the author's own provider (%s); "+
+	var unrunnable []string
+	for _, scaffold := range candidates {
+		if scaffold == author {
+			continue
+		}
+		name, defined := Executable(scaffold)
+		if !defined {
+			continue
+		}
+		if _, err := lookPath(name); err != nil {
+			unrunnable = append(unrunnable, fmt.Sprintf("%s (%s is not on PATH)", scaffold, name))
+			continue
+		}
+		return scaffold, nil
+	}
+	if len(unrunnable) > 0 {
+		return "", fmt.Errorf("no reviewer other than the author's own provider (%s) can be run: %s",
+			author, strings.Join(unrunnable, ", "))
+	}
+	return "", fmt.Errorf("no reviewer is available other than the author's own provider (%s); "+
 		"install a second agent scaffold, because reviewing with the author's provider reproduces the author's blind spots", author)
 }

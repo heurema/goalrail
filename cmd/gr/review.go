@@ -74,11 +74,10 @@ func runReview(ctx context.Context, args []string, stdout, stderr io.Writer) err
 		return err
 	}
 
-	home, homeErr := os.UserHomeDir()
-	if homeErr != nil {
-		return fmt.Errorf("resolve home directory: %w", homeErr)
-	}
-	reviewer, err := review.SelectReviewer(authoring, ambient.DetectScaffolds(home))
+	// Every supported provider is a candidate, and being runnable is what makes
+	// one a reviewer. A configuration directory is evidence that a scaffold was
+	// used here, not that its command exists now.
+	reviewer, err := review.SelectReviewer(authoring, ambient.SupportedScaffolds(), nil)
 	if err != nil {
 		return err
 	}
@@ -180,7 +179,16 @@ func reviewStateFor(repositoryRoot, stateRoot string) harness.ReviewState {
 	}
 	state, receipt, err := review.Status(stateRoot, repositoryRoot, branch)
 	if err != nil {
-		return harness.ReviewState{}
+		// Precisely the state where stored evidence is unusable — a truncated,
+		// malformed or oversized receipt, or a base commit that has been pruned.
+		// Reporting nothing here would present "no review recorded" for a branch
+		// that has one and cannot read it.
+		return harness.ReviewState{
+			Branch: branch,
+			State:  "unreadable",
+			Note: fmt.Sprintf("review: recorded for %s but unreadable (%v); `gr review` records a fresh one",
+				branch, err),
+		}
 	}
 	reported := harness.ReviewState{State: string(state), Branch: branch}
 	switch state {

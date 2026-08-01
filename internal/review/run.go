@@ -13,6 +13,15 @@ import (
 	"github.com/heurema/goalrail/internal/ambient"
 )
 
+// DefaultDeadline bounds one review.
+//
+// A bound is required and cannot be per-vendor: `claude` carries no turn limit
+// in the version measured here, whatever its documentation elsewhere suggests,
+// so a ceiling built out of vendor flags would be a ceiling only where the flag
+// happens to exist. A deadline holds for every reviewer and cannot drift with
+// an interface.
+const DefaultDeadline = 20 * time.Minute
+
 // DefaultEffort is the reasoning effort a review runs at when the caller names
 // none.
 //
@@ -39,6 +48,9 @@ type Input struct {
 
 	// Reviewer is the provider performing the review.
 	Reviewer ambient.Scaffold
+
+	// Deadline bounds the review. Zero means DefaultDeadline.
+	Deadline time.Duration
 
 	// Effort is the reviewer's reasoning effort. Empty means DefaultEffort:
 	// what a review in a loop needs, rather than what the machine's interactive
@@ -111,7 +123,13 @@ func Run(ctx context.Context, input Input) (Result, error) {
 	if effort == "" {
 		effort = DefaultEffort
 	}
-	report, err := invoke(ctx, input.Reviewer, input.RepositoryRoot, input.BaseRef, effort, instructions)
+	deadline := input.Deadline
+	if deadline <= 0 {
+		deadline = DefaultDeadline
+	}
+	bounded, cancel := context.WithTimeout(ctx, deadline)
+	defer cancel()
+	report, err := invoke(bounded, input.Reviewer, input.RepositoryRoot, input.BaseRef, effort, instructions)
 	if err != nil {
 		// No receipt: one describing a review that did not happen is worse than
 		// none, because it reads as done.
@@ -212,10 +230,19 @@ func reviewCommand(reviewer ambient.Scaffold, baseRef, effort string, instructio
 	case ambient.ScaffoldClaudeCode:
 		// Only the tools a reviewer needs, and never an editing one: a reviewer
 		// that can change the work is no longer reviewing it.
-		_ = effort
+		//
+		// The git allowance is per subcommand rather than `git *`. That wildcard
+		// admitted `git reset`, `git checkout` and `git clean`, and `git -c
+		// alias.x='!sh -c ...'` would have run an arbitrary shell through it —
+		// a read-only contract that the permission it granted did not keep.
 		return "claude", []string{
 			"-p", "--output-format", "text",
-			"--allowed-tools", "Bash(git *)", "Read", "Grep", "Glob",
+			"--effort", effort,
+			"--allowed-tools",
+			"Bash(git diff:*)", "Bash(git log:*)", "Bash(git show:*)",
+			"Bash(git status:*)", "Bash(git rev-parse:*)", "Bash(git ls-files:*)",
+			"Read", "Grep", "Glob",
+			"--disallowed-tools", "Edit", "Write", "NotebookEdit",
 		}, prompt(baseRef, instructions), nil
 	default:
 		return "", nil, "", fmt.Errorf("no review invocation is defined for %q", reviewer)
@@ -246,6 +273,9 @@ func invoke(ctx context.Context, reviewer ambient.Scaffold, repositoryRoot, base
 	command.Stdout = &stdout
 	command.Stderr = &stderr
 	if err := command.Run(); err != nil {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return "", fmt.Errorf("the %s reviewer did not finish within the review deadline", reviewer)
+		}
 		detail := strings.TrimSpace(stderr.String())
 		if detail == "" {
 			detail = strings.TrimSpace(stdout.String())

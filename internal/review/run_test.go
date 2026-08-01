@@ -249,10 +249,19 @@ func TestClaudeInvocationCarriesNoEditingTool(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	joined := strings.Join(arguments, " ")
+	allowed := allowedTools(arguments)
 	for _, forbidden := range []string{"Edit", "Write", "NotebookEdit"} {
-		if strings.Contains(joined, forbidden) {
-			t.Fatalf("the reviewer was given %s: %v", forbidden, arguments)
+		for _, tool := range allowed {
+			if tool == forbidden {
+				t.Fatalf("the reviewer was allowed %s: %v", forbidden, allowed)
+			}
+		}
+	}
+	// `git *` admitted reset, checkout, clean, and arbitrary shell through
+	// `git -c alias.x='!...'`. Every allowance must name its subcommand.
+	for _, tool := range allowed {
+		if strings.HasPrefix(tool, "Bash(") && !strings.Contains(tool, ":") {
+			t.Fatalf("an unscoped shell allowance survived: %s", tool)
 		}
 	}
 	if !strings.Contains(stdin, "main...HEAD") || !strings.Contains(stdin, "look for X") {
@@ -264,4 +273,25 @@ func TestUnknownReviewerHasNoInvocation(t *testing.T) {
 	if _, _, _, err := reviewCommand(ambient.Scaffold("something-else"), "main", DefaultEffort, nil); err == nil {
 		t.Fatal("an unknown reviewer produced an invocation")
 	}
+}
+
+// allowedTools returns the values of --allowed-tools, which run until the next
+// flag.
+func allowedTools(arguments []string) []string {
+	var allowed []string
+	collecting := false
+	for _, argument := range arguments {
+		if argument == "--allowed-tools" {
+			collecting = true
+			continue
+		}
+		if strings.HasPrefix(argument, "--") {
+			collecting = false
+			continue
+		}
+		if collecting {
+			allowed = append(allowed, argument)
+		}
+	}
+	return allowed
 }

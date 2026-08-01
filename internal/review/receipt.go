@@ -75,7 +75,17 @@ func digest(value []byte) string {
 // repository, and a digest taken there would describe someone else's changes.
 func git(repositoryRoot string, arguments ...string) (string, error) {
 	command := exec.Command("git", append([]string{"-C", repositoryRoot}, arguments...)...)
-	command.Env = strippedEnvironment(os.Environ(), []string{"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY"})
+	// Repository selectors are stripped, and the reader's own configuration is
+	// taken out of the answer entirely. Naming every key that can change a
+	// diff's bytes is a list that goes stale — `diff.orderFile` cannot even be
+	// neutralised by an override, because an empty value is a path git then
+	// fails to open. Ignoring the global and system files is what actually makes
+	// two machines agree.
+	command.Env = append(
+		strippedEnvironment(os.Environ(), []string{"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY"}),
+		"GIT_CONFIG_GLOBAL=/dev/null",
+		"GIT_CONFIG_SYSTEM=/dev/null",
+	)
 	var stdout, stderr bytes.Buffer
 	command.Stdout = &stdout
 	command.Stderr = &stderr
@@ -120,6 +130,19 @@ func strippedEnvironment(environment []string, remove []string) []string {
 // staleness into a property of whose machine asked.
 func canonicalDiffArguments(baseCommit, headCommit string) []string {
 	return []string{
+		// Flags alone do not make a diff canonical: the repository's own
+		// configuration still decides context lines, the algorithm, prefixes and
+		// ordering. Left to it, changing `diff.context` after a review makes the
+		// same commits digest differently and reports an untouched branch as
+		// stale — the staleness signal would then describe the reader's
+		// configuration rather than the branch.
+		"-c", "diff.context=3",
+		"-c", "diff.algorithm=myers",
+		"-c", "diff.noprefix=false",
+		"-c", "diff.mnemonicPrefix=false",
+		"-c", "diff.relative=false",
+		"-c", "diff.indentHeuristic=true",
+		"-c", "core.abbrev=40",
 		"diff", "--no-ext-diff", "--no-color", "--no-textconv",
 		"--full-index", "--no-renames",
 		baseCommit + "..." + headCommit,
@@ -169,14 +192,27 @@ func receiptPath(stateRoot, repositoryRoot, branch string) string {
 // WriteReceipt stores one receipt.
 func WriteReceipt(stateRoot string, receipt Receipt) (string, error) {
 	path := receiptPath(stateRoot, receipt.Repository, receipt.Branch)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	// The same protection the rest of the local state store uses. A receipt
+	// holds a verbatim review of private source; leaving it readable by every
+	// account on a shared machine would make this the one piece of Goalrail
+	// state that leaks.
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return "", fmt.Errorf("create review state directory: %w", err)
+	}
+	if err := os.Chmod(filepath.Dir(path), 0o700); err != nil {
+		return "", fmt.Errorf("protect review state directory: %w", err)
 	}
 	encoded, err := json.MarshalIndent(receipt, "", "  ")
 	if err != nil {
 		return "", fmt.Errorf("encode review receipt: %w", err)
 	}
-	if err := os.WriteFile(path, append(encoded, '\n'), 0o644); err != nil {
+	// Refuse before writing what no reader could ever load. A receipt that
+	// stores successfully and then fails every read reports a review as done
+	// while leaving nothing usable behind.
+	if len(encoded)+1 > receiptBound {
+		return "", fmt.Errorf("the review report is larger than the %d-byte receipt bound, so it could never be read back", receiptBound)
+	}
+	if err := os.WriteFile(path, append(encoded, '\n'), 0o600); err != nil {
 		return "", fmt.Errorf("write review receipt: %w", err)
 	}
 	return path, nil

@@ -262,3 +262,80 @@ func TestReceiptsAreKeyedByRepositoryAndBranchTogether(t *testing.T) {
 		t.Fatalf("receipt paths collide: %s %s %s", first, second, third)
 	}
 }
+
+// The digest must describe the branch, not the reader's git configuration.
+// Changing a diff setting after a review would otherwise report an untouched
+// branch as stale.
+func TestDiffDigestIgnoresTheReadersOwnDiffConfiguration(t *testing.T) {
+	root := repository(t)
+	base, _ := Resolve(root, "main")
+	branch(t, root, "work")
+	write(t, root, "added.txt", "a\nb\nc\nd\ne\nf\ng\nh\n")
+	commit(t, root, "add lines")
+	head, _ := Resolve(root, "HEAD")
+
+	before, err := DiffDigest(root, base, head)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, setting := range [][]string{
+		{"diff.context", "0"},
+		{"diff.algorithm", "histogram"},
+		{"diff.noprefix", "true"},
+		{"diff.mnemonicPrefix", "true"},
+		{"diff.relative", "true"},
+		{"core.abbrev", "7"},
+	} {
+		if _, err := git(root, "config", setting[0], setting[1]); err != nil {
+			t.Fatal(err)
+		}
+		after, err := DiffDigest(root, base, head)
+		if err != nil {
+			t.Fatalf("%s=%s broke the digest: %v", setting[0], setting[1], err)
+		}
+		if after != before {
+			t.Fatalf("%s=%s changed the digest of an unchanged branch", setting[0], setting[1])
+		}
+	}
+}
+
+// A receipt that stores successfully and then fails every read reports a review
+// as done while leaving nothing usable behind.
+func TestWriteReceiptRefusesWhatCouldNeverBeReadBack(t *testing.T) {
+	stateRoot := t.TempDir()
+	_, err := WriteReceipt(stateRoot, Receipt{
+		Schema: ReceiptSchema, Repository: "/r", Branch: "work",
+		Report: strings.Repeat("x", receiptBound+1),
+	})
+	if err == nil {
+		t.Fatal("an unreadable receipt was written")
+	}
+	if _, found, _ := ReadReceipt(stateRoot, "/r", "work"); found {
+		t.Fatal("the oversized receipt landed anyway")
+	}
+}
+
+// A receipt holds a verbatim review of private source.
+func TestReceiptStateIsNotReadableByOtherAccounts(t *testing.T) {
+	stateRoot := t.TempDir()
+	path, err := WriteReceipt(stateRoot, Receipt{
+		Schema: ReceiptSchema, Repository: "/r", Branch: "work", Report: "private",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	file, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if file.Mode().Perm()&0o077 != 0 {
+		t.Fatalf("the receipt is readable beyond its owner: %v", file.Mode().Perm())
+	}
+	directory, err := os.Stat(filepath.Dir(path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if directory.Mode().Perm()&0o077 != 0 {
+		t.Fatalf("the review state directory is open: %v", directory.Mode().Perm())
+	}
+}
