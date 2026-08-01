@@ -489,3 +489,89 @@ func TestTheMaterializedInstructionsFileIsNotTreatedAsWork(t *testing.T) {
 		t.Fatal("the materialized instructions file was counted as uncommitted work")
 	}
 }
+
+// --full changes the reviewed scope, not whether anything moved.
+func TestStalemateIsMeasuredEvenOnAFullReview(t *testing.T) {
+	root := branchWithWork(t)
+	stateRoot := t.TempDir()
+	stubReviewer(t, "codex", `cat >/dev/null; echo round`)
+	selection := Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"}
+	base := Input{RepositoryRoot: root, StateRoot: stateRoot, BaseRef: "main", Selection: selection}
+
+	if _, err := Run(context.Background(), base); err != nil {
+		t.Fatal(err)
+	}
+	full := base
+	full.Full = true
+	second, err := Run(context.Background(), full)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Receipt.UnchangedRounds != 1 {
+		t.Fatalf("a full re-review of the same head did not count: %d", second.Receipt.UnchangedRounds)
+	}
+}
+
+// Discarded work moved between the rounds even though nothing landed, so the
+// rounds were not over identical state.
+func TestDiscardedWorkDoesNotCountAsAStalemate(t *testing.T) {
+	root := branchWithWork(t)
+	stateRoot := t.TempDir()
+	stubReviewer(t, "codex", `cat >/dev/null; echo round`)
+	selection := Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"}
+	input := Input{RepositoryRoot: root, StateRoot: stateRoot, BaseRef: "main", Selection: selection}
+
+	// A round taken while the author had work in progress.
+	write(t, root, "wip.txt", "half a fix\n")
+	dirty, err := Run(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dirty.Receipt.TreeCleanAtReview {
+		t.Fatal("a dirty round recorded a clean tree")
+	}
+
+	// The author discards it. Same head, clean now — but state moved.
+	if err := os.Remove(filepath.Join(root, "wip.txt")); err != nil {
+		t.Fatal(err)
+	}
+	after, err := Run(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Receipt.UnchangedRounds != 0 {
+		t.Fatalf("a round following discarded work counted as a stalemate: %d", after.Receipt.UnchangedRounds)
+	}
+
+	// Only now are two rounds genuinely over identical state.
+	third, err := Run(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if third.Receipt.UnchangedRounds != 1 {
+		t.Fatalf("two rounds over identical state did not count: %d", third.Receipt.UnchangedRounds)
+	}
+}
+
+// A committed instructions file the author then edits is ordinary work.
+func TestEditingACommittedInstructionsFileCountsAsWork(t *testing.T) {
+	root := repository(t)
+	if _, _, err := EnsureInstructions(root); err != nil {
+		t.Fatal(err)
+	}
+	// Untracked default: not the author's work.
+	if clean, err := WorkingTreeClean(root); err != nil || !clean {
+		t.Fatalf("the materialized default counted as work: %v (%v)", clean, err)
+	}
+	commit(t, root, "commit the review instructions")
+
+	// Committed and then edited: that is the author changing the review rules.
+	write(t, root, InstructionsPath, "# Mine\n\nlook only at X\n")
+	clean, err := WorkingTreeClean(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if clean {
+		t.Fatal("an edit to the committed instructions file was skipped as if Goalrail had made it")
+	}
+}

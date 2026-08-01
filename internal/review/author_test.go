@@ -193,5 +193,3 @@ func TestStrippedEnvironmentRemovesOnlyWhatItWasGiven(t *testing.T) {
 
 // alwaysRunnable stands in for a PATH where every reviewer exists.
 func alwaysRunnable(string) (string, error) { return "/usr/bin/stub", nil }
-
-

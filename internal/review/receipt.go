@@ -76,6 +76,12 @@ type Receipt struct {
 	// stop. Zero means work moved since the previous round.
 	UnchangedRounds int `json:"unchanged_rounds"`
 
+	// TreeCleanAtReview records whether the author's tree was clean when this
+	// round ran. Without it the count cannot tell two rounds over identical
+	// state from a round that followed discarded work, and a stop signal that
+	// cannot be audited is one nobody should stop on.
+	TreeCleanAtReview bool `json:"tree_clean_at_review"`
+
 	// DurationSeconds is measured wall time of the reviewer invocation(s), the
 	// number effort and deadline defaults get tuned against.
 	DurationSeconds int64 `json:"duration_seconds"`
@@ -371,11 +377,11 @@ func WorkingTreeClean(repositoryRoot string) (bool, error) {
 		if entry == "" {
 			continue
 		}
-		// The instructions file Goalrail materialized is not the author's work.
-		// Counting it would let Goalrail's own artifact suppress Goalrail's own
-		// stalemate signal for every repository that has not committed it yet.
-		fields := strings.Fields(entry)
-		if len(fields) == 2 && fields[1] == InstructionsPath {
+		// Only the *untracked* instructions file Goalrail materialized is not
+		// the author's work. Once committed, an edit or deletion of it is
+		// ordinary work and must count: skipping it unconditionally would let a
+		// real change to the review rules read as a stalemate.
+		if strings.HasPrefix(entry, "?? ") && strings.TrimSpace(entry[3:]) == InstructionsPath {
 			continue
 		}
 		return false, nil

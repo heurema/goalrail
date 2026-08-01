@@ -173,11 +173,21 @@ acted on nothing about, and further rounds spend without converging — a loop
 needs a stop signal that does not require reading any report, and this is one
 that is measured.
 
+A round counts only where the previous round was also over identical state:
+both rounds at the same head, and neither carrying work of the author's. Work
+that was written and then discarded moved between the rounds even though
+nothing landed, and a stop signal that cannot tell that apart is one nobody
+should stop on — so the receipt SHALL record whether the tree was clean when
+each round ran. The measurement SHALL be taken regardless of the reviewed
+scope: a full pass changes what is read, not whether anything moved.
+
 Goalrail SHALL report the count and MUST NOT act on it: it neither refuses the
 review nor ends any loop, because the loop belongs to the caller. The
-instructions file Goalrail itself materialized MUST NOT count as the author's
-work, or Goalrail's own artifact would suppress its own signal in every
-repository that has not committed it yet.
+**untracked** instructions file Goalrail itself materialized MUST NOT count as
+the author's work, or Goalrail's own artifact would suppress its own signal in
+every repository that has not committed it yet — but once that file is
+committed, an edit or deletion of it is ordinary work and MUST count, because
+changing the review rules is a change.
 
 #### Scenario: Consecutive rounds that changed nothing
 - **WHEN** a review runs twice against the same head with no change of the author's in the tree
@@ -194,6 +204,18 @@ repository that has not committed it yet.
 #### Scenario: Goalrail's own artifact does not count
 - **WHEN** the instructions file was materialized and never committed
 - **THEN** it does not make the tree count as changed
+
+#### Scenario: An edit to committed instructions is work
+- **WHEN** the instructions file is committed and then modified or deleted by the author
+- **THEN** the tree counts as changed
+
+#### Scenario: Discarded work is not a stalemate
+- **WHEN** a round ran with the author's work in the tree and that work is discarded before the next round at the same head
+- **THEN** the count is zero, and only the round after that can begin counting
+
+#### Scenario: A full pass is measured too
+- **WHEN** an unchanged round is repeated with the full-review flag
+- **THEN** the count still rises, because scope is not movement
 
 ### Requirement: The receipt is bound to what was reviewed, and to how
 **Intent IDs:** OUT-5, SIG-3

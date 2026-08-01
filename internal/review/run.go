@@ -83,8 +83,8 @@ type Input struct {
 
 // Result reports what one review produced.
 type Result struct {
-	Receipt                 Receipt
-	ReceiptPath             string
+	Receipt                  Receipt
+	ReceiptPath              string
 	InstructionsMaterialized bool
 }
 
@@ -126,29 +126,43 @@ func Run(ctx context.Context, input Input) (Result, error) {
 	// cumulative coverage. Reviewing the whole branch every round was measured
 	// into the failure this prevents — each round repaid the full price of all
 	// previous ones. The full pass stays one flag away.
+	treeClean, treeErr := WorkingTreeClean(input.RepositoryRoot)
+	if treeErr != nil {
+		treeClean = false
+	}
+
 	reviewedBase := baseCommit
 	unchangedRounds := 0
-	if !input.Full {
-		if previous, found, readErr := ReadReceipt(input.StateRoot, input.RepositoryRoot, branch); readErr == nil && found {
-			// Stalemate: the same head, and nothing in the tree either. The
-			// previous round produced findings the author did not act on, and
-			// another round spends without converging. Measured, never read out
-			// of a report; the caller's loop policy decides what to do with it.
-			if previous.HeadCommit == headCommit {
-				if clean, cleanErr := WorkingTreeClean(input.RepositoryRoot); cleanErr == nil && clean {
-					unchangedRounds = previous.UnchangedRounds + 1
-				}
-			}
-			// Narrowing is only sound against the same base the chain was built
-			// on: a receipt taken against another ref proves nothing about the
-			// commits this base newly brings into range.
-			// A legacy receipt without the reviewed-range digest cannot anchor
-			// a chain link that proves its bytes; it does not narrow.
-			if previous.ReviewedDiffSHA256 != "" && previous.BaseCommit == baseCommit && previous.HeadCommit != headCommit {
-				if _, resolveErr := Resolve(input.RepositoryRoot, previous.HeadCommit); resolveErr == nil {
-					reviewedBase = previous.HeadCommit
-				}
-			}
+	previous, hasPrevious, previousErr := ReadReceipt(input.StateRoot, input.RepositoryRoot, branch)
+	if previousErr != nil {
+		hasPrevious = false
+	}
+	if hasPrevious {
+		// Stalemate: two rounds over identical state — the same head, and
+		// neither round carrying work of the author's. The previous round
+		// produced findings nothing was done about, and another spends without
+		// converging. Requiring the previous round to have been clean too is
+		// what keeps a discarded fix from reading as a stalemate: work moved,
+		// even though nothing landed. Measured, never read out of a report;
+		// what to do about it is the caller's loop policy.
+		//
+		// Deliberately outside the incremental branch: --full changes the
+		// reviewed scope, not whether anything moved.
+		if previous.HeadCommit == headCommit && treeClean && previous.TreeCleanAtReview {
+			unchangedRounds = previous.UnchangedRounds + 1
+		}
+	}
+	// Narrowing is only sound against the same base the chain was built on: a
+	// receipt taken against another ref proves nothing about the commits this
+	// base newly brings into range. A legacy receipt without the reviewed-range
+	// digest cannot anchor a chain link that proves its bytes, so it does not
+	// narrow either.
+	if !input.Full && hasPrevious &&
+		previous.ReviewedDiffSHA256 != "" &&
+		previous.BaseCommit == baseCommit &&
+		previous.HeadCommit != headCommit {
+		if _, resolveErr := Resolve(input.RepositoryRoot, previous.HeadCommit); resolveErr == nil {
+			reviewedBase = previous.HeadCommit
 		}
 	}
 
@@ -243,6 +257,7 @@ func Run(ctx context.Context, input Input) (Result, error) {
 		Author:             string(input.Author),
 		ReviewedAt:         now().UTC().Format(time.RFC3339),
 		UnchangedRounds:    unchangedRounds,
+		TreeCleanAtReview:  treeClean,
 		DurationSeconds:    int64(now().Sub(started) / time.Second),
 		Report:             report,
 		ReportSHA256:       digest([]byte(report)),
