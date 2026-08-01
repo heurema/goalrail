@@ -63,7 +63,7 @@ func run(
 	factory serviceFactory,
 ) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: gr <init|doctor|update|version|connect|disconnect|health|prepare|inspect|start|finish> [flags]; run gr help")
+		return fmt.Errorf("usage: gr <init|doctor|review|update|version|connect|disconnect|health|prepare|inspect|start|finish> [flags]; run gr help")
 	}
 	switch args[0] {
 	case "prepare":
@@ -82,6 +82,8 @@ func run(
 		return runDisconnect(args[1:], stdout, stderr)
 	case "doctor":
 		return runDoctor(args[1:], stdout, stderr)
+	case "review":
+		return runReview(ctx, args[1:], stdout, stderr)
 	case "update":
 		return runUpdate(args[1:], stdout, stderr)
 	case "version":
@@ -101,7 +103,7 @@ func run(
 		if len(args) == 2 && isCommand(args[1]) {
 			return run(ctx, []string{args[1], "--help"}, stdin, stdout, stderr, factory)
 		}
-		return fmt.Errorf("usage: gr help [init|doctor|update|version|connect|disconnect|health|prepare|inspect|start|finish]")
+		return fmt.Errorf("usage: gr help [init|doctor|review|update|version|connect|disconnect|health|prepare|inspect|start|finish]")
 	case "-h", "--help":
 		return writeHelp(stdout)
 	default:
@@ -112,7 +114,7 @@ func run(
 func isCommand(value string) bool {
 	switch value {
 	case "prepare", "inspect", "start", "finish",
-		"init", "doctor", "update", "connect", "disconnect", "health", "version":
+		"init", "doctor", "review", "update", "connect", "disconnect", "health", "version":
 		return true
 	default:
 		return false
@@ -120,7 +122,7 @@ func isCommand(value string) bool {
 }
 
 func writeHelp(output io.Writer) error {
-	_, err := fmt.Fprint(output, `usage: gr <init|doctor|update|version|connect|disconnect|health|prepare|inspect|start|finish> [flags]
+	_, err := fmt.Fprint(output, `usage: gr <init|doctor|review|update|version|connect|disconnect|health|prepare|inspect|start|finish> [flags]
 
 The harness:
   init → work normally; ordinary work needs no Goalrail command
@@ -128,6 +130,7 @@ The harness:
   init        install the harness here: the OpenSpec overlay with the Goalrail
               schema, the repository marker, and the session hooks
   doctor      report whether the harness is intact, and what to run if not
+  review      review this branch with an agent that did not write it
   update      bring this repository's harness up to what this gr carries
   connect     attach a scaffold that registers at user scope; needs --yes
   disconnect  remove every registration, in whichever scope it lives

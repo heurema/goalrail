@@ -101,6 +101,12 @@ func diagnose(repository, scaffold, stateDirectory string) (harness.Diagnosis, e
 	// other command — and it is also why the diagnosis itself still writes
 	// nothing: remembering the answer happens in here, not in there.
 	input.LatestRelease = updatecheck.New(input.StateRoot, updatecheck.Environment{})
+	// The review state is computed here rather than inside the diagnosis,
+	// because deciding it means running git and a diagnosis that reaches for a
+	// repository on its own cannot be tested without one.
+	if input.StateRoot != "" {
+		input.Review = reviewStateFor(root, input.StateRoot)
+	}
 	return harness.Diagnose(input)
 }
 
