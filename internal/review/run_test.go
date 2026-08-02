@@ -1103,3 +1103,42 @@ func TestAnOrdinaryReviewRecordsNoRefuterModel(t *testing.T) {
 		t.Fatalf("a review with no refuter claimed a refuter model: %q", result.Receipt.RefuterModel)
 	}
 }
+
+// A gate that exits successfully while a descendant keeps the pipe open returns
+// ErrWaitDelay — the shell finished before any deadline, so cancellation never
+// fired. Reporting that as a refusal is doubly wrong: the gate returned success,
+// and the descendant is still running.
+func TestAGateThatLeavesADescendantIsNotARefusal(t *testing.T) {
+	root := branchWithWork(t)
+	stubReviewer(t, "codex", `cat >/dev/null; echo reviewed`)
+	result, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: t.TempDir(), BaseRef: "main",
+		Selection: Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
+		Gate:      "sleep 600 &",
+		Deadline:  60 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("a gate that exited successfully was treated as a failure: %v", err)
+	}
+	if !strings.Contains(result.Receipt.Report, "reviewed") {
+		t.Fatalf("the review did not run after a passing gate: %q", result.Receipt.Report)
+	}
+}
+
+// A gate that reports on stdout and then hangs must not be recorded as silent.
+func TestATimedOutGateKeepsStdoutToo(t *testing.T) {
+	root := branchWithWork(t)
+	stubReviewer(t, "codex", `cat >/dev/null; echo r`)
+	_, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: t.TempDir(), BaseRef: "main",
+		Selection: Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
+		Gate:      `echo "GATE-STDOUT: checking"; sleep 600`,
+		Deadline:  3 * time.Second,
+	})
+	if err == nil {
+		t.Fatal("expected a gate deadline failure")
+	}
+	if !strings.Contains(err.Error(), "GATE-STDOUT") {
+		t.Fatalf("the gate's stdout was discarded: %v", err)
+	}
+}

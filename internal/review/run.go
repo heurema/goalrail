@@ -402,13 +402,36 @@ func runGate(ctx context.Context, repositoryRoot, gate string) error {
 		return syscall.Kill(-command.Process.Pid, syscall.SIGKILL)
 	}
 	command.WaitDelay = cancelGrace
+	// Both streams: a gate that reports on stdout and then hangs would otherwise
+	// be recorded as having produced nothing.
+	stdout := &tailBuffer{limit: 64 * 1024}
 	stderr := &tailBuffer{limit: 64 * 1024}
+	command.Stdout = stdout
 	command.Stderr = stderr
-	if err := command.Run(); err != nil {
+
+	runErr := command.Run()
+	// A gate that exits successfully while a descendant it spawned keeps the
+	// pipe open returns ErrWaitDelay. The shell finished before any deadline, so
+	// cancellation never fired and the process group was never killed. Reporting
+	// that as a refusal is wrong twice over: the gate returned success, and the
+	// descendant is still running. Kill the group here, and let the gate's own
+	// exit status be the answer.
+	if errors.Is(runErr, exec.ErrWaitDelay) {
+		if command.Process != nil {
+			_ = syscall.Kill(-command.Process.Pid, syscall.SIGKILL)
+		}
+		if command.ProcessState != nil && command.ProcessState.Success() {
+			runErr = nil
+		}
+	}
+	if err := runErr; err != nil {
 		// A gate the deadline killed never returned a verdict. Reporting it as
 		// a refusal tells automation the budget denied the review, which is a
 		// different fact with a different response.
 		detail := strings.TrimSpace(stderr.String())
+		if detail == "" {
+			detail = strings.TrimSpace(stdout.String())
+		}
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			// Its own output still travels: a slow budget service and a gate
 			// failing for another reason look identical without it.
