@@ -39,11 +39,11 @@ sections anyway.
 
 ## Consumed Inputs
 
-This slice reads: the previous canon's bytes (embedded at build time, trusted,
-single fixed state — the migration test refuses any other digest); the four
-template/schema files it edits (repository content, byte-identity enforced by
-existing tests). No user-supplied, environment, or runtime input handling is
-introduced or changed.
+| Input | Source and trust | Accepted states/variants | Refused states | Mutation/race policy | Verification |
+|---|---|---|---|---|---|
+| Adopter overlay files | repository content; untrusted (may be user-edited) | byte-identical to the current canon (current); to a recorded previous canon (behind, upgraded without a flag); absent (missing) | matching no known canon: classified edited, update refuses without the explicit discard flag | judged per invocation; a file changed between diagnose and update is re-read by update | migration test materializes shipped bytes from testdata, verifies them against the recorded digests, and crosses |
+| Previous-canon record | digests only, embedded in the binary; trusted | the digest set recorded at the change that altered the canon | a testdata/record mismatch fails the migration test rather than measuring a wrong transition | immutable once shipped | `TestThePreviousCanonUpgradesCleanly` refuses on digest mismatch |
+| Canon template/schema files | repository content of this branch | byte-identical across all four copies | divergence between copies | edited only together, in one commit | existing byte-identity test + forcing-function pins |
 
 ## Correlation and Evidence
 

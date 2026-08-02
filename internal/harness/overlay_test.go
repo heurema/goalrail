@@ -390,40 +390,64 @@ func TestMaterializeRefusesASymlinkedOverlayPath(t *testing.T) {
 }
 
 // The first canon change in this project's history must read as an upgrade,
-// not as user edits. This test materializes the canon that shipped from v0.1.1
-// through v0.1.8 — by the digests recorded in previousCanons, not a fixture —
-// and proves the crossing: behind, update clean without the discard flag,
-// current. Found by the adversarial exchange before it could happen live.
+// not as user edits. The previous canon's bytes live in testdata — extracted
+// from the commit that shipped through v0.1.8 — so this test is not circular:
+// an earlier version compared previousCanons against itself and would have
+// passed with a wrong recorded digest. This one materializes the old overlay,
+// diagnoses it, and updates across.
 func TestThePreviousCanonUpgradesCleanly(t *testing.T) {
 	if len(previousCanons) == 0 {
 		t.Fatal("the canon history is empty; the first canon change would read as user edits")
 	}
 	recorded := previousCanons[0]
-	if recorded.ID != "sha256:12cf770fb566fd4ae7bbb9d8299064cbbe9d61386c5676850a2d8f329c5ee4ad" {
-		t.Fatalf("the recorded previous canon is not the one that shipped: %s", recorded.ID)
+
+	root := t.TempDir()
+	if _, err := Materialize(root, false); err != nil {
+		t.Fatal(err)
+	}
+	// Overwrite the changed files with the shipped bytes, verifying each against
+	// the digest recorded in the history — if testdata and the recorded canon
+	// disagree, the test must fail rather than measure the wrong transition.
+	for _, name := range []string{"schema.yaml", "templates/context.md", "templates/design.md", "templates/intent.md"} {
+		shipped, err := os.ReadFile(filepath.Join("testdata", "canon-v1", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		path := "openspec/schemas/goalrail-intent/" + name
+		expected, known := recorded.Digest(path)
+		if !known {
+			t.Fatalf("the recorded canon does not carry %s", path)
+		}
+		if got := Digest(shipped); got != expected {
+			t.Fatalf("testdata for %s does not match the recorded previous canon: %s vs %s", name, got, expected)
+		}
+		if err := os.WriteFile(filepath.Join(root, filepath.FromSlash(path)), shipped, 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 
-	current, err := CurrentCanon()
+	// Diagnose: every replaced file is behind, none edited.
+	overlay, err := InspectOverlay(root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if current.ID == recorded.ID {
-		// Until the content actually changes, the classification cannot be
-		// exercised end to end; the recorded history is still verified above.
-		t.Skip("canon content unchanged yet; the crossing is provable only after the content commit")
+	for _, finding := range overlay.Files {
+		if finding.State == FileEdited {
+			t.Fatalf("%s at its shipped bytes reads as edited — an adopter would be told they changed it", finding.Path)
+		}
 	}
 
-	// The bytes of the previous canon are not embedded — only digests are — so
-	// the crossing is proven at the classifier: every path whose shipped digest
-	// differs from the current canon must match a previous canon, or it would
-	// read as edited in every adopter's repository at once.
-	for _, file := range recorded.Files {
-		currentDigest, known := current.Digest(file.Path)
-		if !known || currentDigest == file.Digest {
-			continue
-		}
-		if matched := matchingPreviousCanon(file.Path, file.Digest); matched == "" {
-			t.Fatalf("%s at its shipped digest matches no previous canon — it would read as edited", file.Path)
+	// Update crosses without the discard flag, and the overlay is current after.
+	if _, err := Update(UpdateInput{RepositoryRoot: root, StateRoot: t.TempDir()}); err != nil {
+		t.Fatalf("the crossing demanded intervention: %v", err)
+	}
+	after, err := InspectOverlay(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, finding := range after.Files {
+		if finding.State != FileCurrent {
+			t.Fatalf("%s is %s after the update", finding.Path, finding.State)
 		}
 	}
 }

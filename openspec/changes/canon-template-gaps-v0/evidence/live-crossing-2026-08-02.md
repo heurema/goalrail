@@ -1,8 +1,10 @@
 # The first canon change crosses live — 2026-08-02
 
-The defect the adversarial exchange predicted was exercised deliberately: both
-adopting repositories held the v0.1.1–v0.1.8 overlay while a binary carrying
-the new canon diagnosed and updated them.
+The defect the adversarial exchange predicted was exercised deliberately on
+the one repository that could exercise it. baseline held the v0.1.1–v0.1.8
+overlay; goalrail could not cross, because its mirror copy is edited by this
+very branch — one live crossing, not two, and the second is covered by the
+migration test against the shipped bytes in testdata.
 
 | repository | before | update | after |
 |---|---|---|---|

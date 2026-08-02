@@ -19,5 +19,5 @@
 
 ## 4. Prove it on the adopters (SIG-1, SIG-2)
 
-- [x] 4.1 Build, then on both baseline and goalrail: doctor → behind, `gr update` → clean, doctor → current. Record as evidence.
+- [x] 4.1 Build, then cross live where a crossing exists: baseline (held the shipped overlay) → behind, `gr update` clean, current. goalrail had no crossing to make — its mirror is edited by this branch; that leg is covered by the migration test against shipped bytes.
 - [ ] 4.2 Flip the `input-space` promotion to active in PROMOTIONS.jsonl with the template as its landing place; goalrail#49 gets the resolution comment and closes.

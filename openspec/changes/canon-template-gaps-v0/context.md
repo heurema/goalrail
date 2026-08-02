@@ -1,8 +1,10 @@
 # Context Pack
 
 - **Context Pack ID:** CTXP-canon-template-gaps-v0
-- **Version:** 1
-- **Previous version:** none
+- **Version:** 2
+- **Previous version:** 1 (CTX-5 corrected: v1 claimed the upgrade path was
+  safe, the adversarial exchange refuted it, and this change's own rule forbids
+  settling a decision on a refuted fact without a new pack version)
 - **Started at:** 2026-08-02T19:00:00Z
 - **Completed at:** 2026-08-02T19:20:00Z
 - **Outcome:** sufficient
@@ -18,7 +20,7 @@
 | CTX-2 | repository | Its promotion is recorded as `partially-pending`, and the pending half is exactly this template change | `jq -r 'select(.class=="input-space")' ~/personal/heurema/docs/portfolio/PROMOTIONS.jsonl` | 2026-08-02T19:05:00Z | The prose half landed in the reviewer instructions on 2026-08-01 and the class kept recurring; the ladder says the next rung is a schema requirement |
 | CTX-3 | repository | The design template has eight sections and none of them asks what happens when an input is absent, empty, differently shaped, or user-edited | `grep '^## ' internal/harness/canon/templates/design.md` → Context, Goals / Non-Goals, Decisions, Correlation and Evidence, Measurement and Stop Conditions, Risks / Trade-offs, Rollback, Open Questions | 2026-08-02T19:10:00Z | A design can be complete by the schema's own definition and still never have enumerated its input space |
 | CTX-4 | repository | The intent template's outcomes table is headed "Confirmed wording" while the snapshot's own status may be `candidate` | `grep -n 'Confirmed wording' internal/harness/canon/templates/intent.md` and `grep -n 'candidate' internal/harness/canon/templates/intent.md` | 2026-08-02T19:10:00Z | The heading asserts confirmation the status denies; a downstream reader cannot tell interpretation from agreement |
-| CTX-5 | repository | Changing a canon template changes the canon digest, so every adopting repository's overlay reports as drifted until `gr update` runs; the diagnosis reports it and nothing breaks | `gr doctor` reports `overlay: current (sha256:12cf770f…)` today; `internal/harness/overlay.go` marks a differing file `FileEdited` and `gr update` re-materializes | 2026-08-02T19:12:00Z | The blast radius is every adopter, which is why this is a change rather than an edit — but it is visible and one command repairs it |
+| CTX-5 | repository | **v2, corrected.** v1 claimed nothing breaks and one command repairs — refuted: `previousCanons` was empty, so a canon change would classify every adopter's overlay as `edited` and `gr update` would stop with `ErrLocalEdits`, demanding `--discard-local-edits` for untouched files. Clean crossing exists only once the shipped canon is recorded in the history | v1's own citation showed it: `overlay.go` marked a differing file `FileEdited`; the exchange record and `TestThePreviousCanonUpgradesCleanly` prove the corrected claim | 2026-08-02T20:30:00Z | The blast radius is every adopter, and OUT-1 exists because the original claim was false |
 | CTX-6 | repository | The Context Pack template gained a Verification column by hand in `pre-pr-review-v0`, and nothing in the schema requires one | `grep -c 'Verification' internal/harness/canon/templates/context.md` → 0, against this pack, which has the column | 2026-08-02T19:15:00Z | The discipline exists in one change by hand and in no template; the `unprovable-claim` class stands at 10 |
 | CTX-7 | external | A reviewer raised a third gap: the schema requires a Context Pack once, before intent, and never again — while the owner's stated requirement is a context check before each architectural decision | goalrail#49, section 2 | 2026-08-02T19:15:00Z | One occurrence, and the fix would add a per-decision artifact to every change. Cost known, benefit unmeasured — deferred rather than built, per the lean rule in the workspace `GOALS.yaml` |
 
