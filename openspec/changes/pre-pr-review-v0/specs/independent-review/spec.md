@@ -287,6 +287,21 @@ and then waits on the pipes was measured letting a twenty-minute limit run to
 fifty-three. A review that exceeds its deadline SHALL be reported as such,
 write no receipt, and leave no reviewer processes behind.
 
+The reviewer's model SHALL be stated on the invocation rather than inherited
+from the authoring session, which chose its model for writing code and not for
+checking it. A default SHALL be set per provider and only where there is
+evidence for one; where there is none, the provider's own configuration is left
+alone rather than overridden by a pinned vendor identifier that would age. A
+model named by the caller SHALL apply to the reviewer it was named for and MUST
+NOT be carried to a refuter of another provider, because a model name belongs to
+one vendor and the second invocation would fail after the first has been paid
+for.
+
+The receipt SHALL record the resolved effort and model, and the refuter's model
+separately where a refute round ran. Two receipts for one provider and range
+must be distinguishable by the settings that produced them, or the receipt does
+not prove how the review ran.
+
 The reviewer's reasoning effort SHALL be stated on the invocation rather than
 inherited from the machine's interactive configuration, with a moderate
 default: a review is a step inside a loop that runs again after every fix, so
@@ -315,6 +330,14 @@ clean verdict to an unfinished review.
 #### Scenario: A reviewer that outlives its child is still bounded
 - **WHEN** the reviewer's descendant keeps the pipes open past the deadline
 - **THEN** the review ends within the deadline plus a short grace, reports the deadline as the cause, and writes no receipt
+
+#### Scenario: The model is stated, per provider
+- **WHEN** a review runs with no model named by the caller
+- **THEN** a provider with an evidenced default runs on it, and a provider without one keeps its own configuration untouched
+
+#### Scenario: A model name does not cross providers
+- **WHEN** a refute round runs with a refuter of a different provider than the reviewer
+- **THEN** the refuter resolves its own provider's model rather than receiving the reviewer's
 
 #### Scenario: Effort is stated
 - **WHEN** an ordinary loop round runs with no effort named by the caller

@@ -1063,3 +1063,25 @@ func TestAnExplicitModelAppliesToTheTargetedReviewer(t *testing.T) {
 		t.Fatalf("the named model did not reach its reviewer: %s", recorded)
 	}
 }
+
+// The receipt's contract is to prove how the review ran, and the execution
+// parameters are part of how: without them two receipts for the same provider
+// and range cannot say which settings produced them.
+func TestTheReceiptRecordsTheExecutionParameters(t *testing.T) {
+	root := branchWithWork(t)
+	stubReviewer(t, "codex", `cat >/dev/null; echo r`)
+	result, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: t.TempDir(), BaseRef: "main",
+		Selection: Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
+		Model:     "gpt-5.6-sol",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Receipt.Effort != DefaultEffort {
+		t.Fatalf("the effort was not recorded: %q", result.Receipt.Effort)
+	}
+	if result.Receipt.Model != "gpt-5.6-sol" {
+		t.Fatalf("the model was not recorded: %q", result.Receipt.Model)
+	}
+}

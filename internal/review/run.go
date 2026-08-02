@@ -292,7 +292,7 @@ func Run(ctx context.Context, input Input) (Result, error) {
 	}
 
 	mode, modeReason := input.Selection.Mode, input.Selection.Reason
-	var refutation, refuter string
+	var refutation, refuter, refuterModel string
 	if input.Refute {
 		// The refutation is a second paid run: the gate's answer may have
 		// changed while the first one spent, so it is asked again.
@@ -320,6 +320,7 @@ func Run(ctx context.Context, input Input) (Result, error) {
 			return Result{InstructionsMaterialized: materialized}, refuteErr
 		}
 		refuter = string(refuterSelection.Reviewer)
+		refuterModel = modelFor(refuterSelection.Reviewer)
 		mode = "refute"
 		modeReason = input.Selection.Reason + "; refuted by " + refuter + " in a fresh session"
 	}
@@ -348,6 +349,9 @@ func Run(ctx context.Context, input Input) (Result, error) {
 		Reviewer:           string(input.Selection.Reviewer),
 		Author:             string(input.Author),
 		ReviewedAt:         now().UTC().Format(time.RFC3339),
+		Effort:             effort,
+		Model:              modelFor(input.Selection.Reviewer),
+		RefuterModel:       refuterModel,
 		UnchangedRounds:    unchangedRounds,
 		TreeCleanAtReview:  treeClean,
 		DurationSeconds:    int64(now().Sub(started) / time.Second),

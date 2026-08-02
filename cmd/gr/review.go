@@ -157,6 +157,8 @@ func runReview(ctx context.Context, args []string, stdout, stderr io.Writer) err
 		ModeReason:               result.Receipt.ModeReason,
 		ReviewedBase:             result.Receipt.ReviewedBase,
 		DurationSeconds:          result.Receipt.DurationSeconds,
+		Effort:                   result.Receipt.Effort,
+		Model:                    result.Receipt.Model,
 		UnchangedRounds:          result.Receipt.UnchangedRounds,
 		Refutation:               result.Receipt.Refutation,
 		Reviewer:                 result.Receipt.Reviewer,
@@ -187,6 +189,8 @@ type reviewReport struct {
 	ModeReason               string   `json:"mode_reason"`
 	ReviewedBase             string   `json:"reviewed_base"`
 	DurationSeconds          int64    `json:"duration_seconds"`
+	Effort                   string   `json:"effort"`
+	Model                    string   `json:"model,omitempty"`
 	UnchangedRounds          int      `json:"unchanged_rounds"`
 	Refutation               string   `json:"refutation,omitempty"`
 	Reviewer                 string   `json:"reviewer"`

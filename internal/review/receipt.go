@@ -88,6 +88,16 @@ type Receipt struct {
 	// receipt must never do. Nil never counts toward a stalemate.
 	TreeCleanAtReview *bool `json:"tree_clean_at_review,omitempty"`
 
+	// Effort and Model are the execution parameters the paid invocation actually
+	// ran with. Without them two receipts for the same provider and range cannot
+	// establish which settings produced them, and the receipt's whole contract is
+	// to prove how the review ran. Model is empty where the provider was left on
+	// its own configuration; RefuterModel likewise, and it can differ because a
+	// model name belongs to one provider.
+	Effort       string `json:"effort"`
+	Model        string `json:"model,omitempty"`
+	RefuterModel string `json:"refuter_model,omitempty"`
+
 	// DurationSeconds is measured wall time of the reviewer invocation(s), the
 	// number effort and deadline defaults get tuned against.
 	DurationSeconds int64 `json:"duration_seconds"`
