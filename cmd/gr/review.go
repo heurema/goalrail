@@ -30,6 +30,12 @@ const reviewGateEnvironment = "GOALRAIL_REVIEW_GATE"
 // answer is waited for once.
 const reviewEffortEnvironment = "GOALRAIL_REVIEW_EFFORT"
 
+// reviewModelEnvironment names the reviewer's model.
+//
+// Stated rather than inherited: a review invoked from a session would otherwise
+// run on whatever model that session picked for authoring.
+const reviewModelEnvironment = "GOALRAIL_REVIEW_MODEL"
+
 // defaultBaseRef is what a branch is reviewed against when the caller says
 // nothing.
 const defaultBaseRef = "main"
@@ -50,6 +56,7 @@ func runReview(ctx context.Context, args []string, stdout, stderr io.Writer) err
 	refute := set.Bool("refute", false, "run a second fresh session that tries to refute the findings; use when findings exist and you are about to act on them")
 	author := set.String("author", "", "authoring agent (codex or claude-code); omit to detect from the environment")
 	gate := set.String("gate", "", "command run before the review; a non-zero exit refuses it (default $"+reviewGateEnvironment+")")
+	model := set.String("model", "", "reviewer model where the provider accepts one (default "+review.DefaultModel+", or $"+reviewModelEnvironment+")")
 	effort := set.String("effort", "", "reviewer reasoning effort (default "+review.DefaultEffort+", "+review.FullEffort+" with --full, or $"+reviewEffortEnvironment+")")
 	deadline := set.Duration("deadline", 0, "bound on the whole review (default "+review.DefaultDeadline.String()+", "+review.FullDeadline.String()+" with --full)")
 	if err := set.Parse(args); err != nil {
@@ -110,6 +117,11 @@ func runReview(ctx context.Context, args []string, stdout, stderr io.Writer) err
 		configured = os.Getenv(reviewGateEnvironment)
 	}
 
+	chosenModel := *model
+	if strings.TrimSpace(chosenModel) == "" {
+		chosenModel = os.Getenv(reviewModelEnvironment)
+	}
+
 	chosenEffort := *effort
 	if strings.TrimSpace(chosenEffort) == "" {
 		chosenEffort = os.Getenv(reviewEffortEnvironment)
@@ -120,6 +132,7 @@ func runReview(ctx context.Context, args []string, stdout, stderr io.Writer) err
 		StateRoot:      stateRoot,
 		BaseRef:        *base,
 		Effort:         chosenEffort,
+		Model:          chosenModel,
 		Deadline:       *deadline,
 		Author:         authoring,
 		Selection:      selection,

@@ -56,6 +56,18 @@ const (
 // an interface.
 const DefaultDeadline = 20 * time.Minute
 
+// DefaultModel is the model a reviewer runs on when the caller names none.
+//
+// Stated rather than inherited, for the same reason the effort is: a review
+// invoked from a session inherits that session's model, which was chosen for
+// authoring rather than for reviewing. Measured the hard way — a review died in
+// four seconds on "out of usage credits" for a model the session happened to be
+// using, and the reviewer path had never run at all.
+//
+// Empty means the vendor's own default. Only the provider whose model is
+// nameable on the command line gets one.
+const DefaultModel = "opus"
+
 // DefaultEffort is the reasoning effort a review runs at when the caller names
 // none.
 //
@@ -94,6 +106,10 @@ type Input struct {
 
 	// Deadline bounds the review. Zero means DefaultDeadline.
 	Deadline time.Duration
+
+	// Model is the reviewer's model. Empty means DefaultModel where the provider
+	// accepts one on the command line, and the vendor's own default otherwise.
+	Model string
 
 	// Effort is the reviewer's reasoning effort. Empty means DefaultEffort:
 	// what a review in a loop needs, rather than what the machine's interactive
@@ -212,6 +228,10 @@ func Run(ctx context.Context, input Input) (Result, error) {
 			effort = FullEffort
 		}
 	}
+	model := strings.TrimSpace(input.Model)
+	if model == "" {
+		model = DefaultModel
+	}
 	deadline := input.Deadline
 	if deadline <= 0 {
 		deadline = DefaultDeadline
@@ -245,7 +265,7 @@ func Run(ctx context.Context, input Input) (Result, error) {
 		invokeInstructions = append(append([]byte{}, instructions...),
 			[]byte("\n\n--- DIFF UNDER REVIEW ---\n"+rendered)...)
 	}
-	report, err := invoke(bounded, input.Selection.Reviewer, input.RepositoryRoot, rangeSpec, effort, invokeInstructions)
+	report, err := invoke(bounded, input.Selection.Reviewer, input.RepositoryRoot, rangeSpec, effort, model, invokeInstructions)
 	if err != nil {
 		// No receipt: one describing a review that did not happen is worse than
 		// none, because it reads as done.
@@ -276,7 +296,7 @@ func Run(ctx context.Context, input Input) (Result, error) {
 		// The whole policy, including the refute directives, comes from the
 		// committed file the receipt hashes; the binary adds only the report.
 		refutePrompt := string(instructions) + "\n\n--- REPORT UNDER CHALLENGE ---\n" + report
-		refutation, refuteErr = invoke(bounded, refuterSelection.Reviewer, input.RepositoryRoot, rangeSpec, effort, []byte(refutePrompt))
+		refutation, refuteErr = invoke(bounded, refuterSelection.Reviewer, input.RepositoryRoot, rangeSpec, effort, model, []byte(refutePrompt))
 		if refuteErr != nil {
 			return Result{InstructionsMaterialized: materialized}, refuteErr
 		}
@@ -404,7 +424,7 @@ func refutationDigest(refutation string) string {
 // anything: the first live run of this feature failed on an argument
 // combination its vendor documents as legal, and a construction nobody can
 // inspect is one that breaks the same way twice.
-func reviewCommand(reviewer ambient.Scaffold, baseRef, effort string, instructions []byte) (name string, arguments []string, stdin string, err error) {
+func reviewCommand(reviewer ambient.Scaffold, baseRef, effort, model string, instructions []byte) (name string, arguments []string, stdin string, err error) {
 	switch reviewer {
 	case ambient.ScaffoldCodex:
 		// `-` reads the instructions from stdin. No scope flag: it cannot be
@@ -442,12 +462,17 @@ func reviewCommand(reviewer ambient.Scaffold, baseRef, effort string, instructio
 		// `git diff --output=<path>` through the per-subcommand rule — and a
 		// race against git's flag surface is one this boundary keeps losing.
 		// The diff travels in the prompt instead; reading files stays allowed.
-		return "claude", []string{
+		claudeArguments := []string{
 			"-p", "--output-format", "text",
 			"--effort", effort,
+		}
+		if strings.TrimSpace(model) != "" {
+			claudeArguments = append(claudeArguments, "--model", model)
+		}
+		return "claude", append(claudeArguments,
 			"--allowed-tools", "Read", "Grep", "Glob",
 			"--disallowed-tools", "Bash", "Edit", "Write", "NotebookEdit",
-		}, prompt(baseRef, instructions), nil
+		), prompt(baseRef, instructions), nil
 	default:
 		return "", nil, "", fmt.Errorf("no review invocation is defined for %q", reviewer)
 	}
@@ -459,8 +484,8 @@ func reviewCommand(reviewer ambient.Scaffold, baseRef, effort string, instructio
 // so every flag is a surface that can drift under it; a vendor's refusal is
 // surfaced to the caller unchanged rather than translated, because a wrapper
 // that smooths over a changed interface converts a loud break into a quiet one.
-func invoke(ctx context.Context, reviewer ambient.Scaffold, repositoryRoot, baseRef, effort string, instructions []byte) (string, error) {
-	name, arguments, stdin, err := reviewCommand(reviewer, baseRef, effort, instructions)
+func invoke(ctx context.Context, reviewer ambient.Scaffold, repositoryRoot, baseRef, effort, model string, instructions []byte) (string, error) {
+	name, arguments, stdin, err := reviewCommand(reviewer, baseRef, effort, model, instructions)
 	if err != nil {
 		return "", err
 	}

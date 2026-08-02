@@ -220,7 +220,7 @@ func TestRunRefusesADetachedHead(t *testing.T) {
 // --base and a custom prompt, and refuses them together. Reading its help was
 // not enough, so the shape is pinned rather than trusted.
 func TestCodexInvocationNeverCombinesAScopeFlagWithInstructions(t *testing.T) {
-	name, arguments, stdin, err := reviewCommand(ambient.ScaffoldCodex, "main...HEAD", DefaultEffort, []byte("look for X"))
+	name, arguments, stdin, err := reviewCommand(ambient.ScaffoldCodex, "main...HEAD", DefaultEffort, DefaultModel, []byte("look for X"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -246,7 +246,7 @@ func TestCodexInvocationNeverCombinesAScopeFlagWithInstructions(t *testing.T) {
 
 // A reviewer that can edit is no longer reviewing.
 func TestClaudeInvocationCarriesNoEditingTool(t *testing.T) {
-	_, arguments, stdin, err := reviewCommand(ambient.ScaffoldClaudeCode, "main...HEAD", DefaultEffort, []byte("look for X"))
+	_, arguments, stdin, err := reviewCommand(ambient.ScaffoldClaudeCode, "main...HEAD", DefaultEffort, DefaultModel, []byte("look for X"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -271,7 +271,7 @@ func TestClaudeInvocationCarriesNoEditingTool(t *testing.T) {
 }
 
 func TestUnknownReviewerHasNoInvocation(t *testing.T) {
-	if _, _, _, err := reviewCommand(ambient.Scaffold("something-else"), "main...HEAD", DefaultEffort, nil); err == nil {
+	if _, _, _, err := reviewCommand(ambient.Scaffold("something-else"), "main...HEAD", DefaultEffort, DefaultModel, nil); err == nil {
 		t.Fatal("an unknown reviewer produced an invocation")
 	}
 }
@@ -908,7 +908,7 @@ sleep 600`)
 // read-only boundary here lost to `git *` and then to `git diff --output=`
 // before it was made structural.
 func TestTheCodexReviewerIsInvokedWithoutWritePermission(t *testing.T) {
-	_, arguments, _, err := reviewCommand(ambient.ScaffoldCodex, "main...HEAD", DefaultEffort, []byte("x"))
+	_, arguments, _, err := reviewCommand(ambient.ScaffoldCodex, "main...HEAD", DefaultEffort, DefaultModel, []byte("x"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -955,5 +955,30 @@ func TestATimedOutGateCarriesItsDiagnostics(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "GATE-PROGRESS") {
 		t.Fatalf("the timed-out gate discarded its own output: %v", err)
+	}
+}
+
+// A review invoked from a session must not inherit the model that session chose
+// for authoring — measured the hard way, as a four-second "out of usage
+// credits" on a path that had never run at all.
+func TestTheClaudeReviewerIsGivenAModel(t *testing.T) {
+	_, arguments, _, err := reviewCommand(ambient.ScaffoldClaudeCode, "main...HEAD", DefaultEffort, DefaultModel, []byte("x"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(arguments, " ")
+	if !strings.Contains(joined, "--model "+DefaultModel) {
+		t.Fatalf("the reviewer inherits the session's model: %v", arguments)
+	}
+
+	// An empty model means the vendor's own default, not an empty flag value.
+	_, bare, _, err := reviewCommand(ambient.ScaffoldClaudeCode, "main...HEAD", DefaultEffort, "", []byte("x"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index, argument := range bare {
+		if argument == "--model" && index+1 < len(bare) && strings.TrimSpace(bare[index+1]) == "" {
+			t.Fatalf("an empty model was passed as a flag value: %v", bare)
+		}
 	}
 }
