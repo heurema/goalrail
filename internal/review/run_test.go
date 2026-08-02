@@ -1103,3 +1103,105 @@ func TestAnOrdinaryReviewRecordsNoRefuterModel(t *testing.T) {
 		t.Fatalf("a review with no refuter claimed a refuter model: %q", result.Receipt.RefuterModel)
 	}
 }
+
+// A gate that exits successfully while a descendant keeps the pipe open returns
+// ErrWaitDelay — the shell finished before any deadline, so cancellation never
+// fired. Reporting that as a refusal is doubly wrong: the gate returned success,
+// and the descendant is still running.
+func TestAGateThatLeavesADescendantIsNotARefusal(t *testing.T) {
+	root := branchWithWork(t)
+	stubReviewer(t, "codex", `cat >/dev/null; echo reviewed`)
+	result, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: t.TempDir(), BaseRef: "main",
+		Selection: Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
+		Gate:      "sleep 600 &",
+		Deadline:  60 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("a gate that exited successfully was treated as a failure: %v", err)
+	}
+	if !strings.Contains(result.Receipt.Report, "reviewed") {
+		t.Fatalf("the review did not run after a passing gate: %q", result.Receipt.Report)
+	}
+}
+
+// A gate that reports on stdout and then hangs must not be recorded as silent.
+func TestATimedOutGateKeepsStdoutToo(t *testing.T) {
+	root := branchWithWork(t)
+	stubReviewer(t, "codex", `cat >/dev/null; echo r`)
+	_, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: t.TempDir(), BaseRef: "main",
+		Selection: Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
+		Gate:      `echo "GATE-STDOUT: checking"; sleep 600`,
+		Deadline:  3 * time.Second,
+	})
+	if err == nil {
+		t.Fatal("expected a gate deadline failure")
+	}
+	if !strings.Contains(err.Error(), "GATE-STDOUT") {
+		t.Fatalf("the gate's stdout was discarded: %v", err)
+	}
+}
+
+// A descendant that redirects its own stdio holds no pipe, so Run returns nil
+// and any cleanup conditioned on a failure never happens — while the context
+// watcher has already exited, so nothing later kills it either.
+func TestAGateLeavesNoDescendantEvenOnCleanExit(t *testing.T) {
+	root := branchWithWork(t)
+	stubReviewer(t, "codex", `cat >/dev/null; echo reviewed`)
+	marker := filepath.Join(t.TempDir(), "descendant-survived")
+
+	if _, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: t.TempDir(), BaseRef: "main",
+		Selection: Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
+		Gate:      `(sleep 3; touch ` + marker + `) >/dev/null 2>&1 &`,
+		Deadline:  60 * time.Second,
+	}); err != nil {
+		t.Fatalf("a gate that exited successfully was treated as a failure: %v", err)
+	}
+	time.Sleep(6 * time.Second)
+	if _, statErr := os.Stat(marker); statErr == nil {
+		t.Fatal("a backgrounded gate descendant outlived the gate")
+	}
+}
+
+// Both streams, labelled: a gate writing progress to one and its reason to the
+// other loses half its evidence to a fallback that treats them as alternatives.
+func TestAFailingGateKeepsBothStreams(t *testing.T) {
+	root := branchWithWork(t)
+	stubReviewer(t, "codex", `cat >/dev/null; echo r`)
+	_, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: t.TempDir(), BaseRef: "main",
+		Selection: Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
+		Gate:      `echo "GATE-PROGRESS"; echo "GATE-REASON" >&2; exit 1`,
+		Deadline:  30 * time.Second,
+	})
+	if err == nil {
+		t.Fatal("a failing gate reported success")
+	}
+	for _, expected := range []string{"GATE-PROGRESS", "GATE-REASON"} {
+		if !strings.Contains(err.Error(), expected) {
+			t.Fatalf("the failure lost %s: %v", expected, err)
+		}
+	}
+}
+
+// A failure that belongs to the gate must not be attributed to a reviewer that
+// never started: when the deadline expires during the wait grace, the gate
+// timeout is the cause.
+func TestAGateTimeoutDuringTheGraceIsNotBlamedOnTheReviewer(t *testing.T) {
+	root := branchWithWork(t)
+	stubReviewer(t, "codex", `cat >/dev/null; echo r`)
+	_, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: t.TempDir(), BaseRef: "main",
+		Selection: Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
+		Gate:      `sleep 600 & exit 0`,
+		Deadline:  2 * time.Second,
+	})
+	if err == nil {
+		t.Fatal("expected a failure once the deadline expired")
+	}
+	if strings.Contains(err.Error(), "reviewer did not finish") {
+		t.Fatalf("a gate-owned timeout was blamed on the reviewer: %v", err)
+	}
+}

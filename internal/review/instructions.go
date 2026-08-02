@@ -61,6 +61,18 @@ before judging. Report only defects you can point at.
   composition that ships. Defects cluster where correct code meets unchanged
   code that has not been told. The files worth opening are often the ones the
   diff never touched.
+- **Unknowns recorded as measurements.** A field holding false, zero, or an
+  empty string where the truth is "not measured" states something nobody
+  established. Where a value can be absent, absence must be representable and
+  distinguishable from a measured value — and a stop signal, a digest or a
+  receipt built on a collapsed unknown is worse than none, because it reads as
+  evidence.
+- **Failures that do not look like failures, and successes that block.** Every
+  error path must be observable in the outcome it produces. A refusal reported
+  as an empty success, a success reported as a refusal, a value silently
+  dropped, an unreadable record presented as an absent one — each leaves the
+  caller acting on a state that never happened. Ask of each path: what does the
+  caller see, and does it match what occurred?
 - **Tests that exercise a different path than production.** A green suite that
   runs an in-memory substitute while production takes another branch proves the
   substitute works. Check that the code the deployed composition actually runs
