@@ -1085,3 +1085,21 @@ func TestTheReceiptRecordsTheExecutionParameters(t *testing.T) {
 		t.Fatalf("the model was not recorded: %q", result.Receipt.Model)
 	}
 }
+
+// The marker means "the provider used its own configuration". On a review with
+// no refuter there was no provider to have one, so claiming a refuter model
+// would state something that never happened.
+func TestAnOrdinaryReviewRecordsNoRefuterModel(t *testing.T) {
+	root := branchWithWork(t)
+	stubReviewer(t, "codex", `cat >/dev/null; echo r`)
+	result, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: t.TempDir(), BaseRef: "main",
+		Selection: Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Receipt.RefuterModel != "" {
+		t.Fatalf("a review with no refuter claimed a refuter model: %q", result.Receipt.RefuterModel)
+	}
+}

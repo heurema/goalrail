@@ -325,6 +325,11 @@ func Run(ctx context.Context, input Input) (Result, error) {
 		modeReason = input.Selection.Reason + "; refuted by " + refuter + " in a fresh session"
 	}
 
+	refuterModelRecorded := ""
+	if refuter != "" {
+		refuterModelRecorded = recordedModel(refuterModel)
+	}
+
 	diffDigest, err := DiffDigest(input.RepositoryRoot, baseCommit, headCommit)
 	if err != nil {
 		return Result{InstructionsMaterialized: materialized}, err
@@ -351,7 +356,10 @@ func Run(ctx context.Context, input Input) (Result, error) {
 		ReviewedAt:         now().UTC().Format(time.RFC3339),
 		Effort:             effort,
 		Model:              recordedModel(modelFor(input.Selection.Reviewer)),
-		RefuterModel:       recordedModel(refuterModel),
+		// Only where a refuter actually ran: the marker means "the provider used
+		// its own configuration", and on an ordinary review there was no
+		// provider to have one.
+		RefuterModel:       refuterModelRecorded,
 		UnchangedRounds:    unchangedRounds,
 		TreeCleanAtReview:  treeClean,
 		DurationSeconds:    int64(now().Sub(started) / time.Second),

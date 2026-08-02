@@ -289,7 +289,7 @@ func latestPath(stateRoot, repositoryRoot, branch string) string {
 // Earlier rounds' files stay: overwriting them would erase the only proof that
 // the start of the branch was ever reviewed.
 func WriteReceipt(stateRoot string, receipt Receipt) (string, error) {
-	path := receiptPath(stateRoot, receipt.Repository, receipt.Branch, receipt.HeadCommit, receipt.ReportSHA256, receipt.Effort+"\x00"+receipt.Model)
+	path := receiptPath(stateRoot, receipt.Repository, receipt.Branch, receipt.HeadCommit, receipt.ReportSHA256, receipt.Effort+"\x00"+receipt.Model+"\x00"+receipt.Refuter+"\x00"+receipt.RefuterModel)
 	// The same protection the rest of the local state store uses. A receipt
 	// holds a verbatim review of private source; leaving it readable by every
 	// account on a shared machine would make this the one piece of Goalrail
