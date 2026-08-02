@@ -16,11 +16,27 @@ import (
 // apart from a locally edited one: a file matching a version listed here is
 // behind, while a file matching nothing known was edited.
 //
-// It is empty in this version, because this is the first canon to ship. The
-// classification is still implemented and tested against a synthetic entry
-// rather than deferred: the alternative is discovering the shape of the state on
-// the day it first matters, in a user's repository.
-var previousCanons []Canon
+// The first entry is the canon that shipped from v0.1.1 through v0.1.8,
+// recorded the day the canon first changed. Without it, that change would have
+// classified every adopter's overlay as edited — their files match what an
+// earlier binary materialized, they edited nothing — and `gr update` would have
+// demanded --discard-local-edits for a routine upgrade. Found by the
+// adversarial exchange before it could happen; the migration test pins this
+// exact transition by digest.
+var previousCanons = []Canon{
+	{
+		ID: "sha256:12cf770fb566fd4ae7bbb9d8299064cbbe9d61386c5676850a2d8f329c5ee4ad",
+		Files: []CanonFile{
+			{Path: "openspec/schemas/goalrail-intent/schema.yaml", Digest: "sha256:b1599076b9ea7b00a6bc0268ce84e06439c0b571def31f6957cfacba252639d8"},
+			{Path: "openspec/schemas/goalrail-intent/templates/context.md", Digest: "sha256:6b7ad3dcd86a1a51ba9d5b6d589d302c0cc293fcfee4ebc2d7efb151a134940e"},
+			{Path: "openspec/schemas/goalrail-intent/templates/design.md", Digest: "sha256:3653a4ed89b6d1b2f575b75b98096c52744f5ee4a174d76146f6013f044b4cdd"},
+			{Path: "openspec/schemas/goalrail-intent/templates/intent.md", Digest: "sha256:11ce3c0af731300bcc785b8ea0a94850359b73607deb966858e52ef39d45c1e5"},
+			{Path: "openspec/schemas/goalrail-intent/templates/proposal.md", Digest: "sha256:b23361a7591957c6b9b708ea71ae804e86050909a8119eabf18be42b2fffc63e"},
+			{Path: "openspec/schemas/goalrail-intent/templates/spec.md", Digest: "sha256:64332d907be02c4402512504986392e18eb452715d0d17dc22acde2e4578e5dc"},
+			{Path: "openspec/schemas/goalrail-intent/templates/tasks.md", Digest: "sha256:b2a6a4c08c15f347a1d8c3e2d43e0c8fb066dc5cc0feb795f47555f176f9c421"},
+		},
+	},
+}
 
 // FileState is what one overlay file is, judged against the canon this binary
 // carries and the ones it remembers.
