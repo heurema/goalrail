@@ -298,9 +298,13 @@ one vendor and the second invocation would fail after the first has been paid
 for.
 
 The receipt SHALL record the resolved effort and model, and the refuter's model
-separately where a refute round ran. Two receipts for one provider and range
-must be distinguishable by the settings that produced them, or the receipt does
-not prove how the review ran.
+separately where a refute round ran, and stored receipts SHALL remain
+distinguishable by those settings rather than one overwriting another. Where
+Goalrail pinned no model, the receipt SHALL say that the provider used its own
+configuration rather than leaving the field empty: an empty field reads as "no
+model" and the provider certainly used one. What that configuration named is
+outside what the receipt can prove, and stating the limit is required rather
+than implying completeness.
 
 The reviewer's reasoning effort SHALL be stated on the invocation rather than
 inherited from the machine's interactive configuration, with a moderate

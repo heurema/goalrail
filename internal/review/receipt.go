@@ -89,7 +89,11 @@ type Receipt struct {
 	TreeCleanAtReview *bool `json:"tree_clean_at_review,omitempty"`
 
 	// Effort and Model are the execution parameters the paid invocation actually
-	// ran with. Without them two receipts for the same provider and range cannot
+	// ran with. Where Goalrail pinned no model, Model records that the provider
+	// used its own configuration rather than being left empty: an empty field
+	// reads as "no model", and the provider certainly used one. What that
+	// configuration named is outside what this receipt can prove, and saying so
+	// is better than implying completeness. Without them two receipts for the same provider and range cannot
 	// establish which settings produced them, and the receipt's whole contract is
 	// to prove how the review ran. Model is empty where the provider was left on
 	// its own configuration; RefuterModel likewise, and it can differ because a
@@ -259,8 +263,15 @@ func branchKey(repositoryRoot, branch string) string {
 // receiptPath locates one round's receipt: one file per reviewed head, so a
 // later round never erases the evidence of an earlier one. The chain is what
 // lets an incremental receipt prove the rounds before it happened.
-func receiptPath(stateRoot, repositoryRoot, branch, headCommit, reportDigest string) string {
+func receiptPath(stateRoot, repositoryRoot, branch, headCommit, reportDigest, settings string) string {
 	suffix := headCommit
+	if settings != "" {
+		// Two rounds at one head with identical report bytes but different
+		// settings are different rounds; keying without the settings let the
+		// second erase the first, which is the very distinguishability the
+		// recorded parameters were added for.
+		suffix += "-" + digest([]byte(settings))[:8]
+	}
 	if len(reportDigest) >= 12 {
 		// Rounds at the same head are distinct rounds; keying by head alone let
 		// a repeated round erase the evidence the stalemate count refers to.
@@ -278,7 +289,7 @@ func latestPath(stateRoot, repositoryRoot, branch string) string {
 // Earlier rounds' files stay: overwriting them would erase the only proof that
 // the start of the branch was ever reviewed.
 func WriteReceipt(stateRoot string, receipt Receipt) (string, error) {
-	path := receiptPath(stateRoot, receipt.Repository, receipt.Branch, receipt.HeadCommit, receipt.ReportSHA256)
+	path := receiptPath(stateRoot, receipt.Repository, receipt.Branch, receipt.HeadCommit, receipt.ReportSHA256, receipt.Effort+"\x00"+receipt.Model)
 	// The same protection the rest of the local state store uses. A receipt
 	// holds a verbatim review of private source; leaving it readable by every
 	// account on a shared machine would make this the one piece of Goalrail

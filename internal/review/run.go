@@ -350,8 +350,8 @@ func Run(ctx context.Context, input Input) (Result, error) {
 		Author:             string(input.Author),
 		ReviewedAt:         now().UTC().Format(time.RFC3339),
 		Effort:             effort,
-		Model:              modelFor(input.Selection.Reviewer),
-		RefuterModel:       refuterModel,
+		Model:              recordedModel(modelFor(input.Selection.Reviewer)),
+		RefuterModel:       recordedModel(refuterModel),
 		UnchangedRounds:    unchangedRounds,
 		TreeCleanAtReview:  treeClean,
 		DurationSeconds:    int64(now().Sub(started) / time.Second),
@@ -664,6 +664,16 @@ func (b *tailBuffer) String() string {
 		return string(b.head) + string(b.tail)
 	}
 	return string(b.head) + fmt.Sprintf("\n… [%d bytes elided] …\n", b.elided) + string(b.tail)
+}
+
+// recordedModel names what the receipt can prove. An unpinned provider used
+// some model from its own configuration; the receipt says that rather than
+// leaving a field that reads as "none".
+func recordedModel(resolved string) string {
+	if strings.TrimSpace(resolved) == "" {
+		return "(provider configuration, not pinned by Goalrail)"
+	}
+	return resolved
 }
 
 // bounded_ keeps a message a message. Both failure paths use it, so a timeout

@@ -134,6 +134,6 @@ boundaries, not a gap in them.
 ## Confirmation
 
 - **Confirmed by:** Vitaly D.
-- **Confirmed at:** 2026-08-01
-- **Verification action:** The owner drove four versions from plain-language views in Russian: v2 (loop-first, inferred authorship), v3 (intent-hole trigger with the anti-scope test), a hard stop over an invented Context Pack fact that produced the fact-with-check rule, and v4 (single-provider fresh mode as the ordinary case, findings-based refute trigger, incremental re-review), confirming the v4 view that covered all three modes, the single refusal, the receipt's mode and duration fields, and the latency outcome.
+- **Confirmed at:** 2026-08-01 (v4), 2026-08-02 (v5)
+- **Verification action:** The owner drove four versions from plain-language views in Russian: v2 (loop-first, inferred authorship), v3 (intent-hole trigger with the anti-scope test), a hard stop over an invented Context Pack fact that produced the fact-with-check rule, and v4 (single-provider fresh mode as the ordinary case, findings-based refute trigger, incremental re-review), confirming the v4 view that covered all three modes, the single refusal, the receipt's mode and duration fields, and the latency outcome. v5 was confirmed separately on 2026-08-02 from a plain-language view of one question — whether a reviewer may be pinned to a model over the user's own configuration — raised because the pre-PR pass refused the implementation for shipping that policy with no amendment behind it.
 - **Amendment rule:** A material change to outcomes, non-goals, or success signals creates a new version; wording-only edits preserve this version.
