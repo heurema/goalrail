@@ -1,7 +1,7 @@
 # Intent Snapshot
 
 - **Intent ID:** INT-pre-pr-review-v0
-- **Version:** 4
+- **Version:** 5
 - **Status:** confirmed
 - **Owner:** Vitaly D.
 - **Context Pack:** CTXP-pre-pr-review-v0 v4
@@ -50,6 +50,12 @@
   never by Goalrail and never by a judgement of riskiness. Approved with the
   final critique pass ("внимательно еще раз взгляни … есть ли дыры" → six
   holes, accepted).
+- **SE-14 (owner, 2026-08-02):** the reviewer's model is stated rather than
+  inherited, with per-provider defaults only where there is evidence for one —
+  approved after the pre-PR pass refused the change for shipping a material
+  model-selection policy without an intent amendment. Measured basis: a review
+  died in four seconds on "out of usage credits" for a model the authoring
+  session happened to be using, on a reviewer path that had never once run.
 - **SE-13 (repository, CTX-3, CTX-4):** `codex review` refuses its scope flags
   together with custom instructions; the installed `claude` has no turn limit.
   Both were discovered by running them, after reading them had produced wrong
@@ -59,6 +65,7 @@
 
 | ID | Confirmed wording | Verification action | Evidence |
 |---|---|---|---|
+| OUT-9 | The reviewer runs on a model named on the invocation rather than inherited from the authoring session, which chose its model for writing code and not for checking it. A default is set **per provider and only where there is evidence for one**: Opus for Claude, whose session-inherited model was measured failing; none for Codex, whose own configuration is left alone because no measurement says it is wrong for reviewing and a pinned vendor identifier would age into a wrong default nobody revisits. A model named by the caller applies to the reviewer it was named for and is never carried to a refuter of another provider, because a model name belongs to one vendor. | Invoke from a session on a different model and confirm the reviewer runs on the stated one; confirm a Codex reviewer keeps its configured model; confirm a cross-provider refute round does not receive the first provider's model name. | SE-14 |
 | OUT-1 | One command reviews the current branch in a **fresh session that never sees the author's context** — that asymmetry is the mechanism, and a different provider is an upgrade to it, not its precondition. With one installed provider the reviewer is that provider in a clean session (**fresh**); with two, the provider that did not author the change (**cross**). Authorship is inferred from the invoking environment, an explicit override wins, and an undetectable author is recorded as unknown rather than refused. The only refusal is that no reviewer can be run at all. | On a machine with one provider, the command reviews with it and asks nothing; on a machine with two, it selects the non-author; with authorship undetectable, it still reviews and the receipt says unknown. | SE-5, SE-7, SE-10, SE-11 |
 | OUT-2 | The only other machine refusal is the budget gate: a command named in configuration, run before any reviewer, whose non-zero exit stops the review and names the gate. No personal budget infrastructure ships in the product. | Configure a failing gate and confirm nothing runs; remove it and confirm the same invocation reviews. | SE-5 |
 | OUT-3 | The loop closes before the pull request opens, and its cost is proportional to what changed: a re-review by default covers only the range since the previous receipt's head, while the receipt keeps the full branch digest for staleness, so the chain of receipts proves cumulative coverage. A full re-review stays available by flag. The loop's ceiling and stop condition are declared before the first round, and hitting the ceiling with findings open is reported, never absorbed. | Review, fix, re-review: the second round's reviewed range starts at the first round's head and completes in a fraction of the first round's time; the receipts chain covers every commit. | SE-5, SE-9 |
@@ -100,6 +107,14 @@ boundaries, not a gap in them.
 
 ## Version history
 
+- **v5 (2026-08-02):** Adds OUT-9. The reviewer's model is stated rather than
+  inherited, with per-provider defaults only where measured evidence supports
+  one. Raised by the pre-PR pass, which refused the implementation for carrying
+  a material model-selection policy — a forced default over the user's own
+  configuration, plus two new public contracts — with no amendment behind it.
+  The receipt records the resolved effort and model, and the refuter's model
+  separately, because the receipt's contract is to prove how the review ran.
+
 - **v4 (2026-08-01):** Supersedes v3 on the owner's reframing (SE-10) before
   v3's implementation completed. Material changes: the mechanism is context
   asymmetry, so a single-provider **fresh** mode is a legitimate default rather
@@ -119,6 +134,6 @@ boundaries, not a gap in them.
 ## Confirmation
 
 - **Confirmed by:** Vitaly D.
-- **Confirmed at:** 2026-08-01
-- **Verification action:** The owner drove four versions from plain-language views in Russian: v2 (loop-first, inferred authorship), v3 (intent-hole trigger with the anti-scope test), a hard stop over an invented Context Pack fact that produced the fact-with-check rule, and v4 (single-provider fresh mode as the ordinary case, findings-based refute trigger, incremental re-review), confirming the v4 view that covered all three modes, the single refusal, the receipt's mode and duration fields, and the latency outcome.
+- **Confirmed at:** 2026-08-01 (v4), 2026-08-02 (v5)
+- **Verification action:** The owner drove four versions from plain-language views in Russian: v2 (loop-first, inferred authorship), v3 (intent-hole trigger with the anti-scope test), a hard stop over an invented Context Pack fact that produced the fact-with-check rule, and v4 (single-provider fresh mode as the ordinary case, findings-based refute trigger, incremental re-review), confirming the v4 view that covered all three modes, the single refusal, the receipt's mode and duration fields, and the latency outcome. v5 was confirmed separately on 2026-08-02 from a plain-language view of one question — whether a reviewer may be pinned to a model over the user's own configuration — raised because the pre-PR pass refused the implementation for shipping that policy with no amendment behind it.
 - **Amendment rule:** A material change to outcomes, non-goals, or success signals creates a new version; wording-only edits preserve this version.

@@ -220,7 +220,7 @@ func TestRunRefusesADetachedHead(t *testing.T) {
 // --base and a custom prompt, and refuses them together. Reading its help was
 // not enough, so the shape is pinned rather than trusted.
 func TestCodexInvocationNeverCombinesAScopeFlagWithInstructions(t *testing.T) {
-	name, arguments, stdin, err := reviewCommand(ambient.ScaffoldCodex, "main...HEAD", DefaultEffort, []byte("look for X"))
+	name, arguments, stdin, err := reviewCommand(ambient.ScaffoldCodex, "main...HEAD", DefaultEffort, DefaultModel(ambient.ScaffoldClaudeCode), []byte("look for X"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -246,7 +246,7 @@ func TestCodexInvocationNeverCombinesAScopeFlagWithInstructions(t *testing.T) {
 
 // A reviewer that can edit is no longer reviewing.
 func TestClaudeInvocationCarriesNoEditingTool(t *testing.T) {
-	_, arguments, stdin, err := reviewCommand(ambient.ScaffoldClaudeCode, "main...HEAD", DefaultEffort, []byte("look for X"))
+	_, arguments, stdin, err := reviewCommand(ambient.ScaffoldClaudeCode, "main...HEAD", DefaultEffort, DefaultModel(ambient.ScaffoldClaudeCode), []byte("look for X"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -271,7 +271,7 @@ func TestClaudeInvocationCarriesNoEditingTool(t *testing.T) {
 }
 
 func TestUnknownReviewerHasNoInvocation(t *testing.T) {
-	if _, _, _, err := reviewCommand(ambient.Scaffold("something-else"), "main...HEAD", DefaultEffort, nil); err == nil {
+	if _, _, _, err := reviewCommand(ambient.Scaffold("something-else"), "main...HEAD", DefaultEffort, DefaultModel(ambient.ScaffoldClaudeCode), nil); err == nil {
 		t.Fatal("an unknown reviewer produced an invocation")
 	}
 }
@@ -908,7 +908,7 @@ sleep 600`)
 // read-only boundary here lost to `git *` and then to `git diff --output=`
 // before it was made structural.
 func TestTheCodexReviewerIsInvokedWithoutWritePermission(t *testing.T) {
-	_, arguments, _, err := reviewCommand(ambient.ScaffoldCodex, "main...HEAD", DefaultEffort, []byte("x"))
+	_, arguments, _, err := reviewCommand(ambient.ScaffoldCodex, "main...HEAD", DefaultEffort, DefaultModel(ambient.ScaffoldClaudeCode), []byte("x"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -955,5 +955,151 @@ func TestATimedOutGateCarriesItsDiagnostics(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "GATE-PROGRESS") {
 		t.Fatalf("the timed-out gate discarded its own output: %v", err)
+	}
+}
+
+// A review invoked from a session must not inherit the model that session chose
+// for authoring — measured the hard way, as a four-second "out of usage
+// credits" on a path that had never run at all.
+func TestTheClaudeReviewerIsGivenAModel(t *testing.T) {
+	model := DefaultModel(ambient.ScaffoldClaudeCode)
+	if model == "" {
+		t.Fatal("the Claude reviewer has no stated model, so it inherits the session's")
+	}
+	_, arguments, _, err := reviewCommand(ambient.ScaffoldClaudeCode, "main...HEAD", DefaultEffort, model, []byte("x"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(strings.Join(arguments, " "), "--model "+model) {
+		t.Fatalf("the reviewer inherits the session's model: %v", arguments)
+	}
+
+	// An empty model means the vendor's own default, not an empty flag value.
+	_, bare, _, err := reviewCommand(ambient.ScaffoldClaudeCode, "main...HEAD", DefaultEffort, "", []byte("x"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index, argument := range bare {
+		if argument == "--model" && index+1 < len(bare) && strings.TrimSpace(bare[index+1]) == "" {
+			t.Fatalf("an empty model was passed as a flag value: %v", bare)
+		}
+	}
+}
+
+// A caller's model reaches every provider. The claim that Codex could not take
+// one on the command line was asserted without checking and is false — `-c
+// model=` is accepted — and that false claim is what let the asymmetry survive
+// its own review.
+func TestACallerNamedModelReachesCodexToo(t *testing.T) {
+	_, arguments, _, err := reviewCommand(ambient.ScaffoldCodex, "main...HEAD", DefaultEffort, "gpt-5.6-sol", []byte("x"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(strings.Join(arguments, " "), "model=gpt-5.6-sol") {
+		t.Fatalf("a named model was dropped for the Codex reviewer: %v", arguments)
+	}
+
+	// With none named, its own configuration is left alone: no measurement says
+	// the configured model is wrong for reviewing, and pinning a vendor model
+	// identifier would age into a wrong default nobody revisits.
+	if DefaultModel(ambient.ScaffoldCodex) != "" {
+		t.Fatal("Codex was given a hardcoded default model")
+	}
+	_, bare, _, err := reviewCommand(ambient.ScaffoldCodex, "main...HEAD", DefaultEffort, "", []byte("x"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(strings.Join(bare, " "), "-c model=") {
+		t.Fatalf("an unnamed model was forced onto Codex: %v", bare)
+	}
+}
+
+// A model name belongs to one provider. Carrying the reviewer's name to a
+// refuter of a different provider fails the second invocation after the first
+// has already been paid for — and the refute path had never run live, so this
+// would have broken for whoever first enabled it.
+func TestTheRefuterGetsItsOwnProvidersModel(t *testing.T) {
+	root := branchWithWork(t)
+	stateRoot := t.TempDir()
+	seen := filepath.Join(t.TempDir(), "codex-args")
+	stubReviewer(t, "claude", `cat >/dev/null; echo "a finding"`)
+	stubReviewer(t, "codex", `printf '%s' "$*" >> `+seen+`; cat >/dev/null; echo "REFUTED"`)
+
+	if _, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: stateRoot, BaseRef: "main",
+		Selection: Selection{Reviewer: ambient.ScaffoldClaudeCode, Mode: "cross", Reason: "test"},
+		Refute:    true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	recorded, err := os.ReadFile(seen)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Claude's default must not reach the Codex refuter.
+	if strings.Contains(string(recorded), "model="+DefaultModel(ambient.ScaffoldClaudeCode)) {
+		t.Fatalf("the reviewer's provider-specific model was carried to the refuter: %s", recorded)
+	}
+}
+
+// An explicitly named model reaches the reviewer it was named for.
+func TestAnExplicitModelAppliesToTheTargetedReviewer(t *testing.T) {
+	root := branchWithWork(t)
+	seen := filepath.Join(t.TempDir(), "args")
+	stubReviewer(t, "codex", `printf '%s' "$*" > `+seen+`; cat >/dev/null; echo r`)
+
+	if _, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: t.TempDir(), BaseRef: "main",
+		Selection: Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
+		Model:     "gpt-5.6-sol",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	recorded, err := os.ReadFile(seen)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(recorded), "model=gpt-5.6-sol") {
+		t.Fatalf("the named model did not reach its reviewer: %s", recorded)
+	}
+}
+
+// The receipt's contract is to prove how the review ran, and the execution
+// parameters are part of how: without them two receipts for the same provider
+// and range cannot say which settings produced them.
+func TestTheReceiptRecordsTheExecutionParameters(t *testing.T) {
+	root := branchWithWork(t)
+	stubReviewer(t, "codex", `cat >/dev/null; echo r`)
+	result, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: t.TempDir(), BaseRef: "main",
+		Selection: Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
+		Model:     "gpt-5.6-sol",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Receipt.Effort != DefaultEffort {
+		t.Fatalf("the effort was not recorded: %q", result.Receipt.Effort)
+	}
+	if result.Receipt.Model != "gpt-5.6-sol" {
+		t.Fatalf("the model was not recorded: %q", result.Receipt.Model)
+	}
+}
+
+// The marker means "the provider used its own configuration". On a review with
+// no refuter there was no provider to have one, so claiming a refuter model
+// would state something that never happened.
+func TestAnOrdinaryReviewRecordsNoRefuterModel(t *testing.T) {
+	root := branchWithWork(t)
+	stubReviewer(t, "codex", `cat >/dev/null; echo r`)
+	result, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: t.TempDir(), BaseRef: "main",
+		Selection: Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Receipt.RefuterModel != "" {
+		t.Fatalf("a review with no refuter claimed a refuter model: %q", result.Receipt.RefuterModel)
 	}
 }

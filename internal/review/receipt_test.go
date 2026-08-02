@@ -258,10 +258,10 @@ func TestStatusMovesWithTheBranchAndNeedsNobody(t *testing.T) {
 // The same branch name in two clones is two different pieces of work.
 func TestReceiptsAreKeyedByRepositoryAndBranchTogether(t *testing.T) {
 	stateRoot := t.TempDir()
-	first := receiptPath(stateRoot, "/a", "work", "h1", "d000000000001")
-	second := receiptPath(stateRoot, "/b", "work", "h1", "d000000000001")
-	third := receiptPath(stateRoot, "/a", "other", "h1", "d000000000001")
-	fourth := receiptPath(stateRoot, "/a", "work", "h2", "d000000000001")
+	first := receiptPath(stateRoot, "/a", "work", "h1", "d000000000001", "")
+	second := receiptPath(stateRoot, "/b", "work", "h1", "d000000000001", "")
+	third := receiptPath(stateRoot, "/a", "other", "h1", "d000000000001", "")
+	fourth := receiptPath(stateRoot, "/a", "work", "h2", "d000000000001", "")
 	if first == second || first == third || second == third || first == fourth {
 		t.Fatalf("receipt paths collide: %s %s %s %s", first, second, third, fourth)
 	}
@@ -439,5 +439,34 @@ func TestDiffDigestIgnoresRepositoryLocalOrderFile(t *testing.T) {
 	}
 	if after != before {
 		t.Fatal("a repository-local orderFile changed the digest of an unchanged branch")
+	}
+}
+
+// Two rounds at one head with identical report bytes but different settings are
+// different rounds; keying without the settings let the second erase the first.
+func TestReceiptsAtOneHeadAreKeyedBySettingsToo(t *testing.T) {
+	stateRoot := t.TempDir()
+	base := Receipt{
+		Schema: ReceiptSchema, Repository: "/r", Branch: "work",
+		BaseCommit: "b", HeadCommit: "h1", Report: "same bytes",
+		ReportSHA256: digest([]byte("same bytes")),
+	}
+	first := base
+	first.Effort, first.Model = "medium", "opus"
+	firstPath, err := WriteReceipt(stateRoot, first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second := base
+	second.Effort, second.Model = "high", "opus"
+	secondPath, err := WriteReceipt(stateRoot, second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if firstPath == secondPath {
+		t.Fatalf("two settings produced one receipt path: %s", firstPath)
+	}
+	if _, statErr := os.Stat(firstPath); statErr != nil {
+		t.Fatal("the second round erased the first")
 	}
 }

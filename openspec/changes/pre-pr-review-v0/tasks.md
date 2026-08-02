@@ -72,3 +72,11 @@
 - [x] 10.2 Exclude the instructions file Goalrail materialized from the tree check, so its own artifact cannot suppress its own signal in a repository that has not committed it yet.
 - [x] 10.3 Report the count and act on nothing: the loop belongs to the caller, and the workspace policy is where "stop on a stalemate" lives.
 - [x] 10.4 Test the accumulation, the reset after a commit, a dirty tree as not-a-stalemate, and the materialized instructions file as not-work.
+
+## 11. v5: the reviewer's model is stated, not inherited (OUT-9)
+
+- [x] 11.1 Resolve the model per provider, with a default only where evidence supports one: Opus for Claude, whose session-inherited model was measured failing; nothing for Codex, whose configuration is left alone rather than overridden by a vendor identifier that would age.
+- [x] 11.2 Pass a caller-named model to whichever provider reviews — `codex -c model=` is accepted, and the earlier claim that it was not is what let the asymmetry survive its own review.
+- [x] 11.3 Resolve the model per invocation, never once: a refuter is by definition another provider, and carrying the reviewer's name there fails the second invocation after the first has been paid for.
+- [x] 11.4 Record effort, model and the refuter's model in the receipt, and include the settings in the storage key so two rounds at one head with different settings do not overwrite each other.
+- [x] 11.5 Where no model was pinned, record that the provider used its own configuration rather than leaving the field empty — and state in the spec that what the configuration named is outside what the receipt can prove.

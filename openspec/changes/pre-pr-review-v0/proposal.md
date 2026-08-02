@@ -54,7 +54,7 @@ loop rather than a stage that begins when the work is already exposed.
 
 ## Intent Coverage
 
-*(recompiled against intent v4)*
+*(recompiled against intent v5)*
 
 | Change | Intent IDs | How it preserves the boundaries |
 |---|---|---|
@@ -66,6 +66,7 @@ loop rather than a stage that begins when the work is already exposed.
 | Receipt bound to base, head and diff digest, report stored verbatim | OUT-5, SIG-3 | Every field is measured; none is read out of the prose (NG-1) |
 | Diagnosis line, self-terminating by digest | OUT-6, SIG-4 | Reports a condition, never affects the verdict (NG-2) |
 | Committed instructions file with a materialized default | OUT-7 | Ratchet promotions are ordinary repository edits; disposition stays at workspace level (NG-4) |
+| Reviewer model stated per provider, never carried across providers | OUT-9 | Defaults only where measured evidence supports one; a provider without evidence keeps its own configuration (NG-3 in spirit: nothing is pinned for its own sake) |
 | Vendor CLIs invoked, never wrapped or pinned | OUT-1 | Drift is stated as accepted, not hidden (NG-3) |
 
 ## Capabilities

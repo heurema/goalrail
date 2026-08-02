@@ -56,6 +56,29 @@ const (
 // an interface.
 const DefaultDeadline = 20 * time.Minute
 
+// defaultModels is the model each reviewer runs on when the caller names none.
+//
+// Stated rather than inherited where there is evidence to state something: a
+// Claude review invoked from a session inherits that session's model, chosen for
+// authoring rather than reviewing, and that inheritance was measured failing —
+// a review died in four seconds on "out of usage credits" for a model the
+// session happened to be using, on a path that had never once run.
+//
+// Codex has no entry, and the absence is deliberate rather than a limitation.
+// An earlier version of this comment claimed its model could not be named on the
+// command line; that was asserted without checking and is false — `-c model=`
+// is accepted. What is missing is not the capability but the evidence: nothing
+// measured says the configured model is wrong for reviewing, and pinning a
+// vendor model identifier here would age into a wrong default nobody revisits.
+// The caller can still name one, and it is passed.
+var defaultModels = map[ambient.Scaffold]string{
+	ambient.ScaffoldClaudeCode: "opus",
+}
+
+// DefaultModel reports the model one reviewer runs on absent a caller's choice.
+// An empty string means the vendor's own default is left alone.
+func DefaultModel(reviewer ambient.Scaffold) string { return defaultModels[reviewer] }
+
 // DefaultEffort is the reasoning effort a review runs at when the caller names
 // none.
 //
@@ -94,6 +117,10 @@ type Input struct {
 
 	// Deadline bounds the review. Zero means DefaultDeadline.
 	Deadline time.Duration
+
+	// Model is the reviewer's model. Empty means DefaultModel where the provider
+	// accepts one on the command line, and the vendor's own default otherwise.
+	Model string
 
 	// Effort is the reviewer's reasoning effort. Empty means DefaultEffort:
 	// what a review in a loop needs, rather than what the machine's interactive
@@ -212,6 +239,18 @@ func Run(ctx context.Context, input Input) (Result, error) {
 			effort = FullEffort
 		}
 	}
+	// A model name belongs to one provider and cannot be carried to another, so
+	// it is resolved per invocation rather than once. An explicitly named model
+	// applies to the reviewer the caller is targeting; a refuter of a different
+	// provider falls back to its own default, because passing a name from the
+	// other vendor would fail the second, unpaid-for invocation after the first
+	// one has already been paid.
+	modelFor := func(reviewer ambient.Scaffold) string {
+		if named := strings.TrimSpace(input.Model); named != "" && reviewer == input.Selection.Reviewer {
+			return named
+		}
+		return DefaultModel(reviewer)
+	}
 	deadline := input.Deadline
 	if deadline <= 0 {
 		deadline = DefaultDeadline
@@ -245,7 +284,7 @@ func Run(ctx context.Context, input Input) (Result, error) {
 		invokeInstructions = append(append([]byte{}, instructions...),
 			[]byte("\n\n--- DIFF UNDER REVIEW ---\n"+rendered)...)
 	}
-	report, err := invoke(bounded, input.Selection.Reviewer, input.RepositoryRoot, rangeSpec, effort, invokeInstructions)
+	report, err := invoke(bounded, input.Selection.Reviewer, input.RepositoryRoot, rangeSpec, effort, modelFor(input.Selection.Reviewer), invokeInstructions)
 	if err != nil {
 		// No receipt: one describing a review that did not happen is worse than
 		// none, because it reads as done.
@@ -253,7 +292,7 @@ func Run(ctx context.Context, input Input) (Result, error) {
 	}
 
 	mode, modeReason := input.Selection.Mode, input.Selection.Reason
-	var refutation, refuter string
+	var refutation, refuter, refuterModel string
 	if input.Refute {
 		// The refutation is a second paid run: the gate's answer may have
 		// changed while the first one spent, so it is asked again.
@@ -276,13 +315,19 @@ func Run(ctx context.Context, input Input) (Result, error) {
 		// The whole policy, including the refute directives, comes from the
 		// committed file the receipt hashes; the binary adds only the report.
 		refutePrompt := string(instructions) + "\n\n--- REPORT UNDER CHALLENGE ---\n" + report
-		refutation, refuteErr = invoke(bounded, refuterSelection.Reviewer, input.RepositoryRoot, rangeSpec, effort, []byte(refutePrompt))
+		refutation, refuteErr = invoke(bounded, refuterSelection.Reviewer, input.RepositoryRoot, rangeSpec, effort, modelFor(refuterSelection.Reviewer), []byte(refutePrompt))
 		if refuteErr != nil {
 			return Result{InstructionsMaterialized: materialized}, refuteErr
 		}
 		refuter = string(refuterSelection.Reviewer)
+		refuterModel = modelFor(refuterSelection.Reviewer)
 		mode = "refute"
 		modeReason = input.Selection.Reason + "; refuted by " + refuter + " in a fresh session"
+	}
+
+	refuterModelRecorded := ""
+	if refuter != "" {
+		refuterModelRecorded = recordedModel(refuterModel)
 	}
 
 	diffDigest, err := DiffDigest(input.RepositoryRoot, baseCommit, headCommit)
@@ -309,6 +354,12 @@ func Run(ctx context.Context, input Input) (Result, error) {
 		Reviewer:           string(input.Selection.Reviewer),
 		Author:             string(input.Author),
 		ReviewedAt:         now().UTC().Format(time.RFC3339),
+		Effort:             effort,
+		Model:              recordedModel(modelFor(input.Selection.Reviewer)),
+		// Only where a refuter actually ran: the marker means "the provider used
+		// its own configuration", and on an ordinary review there was no
+		// provider to have one.
+		RefuterModel:       refuterModelRecorded,
 		UnchangedRounds:    unchangedRounds,
 		TreeCleanAtReview:  treeClean,
 		DurationSeconds:    int64(now().Sub(started) / time.Second),
@@ -404,7 +455,7 @@ func refutationDigest(refutation string) string {
 // anything: the first live run of this feature failed on an argument
 // combination its vendor documents as legal, and a construction nobody can
 // inspect is one that breaks the same way twice.
-func reviewCommand(reviewer ambient.Scaffold, baseRef, effort string, instructions []byte) (name string, arguments []string, stdin string, err error) {
+func reviewCommand(reviewer ambient.Scaffold, baseRef, effort, model string, instructions []byte) (name string, arguments []string, stdin string, err error) {
 	switch reviewer {
 	case ambient.ScaffoldCodex:
 		// `-` reads the instructions from stdin. No scope flag: it cannot be
@@ -418,8 +469,15 @@ func reviewCommand(reviewer ambient.Scaffold, baseRef, effort string, instructio
 		// needs no equivalent: its effort arrives in the environment, which is
 		// already stripped so the reviewer does not inherit the author's
 		// session. A configuration file is out of that reach.
-		return "codex", []string{
+		codexArguments := []string{
 			"-c", "model_reasoning_effort=" + effort,
+		}
+		if strings.TrimSpace(model) != "" {
+			// Accepted here as well: the claim that it was not is what let this
+			// asymmetry survive its own review.
+			codexArguments = append(codexArguments, "-c", "model="+model)
+		}
+		return "codex", append(codexArguments,
 			// A reviewer that can edit the work is no longer reviewing it, and
 			// the other reviewer already has no writing tool at all. Asking in
 			// the prompt is not the same as removing the permission: the
@@ -429,7 +487,7 @@ func reviewCommand(reviewer ambient.Scaffold, baseRef, effort string, instructio
 			// overrides whatever the machine's own sandbox setting says.
 			"-c", "sandbox_mode=read-only",
 			"review", "-",
-		}, prompt(baseRef, instructions), nil
+		), prompt(baseRef, instructions), nil
 	case ambient.ScaffoldClaudeCode:
 		// Only the tools a reviewer needs, and never an editing one: a reviewer
 		// that can change the work is no longer reviewing it.
@@ -442,12 +500,17 @@ func reviewCommand(reviewer ambient.Scaffold, baseRef, effort string, instructio
 		// `git diff --output=<path>` through the per-subcommand rule — and a
 		// race against git's flag surface is one this boundary keeps losing.
 		// The diff travels in the prompt instead; reading files stays allowed.
-		return "claude", []string{
+		claudeArguments := []string{
 			"-p", "--output-format", "text",
 			"--effort", effort,
+		}
+		if strings.TrimSpace(model) != "" {
+			claudeArguments = append(claudeArguments, "--model", model)
+		}
+		return "claude", append(claudeArguments,
 			"--allowed-tools", "Read", "Grep", "Glob",
 			"--disallowed-tools", "Bash", "Edit", "Write", "NotebookEdit",
-		}, prompt(baseRef, instructions), nil
+		), prompt(baseRef, instructions), nil
 	default:
 		return "", nil, "", fmt.Errorf("no review invocation is defined for %q", reviewer)
 	}
@@ -459,8 +522,8 @@ func reviewCommand(reviewer ambient.Scaffold, baseRef, effort string, instructio
 // so every flag is a surface that can drift under it; a vendor's refusal is
 // surfaced to the caller unchanged rather than translated, because a wrapper
 // that smooths over a changed interface converts a loud break into a quiet one.
-func invoke(ctx context.Context, reviewer ambient.Scaffold, repositoryRoot, baseRef, effort string, instructions []byte) (string, error) {
-	name, arguments, stdin, err := reviewCommand(reviewer, baseRef, effort, instructions)
+func invoke(ctx context.Context, reviewer ambient.Scaffold, repositoryRoot, baseRef, effort, model string, instructions []byte) (string, error) {
+	name, arguments, stdin, err := reviewCommand(reviewer, baseRef, effort, model, instructions)
 	if err != nil {
 		return "", err
 	}
@@ -609,6 +672,16 @@ func (b *tailBuffer) String() string {
 		return string(b.head) + string(b.tail)
 	}
 	return string(b.head) + fmt.Sprintf("\n… [%d bytes elided] …\n", b.elided) + string(b.tail)
+}
+
+// recordedModel names what the receipt can prove. An unpinned provider used
+// some model from its own configuration; the receipt says that rather than
+// leaving a field that reads as "none".
+func recordedModel(resolved string) string {
+	if strings.TrimSpace(resolved) == "" {
+		return "(provider configuration, not pinned by Goalrail)"
+	}
+	return resolved
 }
 
 // bounded_ keeps a message a message. Both failure paths use it, so a timeout

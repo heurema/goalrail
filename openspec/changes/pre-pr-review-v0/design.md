@@ -19,7 +19,7 @@ Code session also carries a Codex companion variable.
 
 ## Goals / Non-Goals
 
-Goals, from the confirmed intent (v4; the list below predates v4 and the v4 decisions further down supersede where they differ): run the review inside the author's loop
+Goals, from the confirmed intent (v5; OUT-9 adds the stated reviewer model — the list below predates v4 and the v4 decisions further down supersede where they differ): run the review inside the author's loop
 with no question on the ordinary path (OUT-1); make the budget gate the only
 other refusal (OUT-2); close findings before the pull request opens under a
 declared ceiling (OUT-3); leave the user alone except for a divergence or a real
