@@ -43,10 +43,26 @@ rather than a plan, and a cheap failure is worth more than a generous one.
 
 ## Reproduce
 
+The recorded run predates the defaults it justifies, so the bound and the
+instructions must be pinned explicitly — otherwise a repeat inherits the very
+values this experiment produced and holds nothing constant but the label.
+
 ```sh
-gr review --repo <path> --full --effort medium   # then high, then ultra
+# The 20-minute bound is the one the ultra point expired against. Today's
+# full-pass default is 25 minutes, which would not reproduce that expiry.
+for effort in medium high ultra; do
+  gr review --repo <path> --full --effort "$effort" --deadline 20m
+done
 ```
 
-Compare the stored receipts under the per-clone state root: each carries its
-mode, reviewed range, both digests, the measured duration and the report
-verbatim.
+Instructions must be the ones measured against, not whatever the repository
+happens to carry:
+
+```sh
+shasum -a 256 <path>/.goalrail-review.md   # expect 1597f9a17f4b3f9e… (the unedited default of that day)
+```
+
+A repository whose instructions digest differs is running a different
+experiment. Compare the stored receipts under the per-clone state root: each
+carries its mode, reviewed range, both digests, the measured duration and the
+report verbatim.

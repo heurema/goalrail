@@ -826,3 +826,67 @@ sleep 600`)
 		t.Fatalf("a timeout dumped a transcript: %d bytes", len(err.Error()))
 	}
 }
+
+// The bound covers the second gate too: a refute round is part of the review.
+func TestTheDeadlineCoversTheRefuteGate(t *testing.T) {
+	root := branchWithWork(t)
+	stubReviewer(t, "codex", `cat >/dev/null; echo "a finding"`)
+	stubReviewer(t, "claude", `cat >/dev/null; echo "REFUTED"`)
+	started := time.Now()
+	_, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: t.TempDir(), BaseRef: "main",
+		Selection: Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
+		Refute:    true,
+		Gate:      `[ -f ` + filepath.Join(t.TempDir(), "seen") + ` ] && sleep 600; touch ` + filepath.Join(t.TempDir(), "seen"),
+		Deadline:  3 * time.Second,
+	})
+	_ = err // the gate shape varies; the bound is what is under test
+	if elapsed := time.Since(started); elapsed > 40*time.Second {
+		t.Fatalf("a blocking refute gate ran outside the review's bound: %s", elapsed)
+	}
+}
+
+// A gate the deadline killed never refused: reporting a budget denial there
+// tells automation a different fact with a different response.
+func TestAGateKilledByTheDeadlineIsNotARefusal(t *testing.T) {
+	root := branchWithWork(t)
+	stubReviewer(t, "codex", `cat >/dev/null; echo r`)
+	_, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: t.TempDir(), BaseRef: "main",
+		Selection: Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
+		Gate:      "sleep 600", Deadline: 2 * time.Second,
+	})
+	if err == nil {
+		t.Fatal("a gate past the deadline reported success")
+	}
+	if errors.Is(err, ErrGateRefused) {
+		t.Fatalf("a timed-out gate was reported as a budget refusal: %v", err)
+	}
+	if !strings.Contains(err.Error(), "deadline") {
+		t.Fatalf("the timeout was not named: %v", err)
+	}
+}
+
+// A timeout carries whatever each stream had: partial findings live on stdout
+// while progress logging lives on stderr, and only one of them surviving
+// discards half the evidence the timeout exists to provide.
+func TestATimeoutKeepsBothStreams(t *testing.T) {
+	root := branchWithWork(t)
+	stubReviewer(t, "codex", `cat >/dev/null
+echo "PARTIAL-FINDING on stdout"
+echo "PROGRESS on stderr" >&2
+sleep 600`)
+	_, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: t.TempDir(), BaseRef: "main",
+		Selection: Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
+		Deadline:  3 * time.Second,
+	})
+	if err == nil {
+		t.Fatal("expected a deadline failure")
+	}
+	for _, expected := range []string{"PARTIAL-FINDING", "PROGRESS"} {
+		if !strings.Contains(err.Error(), expected) {
+			t.Fatalf("the timeout discarded %s: %v", expected, err)
+		}
+	}
+}

@@ -258,7 +258,7 @@ func Run(ctx context.Context, input Input) (Result, error) {
 		// The refutation is a second paid run: the gate's answer may have
 		// changed while the first one spent, so it is asked again.
 		if strings.TrimSpace(input.Gate) != "" {
-			if gateErr := runGate(ctx, input.RepositoryRoot, input.Gate); gateErr != nil {
+			if gateErr := runGate(bounded, input.RepositoryRoot, input.Gate); gateErr != nil {
 				return Result{InstructionsMaterialized: materialized}, gateErr
 			}
 		}
@@ -341,6 +341,12 @@ func runGate(ctx context.Context, repositoryRoot, gate string) error {
 	var stderr bytes.Buffer
 	command.Stderr = &stderr
 	if err := command.Run(); err != nil {
+		// A gate the deadline killed never returned a verdict. Reporting it as
+		// a refusal tells automation the budget denied the review, which is a
+		// different fact with a different response.
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return fmt.Errorf("the review gate (%s) did not finish within the review deadline", gate)
+		}
 		detail := strings.TrimSpace(stderr.String())
 		if detail == "" {
 			detail = err.Error()
@@ -476,10 +482,18 @@ func invoke(ctx context.Context, reviewer ambient.Scaffold, repositoryRoot, base
 			// "did not finish" cannot distinguish working-but-slow from stuck,
 			// so an expensive failure teaches nothing and the next decision —
 			// raise the bound, or stop trying — has no evidence behind it.
-			progress := strings.TrimSpace(stderr.String())
-			if progress == "" {
-				progress = strings.TrimSpace(stdout.String())
+			// Both streams, not one instead of the other: a reviewer that logs
+			// progress on stderr may still have produced partial findings on
+			// stdout, and that is exactly the evidence a timeout exists to
+			// carry.
+			var parts []string
+			if out := strings.TrimSpace(stdout.String()); out != "" {
+				parts = append(parts, "stdout:\n"+out)
 			}
+			if errOut := strings.TrimSpace(stderr.String()); errOut != "" {
+				parts = append(parts, "stderr:\n"+errOut)
+			}
+			progress := strings.Join(parts, "\n")
 			if progress == "" {
 				// Observed, not diagnosed. A reviewer may buffer everything
 				// until it finishes, so silence proves no output was emitted —

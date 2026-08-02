@@ -295,7 +295,7 @@ clean verdict to an unfinished review.
 - **THEN** the review ends within the deadline plus a short grace, reports the deadline as the cause, and writes no receipt
 
 #### Scenario: Effort is stated
-- **WHEN** a review runs with no effort named by the caller
+- **WHEN** an ordinary loop round runs with no effort named by the caller
 - **THEN** the reviewer is invoked at the moderate default, not at whatever the machine's interactive configuration names
 
 ### Requirement: Reviewer instructions are repository content
