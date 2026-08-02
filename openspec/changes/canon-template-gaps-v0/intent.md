@@ -4,7 +4,7 @@
 - **Version:** 1
 - **Status:** confirmed
 - **Owner:** Vitaly D.
-- **Context Pack:** CTXP-canon-template-gaps-v0 v1
+- **Context Pack:** CTXP-canon-template-gaps-v0 v2 (v1 at confirmation time; v2 corrects CTX-5 to the very fact SE-4 already recorded, so the confirmed meaning is unchanged and the lineage now names the corrected evidence)
 - **Run references:** local session, 2026-08-02; adversarial exchange record in `evidence/`
 
 ## Source Evidence
@@ -73,9 +73,11 @@ not for meaning.
 
 - **Confirmed by:** Vitaly D.
 - **Confirmed at:** 2026-08-02
-- **Verification action:** The owner directed the adversarial method, read a
-  Russian plain-language account of the opponent's verdicts — including the
-  blocking upgrade-history discovery, all three amendments, the refuted version
-  bump, and the deferred-binding compromise — and confirmed the amended
-  composition in full.
+- **Verification action:** What the owner confirmed is exactly
+  INT-canon-template-gaps-v0 v1 — this snapshot, no other version existing
+  before or since. They directed the adversarial method, read a Russian
+  plain-language account of the opponent's verdicts — the blocking
+  upgrade-history discovery, all three amendments, the refuted version bump,
+  the deferred-binding compromise — and confirmed that composition, which v1
+  transcribes without addition.
 - **Amendment rule:** A material change to outcomes, non-goals, or success signals creates a new version; wording-only edits preserve this version.

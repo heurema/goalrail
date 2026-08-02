@@ -19,7 +19,7 @@ per-decision artifact, no enforcement claims, no touching existing changes.
 changes; the migration test materializes that canon and proves `behind`, not
 `edited`. Landing both in one commit would test the transition against itself.
 
-**The opponent's amended text is the starting text.** (SE-3) The Consumed
+**The opponent's amended text is the starting text.** (CTX-8, SE-3) The Consumed
 Inputs table, the exact empty form, the recipe column with its
 non-reproducible clause, and the decision-citation rule are taken as amended;
 edits are tone-only. Their rationale lives in the exchange record, not
