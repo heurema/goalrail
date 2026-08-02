@@ -270,6 +270,26 @@ inherited from the machine's interactive configuration, with a moderate
 default: a review is a step inside a loop that runs again after every fix, so
 its cost is paid on every round.
 
+A full pass SHALL default to a higher effort and a longer deadline than a loop
+round, and the caller's explicit values SHALL always win over both. A full pass
+is the thoroughness pass by definition, and running it at the loop's cheap
+default produces a confident wrong verdict — the most expensive output this
+command has. Measured on one range with one set of instructions, effort the only
+variable: the moderate default reviewed clean and missed three real defects, two
+of them P1, which the higher effort reported — recorded with its design, ranges,
+durations and reproduction command in
+`openspec/changes/pre-pr-review-v0/evidence/effort-experiment-2026-08-01.md`. The deadline travels with the
+effort because raising one without the other only moves the failure from a false
+clean verdict to an unfinished review.
+
+#### Scenario: A full pass is thorough by default
+- **WHEN** a full pass runs with no effort and no deadline named by the caller
+- **THEN** it uses the full-pass effort and the full-pass deadline, both above the loop round's
+
+#### Scenario: The caller's values win
+- **WHEN** a full pass runs with an effort or a deadline named explicitly
+- **THEN** those are used, however cheap or short
+
 #### Scenario: A reviewer that outlives its child is still bounded
 - **WHEN** the reviewer's descendant keeps the pipes open past the deadline
 - **THEN** the review ends within the deadline plus a short grace, reports the deadline as the cause, and writes no receipt

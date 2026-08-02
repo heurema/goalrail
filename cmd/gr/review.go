@@ -50,7 +50,8 @@ func runReview(ctx context.Context, args []string, stdout, stderr io.Writer) err
 	refute := set.Bool("refute", false, "run a second fresh session that tries to refute the findings; use when findings exist and you are about to act on them")
 	author := set.String("author", "", "authoring agent (codex or claude-code); omit to detect from the environment")
 	gate := set.String("gate", "", "command run before the review; a non-zero exit refuses it (default $"+reviewGateEnvironment+")")
-	effort := set.String("effort", "", "reviewer reasoning effort (default "+review.DefaultEffort+", or $"+reviewEffortEnvironment+")")
+	effort := set.String("effort", "", "reviewer reasoning effort (default "+review.DefaultEffort+", "+review.FullEffort+" with --full, or $"+reviewEffortEnvironment+")")
+	deadline := set.Duration("deadline", 0, "bound on the whole review (default "+review.DefaultDeadline.String()+", "+review.FullDeadline.String()+" with --full)")
 	if err := set.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
@@ -59,6 +60,13 @@ func runReview(ctx context.Context, args []string, stdout, stderr io.Writer) err
 	}
 	if set.NArg() != 0 {
 		return fmt.Errorf("review accepts no positional arguments")
+	}
+
+	// An explicit non-positive bound is a malformed value, not a request for the
+	// default: silently starting a 45-minute review on `--deadline=0s` is the
+	// opposite of what the caller asked for.
+	if isSet(set, "deadline") && *deadline <= 0 {
+		return fmt.Errorf("--deadline must be positive; %s asks for no time at all", *deadline)
 	}
 
 	root, err := filepath.Abs(*repository)
@@ -112,6 +120,7 @@ func runReview(ctx context.Context, args []string, stdout, stderr io.Writer) err
 		StateRoot:      stateRoot,
 		BaseRef:        *base,
 		Effort:         chosenEffort,
+		Deadline:       *deadline,
 		Author:         authoring,
 		Selection:      selection,
 		Full:           *full,
@@ -239,4 +248,16 @@ func stalemateNote(rounds int) []string {
 	return []string{fmt.Sprintf(
 		"stalemate: %d consecutive round(s) reviewed the same head with a clean tree — nothing was acted on between them; stop and report the open findings",
 		rounds)}
+}
+
+// isSet reports whether a flag was named on the command line, which is how an
+// explicit zero is told apart from an omitted one.
+func isSet(set *flag.FlagSet, name string) bool {
+	found := false
+	set.Visit(func(f *flag.Flag) {
+		if f.Name == name {
+			found = true
+		}
+	})
+	return found
 }

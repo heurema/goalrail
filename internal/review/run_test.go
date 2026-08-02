@@ -680,3 +680,149 @@ exit 3`)
 		t.Fatalf("a leading cause was truncated away: %d bytes", len(err.Error()))
 	}
 }
+
+// A full pass is the thoroughness pass, so it must not inherit the loop's cheap
+// defaults — measured: at medium the same range reviewed clean and missed three
+// real defects that high found.
+func TestAFullPassIsThoroughByDefaultAndTheCallerStillWins(t *testing.T) {
+	root := branchWithWork(t)
+	selection := Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"}
+
+	// The stub reports the effort it was actually invoked with.
+	stubReviewer(t, "codex", `args="$*"; cat >/dev/null; echo "invoked with: $args"`)
+
+	full, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: t.TempDir(), BaseRef: "main",
+		Selection: selection, Full: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(full.Receipt.Report, "model_reasoning_effort="+FullEffort) {
+		t.Fatalf("a full pass did not run at %s: %q", FullEffort, full.Receipt.Report)
+	}
+
+	incremental, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: t.TempDir(), BaseRef: "main",
+		Selection: selection,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(incremental.Receipt.Report, "model_reasoning_effort="+DefaultEffort) {
+		t.Fatalf("an ordinary round did not run at %s: %q", DefaultEffort, incremental.Receipt.Report)
+	}
+
+	// An explicit effort always wins, full pass or not.
+	stated, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: t.TempDir(), BaseRef: "main",
+		Selection: selection, Full: true, Effort: "low",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(stated.Receipt.Report, "model_reasoning_effort=low") {
+		t.Fatalf("the caller's effort was overridden: %q", stated.Receipt.Report)
+	}
+}
+
+// Raising the effort without raising the bound only moves the failure from a
+// false clean verdict to a deadline — measured: ultra reached the twenty-minute
+// bound and returned nothing.
+func TestAFullPassCarriesTheLongerDeadlineAndTheCallerStillWins(t *testing.T) {
+	root := branchWithWork(t)
+	stubReviewer(t, "codex", `cat >/dev/null; echo r`)
+	selection := Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"}
+
+	if FullDeadline <= DefaultDeadline {
+		t.Fatalf("a full pass is bounded no better than a loop round: %s vs %s", FullDeadline, DefaultDeadline)
+	}
+	// The caller's bound wins: a deliberately short one still refuses.
+	stubReviewer(t, "codex", `cat >/dev/null; sleep 600 & sleep 600`)
+	_, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: t.TempDir(), BaseRef: "main",
+		Selection: selection, Full: true, Deadline: 2 * time.Second,
+	})
+	if err == nil || !strings.Contains(err.Error(), "deadline") {
+		t.Fatalf("an explicit deadline was ignored on a full pass: %v", err)
+	}
+}
+
+// An expensive timeout must teach something: a bare "did not finish" cannot
+// tell working-but-slow from stuck, and the next decision has no evidence.
+func TestATimeoutCarriesWhatTheReviewerHadProduced(t *testing.T) {
+	root := branchWithWork(t)
+	stubReviewer(t, "codex", `cat >/dev/null; echo "PROGRESS-MARKER: reading files" >&2; sleep 600`)
+
+	_, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: t.TempDir(), BaseRef: "main",
+		Selection: Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
+		Deadline:  2 * time.Second,
+	})
+	if err == nil || !strings.Contains(err.Error(), "deadline") {
+		t.Fatalf("expected a deadline failure, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "PROGRESS-MARKER") {
+		t.Fatalf("the timeout discarded the reviewer's progress: %v", err)
+	}
+}
+
+// The bound is advertised for the whole review, and a gate is part of it.
+func TestTheDeadlineCoversTheGate(t *testing.T) {
+	root := branchWithWork(t)
+	stubReviewer(t, "codex", `cat >/dev/null; echo r`)
+	started := time.Now()
+	_, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: t.TempDir(), BaseRef: "main",
+		Selection: Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
+		Gate:      "sleep 600", Deadline: 2 * time.Second,
+	})
+	if err == nil {
+		t.Fatal("a blocking gate under a two-second bound reported success")
+	}
+	if elapsed := time.Since(started); elapsed > 30*time.Second {
+		t.Fatalf("the gate ran outside the review's bound: took %s", elapsed)
+	}
+}
+
+// Silence is observed, never diagnosed: a reviewer may buffer everything until
+// it finishes, so no output proves no output — not that anything stopped.
+func TestASilentTimeoutStatesTheObservationNotACause(t *testing.T) {
+	root := branchWithWork(t)
+	stubReviewer(t, "codex", `cat >/dev/null; sleep 600`)
+	_, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: t.TempDir(), BaseRef: "main",
+		Selection: Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
+		Deadline:  2 * time.Second,
+	})
+	if err == nil {
+		t.Fatal("expected a deadline failure")
+	}
+	for _, invented := range []string{"hang", "hung", "stuck"} {
+		if strings.Contains(strings.ToLower(err.Error()), invented) {
+			t.Fatalf("silence was diagnosed rather than reported: %v", err)
+		}
+	}
+	if !strings.Contains(err.Error(), "no output before the deadline") {
+		t.Fatalf("the observation itself was lost: %v", err)
+	}
+}
+
+// A timeout may not dump what the ordinary failure path is forbidden to dump.
+func TestATimeoutErrorIsBoundedLikeAnyOther(t *testing.T) {
+	root := branchWithWork(t)
+	stubReviewer(t, "codex", `cat >/dev/null
+i=0; while [ $i -lt 400 ]; do printf '%0512d\n' $i >&2; i=$((i+1)); done
+sleep 600`)
+	_, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: t.TempDir(), BaseRef: "main",
+		Selection: Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
+		Deadline:  3 * time.Second,
+	})
+	if err == nil {
+		t.Fatal("expected a deadline failure")
+	}
+	if len(err.Error()) > 8192 {
+		t.Fatalf("a timeout dumped a transcript: %d bytes", len(err.Error()))
+	}
+}
