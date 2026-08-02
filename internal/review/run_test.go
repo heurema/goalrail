@@ -1013,3 +1013,53 @@ func TestACallerNamedModelReachesCodexToo(t *testing.T) {
 		t.Fatalf("an unnamed model was forced onto Codex: %v", bare)
 	}
 }
+
+// A model name belongs to one provider. Carrying the reviewer's name to a
+// refuter of a different provider fails the second invocation after the first
+// has already been paid for — and the refute path had never run live, so this
+// would have broken for whoever first enabled it.
+func TestTheRefuterGetsItsOwnProvidersModel(t *testing.T) {
+	root := branchWithWork(t)
+	stateRoot := t.TempDir()
+	seen := filepath.Join(t.TempDir(), "codex-args")
+	stubReviewer(t, "claude", `cat >/dev/null; echo "a finding"`)
+	stubReviewer(t, "codex", `printf '%s' "$*" >> `+seen+`; cat >/dev/null; echo "REFUTED"`)
+
+	if _, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: stateRoot, BaseRef: "main",
+		Selection: Selection{Reviewer: ambient.ScaffoldClaudeCode, Mode: "cross", Reason: "test"},
+		Refute:    true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	recorded, err := os.ReadFile(seen)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Claude's default must not reach the Codex refuter.
+	if strings.Contains(string(recorded), "model="+DefaultModel(ambient.ScaffoldClaudeCode)) {
+		t.Fatalf("the reviewer's provider-specific model was carried to the refuter: %s", recorded)
+	}
+}
+
+// An explicitly named model reaches the reviewer it was named for.
+func TestAnExplicitModelAppliesToTheTargetedReviewer(t *testing.T) {
+	root := branchWithWork(t)
+	seen := filepath.Join(t.TempDir(), "args")
+	stubReviewer(t, "codex", `printf '%s' "$*" > `+seen+`; cat >/dev/null; echo r`)
+
+	if _, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: t.TempDir(), BaseRef: "main",
+		Selection: Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
+		Model:     "gpt-5.6-sol",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	recorded, err := os.ReadFile(seen)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(recorded), "model=gpt-5.6-sol") {
+		t.Fatalf("the named model did not reach its reviewer: %s", recorded)
+	}
+}

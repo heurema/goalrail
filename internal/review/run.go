@@ -239,9 +239,17 @@ func Run(ctx context.Context, input Input) (Result, error) {
 			effort = FullEffort
 		}
 	}
-	model := strings.TrimSpace(input.Model)
-	if model == "" {
-		model = DefaultModel(input.Selection.Reviewer)
+	// A model name belongs to one provider and cannot be carried to another, so
+	// it is resolved per invocation rather than once. An explicitly named model
+	// applies to the reviewer the caller is targeting; a refuter of a different
+	// provider falls back to its own default, because passing a name from the
+	// other vendor would fail the second, unpaid-for invocation after the first
+	// one has already been paid.
+	modelFor := func(reviewer ambient.Scaffold) string {
+		if named := strings.TrimSpace(input.Model); named != "" && reviewer == input.Selection.Reviewer {
+			return named
+		}
+		return DefaultModel(reviewer)
 	}
 	deadline := input.Deadline
 	if deadline <= 0 {
@@ -276,7 +284,7 @@ func Run(ctx context.Context, input Input) (Result, error) {
 		invokeInstructions = append(append([]byte{}, instructions...),
 			[]byte("\n\n--- DIFF UNDER REVIEW ---\n"+rendered)...)
 	}
-	report, err := invoke(bounded, input.Selection.Reviewer, input.RepositoryRoot, rangeSpec, effort, model, invokeInstructions)
+	report, err := invoke(bounded, input.Selection.Reviewer, input.RepositoryRoot, rangeSpec, effort, modelFor(input.Selection.Reviewer), invokeInstructions)
 	if err != nil {
 		// No receipt: one describing a review that did not happen is worse than
 		// none, because it reads as done.
@@ -307,7 +315,7 @@ func Run(ctx context.Context, input Input) (Result, error) {
 		// The whole policy, including the refute directives, comes from the
 		// committed file the receipt hashes; the binary adds only the report.
 		refutePrompt := string(instructions) + "\n\n--- REPORT UNDER CHALLENGE ---\n" + report
-		refutation, refuteErr = invoke(bounded, refuterSelection.Reviewer, input.RepositoryRoot, rangeSpec, effort, model, []byte(refutePrompt))
+		refutation, refuteErr = invoke(bounded, refuterSelection.Reviewer, input.RepositoryRoot, rangeSpec, effort, modelFor(refuterSelection.Reviewer), []byte(refutePrompt))
 		if refuteErr != nil {
 			return Result{InstructionsMaterialized: materialized}, refuteErr
 		}
