@@ -56,7 +56,7 @@ func runReview(ctx context.Context, args []string, stdout, stderr io.Writer) err
 	refute := set.Bool("refute", false, "run a second fresh session that tries to refute the findings; use when findings exist and you are about to act on them")
 	author := set.String("author", "", "authoring agent (codex or claude-code); omit to detect from the environment")
 	gate := set.String("gate", "", "command run before the review; a non-zero exit refuses it (default $"+reviewGateEnvironment+")")
-	model := set.String("model", "", "reviewer model where the provider accepts one (default "+review.DefaultModel+", or $"+reviewModelEnvironment+")")
+	model := set.String("model", "", "reviewer model; passed to whichever provider reviews (default: opus for claude-code, the vendor's own for codex, or $"+reviewModelEnvironment+")")
 	effort := set.String("effort", "", "reviewer reasoning effort (default "+review.DefaultEffort+", "+review.FullEffort+" with --full, or $"+reviewEffortEnvironment+")")
 	deadline := set.Duration("deadline", 0, "bound on the whole review (default "+review.DefaultDeadline.String()+", "+review.FullDeadline.String()+" with --full)")
 	if err := set.Parse(args); err != nil {

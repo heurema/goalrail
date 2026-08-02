@@ -56,17 +56,28 @@ const (
 // an interface.
 const DefaultDeadline = 20 * time.Minute
 
-// DefaultModel is the model a reviewer runs on when the caller names none.
+// defaultModels is the model each reviewer runs on when the caller names none.
 //
-// Stated rather than inherited, for the same reason the effort is: a review
-// invoked from a session inherits that session's model, which was chosen for
-// authoring rather than for reviewing. Measured the hard way — a review died in
-// four seconds on "out of usage credits" for a model the session happened to be
-// using, and the reviewer path had never run at all.
+// Stated rather than inherited where there is evidence to state something: a
+// Claude review invoked from a session inherits that session's model, chosen for
+// authoring rather than reviewing, and that inheritance was measured failing —
+// a review died in four seconds on "out of usage credits" for a model the
+// session happened to be using, on a path that had never once run.
 //
-// Empty means the vendor's own default. Only the provider whose model is
-// nameable on the command line gets one.
-const DefaultModel = "opus"
+// Codex has no entry, and the absence is deliberate rather than a limitation.
+// An earlier version of this comment claimed its model could not be named on the
+// command line; that was asserted without checking and is false — `-c model=`
+// is accepted. What is missing is not the capability but the evidence: nothing
+// measured says the configured model is wrong for reviewing, and pinning a
+// vendor model identifier here would age into a wrong default nobody revisits.
+// The caller can still name one, and it is passed.
+var defaultModels = map[ambient.Scaffold]string{
+	ambient.ScaffoldClaudeCode: "opus",
+}
+
+// DefaultModel reports the model one reviewer runs on absent a caller's choice.
+// An empty string means the vendor's own default is left alone.
+func DefaultModel(reviewer ambient.Scaffold) string { return defaultModels[reviewer] }
 
 // DefaultEffort is the reasoning effort a review runs at when the caller names
 // none.
@@ -230,7 +241,7 @@ func Run(ctx context.Context, input Input) (Result, error) {
 	}
 	model := strings.TrimSpace(input.Model)
 	if model == "" {
-		model = DefaultModel
+		model = DefaultModel(input.Selection.Reviewer)
 	}
 	deadline := input.Deadline
 	if deadline <= 0 {
@@ -438,8 +449,15 @@ func reviewCommand(reviewer ambient.Scaffold, baseRef, effort, model string, ins
 		// needs no equivalent: its effort arrives in the environment, which is
 		// already stripped so the reviewer does not inherit the author's
 		// session. A configuration file is out of that reach.
-		return "codex", []string{
+		codexArguments := []string{
 			"-c", "model_reasoning_effort=" + effort,
+		}
+		if strings.TrimSpace(model) != "" {
+			// Accepted here as well: the claim that it was not is what let this
+			// asymmetry survive its own review.
+			codexArguments = append(codexArguments, "-c", "model="+model)
+		}
+		return "codex", append(codexArguments,
 			// A reviewer that can edit the work is no longer reviewing it, and
 			// the other reviewer already has no writing tool at all. Asking in
 			// the prompt is not the same as removing the permission: the
@@ -449,7 +467,7 @@ func reviewCommand(reviewer ambient.Scaffold, baseRef, effort, model string, ins
 			// overrides whatever the machine's own sandbox setting says.
 			"-c", "sandbox_mode=read-only",
 			"review", "-",
-		}, prompt(baseRef, instructions), nil
+		), prompt(baseRef, instructions), nil
 	case ambient.ScaffoldClaudeCode:
 		// Only the tools a reviewer needs, and never an editing one: a reviewer
 		// that can change the work is no longer reviewing it.

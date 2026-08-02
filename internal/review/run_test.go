@@ -220,7 +220,7 @@ func TestRunRefusesADetachedHead(t *testing.T) {
 // --base and a custom prompt, and refuses them together. Reading its help was
 // not enough, so the shape is pinned rather than trusted.
 func TestCodexInvocationNeverCombinesAScopeFlagWithInstructions(t *testing.T) {
-	name, arguments, stdin, err := reviewCommand(ambient.ScaffoldCodex, "main...HEAD", DefaultEffort, DefaultModel, []byte("look for X"))
+	name, arguments, stdin, err := reviewCommand(ambient.ScaffoldCodex, "main...HEAD", DefaultEffort, DefaultModel(ambient.ScaffoldClaudeCode), []byte("look for X"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -246,7 +246,7 @@ func TestCodexInvocationNeverCombinesAScopeFlagWithInstructions(t *testing.T) {
 
 // A reviewer that can edit is no longer reviewing.
 func TestClaudeInvocationCarriesNoEditingTool(t *testing.T) {
-	_, arguments, stdin, err := reviewCommand(ambient.ScaffoldClaudeCode, "main...HEAD", DefaultEffort, DefaultModel, []byte("look for X"))
+	_, arguments, stdin, err := reviewCommand(ambient.ScaffoldClaudeCode, "main...HEAD", DefaultEffort, DefaultModel(ambient.ScaffoldClaudeCode), []byte("look for X"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -271,7 +271,7 @@ func TestClaudeInvocationCarriesNoEditingTool(t *testing.T) {
 }
 
 func TestUnknownReviewerHasNoInvocation(t *testing.T) {
-	if _, _, _, err := reviewCommand(ambient.Scaffold("something-else"), "main...HEAD", DefaultEffort, DefaultModel, nil); err == nil {
+	if _, _, _, err := reviewCommand(ambient.Scaffold("something-else"), "main...HEAD", DefaultEffort, DefaultModel(ambient.ScaffoldClaudeCode), nil); err == nil {
 		t.Fatal("an unknown reviewer produced an invocation")
 	}
 }
@@ -908,7 +908,7 @@ sleep 600`)
 // read-only boundary here lost to `git *` and then to `git diff --output=`
 // before it was made structural.
 func TestTheCodexReviewerIsInvokedWithoutWritePermission(t *testing.T) {
-	_, arguments, _, err := reviewCommand(ambient.ScaffoldCodex, "main...HEAD", DefaultEffort, DefaultModel, []byte("x"))
+	_, arguments, _, err := reviewCommand(ambient.ScaffoldCodex, "main...HEAD", DefaultEffort, DefaultModel(ambient.ScaffoldClaudeCode), []byte("x"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -962,12 +962,15 @@ func TestATimedOutGateCarriesItsDiagnostics(t *testing.T) {
 // for authoring — measured the hard way, as a four-second "out of usage
 // credits" on a path that had never run at all.
 func TestTheClaudeReviewerIsGivenAModel(t *testing.T) {
-	_, arguments, _, err := reviewCommand(ambient.ScaffoldClaudeCode, "main...HEAD", DefaultEffort, DefaultModel, []byte("x"))
+	model := DefaultModel(ambient.ScaffoldClaudeCode)
+	if model == "" {
+		t.Fatal("the Claude reviewer has no stated model, so it inherits the session's")
+	}
+	_, arguments, _, err := reviewCommand(ambient.ScaffoldClaudeCode, "main...HEAD", DefaultEffort, model, []byte("x"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	joined := strings.Join(arguments, " ")
-	if !strings.Contains(joined, "--model "+DefaultModel) {
+	if !strings.Contains(strings.Join(arguments, " "), "--model "+model) {
 		t.Fatalf("the reviewer inherits the session's model: %v", arguments)
 	}
 
@@ -980,5 +983,33 @@ func TestTheClaudeReviewerIsGivenAModel(t *testing.T) {
 		if argument == "--model" && index+1 < len(bare) && strings.TrimSpace(bare[index+1]) == "" {
 			t.Fatalf("an empty model was passed as a flag value: %v", bare)
 		}
+	}
+}
+
+// A caller's model reaches every provider. The claim that Codex could not take
+// one on the command line was asserted without checking and is false — `-c
+// model=` is accepted — and that false claim is what let the asymmetry survive
+// its own review.
+func TestACallerNamedModelReachesCodexToo(t *testing.T) {
+	_, arguments, _, err := reviewCommand(ambient.ScaffoldCodex, "main...HEAD", DefaultEffort, "gpt-5.6-sol", []byte("x"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(strings.Join(arguments, " "), "model=gpt-5.6-sol") {
+		t.Fatalf("a named model was dropped for the Codex reviewer: %v", arguments)
+	}
+
+	// With none named, its own configuration is left alone: no measurement says
+	// the configured model is wrong for reviewing, and pinning a vendor model
+	// identifier would age into a wrong default nobody revisits.
+	if DefaultModel(ambient.ScaffoldCodex) != "" {
+		t.Fatal("Codex was given a hardcoded default model")
+	}
+	_, bare, _, err := reviewCommand(ambient.ScaffoldCodex, "main...HEAD", DefaultEffort, "", []byte("x"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(strings.Join(bare, " "), "-c model=") {
+		t.Fatalf("an unnamed model was forced onto Codex: %v", bare)
 	}
 }
