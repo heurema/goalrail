@@ -1142,3 +1142,46 @@ func TestATimedOutGateKeepsStdoutToo(t *testing.T) {
 		t.Fatalf("the gate's stdout was discarded: %v", err)
 	}
 }
+
+// A descendant that redirects its own stdio holds no pipe, so Run returns nil
+// and any cleanup conditioned on a failure never happens — while the context
+// watcher has already exited, so nothing later kills it either.
+func TestAGateLeavesNoDescendantEvenOnCleanExit(t *testing.T) {
+	root := branchWithWork(t)
+	stubReviewer(t, "codex", `cat >/dev/null; echo reviewed`)
+	marker := filepath.Join(t.TempDir(), "descendant-survived")
+
+	if _, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: t.TempDir(), BaseRef: "main",
+		Selection: Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
+		Gate:      `(sleep 3; touch ` + marker + `) >/dev/null 2>&1 &`,
+		Deadline:  60 * time.Second,
+	}); err != nil {
+		t.Fatalf("a gate that exited successfully was treated as a failure: %v", err)
+	}
+	time.Sleep(6 * time.Second)
+	if _, statErr := os.Stat(marker); statErr == nil {
+		t.Fatal("a backgrounded gate descendant outlived the gate")
+	}
+}
+
+// Both streams, labelled: a gate writing progress to one and its reason to the
+// other loses half its evidence to a fallback that treats them as alternatives.
+func TestAFailingGateKeepsBothStreams(t *testing.T) {
+	root := branchWithWork(t)
+	stubReviewer(t, "codex", `cat >/dev/null; echo r`)
+	_, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: t.TempDir(), BaseRef: "main",
+		Selection: Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
+		Gate:      `echo "GATE-PROGRESS"; echo "GATE-REASON" >&2; exit 1`,
+		Deadline:  30 * time.Second,
+	})
+	if err == nil {
+		t.Fatal("a failing gate reported success")
+	}
+	for _, expected := range []string{"GATE-PROGRESS", "GATE-REASON"} {
+		if !strings.Contains(err.Error(), expected) {
+			t.Fatalf("the failure lost %s: %v", expected, err)
+		}
+	}
+}

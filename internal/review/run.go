@@ -410,31 +410,31 @@ func runGate(ctx context.Context, repositoryRoot, gate string) error {
 	command.Stderr = stderr
 
 	runErr := command.Run()
-	// A gate that exits successfully while a descendant it spawned keeps the
-	// pipe open returns ErrWaitDelay. The shell finished before any deadline, so
-	// cancellation never fired and the process group was never killed. Reporting
-	// that as a refusal is wrong twice over: the gate returned success, and the
-	// descendant is still running. Kill the group here, and let the gate's own
-	// exit status be the answer.
-	if errors.Is(runErr, exec.ErrWaitDelay) {
-		if command.Process != nil {
-			_ = syscall.Kill(-command.Process.Pid, syscall.SIGKILL)
-		}
-		if command.ProcessState != nil && command.ProcessState.Success() {
-			runErr = nil
-		}
+	// The group is killed unconditionally once the shell is done, not only when
+	// waiting produced an error. A descendant that redirects its own stdio holds
+	// no pipe, so Run returns nil and any cleanup conditioned on a failure never
+	// happens — while the context watcher has already exited, so nothing later
+	// will kill it either. The gate is finished; anything still alive in its
+	// group is a leak whatever Run returned.
+	if command.Process != nil {
+		_ = syscall.Kill(-command.Process.Pid, syscall.SIGKILL)
+	}
+	// A gate that exited successfully while a descendant kept the pipe open
+	// returns ErrWaitDelay. Reporting that as a refusal is wrong twice over: the
+	// gate returned success, and the descendant was the only thing waiting on.
+	if errors.Is(runErr, exec.ErrWaitDelay) && command.ProcessState != nil && command.ProcessState.Success() {
+		runErr = nil
 	}
 	if err := runErr; err != nil {
-		// A gate the deadline killed never returned a verdict. Reporting it as
-		// a refusal tells automation the budget denied the review, which is a
-		// different fact with a different response.
-		detail := strings.TrimSpace(stderr.String())
-		if detail == "" {
-			detail = strings.TrimSpace(stdout.String())
-		}
+		// Both streams, labelled — the reviewer's timeout path already does
+		// this, and a gate that writes progress to one and a reason to the other
+		// loses half its evidence to a fallback that treats them as
+		// alternatives.
+		detail := labelledStreams(stdout.String(), stderr.String())
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			// Its own output still travels: a slow budget service and a gate
-			// failing for another reason look identical without it.
+			// A gate the deadline killed never returned a verdict. Reporting it
+			// as a refusal tells automation the budget denied the review, which
+			// is a different fact with a different response.
 			if detail == "" {
 				detail = "(it emitted no output before the deadline)"
 			}
@@ -599,14 +599,7 @@ func invoke(ctx context.Context, reviewer ambient.Scaffold, repositoryRoot, base
 			// progress on stderr may still have produced partial findings on
 			// stdout, and that is exactly the evidence a timeout exists to
 			// carry.
-			var parts []string
-			if out := strings.TrimSpace(stdout.String()); out != "" {
-				parts = append(parts, "stdout:\n"+out)
-			}
-			if errOut := strings.TrimSpace(stderr.String()); errOut != "" {
-				parts = append(parts, "stderr:\n"+errOut)
-			}
-			progress := strings.Join(parts, "\n")
+			progress := labelledStreams(stdout.String(), stderr.String())
 			if progress == "" {
 				// Observed, not diagnosed. A reviewer may buffer everything
 				// until it finishes, so silence proves no output was emitted —
@@ -718,4 +711,18 @@ func bounded_(detail string) string {
 	return detail[:1024] +
 		fmt.Sprintf("\n… [%d bytes elided] …\n", len(detail)-limit) +
 		detail[len(detail)-3072:]
+}
+
+// labelledStreams keeps whatever each stream carried, labelled. Both failure
+// paths use it: treating the streams as alternatives loses half the evidence
+// whenever a process writes progress to one and its reason to the other.
+func labelledStreams(stdout, stderr string) string {
+	var parts []string
+	if out := strings.TrimSpace(stdout); out != "" {
+		parts = append(parts, "stdout:\n"+out)
+	}
+	if errOut := strings.TrimSpace(stderr); errOut != "" {
+		parts = append(parts, "stderr:\n"+errOut)
+	}
+	return strings.Join(parts, "\n")
 }
