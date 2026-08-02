@@ -1185,3 +1185,23 @@ func TestAFailingGateKeepsBothStreams(t *testing.T) {
 		}
 	}
 }
+
+// A failure that belongs to the gate must not be attributed to a reviewer that
+// never started: when the deadline expires during the wait grace, the gate
+// timeout is the cause.
+func TestAGateTimeoutDuringTheGraceIsNotBlamedOnTheReviewer(t *testing.T) {
+	root := branchWithWork(t)
+	stubReviewer(t, "codex", `cat >/dev/null; echo r`)
+	_, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: t.TempDir(), BaseRef: "main",
+		Selection: Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
+		Gate:      `sleep 600 & exit 0`,
+		Deadline:  2 * time.Second,
+	})
+	if err == nil {
+		t.Fatal("expected a failure once the deadline expired")
+	}
+	if strings.Contains(err.Error(), "reviewer did not finish") {
+		t.Fatalf("a gate-owned timeout was blamed on the reviewer: %v", err)
+	}
+}

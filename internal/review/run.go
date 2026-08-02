@@ -422,7 +422,13 @@ func runGate(ctx context.Context, repositoryRoot, gate string) error {
 	// A gate that exited successfully while a descendant kept the pipe open
 	// returns ErrWaitDelay. Reporting that as a refusal is wrong twice over: the
 	// gate returned success, and the descendant was the only thing waiting on.
-	if errors.Is(runErr, exec.ErrWaitDelay) && command.ProcessState != nil && command.ProcessState.Success() {
+	// Only while the review still has time. When the deadline expires during the
+	// grace period, clearing the error would skip the gate-timeout branch and
+	// launch the reviewer on an already-dead context — reporting that the
+	// reviewer timed out when it never started, which names the wrong cause for
+	// a failure that belongs to the gate.
+	if errors.Is(runErr, exec.ErrWaitDelay) && ctx.Err() == nil &&
+		command.ProcessState != nil && command.ProcessState.Success() {
 		runErr = nil
 	}
 	if err := runErr; err != nil {
