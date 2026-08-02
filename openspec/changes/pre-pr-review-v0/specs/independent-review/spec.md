@@ -20,6 +20,15 @@ because the other provider's command would not run SHALL be recorded with its
 reason, never silent: "a different vendor reviewed this" must stay a provable
 claim.
 
+The reviewer SHALL be invoked without the capability to modify the repository,
+and MUST NOT be merely instructed to refrain. A reviewer that can edit the work
+is no longer reviewing it, and asking is not the same as removing the
+permission: this boundary was defeated twice while it lived in an allowance —
+first by a shell wildcard, then by a write-capable flag on a read-only-looking
+subcommand. Where a provider's sandbox is configurable, the invocation SHALL set
+it to read-only and override whatever the machine configures; where tools are
+enumerated, no editing tool SHALL appear.
+
 The reviewer SHALL be invoked through the vendor's own documented
 non-interactive interface, so the user's existing subscription is used as its
 vendor intends. Goalrail MUST NOT vendor, pin, or wrap a reviewer, MUST NOT
@@ -45,6 +54,10 @@ The command SHALL refuse in exactly one case: no reviewer can be run at all.
 #### Scenario: Nothing can review
 - **WHEN** no reviewer executable resolves at all
 - **THEN** the command refuses and names what is missing, and that is its only refusal besides the gate
+
+#### Scenario: The reviewer cannot write
+- **WHEN** a reviewer is invoked
+- **THEN** it is given no editing tool and no write-capable sandbox, whatever the machine's own configuration says
 
 #### Scenario: The vendor CLI refuses
 - **WHEN** the reviewer's own command exits non-zero or reports an unusable invocation
@@ -85,7 +98,12 @@ unknown and several runnable providers, selection SHALL be deterministic.
 
 Where configuration names a gate command, the command SHALL run it before
 invoking any reviewer — including a refute round — and SHALL refuse on a
-non-zero exit, naming the gate as the reason. The gate SHALL be a command named
+non-zero exit, naming the gate as the reason. Every gate invocation SHALL run
+under the review's own deadline, bounded across its whole process tree, because
+a gate is routinely a pipeline whose descendant can outlive the shell. A gate
+the deadline stopped SHALL be reported as a timeout carrying its own output, and
+never as a refusal: it returned no verdict, and telling automation the budget
+denied the review is a different fact with a different response. The gate SHALL be a command named
 in configuration and MUST NOT be a path, provider, or budget service built into
 Goalrail. Where no gate is configured, the review SHALL proceed, and nothing
 SHALL be reported as missing.
@@ -93,6 +111,10 @@ SHALL be reported as missing.
 #### Scenario: A configured gate refuses
 - **WHEN** the gate command exits non-zero
 - **THEN** no reviewer is invoked, no receipt is written, and the refusal names the gate
+
+#### Scenario: A gate outlives the deadline
+- **WHEN** a gate, or any process it spawned, is still running at the deadline
+- **THEN** the review ends within the bound, reports a timeout rather than a refusal, and carries whatever the gate had produced
 
 #### Scenario: No gate is configured
 - **WHEN** configuration names no gate command

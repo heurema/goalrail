@@ -828,21 +828,34 @@ sleep 600`)
 }
 
 // The bound covers the second gate too: a refute round is part of the review.
+// One marker path, created before the input: the earlier version of this test
+// used two t.TempDir() calls, so the first gate touched a file the second never
+// looked for — it passed whether or not the refute gate was bounded at all.
 func TestTheDeadlineCoversTheRefuteGate(t *testing.T) {
 	root := branchWithWork(t)
 	stubReviewer(t, "codex", `cat >/dev/null; echo "a finding"`)
 	stubReviewer(t, "claude", `cat >/dev/null; echo "REFUTED"`)
+	marker := filepath.Join(t.TempDir(), "first-gate-ran")
+
 	started := time.Now()
 	_, err := Run(context.Background(), Input{
 		RepositoryRoot: root, StateRoot: t.TempDir(), BaseRef: "main",
 		Selection: Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
 		Refute:    true,
-		Gate:      `[ -f ` + filepath.Join(t.TempDir(), "seen") + ` ] && sleep 600; touch ` + filepath.Join(t.TempDir(), "seen"),
-		Deadline:  3 * time.Second,
+		// The first invocation passes and leaves the marker; the second finds it
+		// and blocks, so only the refute gate is what the deadline must stop.
+		Gate:     "if [ -f " + marker + " ]; then sleep 600; fi; touch " + marker,
+		Deadline: 3 * time.Second,
 	})
-	_ = err // the gate shape varies; the bound is what is under test
-	if elapsed := time.Since(started); elapsed > 40*time.Second {
-		t.Fatalf("a blocking refute gate ran outside the review's bound: %s", elapsed)
+	elapsed := time.Since(started)
+	if err == nil {
+		t.Fatal("a blocking refute gate reported success")
+	}
+	if !strings.Contains(err.Error(), "deadline") {
+		t.Fatalf("the refute gate was not stopped by the deadline: %v", err)
+	}
+	if elapsed > 40*time.Second {
+		t.Fatalf("the refute gate ran outside the review's bound: %s", elapsed)
 	}
 }
 
@@ -888,5 +901,59 @@ sleep 600`)
 		if !strings.Contains(err.Error(), expected) {
 			t.Fatalf("the timeout discarded %s: %v", expected, err)
 		}
+	}
+}
+
+// The reviewer must not be able to write, not merely be asked not to: the
+// read-only boundary here lost to `git *` and then to `git diff --output=`
+// before it was made structural.
+func TestTheCodexReviewerIsInvokedWithoutWritePermission(t *testing.T) {
+	_, arguments, _, err := reviewCommand(ambient.ScaffoldCodex, "main...HEAD", DefaultEffort, []byte("x"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(arguments, " ")
+	if !strings.Contains(joined, "sandbox_mode=read-only") {
+		t.Fatalf("the reviewer keeps whatever sandbox the machine configures: %v", arguments)
+	}
+}
+
+// A gate is routinely a pipeline, so killing the shell alone leaves a
+// descendant holding the pipe and Run waiting past the deadline.
+func TestTheGateDeadlineBoundsItsWholeProcessTree(t *testing.T) {
+	root := branchWithWork(t)
+	stubReviewer(t, "codex", `cat >/dev/null; echo r`)
+	started := time.Now()
+	_, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: t.TempDir(), BaseRef: "main",
+		Selection: Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
+		Gate:      "sleep 600 & sleep 600",
+		Deadline:  2 * time.Second,
+	})
+	elapsed := time.Since(started)
+	if err == nil || !strings.Contains(err.Error(), "deadline") {
+		t.Fatalf("a gate whose descendant outlives it was not bounded: %v", err)
+	}
+	if elapsed > 30*time.Second {
+		t.Fatalf("the gate's process tree ran past the bound: %s", elapsed)
+	}
+}
+
+// A slow budget service and a gate failing for another reason look identical
+// without the gate's own output.
+func TestATimedOutGateCarriesItsDiagnostics(t *testing.T) {
+	root := branchWithWork(t)
+	stubReviewer(t, "codex", `cat >/dev/null; echo r`)
+	_, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: t.TempDir(), BaseRef: "main",
+		Selection: Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
+		Gate:      `echo "GATE-PROGRESS: asking the budget service" >&2; sleep 600`,
+		Deadline:  3 * time.Second,
+	})
+	if err == nil {
+		t.Fatal("expected a gate deadline failure")
+	}
+	if !strings.Contains(err.Error(), "GATE-PROGRESS") {
+		t.Fatalf("the timed-out gate discarded its own output: %v", err)
 	}
 }
