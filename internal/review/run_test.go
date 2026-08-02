@@ -767,17 +767,62 @@ func TestATimeoutCarriesWhatTheReviewerHadProduced(t *testing.T) {
 	}
 }
 
-// And silence is itself the diagnosis: nothing produced is a hang, not slowness.
-func TestASilentTimeoutSaysSoExplicitly(t *testing.T) {
+// The bound is advertised for the whole review, and a gate is part of it.
+func TestTheDeadlineCoversTheGate(t *testing.T) {
+	root := branchWithWork(t)
+	stubReviewer(t, "codex", `cat >/dev/null; echo r`)
+	started := time.Now()
+	_, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: t.TempDir(), BaseRef: "main",
+		Selection: Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
+		Gate:      "sleep 600", Deadline: 2 * time.Second,
+	})
+	if err == nil {
+		t.Fatal("a blocking gate under a two-second bound reported success")
+	}
+	if elapsed := time.Since(started); elapsed > 30*time.Second {
+		t.Fatalf("the gate ran outside the review's bound: took %s", elapsed)
+	}
+}
+
+// Silence is observed, never diagnosed: a reviewer may buffer everything until
+// it finishes, so no output proves no output — not that anything stopped.
+func TestASilentTimeoutStatesTheObservationNotACause(t *testing.T) {
 	root := branchWithWork(t)
 	stubReviewer(t, "codex", `cat >/dev/null; sleep 600`)
-
 	_, err := Run(context.Background(), Input{
 		RepositoryRoot: root, StateRoot: t.TempDir(), BaseRef: "main",
 		Selection: Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
 		Deadline:  2 * time.Second,
 	})
-	if err == nil || !strings.Contains(err.Error(), "hang rather than a slow review") {
-		t.Fatalf("a silent timeout was not diagnosed as a hang: %v", err)
+	if err == nil {
+		t.Fatal("expected a deadline failure")
+	}
+	for _, invented := range []string{"hang", "hung", "stuck"} {
+		if strings.Contains(strings.ToLower(err.Error()), invented) {
+			t.Fatalf("silence was diagnosed rather than reported: %v", err)
+		}
+	}
+	if !strings.Contains(err.Error(), "no output before the deadline") {
+		t.Fatalf("the observation itself was lost: %v", err)
+	}
+}
+
+// A timeout may not dump what the ordinary failure path is forbidden to dump.
+func TestATimeoutErrorIsBoundedLikeAnyOther(t *testing.T) {
+	root := branchWithWork(t)
+	stubReviewer(t, "codex", `cat >/dev/null
+i=0; while [ $i -lt 400 ]; do printf '%0512d\n' $i >&2; i=$((i+1)); done
+sleep 600`)
+	_, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: t.TempDir(), BaseRef: "main",
+		Selection: Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
+		Deadline:  3 * time.Second,
+	})
+	if err == nil {
+		t.Fatal("expected a deadline failure")
+	}
+	if len(err.Error()) > 8192 {
+		t.Fatalf("a timeout dumped a transcript: %d bytes", len(err.Error()))
 	}
 }

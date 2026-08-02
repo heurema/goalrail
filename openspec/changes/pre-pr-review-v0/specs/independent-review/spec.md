@@ -276,7 +276,9 @@ is the thoroughness pass by definition, and running it at the loop's cheap
 default produces a confident wrong verdict — the most expensive output this
 command has. Measured on one range with one set of instructions, effort the only
 variable: the moderate default reviewed clean and missed three real defects, two
-of them P1, which the higher effort reported. The deadline travels with the
+of them P1, which the higher effort reported — recorded with its design, ranges,
+durations and reproduction command in
+`openspec/changes/pre-pr-review-v0/evidence/effort-experiment-2026-08-01.md`. The deadline travels with the
 effort because raising one without the other only moves the failure from a false
 clean verdict to an unfinished review.
 

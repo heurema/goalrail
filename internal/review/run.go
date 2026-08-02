@@ -29,13 +29,22 @@ const cancelGrace = 5 * time.Second
 // full pass is a contradiction that produces a confident wrong verdict, which
 // is the most expensive output this command has.
 //
-// The longer deadline travels with it because the two are one decision: raising
+// A longer deadline travels with it because the two are one decision: raising
 // the effort without raising the bound just moves the failure from a false
 // clean verdict to a deadline. Measured at the same time — ultra reached the
 // twenty-minute bound and returned nothing at all.
+//
+// The bound is a safety net, not a plan. Observed full passes at this effort:
+// 272s, 500s and 565s, with one run of the very same range exceeding 2700s — an
+// order of magnitude apart on identical inputs. Duration is not predictable from
+// diff size or effort, so the number is set at roughly three times the observed
+// median rather than above the worst tail: at this spread a cheap failure that
+// can be retried beats a generous wait that cannot be undone. The first choice
+// here was 45 minutes, picked by eye and corrected once the spread was measured.
+// Evidence: openspec/changes/pre-pr-review-v0/evidence/effort-experiment-2026-08-01.md
 const (
 	FullEffort   = "high"
-	FullDeadline = 45 * time.Minute
+	FullDeadline = 25 * time.Minute
 )
 
 // DefaultDeadline bounds one review.
@@ -194,14 +203,6 @@ func Run(ctx context.Context, input Input) (Result, error) {
 		return Result{}, err
 	}
 
-	// The gate runs before anything is spawned, because its whole purpose is to
-	// stop the spend rather than to report it afterwards.
-	if strings.TrimSpace(input.Gate) != "" {
-		if gateErr := runGate(ctx, input.RepositoryRoot, input.Gate); gateErr != nil {
-			return Result{InstructionsMaterialized: materialized}, gateErr
-		}
-	}
-
 	// The caller's word always wins; these are the defaults for a pass nobody
 	// parameterized.
 	effort := strings.TrimSpace(input.Effort)
@@ -218,8 +219,19 @@ func Run(ctx context.Context, input Input) (Result, error) {
 			deadline = FullDeadline
 		}
 	}
+	// The bound is created before the gate, because it is advertised as a bound
+	// on the whole review and a gate is part of the review. A gate that blocks
+	// under an unbounded context makes that promise false.
 	bounded, cancel := context.WithTimeout(ctx, deadline)
 	defer cancel()
+
+	// The gate runs before anything is spawned, because its whole purpose is to
+	// stop the spend rather than to report it afterwards.
+	if strings.TrimSpace(input.Gate) != "" {
+		if gateErr := runGate(bounded, input.RepositoryRoot, input.Gate); gateErr != nil {
+			return Result{InstructionsMaterialized: materialized}, gateErr
+		}
+	}
 	started := now()
 	rangeSpec := reviewedBase + "..." + headCommit
 	// The Claude reviewer has no shell, so the diff it reviews is rendered
@@ -469,10 +481,14 @@ func invoke(ctx context.Context, reviewer ambient.Scaffold, repositoryRoot, base
 				progress = strings.TrimSpace(stdout.String())
 			}
 			if progress == "" {
-				progress = "the reviewer produced no output at all before the deadline, which is a hang rather than a slow review"
+				// Observed, not diagnosed. A reviewer may buffer everything
+				// until it finishes, so silence proves no output was emitted —
+				// not that anything stopped. Naming a cause here would state an
+				// unknown as a measurement.
+				progress = "(it emitted no output before the deadline)"
 			}
 			return "", fmt.Errorf("the %s reviewer did not finish within the review deadline; what it had produced:\n%s",
-				reviewer, progress)
+				reviewer, bounded_(progress))
 		}
 		detail := strings.TrimSpace(stderr.String())
 		if detail == "" {
@@ -486,9 +502,7 @@ func invoke(ctx context.Context, reviewer ambient.Scaffold, repositoryRoot, base
 		// different ends — a panic leads, an exit summary trails — so both a
 		// bounded head and a bounded tail survive, and the process's own exit
 		// error is always stated because no truncation can lose it.
-		if len(detail) > 4096 {
-			detail = detail[:1024] + "\n… [" + fmt.Sprint(len(detail)-4096) + " bytes elided] …\n" + detail[len(detail)-3072:]
-		}
+		detail = bounded_(detail)
 		return "", fmt.Errorf("the %s reviewer did not complete (%v): %s", reviewer, err, detail)
 	}
 	report := stdout.String()
@@ -554,4 +568,17 @@ func (b *tailBuffer) String() string {
 		return string(b.head) + string(b.tail)
 	}
 	return string(b.head) + fmt.Sprintf("\n… [%d bytes elided] …\n", b.elided) + string(b.tail)
+}
+
+// bounded_ keeps a message a message. Both failure paths use it, so a timeout
+// cannot dump a transcript the ordinary failure path is forbidden from
+// dumping — different ends of the same output, one rule.
+func bounded_(detail string) string {
+	const limit = 4096
+	if len(detail) <= limit {
+		return detail
+	}
+	return detail[:1024] +
+		fmt.Sprintf("\n… [%d bytes elided] …\n", len(detail)-limit) +
+		detail[len(detail)-3072:]
 }

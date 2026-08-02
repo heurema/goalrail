@@ -62,6 +62,13 @@ func runReview(ctx context.Context, args []string, stdout, stderr io.Writer) err
 		return fmt.Errorf("review accepts no positional arguments")
 	}
 
+	// An explicit non-positive bound is a malformed value, not a request for the
+	// default: silently starting a 45-minute review on `--deadline=0s` is the
+	// opposite of what the caller asked for.
+	if isSet(set, "deadline") && *deadline <= 0 {
+		return fmt.Errorf("--deadline must be positive; %s asks for no time at all", *deadline)
+	}
+
 	root, err := filepath.Abs(*repository)
 	if err != nil {
 		return err
@@ -241,4 +248,16 @@ func stalemateNote(rounds int) []string {
 	return []string{fmt.Sprintf(
 		"stalemate: %d consecutive round(s) reviewed the same head with a clean tree — nothing was acted on between them; stop and report the open findings",
 		rounds)}
+}
+
+// isSet reports whether a flag was named on the command line, which is how an
+// explicit zero is told apart from an omitted one.
+func isSet(set *flag.FlagSet, name string) bool {
+	found := false
+	set.Visit(func(f *flag.Flag) {
+		if f.Name == name {
+			found = true
+		}
+	})
+	return found
 }
