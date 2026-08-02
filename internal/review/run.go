@@ -258,7 +258,7 @@ func Run(ctx context.Context, input Input) (Result, error) {
 		// The refutation is a second paid run: the gate's answer may have
 		// changed while the first one spent, so it is asked again.
 		if strings.TrimSpace(input.Gate) != "" {
-			if gateErr := runGate(ctx, input.RepositoryRoot, input.Gate); gateErr != nil {
+			if gateErr := runGate(bounded, input.RepositoryRoot, input.Gate); gateErr != nil {
 				return Result{InstructionsMaterialized: materialized}, gateErr
 			}
 		}
@@ -338,14 +338,39 @@ func runGate(ctx context.Context, repositoryRoot, gate string) error {
 	}
 	command := exec.CommandContext(ctx, shell, "-c", gate)
 	command.Dir = repositoryRoot
-	var stderr bytes.Buffer
-	command.Stderr = &stderr
+	// The same tree-wide cancellation the reviewers get. A gate is routinely a
+	// pipeline or a script, so killing the shell alone leaves a descendant
+	// holding the pipe and Run waiting past the deadline — the bound would be
+	// advertised and not held, which is the defect this whole path just fixed
+	// one layer up.
+	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	command.Cancel = func() error {
+		if command.Process == nil {
+			return nil
+		}
+		return syscall.Kill(-command.Process.Pid, syscall.SIGKILL)
+	}
+	command.WaitDelay = cancelGrace
+	stderr := &tailBuffer{limit: 64 * 1024}
+	command.Stderr = stderr
 	if err := command.Run(); err != nil {
+		// A gate the deadline killed never returned a verdict. Reporting it as
+		// a refusal tells automation the budget denied the review, which is a
+		// different fact with a different response.
 		detail := strings.TrimSpace(stderr.String())
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			// Its own output still travels: a slow budget service and a gate
+			// failing for another reason look identical without it.
+			if detail == "" {
+				detail = "(it emitted no output before the deadline)"
+			}
+			return fmt.Errorf("the review gate (%s) did not finish within the review deadline; what it had produced:\n%s",
+				gate, bounded_(detail))
+		}
 		if detail == "" {
 			detail = err.Error()
 		}
-		return fmt.Errorf("%w (%s): %s", ErrGateRefused, gate, detail)
+		return fmt.Errorf("%w (%s): %s", ErrGateRefused, gate, bounded_(detail))
 	}
 	return nil
 }
@@ -395,6 +420,14 @@ func reviewCommand(reviewer ambient.Scaffold, baseRef, effort string, instructio
 		// session. A configuration file is out of that reach.
 		return "codex", []string{
 			"-c", "model_reasoning_effort=" + effort,
+			// A reviewer that can edit the work is no longer reviewing it, and
+			// the other reviewer already has no writing tool at all. Asking in
+			// the prompt is not the same as removing the permission: the
+			// read-only boundary here lost to `git *` and then to
+			// `git diff --output=` before it was made structural. This takes
+			// the capability away rather than requesting restraint, and it
+			// overrides whatever the machine's own sandbox setting says.
+			"-c", "sandbox_mode=read-only",
 			"review", "-",
 		}, prompt(baseRef, instructions), nil
 	case ambient.ScaffoldClaudeCode:
@@ -476,10 +509,18 @@ func invoke(ctx context.Context, reviewer ambient.Scaffold, repositoryRoot, base
 			// "did not finish" cannot distinguish working-but-slow from stuck,
 			// so an expensive failure teaches nothing and the next decision —
 			// raise the bound, or stop trying — has no evidence behind it.
-			progress := strings.TrimSpace(stderr.String())
-			if progress == "" {
-				progress = strings.TrimSpace(stdout.String())
+			// Both streams, not one instead of the other: a reviewer that logs
+			// progress on stderr may still have produced partial findings on
+			// stdout, and that is exactly the evidence a timeout exists to
+			// carry.
+			var parts []string
+			if out := strings.TrimSpace(stdout.String()); out != "" {
+				parts = append(parts, "stdout:\n"+out)
 			}
+			if errOut := strings.TrimSpace(stderr.String()); errOut != "" {
+				parts = append(parts, "stderr:\n"+errOut)
+			}
+			progress := strings.Join(parts, "\n")
 			if progress == "" {
 				// Observed, not diagnosed. A reviewer may buffer everything
 				// until it finishes, so silence proves no output was emitted —
