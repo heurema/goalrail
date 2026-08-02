@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -130,6 +131,55 @@ func TestCanonCarriesNoConfiguration(t *testing.T) {
 	for _, file := range canon.Files {
 		if file.Path == ConfigPath {
 			t.Error("canon carries the OpenSpec configuration, which is repository-owned")
+		}
+	}
+}
+
+// The canon's forcing functions are prose, so a later edit could drop them
+// silently. These pins make the drop loud.
+func TestTheCanonCarriesItsForcingFunctions(t *testing.T) {
+	design, err := Content("openspec/schemas/goalrail-intent/templates/design.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, required := range []string{
+		"## Consumed Inputs",
+		"None — verified within <scope> by <bounded search or trace>",
+	} {
+		if !strings.Contains(string(design), required) {
+			t.Fatalf("design template lost %q", required)
+		}
+	}
+	context, err := Content("openspec/schemas/goalrail-intent/templates/context.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, required := range []string{"Verification recipe", "Not independently reproducible"} {
+		if !strings.Contains(string(context), required) {
+			t.Fatalf("context template lost %q", required)
+		}
+	}
+	intent, err := Content("openspec/schemas/goalrail-intent/templates/intent.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, banned := range []string{"Confirmed wording", "Confirmed boundary"} {
+		if strings.Contains(string(intent), banned) {
+			t.Fatalf("intent template still asserts confirmation in a heading: %q", banned)
+		}
+	}
+	schema, err := Content("openspec/schemas/goalrail-intent/schema.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, required := range []string{
+		"Consumed Inputs",
+		"MUST cite the Context Pack item IDs",
+		"verification recipe",
+		"candidate-or-confirmed",
+	} {
+		if !strings.Contains(string(schema), required) {
+			t.Fatalf("schema instructions lost %q", required)
 		}
 	}
 }

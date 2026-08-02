@@ -17,6 +17,13 @@ artifacts:
       source pages, transcripts, prompts, credentials, or secret-shaped data.
 
 
+      Every context item carries a verification recipe: bounded, read-only,
+      stating its prerequisites and the observation expected. For historical or
+      non-repeatable evidence write "Not independently reproducible — <reason>;
+      retained evidence: <stable ref>". A refresh command measures the present
+      and MUST NOT be described as reproducing an earlier observation.
+
+
       End collection with exactly one outcome: `sufficient`,
       `material_unknown`, or `budget_exhausted`. A material unknown blocks flow
       intent confirmation. Context is evidence, not owner intent and not effect
@@ -24,7 +31,7 @@ artifacts:
     requires: []
   - id: intent
     generates: intent.md
-    description: Versioned owner-confirmed statement of desired outcomes, non-goals, and success signals
+    description: Versioned candidate-or-confirmed statement of desired outcomes, non-goals, and success signals; confirmation is established only by its status and confirmation block
     template: intent.md
     instruction: >
       Create the Intent Snapshot after the Context Pack and before proposing a
@@ -258,6 +265,22 @@ artifacts:
       Reference the confirmed intent for boundaries, the proposal for motivation,
       and specs for requirements. Make correlation, evidence, metrics, failure
       handling, and rollback/stop behavior explicit where relevant.
+
+
+      Fill the Consumed Inputs section for every behavior-affecting external
+      input this slice introduces or changes: source and trust, accepted states,
+      refused states, mutation policy, and how each claim is verified. Consider
+      absent, empty, unreadable, malformed, alternate legal syntax or version,
+      oversized, user-edited, and changed after validation. Where the slice
+      introduces or changes no external input handling, write exactly
+      "None — verified within <scope> by <bounded search or trace>";
+      a bare N/A is an unfilled section.
+
+
+      Every material decision MUST cite the Context Pack item IDs it relies on.
+      If a decision depends on a material fact absent from the current Context
+      Pack, or stale since its observation time, create a new Context Pack
+      version before settling that decision.
 
 
       Do not select or implement target runtime infrastructure unless the current

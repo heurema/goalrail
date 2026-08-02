@@ -13,13 +13,13 @@
 
 ## Desired Outcomes
 
-| ID | Confirmed wording | Verification action | Evidence |
+| ID | Outcome | Verification action | Evidence |
 |---|---|---|---|
 | OUT-1 | <!-- desired outcome --> | <!-- how the owner will verify it --> | <!-- SE-* and CTX-* references --> |
 
 ## Non-Goals
 
-| ID | Confirmed boundary | Evidence |
+| ID | Boundary | Evidence |
 |---|---|---|
 | NG-1 | <!-- explicitly excluded result or approach --> | <!-- SE-* and CTX-* references --> |
 
