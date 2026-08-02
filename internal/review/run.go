@@ -460,7 +460,19 @@ func invoke(ctx context.Context, reviewer ambient.Scaffold, repositoryRoot, base
 	command.Stderr = stderr
 	if err := command.Run(); err != nil {
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return "", fmt.Errorf("the %s reviewer did not finish within the review deadline", reviewer)
+			// What the reviewer had produced travels with the timeout. A bare
+			// "did not finish" cannot distinguish working-but-slow from stuck,
+			// so an expensive failure teaches nothing and the next decision —
+			// raise the bound, or stop trying — has no evidence behind it.
+			progress := strings.TrimSpace(stderr.String())
+			if progress == "" {
+				progress = strings.TrimSpace(stdout.String())
+			}
+			if progress == "" {
+				progress = "the reviewer produced no output at all before the deadline, which is a hang rather than a slow review"
+			}
+			return "", fmt.Errorf("the %s reviewer did not finish within the review deadline; what it had produced:\n%s",
+				reviewer, progress)
 		}
 		detail := strings.TrimSpace(stderr.String())
 		if detail == "" {

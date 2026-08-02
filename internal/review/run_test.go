@@ -747,3 +747,37 @@ func TestAFullPassCarriesTheLongerDeadlineAndTheCallerStillWins(t *testing.T) {
 		t.Fatalf("an explicit deadline was ignored on a full pass: %v", err)
 	}
 }
+
+// An expensive timeout must teach something: a bare "did not finish" cannot
+// tell working-but-slow from stuck, and the next decision has no evidence.
+func TestATimeoutCarriesWhatTheReviewerHadProduced(t *testing.T) {
+	root := branchWithWork(t)
+	stubReviewer(t, "codex", `cat >/dev/null; echo "PROGRESS-MARKER: reading files" >&2; sleep 600`)
+
+	_, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: t.TempDir(), BaseRef: "main",
+		Selection: Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
+		Deadline:  2 * time.Second,
+	})
+	if err == nil || !strings.Contains(err.Error(), "deadline") {
+		t.Fatalf("expected a deadline failure, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "PROGRESS-MARKER") {
+		t.Fatalf("the timeout discarded the reviewer's progress: %v", err)
+	}
+}
+
+// And silence is itself the diagnosis: nothing produced is a hang, not slowness.
+func TestASilentTimeoutSaysSoExplicitly(t *testing.T) {
+	root := branchWithWork(t)
+	stubReviewer(t, "codex", `cat >/dev/null; sleep 600`)
+
+	_, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: t.TempDir(), BaseRef: "main",
+		Selection: Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
+		Deadline:  2 * time.Second,
+	})
+	if err == nil || !strings.Contains(err.Error(), "hang rather than a slow review") {
+		t.Fatalf("a silent timeout was not diagnosed as a hang: %v", err)
+	}
+}
