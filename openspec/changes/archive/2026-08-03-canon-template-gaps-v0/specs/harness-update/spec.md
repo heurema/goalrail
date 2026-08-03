@@ -17,9 +17,17 @@ would misname a routine upgrade as a conflict. A migration test SHALL pin the
 transition from the actual previous canon, by digest, so the safety is proven
 against the bytes that shipped rather than against a fixture.
 
-#### Scenario: An edited file stops the update
+#### Scenario: A template was edited locally
 - **WHEN** an overlay file matches no canon this binary knows
-- **THEN** the update refuses, names the file, and proceeds only with the explicit discard flag
+- **THEN** the update refuses, names the file, and rewrites nothing without the explicit discard flag
+
+#### Scenario: The user chooses to discard local edits
+- **WHEN** the user runs the update with the explicit discard flag on a drifted overlay
+- **THEN** the canonical content is restored, the digests match the canon, and the report states that local edits were discarded
+
+#### Scenario: Drift and behind-ness coincide
+- **WHEN** an overlay contains both a previous-canon file and a file that differs from every canon this binary knows
+- **THEN** the update stops on the edited file rather than treating the pending upgrade as permission to overwrite it
 
 Before each replacement, update SHALL perform a just-in-time optimistic digest
 check against the state it inspected. A mismatch SHALL fail closed unless the
