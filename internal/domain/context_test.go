@@ -17,14 +17,37 @@ func validContextPack() ContextPack {
 		Outcome:     ContextSufficient,
 		Items: []ContextItem{
 			{
-				ID:         "CTX-1",
-				Kind:       ContextRepository,
-				Claim:      "The current canary manifest is frozen and not activated.",
-				SourceRef:  "repo:canary/intent-canary-v0/manifest-v1.md",
-				ObservedAt: contextTestTime.Add(30 * time.Second),
-				Relevance:  "A material flow change requires a new manifest version.",
+				ID:                 "CTX-1",
+				Kind:               ContextRepository,
+				Claim:              "The current canary manifest is frozen and not activated.",
+				SourceRef:          "repo:canary/intent-canary-v0/manifest-v1.md",
+				VerificationRecipe: "Read the manifest and expect activation to be false.",
+				ObservedAt:         contextTestTime.Add(30 * time.Second),
+				Relevance:          "A material flow change requires a new manifest version.",
 			},
 		},
+	}
+}
+
+func TestValidateContextPackRejectsUnsafeVerificationRecipes(t *testing.T) {
+	tests := []struct {
+		name   string
+		recipe string
+		code   string
+	}{
+		{name: "multiline", recipe: "first line\nsecond line", code: "context.text.not_concise"},
+		{name: "secret shaped", recipe: "password=example", code: "context.text.sensitive"},
+		{name: "unbounded", recipe: strings.Repeat("x", maxContextRecipeRunes+1), code: "context.text.too_long"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			pack := validContextPack()
+			pack.Items[0].VerificationRecipe = test.recipe
+			err := ValidateContextPack(pack)
+			if err == nil || !strings.Contains(err.Error(), test.code) {
+				t.Fatalf("verification recipe error = %v, want %s", err, test.code)
+			}
+		})
 	}
 }
 

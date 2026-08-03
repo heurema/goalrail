@@ -590,30 +590,38 @@ func parseContextItems(lines []string) ([]domain.ContextItem, error) {
 		lines,
 		[]string{"ID", "Kind", "Claim", "Source", "Verification recipe", "Observed at", "Relevance"},
 	)
-	observedIndex, relevanceIndex := 5, 6
+	recipeIndex, observedIndex, relevanceIndex := 4, 5, 6
 	if err != nil {
 		rows, err = parseMarkdownTable(
 			lines,
 			[]string{"ID", "Kind", "Claim", "Source", "Observed at", "Relevance"},
 		)
-		observedIndex, relevanceIndex = 4, 5
+		recipeIndex, observedIndex, relevanceIndex = -1, 4, 5
 	}
 	if err != nil {
 		return nil, fmt.Errorf("parse context items: %w", err)
 	}
 	items := make([]domain.ContextItem, 0, len(rows))
 	for _, row := range rows {
+		recipe := ""
+		if recipeIndex >= 0 {
+			recipe = cleanInline(row[recipeIndex])
+			if recipe == "" {
+				return nil, fmt.Errorf("%w: context item verification recipe is required", ErrMalformedArtifact)
+			}
+		}
 		observedAt, parseErr := parseArtifactTime(cleanInline(row[observedIndex]))
 		if parseErr != nil {
 			return nil, parseErr
 		}
 		items = append(items, domain.ContextItem{
-			ID:         domain.ContextItemID(cleanInline(row[0])),
-			Kind:       domain.ContextItemKind(strings.ToLower(cleanInline(row[1]))),
-			Claim:      cleanInline(row[2]),
-			SourceRef:  domain.EvidenceReference(cleanInline(row[3])),
-			ObservedAt: observedAt,
-			Relevance:  cleanInline(row[relevanceIndex]),
+			ID:                 domain.ContextItemID(cleanInline(row[0])),
+			Kind:               domain.ContextItemKind(strings.ToLower(cleanInline(row[1]))),
+			Claim:              cleanInline(row[2]),
+			SourceRef:          domain.EvidenceReference(cleanInline(row[3])),
+			VerificationRecipe: recipe,
+			ObservedAt:         observedAt,
+			Relevance:          cleanInline(row[relevanceIndex]),
 		})
 	}
 	return items, nil

@@ -53,12 +53,13 @@ const (
 // ContextItem retains one concise fact used to interpret a request. It never
 // becomes owner intent without the owner's separate confirmation.
 type ContextItem struct {
-	ID         ContextItemID
-	Kind       ContextItemKind
-	Claim      string
-	SourceRef  EvidenceReference
-	ObservedAt time.Time
-	Relevance  string
+	ID                 ContextItemID
+	Kind               ContextItemKind
+	Claim              string
+	SourceRef          EvidenceReference
+	VerificationRecipe string
+	ObservedAt         time.Time
+	Relevance          string
 }
 
 // ContextUnknown makes an unresolved material fact explicit instead of

@@ -35,9 +35,12 @@ design outright.
 The design instruction SHALL require every material decision to cite the
 Context Pack item IDs it relies on, and SHALL require a new Context Pack
 version before settling any decision that rests on a fact absent from the
-current pack or stale since its observation time. The pack is verified before
-intent and can be outdated by the time design settles; citation is the minimal
-binding that exposes that gap without inventing a per-decision artifact.
+current pack or stale since its observation time. Refreshing context SHALL stop
+design, return intent to candidate as a new version linked to its predecessor
+and the refreshed pack, and require exact owner confirmation before design
+resumes. The pack is verified before intent and can be outdated by the time
+design settles; citation is the minimal binding that exposes that gap without
+inventing a per-decision artifact.
 
 #### Scenario: A decision on fresh context
 - **WHEN** a material decision cites context items present and current in the pack
@@ -45,7 +48,7 @@ binding that exposes that gap without inventing a per-decision artifact.
 
 #### Scenario: A decision on a missing or stale fact
 - **WHEN** a material decision depends on a fact the current pack lacks or observed too long ago
-- **THEN** the pack gains a version carrying that fact before the decision settles
+- **THEN** design stops, the pack gains a version carrying that fact, intent returns as a linked candidate version, and exact owner confirmation precedes both resumed design and the settled decision
 
 ### Requirement: The intent template does not assert confirmation outside the status
 **Intent IDs:** OUT-3
@@ -72,6 +75,10 @@ retained evidence — and a refresh command MUST NOT be described as reproducing
 an earlier observation, because it measures the present instead. An invented
 fact reached a confirmed intent through a context item nobody could check;
 the column exists so every item arrives with the means to challenge it.
+The Goalrail reader SHALL retain the recipe as domain data and apply the same
+bounded, single-line, control-character, and secret-shaped-content protections
+used for other retained context text. It SHALL continue to accept the legacy
+six-column form without inventing a recipe for already-written artifacts.
 
 #### Scenario: A reproducible claim
 - **WHEN** a context item states something the repository or a tool can show now
@@ -80,6 +87,14 @@ the column exists so every item arrives with the means to challenge it.
 #### Scenario: A historical claim
 - **WHEN** a context item records an observation that cannot be independently repeated
 - **THEN** its recipe says so, names the reason, and points at the retained evidence
+
+#### Scenario: A recipe is consumed
+- **WHEN** Goalrail reads the seven-column Context Items form
+- **THEN** it retains the exact recipe and rejects unbounded or secret-shaped recipe text
+
+#### Scenario: A legacy item has no recipe column
+- **WHEN** Goalrail reads the supported six-column Context Items form
+- **THEN** it accepts the item with no invented recipe
 
 ### Requirement: The canon's copies move together, and its test tells the truth
 **Intent IDs:** OUT-6

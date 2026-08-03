@@ -1,33 +1,41 @@
 # Context Pack
 
 - **Context Pack ID:** CTXP-canon-template-gaps-v0
-- **Version:** 2
-- **Previous version:** 1 (CTX-5 corrected: v1 claimed the upgrade path was
-  safe, the adversarial exchange refuted it, and this change's own rule forbids
-  settling a decision on a refuted fact without a new pack version)
-- **Started at:** 2026-08-02T19:00:00Z
-- **Completed at:** 2026-08-02T20:35:00Z (v2; v1 completed 19:20Z, before CTX-5's correction existed)
+- **Version:** 3
+- **Previous version:** 2
+- **Started at:** 2026-08-02T18:55:27Z
+- **Completed at:** 2026-08-02T18:59:58Z
 - **Outcome:** sufficient
 
 > Every claim carries the command that reproduces it. The one time this pack's
 > predecessor did not, it carried an invented fact into a confirmed intent.
+>
+> Version 2 corrected CTX-5 after the adversarial exchange refuted v1's upgrade
+> claim. Version 3 re-runs every bounded recipe, records the PR review findings
+> and the remaining compare/write window, and replaces the earlier artifact's
+> mislabeled local-wall-clock `Z` metadata with live UTC observations. The exact
+> predecessor is retained in `context-v2.md`.
 
 ## Context Items
 
-| ID | Kind | Claim | Verification (run this) | Observed at | Relevance |
-|---|---|---|---|---|---|
-| CTX-1 | repository | `input-space` is the largest finding class by a factor of two — 22 of 78 recorded findings | `jq -r .class ~/personal/heurema/docs/portfolio/REVIEW-FINDINGS.jsonl \| sort \| uniq -c \| sort -rn \| head -3` | 2026-08-02T19:05:00Z | The class the ratchet most owes a working promotion to |
-| CTX-2 | repository | Its promotion is recorded as `partially-pending`, and the pending half is exactly this template change | `jq -r 'select(.class=="input-space")' ~/personal/heurema/docs/portfolio/PROMOTIONS.jsonl` | 2026-08-02T19:05:00Z | The prose half landed in the reviewer instructions on 2026-08-01 and the class kept recurring; the ladder says the next rung is a schema requirement |
-| CTX-3 | repository | The design template has eight sections and none of them asks what happens when an input is absent, empty, differently shaped, or user-edited | `git show 1d3e75665ae8:internal/harness/canon/templates/design.md | grep '^## '` → Context, Goals / Non-Goals, Decisions, Correlation and Evidence, Measurement and Stop Conditions, Risks / Trade-offs, Rollback, Open Questions | 2026-08-02T19:10:00Z | A design can be complete by the schema's own definition and still never have enumerated its input space |
-| CTX-4 | repository | The intent template's outcomes table is headed "Confirmed wording" while the snapshot's own status may be `candidate` | `git show 1d3e75665ae8:internal/harness/canon/templates/intent.md | grep -c 'Confirmed wording'` → 1 (at the pre-change revision; the working tree now differs by design) | 2026-08-02T19:10:00Z | The heading asserts confirmation the status denies; a downstream reader cannot tell interpretation from agreement |
-| CTX-5 | repository | **v2, corrected.** v1 claimed nothing breaks and one command repairs — refuted: `previousCanons` was empty, so a canon change would classify every adopter's overlay as `edited` and `gr update` would stop with `ErrLocalEdits`, demanding `--discard-local-edits` for untouched files. Clean crossing exists only once the shipped canon is recorded in the history | v1's own citation showed it: `overlay.go` marked a differing file `FileEdited`; the exchange record and `TestThePreviousCanonUpgradesCleanly` prove the corrected claim | 2026-08-02T20:30:00Z | The blast radius is every adopter, and OUT-1 exists because the original claim was false |
-| CTX-6 | repository | The Context Pack template gained a Verification column by hand in `pre-pr-review-v0`, and nothing in the schema requires one | `git show 1d3e75665ae8:internal/harness/canon/templates/context.md | grep -c 'Verification'` → 0 at the pre-change revision, against this pack, which has the column | 2026-08-02T19:15:00Z | The discipline exists in one change by hand and in no template; the `unprovable-claim` class stands at 10 |
-| CTX-7 | external | A reviewer raised a third gap: the schema requires a Context Pack once, before intent, and never again — while the owner's stated requirement is a context check before each architectural decision | goalrail#49, section 2 | 2026-08-02T19:15:00Z | One occurrence, and the fix would add a per-decision artifact to every change. Cost known, benefit unmeasured — deferred rather than built, per the lean rule in the workspace `GOALS.yaml` |
+| ID | Kind | Claim | Source | Verification recipe | Observed at | Relevance |
+|---|---|---|---|---|---|---|
+| CTX-1 | repository | `input-space` remains the largest finding class: 22 recorded findings, ahead of `contract-seam` at 12 and `unprovable-claim` at 10 | repo:heurema-docs/portfolio/REVIEW-FINDINGS.jsonl | `jq -r .class ~/personal/heurema/docs/portfolio/REVIEW-FINDINGS.jsonl \| sort \| uniq -c \| sort -rn \| head -3` returns `input-space` first with 22 | 2026-08-02T18:59:58Z | The class the ratchet most owed a working promotion to |
+| CTX-2 | repository | The `input-space` promotion is now recorded as `active`, with this change's Consumed Inputs template as a landing place | repo:heurema-docs/portfolio/PROMOTIONS.jsonl | `jq -r 'select(.class=="input-space")' ~/personal/heurema/docs/portfolio/PROMOTIONS.jsonl` returns status `active` and names the canon landing place | 2026-08-02T18:59:58Z | The external half of task 4.2 is complete; merge readback still decides whether the default branch carries the landing place |
+| CTX-3 | repository | The base design template has eight sections and none asks what happens when an input is absent, empty, differently shaped, or user-edited | git:1d3e75665ae8:internal/harness/canon/templates/design.md | `git show 1d3e75665ae8:internal/harness/canon/templates/design.md` shows no Consumed Inputs section | 2026-08-02T18:59:58Z | A design can be complete by the schema's own definition and still never have enumerated its input space |
+| CTX-4 | repository | The base intent template heads candidate-capable tables with "Confirmed wording" and "Confirmed boundary" | git:1d3e75665ae8:internal/harness/canon/templates/intent.md | `git show 1d3e75665ae8:internal/harness/canon/templates/intent.md` contains both confirmed headings | 2026-08-02T18:59:58Z | The headings assert confirmation the status may deny |
+| CTX-5 | repository | The original upgrade claim was false: without a previous-canon record, untouched adopter overlays become `edited`; the current migration test now proves the recorded shipped digest crosses cleanly | repo:openspec/changes/canon-template-gaps-v0/evidence/adversarial-exchange-2026-08-02.md | Inspect the retained exchange and run `go test ./internal/harness -run TestThePreviousCanonUpgradesCleanly -count=1`; expect a pass | 2026-08-02T18:59:58Z | The blast radius is every adopter, and OUT-1 exists because the original claim was false |
+| CTX-6 | repository | The base Context Pack template contains no Verification recipe column | git:1d3e75665ae8:internal/harness/canon/templates/context.md | `git show 1d3e75665ae8:internal/harness/canon/templates/context.md` contains no Verification heading | 2026-08-02T18:59:58Z | The discipline existed only by hand; the reader must retain and validate the promoted field rather than discard it |
+| CTX-7 | external | Issue 49 asks for context rebinding around architectural decisions and is already closed with a resolution comment for this change | issue:heurema/goalrail/49 | `gh issue view 49 --repo heurema/goalrail --json state,body,comments` shows the request, closed state, and resolution comment | 2026-08-02T18:59:58Z | The issue needs no second closure action; PR merge and archive are the remaining repository tail |
+| CTX-8 | repository | The opponent's amendments define the Consumed Inputs shape, falsifiable empty form, recipe wording, and decision-citation rule | repo:openspec/changes/canon-template-gaps-v0/evidence/adversarial-exchange-2026-08-02.md | Not independently reproducible — a live exchange with a metered provider; retained evidence: `evidence/adversarial-exchange-2026-08-02.md` | 2026-08-02T18:59:58Z | The design's text decisions rest on retained evidence rather than memory |
+| CTX-9 | external | PR 56 has eight unresolved review threads: seven valid defects to fix and one test-order claim refuted by existing restore logic and a shuffled run | pr:heurema/goalrail/56 | Read the eight PR 56 review threads; expect seven fixed dispositions and one refuted disposition before merge | 2026-08-02T18:59:58Z | A green old-head CI result does not close unresolved review findings |
+| CTX-10 | repository | The first remediation attempt bulk-compares the overlay and then writes in a separate loop, leaving a wider TOCTOU window before later file replacements | repo:internal/harness/overlay.go | Inspect `materializeExpected`; expect comparison to finish before the write loop, then run the deterministic late-write regression after the fix | 2026-08-02T18:59:58Z | P1 is not closed until each replacement performs a just-in-time optimistic digest check |
+| CTX-11 | repository | Context Pack v2 labeled local wall-clock values with `Z`; its `20:35Z` completion is later than the `16:36Z` commit that carried it | git:e7ae4c9:openspec/changes/canon-template-gaps-v0/context.md | Compare `git show e7ae4c9:openspec/changes/canon-template-gaps-v0/context.md` with `git show -s --format=%cI e7ae4c9`; expect the impossible ordering | 2026-08-02T18:59:58Z | v3 uses a live UTC window instead of repairing the old evidence in place |
 
-| CTX-8 | repository | The opponent's exact amendments — the Consumed Inputs table shape, the falsifiable empty form, the recipe column wording, the decision-citation rule — are the starting text for every template edit | Not independently reproducible — a live exchange with a metered provider; retained evidence: `evidence/adversarial-exchange-2026-08-02.md`, verbatim verdict | 2026-08-02T20:30:00Z | The design's text decisions settle on these amendments; without this item they would rest outside the pack |
+> The judgement whether a per-decision Context Pack artifact earns its cost is
+> deliberately deferred, not unresolved: the change proceeds correctly with
+> the minimal citation binding in OUT-5.
 
 ## Material Unknowns
 
-None. The one judgement left — whether per-decision context binding earns its
-cost — is recorded as deferred with its reason rather than carried as an
-unknown, because the change proceeds correctly without answering it.
+None.

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/heurema/goalrail/internal/ambient"
 )
@@ -270,9 +271,54 @@ type FileOutcome struct {
 // deliberate local edit that was never committed, so the default is to leave it
 // and report it; the caller that has asked the user decides otherwise.
 func Materialize(repositoryRoot string, overwrite bool) ([]FileOutcome, error) {
+	return materializeExpected(repositoryRoot, overwrite, nil, nil)
+}
+
+var errOverlayChangedDuringUpdate = errors.New("overlay changed during update")
+
+type overlayChangedDuringUpdateError struct {
+	paths []string
+}
+
+func (err *overlayChangedDuringUpdateError) Error() string {
+	return fmt.Sprintf("%s: %s", errOverlayChangedDuringUpdate, strings.Join(err.paths, ", "))
+}
+
+func (err *overlayChangedDuringUpdateError) Unwrap() error {
+	return errOverlayChangedDuringUpdate
+}
+
+// materializeExpected is the update-specific compare-before-write seam. The
+// ordinary Materialize API retains its explicit overwrite behavior, while an
+// update can require every replaceable file to still have the digest it backed
+// up. A bulk comparison fails before any write, and a second per-file comparison
+// narrows the window immediately before each replacement. The latter can detect
+// a change after earlier paths were already updated, so callers retain both the
+// recovery point and the completed outcomes when reporting that partial update.
+func materializeExpected(
+	repositoryRoot string,
+	overwrite bool,
+	expected map[string]string,
+	beforeReplace func(string),
+) ([]FileOutcome, error) {
 	state, err := InspectOverlay(repositoryRoot)
 	if err != nil {
 		return nil, err
+	}
+	if len(expected) > 0 {
+		var changed []string
+		for _, finding := range state.Files {
+			digest, tracked := expected[finding.Path]
+			if !tracked || finding.State == FileCurrent {
+				continue
+			}
+			if finding.Digest != digest {
+				changed = append(changed, finding.Path)
+			}
+		}
+		if len(changed) > 0 {
+			return nil, &overlayChangedDuringUpdateError{paths: changed}
+		}
 	}
 	outcomes := make([]FileOutcome, 0, len(state.Files))
 	for _, finding := range state.Files {
@@ -302,22 +348,34 @@ func Materialize(repositoryRoot string, overwrite bool) ([]FileOutcome, error) {
 			})
 			continue
 		}
+		if beforeReplace != nil {
+			beforeReplace(finding.Path)
+		}
+		// The bulk comparison above prevents an update that already knows the
+		// overlay changed from starting any writes. Re-read each path again at the
+		// narrowest portable seam before its own replacement so later files do not
+		// inherit the time spent writing earlier ones. This is optimistic, not an
+		// atomic filesystem compare-and-swap: a non-cooperating writer can still
+		// change the path after this read.
+		if expectedErr := requireExpectedDigest(repositoryRoot, finding.Path, expected); expectedErr != nil {
+			return outcomes, expectedErr
+		}
 		content, contentErr := Content(finding.Path)
 		if contentErr != nil {
-			return nil, contentErr
+			return outcomes, contentErr
 		}
 		absolute := filepath.Join(repositoryRoot, filepath.FromSlash(finding.Path))
 		// The overlay honours the same containment as the registration: a checkout
 		// can ship a symlink at any of these paths, and writing through one would
 		// land canonical content outside the repository the user named.
 		if containErr := ambient.EnsureWriteWithinRepository(repositoryRoot, absolute); containErr != nil {
-			return nil, containErr
+			return outcomes, containErr
 		}
 		if mkdirErr := os.MkdirAll(filepath.Dir(absolute), 0o755); mkdirErr != nil {
-			return nil, fmt.Errorf("create %s: %w", filepath.Dir(finding.Path), mkdirErr)
+			return outcomes, fmt.Errorf("create %s: %w", filepath.Dir(finding.Path), mkdirErr)
 		}
 		if writeErr := os.WriteFile(absolute, content, 0o644); writeErr != nil {
-			return nil, fmt.Errorf("write %s: %w", finding.Path, writeErr)
+			return outcomes, fmt.Errorf("write %s: %w", finding.Path, writeErr)
 		}
 		action := ActionUpdated
 		if finding.State == FileMissing {
@@ -330,4 +388,27 @@ func Materialize(repositoryRoot string, overwrite bool) ([]FileOutcome, error) {
 		})
 	}
 	return outcomes, nil
+}
+
+func requireExpectedDigest(repositoryRoot, relativePath string, expected map[string]string) error {
+	if len(expected) == 0 {
+		return nil
+	}
+	expectedDigest, tracked := expected[relativePath]
+	if !tracked {
+		return &overlayChangedDuringUpdateError{paths: []string{relativePath}}
+	}
+	content, err := os.ReadFile(filepath.Join(repositoryRoot, filepath.FromSlash(relativePath)))
+	actualDigest := ""
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+	case err != nil:
+		return fmt.Errorf("recheck %s before update: %w", relativePath, err)
+	default:
+		actualDigest = Digest(content)
+	}
+	if actualDigest != expectedDigest {
+		return &overlayChangedDuringUpdateError{paths: []string{relativePath}}
+	}
+	return nil
 }

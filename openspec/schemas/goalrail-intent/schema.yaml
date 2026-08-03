@@ -280,7 +280,10 @@ artifacts:
       Every material decision MUST cite the Context Pack item IDs it relies on.
       If a decision depends on a material fact absent from the current Context
       Pack, or stale since its observation time, create a new Context Pack
-      version before settling that decision.
+      version and stop design. Return the Intent Snapshot to candidate, create
+      its next version linked to both the previous intent version and the new
+      Context Pack, obtain exact owner confirmation of that candidate version,
+      and only then resume design and settle the decision.
 
 
       Do not select or implement target runtime infrastructure unless the current

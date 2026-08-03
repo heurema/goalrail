@@ -175,6 +175,8 @@ func TestTheCanonCarriesItsForcingFunctions(t *testing.T) {
 	for _, required := range []string{
 		"Consumed Inputs",
 		"MUST cite the Context Pack item IDs",
+		"Return the Intent Snapshot to candidate",
+		"obtain exact owner confirmation",
 		"verification recipe",
 		"candidate-or-confirmed",
 	} {
