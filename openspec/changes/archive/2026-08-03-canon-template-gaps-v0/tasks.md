@@ -36,4 +36,4 @@
 - [x] 6.1 Preserve `SIG-4` provenance and the current-canon boundary for behind versus superseded files in both the delta and promoted specification.
 - [x] 6.2 Make the migration test reconstruct and digest-check every retained previous-canon file and verify the derived canon ID.
 - [x] 6.3 Add the required Previous version field to both intent templates and pin it in canon tests.
-- [ ] 6.4 Disposition all four archive-review threads with evidence and finish with zero unresolved threads and green CI.
+- [x] 6.4 Disposition all four archive-review threads with evidence and finish with zero unresolved threads and green CI.
