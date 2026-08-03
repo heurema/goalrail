@@ -3,6 +3,7 @@ package harness
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -399,55 +400,133 @@ func TestThePreviousCanonUpgradesCleanly(t *testing.T) {
 	if len(previousCanons) == 0 {
 		t.Fatal("the canon history is empty; the first canon change would read as user edits")
 	}
-	recorded := previousCanons[0]
-
-	root := t.TempDir()
-	if _, err := Materialize(root, false); err != nil {
-		t.Fatal(err)
+	fixtureByCanonID := map[string]string{
+		"sha256:12cf770fb566fd4ae7bbb9d8299064cbbe9d61386c5676850a2d8f329c5ee4ad": "canon-v1",
 	}
-	// Overwrite the changed files with the shipped bytes, verifying each against
-	// the digest recorded in the history — if testdata and the recorded canon
-	// disagree, the test must fail rather than measure the wrong transition.
-	for _, name := range []string{"schema.yaml", "templates/context.md", "templates/design.md", "templates/intent.md"} {
-		shipped, err := os.ReadFile(filepath.Join("testdata", "canon-v1", name))
-		if err != nil {
-			t.Fatal(err)
-		}
-		path := "openspec/schemas/goalrail-intent/" + name
-		expected, known := recorded.Digest(path)
-		if !known {
-			t.Fatalf("the recorded canon does not carry %s", path)
-		}
-		if got := Digest(shipped); got != expected {
-			t.Fatalf("testdata for %s does not match the recorded previous canon: %s vs %s", name, got, expected)
-		}
-		if err := os.WriteFile(filepath.Join(root, filepath.FromSlash(path)), shipped, 0o644); err != nil {
-			t.Fatal(err)
-		}
+	if len(fixtureByCanonID) != len(previousCanons) {
+		t.Fatalf("previous canon fixtures = %d, recorded canons = %d", len(fixtureByCanonID), len(previousCanons))
 	}
-
-	// Diagnose: every replaced file is behind, none edited.
-	overlay, err := InspectOverlay(root)
+	current, err := CurrentCanon()
 	if err != nil {
-		t.Fatal(err)
-	}
-	for _, finding := range overlay.Files {
-		if finding.State == FileEdited {
-			t.Fatalf("%s at its shipped bytes reads as edited — an adopter would be told they changed it", finding.Path)
-		}
+		t.Fatalf("read current canon: %v", err)
 	}
 
-	// Update crosses without the discard flag, and the overlay is current after.
-	if _, err := Update(UpdateInput{RepositoryRoot: root, StateRoot: t.TempDir()}); err != nil {
-		t.Fatalf("the crossing demanded intervention: %v", err)
-	}
-	after, err := InspectOverlay(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, finding := range after.Files {
-		if finding.State != FileCurrent {
-			t.Fatalf("%s is %s after the update", finding.Path, finding.State)
+	for _, recorded := range previousCanons {
+		fixture, knownFixture := fixtureByCanonID[recorded.ID]
+		if !knownFixture {
+			t.Fatalf("the recorded canon %s has no retained fixture", recorded.ID)
 		}
+		t.Run(recorded.ID, func(t *testing.T) {
+			root := t.TempDir()
+			fixtureRoot := filepath.Join("testdata", fixture)
+			reconstructed := make([]CanonFile, 0, len(recorded.Files))
+			recordedDigests := make(map[string]string, len(recorded.Files))
+			expectedFixtureFiles := make(map[string]bool, len(recorded.Files))
+			supersededDigests := make(map[string]string)
+			for _, file := range recorded.Files {
+				if _, duplicate := recordedDigests[file.Path]; duplicate {
+					t.Fatalf("the recorded canon repeats %s", file.Path)
+				}
+				name, inOverlay := strings.CutPrefix(file.Path, OverlayDirectory+"/")
+				if !inOverlay {
+					t.Fatalf("the recorded canon carries a path outside the overlay: %s", file.Path)
+				}
+				expectedFixtureFiles[name] = true
+				shipped, err := os.ReadFile(filepath.Join(fixtureRoot, filepath.FromSlash(name)))
+				if err != nil {
+					t.Fatalf("read retained %s: %v", file.Path, err)
+				}
+				got := Digest(shipped)
+				if got != file.Digest {
+					t.Fatalf("testdata for %s does not match the recorded previous canon: %s vs %s", file.Path, got, file.Digest)
+				}
+				recordedDigests[file.Path] = got
+				if _, stillCanonical := current.Digest(file.Path); !stillCanonical {
+					supersededDigests[file.Path] = got
+				}
+				reconstructed = append(reconstructed, CanonFile{Path: file.Path, Digest: got})
+				target := filepath.Join(root, filepath.FromSlash(file.Path))
+				if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+					t.Fatalf("create retained path for %s: %v", file.Path, err)
+				}
+				if err := os.WriteFile(target, shipped, 0o644); err != nil {
+					t.Fatalf("materialize retained %s: %v", file.Path, err)
+				}
+			}
+			walkErr := filepath.Walk(fixtureRoot, func(walked string, info os.FileInfo, walkErr error) error {
+				if walkErr != nil {
+					return walkErr
+				}
+				if info.IsDir() {
+					return nil
+				}
+				relative, relErr := filepath.Rel(fixtureRoot, walked)
+				if relErr != nil {
+					return relErr
+				}
+				relative = filepath.ToSlash(relative)
+				if !expectedFixtureFiles[relative] {
+					t.Errorf("fixture %s carries unrecorded file %s", fixture, relative)
+				}
+				return nil
+			})
+			if walkErr != nil {
+				t.Fatalf("walk retained fixture %s: %v", fixture, walkErr)
+			}
+			if got := canonIdentity(reconstructed); got != recorded.ID {
+				t.Fatalf("retained files derive canon %s, want recorded %s", got, recorded.ID)
+			}
+
+			// Diagnose: retained current paths are behind or current, paths removed
+			// from the current canon are superseded, and none are user edits.
+			overlay, err := InspectOverlay(root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, finding := range overlay.Files {
+				recordedDigest, wasRecorded := recordedDigests[finding.Path]
+				currentDigest, isCurrent := current.Digest(finding.Path)
+				want := FileMissing
+				switch {
+				case wasRecorded && isCurrent && recordedDigest == currentDigest:
+					want = FileCurrent
+				case wasRecorded && isCurrent:
+					want = FileBehind
+				case wasRecorded:
+					want = FileSuperseded
+				case isCurrent:
+					want = FileMissing
+				}
+				if finding.State != want {
+					t.Fatalf("%s at its retained bytes is %s, want %s", finding.Path, finding.State, want)
+				}
+			}
+
+			// Update crosses without the discard flag. Current paths converge, while
+			// any superseded historical paths remain visible and untouched.
+			report, err := Update(UpdateInput{RepositoryRoot: root, StateRoot: t.TempDir()})
+			if err != nil {
+				t.Fatalf("the crossing demanded intervention: %v", err)
+			}
+			if !report.Verified || len(report.DiscardedLocalEdits) != 0 {
+				t.Fatalf("unexpected crossing report: %+v", report)
+			}
+			after, err := InspectOverlay(root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !after.Settled() {
+				t.Fatalf("overlay is not settled after the update: %+v", after.Files)
+			}
+			for path, want := range supersededDigests {
+				content, readErr := os.ReadFile(filepath.Join(root, filepath.FromSlash(path)))
+				if readErr != nil {
+					t.Fatalf("read superseded %s after update: %v", path, readErr)
+				}
+				if got := Digest(content); got != want {
+					t.Fatalf("superseded %s changed during update: %s vs %s", path, got, want)
+				}
+			}
+		})
 	}
 }

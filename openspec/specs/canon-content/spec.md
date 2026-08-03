@@ -50,6 +50,10 @@ resumes. The pack is verified before intent and can be outdated by the time
 design settles; citation is the minimal binding that exposes that gap without
 inventing a per-decision artifact.
 
+Both mirrored intent templates SHALL expose a Previous version metadata field
+for that link. The author SHALL delete the field for version 1 and SHALL fill it
+with the direct predecessor version for every later snapshot.
+
 #### Scenario: A decision on fresh context
 - **WHEN** a material decision cites context items present and current in the pack
 - **THEN** it settles with those citations recorded
@@ -57,6 +61,14 @@ inventing a per-decision artifact.
 #### Scenario: A decision on a missing or stale fact
 - **WHEN** a material decision depends on a fact the current pack lacks or observed too long ago
 - **THEN** design stops, the pack gains a version carrying that fact, intent returns as a linked candidate version, and exact owner confirmation precedes both resumed design and the settled decision
+
+#### Scenario: A later intent version is created from the template
+- **WHEN** an author creates intent version 2 or later after a material context refresh
+- **THEN** the template provides the Previous version field required to link the new candidate to its direct predecessor
+
+#### Scenario: The first intent version is created from the template
+- **WHEN** an author creates intent version 1
+- **THEN** the author deletes the Previous version row because the snapshot has no predecessor
 
 ### Requirement: The intent template does not assert confirmation outside the status
 **Intent IDs:** OUT-3

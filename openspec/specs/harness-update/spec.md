@@ -59,21 +59,23 @@ CLI: the canon is already inside the binary.
 - **THEN** it is refused with the reason named, and nothing is written into it
 
 ### Requirement: Local drift stops an update rather than being overwritten
-**Intent IDs:** OUT-1, SIG-1
+**Intent IDs:** OUT-1, SIG-1, SIG-4
 
 An update SHALL refuse to replace overlay files that differ from every canon
 this binary knows, and SHALL name the differing files and the flag that
 discards local edits. A user's edit is theirs, and an update that silently
 overwrites it turns a customization into a loss.
 
-An overlay file byte-identical to a **previous** canon SHALL be classified as
-behind, never as edited, and the update SHALL bring it forward without any
-flag. The first canon change in this project's history is exactly this case for
+An overlay file whose path remains defined by the **current** canon and whose
+bytes are identical to a previous canon SHALL be classified as behind, never
+as edited, and the update SHALL bring it forward without any flag. A path that
+only a previous canon defined is superseded instead and remains untouched. The
+first canon change in this project's history is exactly the behind case for
 every adopter at once: their files match what an earlier binary materialized,
 they edited nothing, and demanding `--discard-local-edits` from all of them
 would misname a routine upgrade as a conflict. A migration test SHALL pin the
 transition from the actual previous canon, by digest, so the safety is proven
-against the bytes that shipped rather than against a fixture.
+against the bytes that shipped rather than against a synthetic fixture.
 
 #### Scenario: A template was edited locally
 - **WHEN** an overlay file matches no canon this binary knows
@@ -128,12 +130,12 @@ all changed inputs began missing and no backup was needed.
 - **THEN** the CLI emits the partial report even though the backup field is empty
 
 #### Scenario: A previous canon's file is behind, not edited
-- **WHEN** an overlay file is byte-identical to a canon a previous binary shipped
+- **WHEN** a path remains defined by the current canon and its overlay file is byte-identical to a canon a previous binary shipped
 - **THEN** the diagnosis reports it as behind and the update replaces it without any flag
 
 #### Scenario: The real transition is pinned
 - **WHEN** the migration test runs
-- **THEN** it materializes the previous canon by its recorded digest and proves the update crosses to the current one clean
+- **THEN** it reads every retained previous-canon file, validates every recorded digest and the derived canon ID, reconstructs the old overlay, and proves the update crosses to the current one clean
 
 ### Requirement: The update does not update the binary
 **Intent IDs:** OUT-5
