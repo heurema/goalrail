@@ -35,7 +35,8 @@ break clean `gr update`. That fix is now the first outcome, not a footnote.
 - **`intent.md`: headings stop asserting confirmation.** "Outcome" and
   "Boundary" replace the "Confirmed …" headings; the schema description says
   candidate-or-confirmed; Status and the Confirmation block remain the only
-  places confirmation lives.
+  places confirmation lives. Both mirrored templates expose the Previous
+  version field required when a material amendment creates version 2 or later.
 - **`context.md`: Verification recipe.** Bounded, read-only, prerequisites and
   expected observation stated; an honest non-reproducible form for historical
   evidence; a refresh command never described as reproducing an earlier
@@ -43,8 +44,8 @@ break clean `gr update`. That fix is now the first outcome, not a footnote.
   continuing to accept legacy six-column Context Packs without inventing data.
 - **Context refresh rebinds owner intent.** A material absent or stale fact
   stops design, creates the next Context Pack and a linked candidate Intent
-  Snapshot version, and requires exact owner confirmation before design or the
-  affected decision resumes.
+  Snapshot version using the template's Previous version field, and requires
+  exact owner confirmation before design or the affected decision resumes.
 - Every edit lands in the canon templates, the canon `schema.yaml`
   instructions, and the mirrored repository schema copies at once, byte-identical
   where the tests demand it; the canon CLI test stops promising a validation it

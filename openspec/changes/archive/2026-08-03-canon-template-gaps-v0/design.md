@@ -33,7 +33,9 @@ becomes candidate-or-confirmed. Generation follows instructions; a
 template-only edit would produce artifacts that ignore the new sections. A
 context refresh during design stops design, creates a linked candidate intent
 version bound to the refreshed pack, and requires exact owner confirmation
-before design resumes; otherwise the temporal validator correctly rejects the
+before design resumes; both mirrored intent templates expose the Previous
+version field the runtime validator requires for that link, with the row
+deleted for version 1. Otherwise the temporal validator correctly rejects the
 late pack.
 
 **Verification recipes are retained input, not decorative prose.** (CTX-6)

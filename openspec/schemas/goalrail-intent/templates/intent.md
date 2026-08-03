@@ -2,6 +2,7 @@
 
 - **Intent ID:** <!-- stable change-level intent identifier -->
 - **Version:** <!-- integer version -->
+- **Previous version:** <!-- direct predecessor version; delete this row for version 1 -->
 - **Status:** <!-- candidate | confirmed -->
 - **Owner:** <!-- confirming decision owner -->
 - **Context Pack:** <!-- context.md ID and version -->

@@ -317,6 +317,59 @@ func TestReadIntentRejectsConfirmedUnresolvedAmbiguity(t *testing.T) {
 	}
 }
 
+func TestReadIntentEnforcesVersionLineage(t *testing.T) {
+	versionOne := minimalIntent("candidate", "None.", false)
+	snapshot, err := ReadIntent(strings.NewReader(versionOne))
+	if err != nil {
+		t.Fatalf("read version 1: %v", err)
+	}
+	if snapshot.Version != 1 || snapshot.PreviousVersion != 0 {
+		t.Fatalf("version 1 lineage = %d <- %d", snapshot.Version, snapshot.PreviousVersion)
+	}
+
+	versionTwo := strings.Replace(
+		versionOne,
+		"- **Version:** 1",
+		"- **Version:** 2\n- **Previous version:** 1",
+		1,
+	)
+	snapshot, err = ReadIntent(strings.NewReader(versionTwo))
+	if err != nil {
+		t.Fatalf("read version 2: %v", err)
+	}
+	if snapshot.Version != 2 || snapshot.PreviousVersion != 1 {
+		t.Fatalf("version 2 lineage = %d <- %d", snapshot.Version, snapshot.PreviousVersion)
+	}
+
+	missingPredecessor := strings.Replace(versionOne, "- **Version:** 1", "- **Version:** 2", 1)
+	if _, err = ReadIntent(strings.NewReader(missingPredecessor)); err == nil ||
+		!strings.Contains(err.Error(), "intent.previous_version.invalid") {
+		t.Fatalf("missing version 2 predecessor error = %v", err)
+	}
+
+	placeholderPredecessor := strings.Replace(
+		versionOne,
+		"- **Version:** 1",
+		"- **Version:** 2\n- **Previous version:** <!-- direct predecessor version -->",
+		1,
+	)
+	if _, err = ReadIntent(strings.NewReader(placeholderPredecessor)); err == nil ||
+		!strings.Contains(err.Error(), "intent.previous_version.invalid") {
+		t.Fatalf("placeholder predecessor error = %v", err)
+	}
+
+	versionOneWithPredecessor := strings.Replace(
+		versionOne,
+		"- **Version:** 1",
+		"- **Version:** 1\n- **Previous version:** 1",
+		1,
+	)
+	if _, err = ReadIntent(strings.NewReader(versionOneWithPredecessor)); err == nil ||
+		!strings.Contains(err.Error(), "intent.previous_version.invalid") {
+		t.Fatalf("version 1 predecessor error = %v", err)
+	}
+}
+
 func TestReadIntentRejectsUnstructuredAmbiguityText(t *testing.T) {
 	_, err := ReadIntent(strings.NewReader(minimalIntent("candidate", "Maybe this means something else.", false)))
 	if !errors.Is(err, ErrMalformedArtifact) {

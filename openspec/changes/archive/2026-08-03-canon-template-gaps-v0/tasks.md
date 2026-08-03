@@ -30,3 +30,10 @@
 - [x] 5.4 Make the design instruction stop, version intent, and obtain exact owner confirmation after a material Context Pack refresh; mirror and test the instruction.
 - [x] 5.5 Obtain exact owner confirmation of `INT-canon-template-gaps-v0 v3` after presenting its owner-language view.
 - [x] 5.6 Run targeted, shuffled, race, full Go, and strict OpenSpec checks; disposition all eight review threads with evidence and finish with zero unresolved threads and green CI.
+
+## 6. Close the archive review findings
+
+- [x] 6.1 Preserve `SIG-4` provenance and the current-canon boundary for behind versus superseded files in both the delta and promoted specification.
+- [x] 6.2 Make the migration test reconstruct and digest-check every retained previous-canon file and verify the derived canon ID.
+- [x] 6.3 Add the required Previous version field to both intent templates and pin it in canon tests.
+- [x] 6.4 Disposition all four archive-review threads with evidence and finish with zero unresolved threads and green CI.

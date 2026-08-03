@@ -163,6 +163,12 @@ func TestTheCanonCarriesItsForcingFunctions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if !strings.Contains(
+		string(intent),
+		"- **Previous version:** <!-- direct predecessor version; delete this row for version 1 -->",
+	) {
+		t.Fatal("intent template lost the predecessor field required by later versions")
+	}
 	for _, banned := range []string{"Confirmed wording", "Confirmed boundary"} {
 		if strings.Contains(string(intent), banned) {
 			t.Fatalf("intent template still asserts confirmation in a heading: %q", banned)
