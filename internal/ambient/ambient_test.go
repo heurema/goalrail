@@ -49,8 +49,8 @@ type fixedIntents struct {
 	reason    string
 }
 
-func (resolver fixedIntents) ActiveConfirmedIntent(string) (*IntentRef, string) {
-	return resolver.reference, resolver.reason
+func (resolver fixedIntents) ActiveConfirmedIntent(string) IntentResolution {
+	return IntentResolution{Reference: resolver.reference, UnboundReason: resolver.reason}
 }
 
 func fixedClock() func() time.Time {
@@ -326,6 +326,35 @@ func TestQuestionRecordSerialisesWithoutThePayload(t *testing.T) {
 	}
 	if strings.Contains(string(encoded), "Which retention period governs") {
 		t.Fatal("the record embedded the question instead of referencing it")
+	}
+	if record.Schema != "goalrail.ambient-question/v1" {
+		t.Fatalf("schema = %q", record.Schema)
+	}
+}
+
+func TestStopSessionRetainsInvalidConfirmedBindingDiagnostics(t *testing.T) {
+	root := initializedRepository(t)
+	writeQuestion(t, root, validQuestion)
+	writeChange(t, root, "good-change", "INTENT-GOOD", "confirmed", "1")
+	writeInvalidPairChange(t, root, "broken-change", "confirmed")
+	store := newRecordingStore()
+
+	record, err := StopSession(store, root, "session-one", OpenSpecIntents{}, fixedClock())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if record.Intent != nil || record.UnboundWhy != reasonInvalidConfirmed {
+		t.Fatalf("record = %+v", record)
+	}
+	if len(record.BindingDiagnostics) != 1 || record.BindingDiagnostics[0].Change != "broken-change" {
+		t.Fatalf("binding diagnostics = %+v", record.BindingDiagnostics)
+	}
+	encoded, err := json.Marshal(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(encoded), `"binding_diagnostics"`) || strings.Contains(string(encoded), "CTXP-broken version 1") {
+		t.Fatalf("serialized diagnostic is missing or leaks artifact content: %s", encoded)
 	}
 }
 

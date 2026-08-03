@@ -4,6 +4,7 @@ package openspec
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -30,6 +31,7 @@ const goalrailIntentSchema = "goalrail-intent"
 type CompiledChange struct {
 	Intent   domain.IntentSnapshot
 	Proposal domain.Proposal
+	Pair     *ConformedPair
 }
 
 // ReadContext parses the bounded evidence artifact introduced by schema v2.
@@ -98,49 +100,52 @@ func ReadContext(reader io.Reader) (domain.ContextPack, error) {
 // exclusively through canonical domain rules. A missing context.md is accepted
 // only for legacy schema-v1 changes.
 func LoadChange(changeDir string) (CompiledChange, error) {
-	var contextPack *domain.ContextPack
-	contextFile, err := os.Open(filepath.Join(changeDir, "context.md"))
-	if err == nil {
-		parsed, readErr := ReadContext(contextFile)
-		closeErr := contextFile.Close()
-		if readErr != nil {
-			return CompiledChange{}, readErr
+	contextPath := filepath.Join(changeDir, "context.md")
+	var rawContext []byte
+	if _, err := os.Lstat(contextPath); err == nil {
+		rawContext, err = readPairArtifactFile(contextPath, "context.md", ArtifactKindContext)
+		if err != nil {
+			return CompiledChange{}, err
 		}
-		if closeErr != nil {
-			return CompiledChange{}, fmt.Errorf("close OpenSpec context: %w", closeErr)
-		}
-		contextPack = &parsed
 	} else if !errors.Is(err, os.ErrNotExist) {
-		return CompiledChange{}, fmt.Errorf("open OpenSpec context: %w", err)
+		return CompiledChange{}, inputUnavailableDiagnostic("context.md", ArtifactKindContext, "unreadable input", err)
 	} else {
 		required, requirementErr := changeRequiresContext(changeDir)
 		if requirementErr != nil {
 			return CompiledChange{}, requirementErr
 		}
 		if required {
-			return CompiledChange{}, fmt.Errorf("%w: goalrail-intent change has no context.md", ErrContextRequired)
+			return CompiledChange{}, inputUnavailableDiagnostic(
+				"context.md", ArtifactKindContext, "missing required input", ErrContextRequired,
+			)
 		}
 	}
 
-	intentFile, err := os.Open(filepath.Join(changeDir, "intent.md"))
+	intentPath := filepath.Join(changeDir, "intent.md")
+	rawIntent, err := readPairArtifactFile(intentPath, "intent.md", ArtifactKindIntent)
 	if err != nil {
+		if rawContext != nil {
+			return CompiledChange{}, err
+		}
 		return CompiledChange{}, fmt.Errorf("open OpenSpec intent: %w", err)
 	}
-	intent, readErr := readIntent(intentFile, contextPack)
-	closeErr := intentFile.Close()
-	if readErr != nil {
-		return CompiledChange{}, readErr
-	}
-	if closeErr != nil {
-		return CompiledChange{}, fmt.Errorf("close OpenSpec intent: %w", closeErr)
+	var pair *ConformedPair
+	var intent domain.IntentSnapshot
+	if rawContext != nil {
+		conformed, conformErr := ConformPair(rawContext, rawIntent, "context.md", "intent.md")
+		if conformErr != nil {
+			return CompiledChange{}, conformErr
+		}
+		pair = &conformed
+		intent = conformed.Intent
+	} else {
+		intent, err = ReadIntent(bytes.NewReader(rawIntent))
+		if err != nil {
+			return CompiledChange{}, err
+		}
 	}
 	if intent.Status != domain.IntentConfirmed {
 		return CompiledChange{}, fmt.Errorf("%w: status is %q", ErrIntentNotConfirmed, intent.Status)
-	}
-	if contextPack != nil {
-		if err := domain.ValidateFlowIntentSnapshot(intent); err != nil {
-			return CompiledChange{}, fmt.Errorf("validate OpenSpec flow intent: %w", err)
-		}
 	}
 
 	proposalFile, err := os.Open(filepath.Join(changeDir, "proposal.md"))
@@ -148,7 +153,7 @@ func LoadChange(changeDir string) (CompiledChange, error) {
 		return CompiledChange{}, fmt.Errorf("open OpenSpec proposal: %w", err)
 	}
 	proposal, readErr := ReadProposal(proposalFile)
-	closeErr = proposalFile.Close()
+	closeErr := proposalFile.Close()
 	if readErr != nil {
 		return CompiledChange{}, readErr
 	}
@@ -158,7 +163,7 @@ func LoadChange(changeDir string) (CompiledChange, error) {
 	if err := domain.ValidateProposalCoverage(intent, proposal); err != nil {
 		return CompiledChange{}, fmt.Errorf("validate OpenSpec proposal coverage: %w", err)
 	}
-	return CompiledChange{Intent: intent, Proposal: proposal}, nil
+	return CompiledChange{Intent: intent, Proposal: proposal, Pair: pair}, nil
 }
 
 func changeRequiresContext(changeDir string) (bool, error) {

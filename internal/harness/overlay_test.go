@@ -402,6 +402,7 @@ func TestThePreviousCanonUpgradesCleanly(t *testing.T) {
 	}
 	fixtureByCanonID := map[string]string{
 		"sha256:12cf770fb566fd4ae7bbb9d8299064cbbe9d61386c5676850a2d8f329c5ee4ad": "canon-v1",
+		"sha256:5bb44313098d6d330bf40090a1e9b4b422441c2baf28af8c57dd2a168316d1b1": "canon-v2",
 	}
 	if len(fixtureByCanonID) != len(previousCanons) {
 		t.Fatalf("previous canon fixtures = %d, recorded canons = %d", len(fixtureByCanonID), len(previousCanons))

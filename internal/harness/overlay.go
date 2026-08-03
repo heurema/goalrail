@@ -37,6 +37,18 @@ var previousCanons = []Canon{
 			{Path: "openspec/schemas/goalrail-intent/templates/tasks.md", Digest: "sha256:b2a6a4c08c15f347a1d8c3e2d43e0c8fb066dc5cc0feb795f47555f176f9c421"},
 		},
 	},
+	{
+		ID: "sha256:5bb44313098d6d330bf40090a1e9b4b422441c2baf28af8c57dd2a168316d1b1",
+		Files: []CanonFile{
+			{Path: "openspec/schemas/goalrail-intent/schema.yaml", Digest: "sha256:42666f5b7cef3c4b2fc730aea77d8f2409869d80d0a46da6edb49a5f876714b2"},
+			{Path: "openspec/schemas/goalrail-intent/templates/context.md", Digest: "sha256:5090b5f8f9b91f5c59b1403b3f307038f371ee07bff3b4742949554ce7b5c14c"},
+			{Path: "openspec/schemas/goalrail-intent/templates/design.md", Digest: "sha256:e8fa784c687c9fa5fdacd53da68639775c5d4f8ba0be12b704ce0fd470979879"},
+			{Path: "openspec/schemas/goalrail-intent/templates/intent.md", Digest: "sha256:b307eb9710f4d7a6d599f8428efe2b7aca37ef607867490cac4e936b45cf0b35"},
+			{Path: "openspec/schemas/goalrail-intent/templates/proposal.md", Digest: "sha256:b23361a7591957c6b9b708ea71ae804e86050909a8119eabf18be42b2fffc63e"},
+			{Path: "openspec/schemas/goalrail-intent/templates/spec.md", Digest: "sha256:64332d907be02c4402512504986392e18eb452715d0d17dc22acde2e4578e5dc"},
+			{Path: "openspec/schemas/goalrail-intent/templates/tasks.md", Digest: "sha256:b2a6a4c08c15f347a1d8c3e2d43e0c8fb066dc5cc0feb795f47555f176f9c421"},
+		},
+	},
 }
 
 // FileState is what one overlay file is, judged against the canon this binary

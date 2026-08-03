@@ -154,7 +154,12 @@ func TestTheCanonCarriesItsForcingFunctions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, required := range []string{"Verification recipe", "Not independently reproducible"} {
+	for _, required := range []string{
+		"Verification recipe",
+		"Not independently reproducible",
+		"- **Artifact Contract:** goalrail-context-intent",
+		"- **Artifact Contract Version:** 1",
+	} {
 		if !strings.Contains(string(context), required) {
 			t.Fatalf("context template lost %q", required)
 		}
@@ -168,6 +173,14 @@ func TestTheCanonCarriesItsForcingFunctions(t *testing.T) {
 		"- **Previous version:** <!-- direct predecessor version; delete this row for version 1 -->",
 	) {
 		t.Fatal("intent template lost the predecessor field required by later versions")
+	}
+	for _, required := range []string{
+		"- **Artifact Contract:** goalrail-context-intent",
+		"- **Artifact Contract Version:** 1",
+	} {
+		if !strings.Contains(string(intent), required) {
+			t.Fatalf("intent template lost %q", required)
+		}
 	}
 	for _, banned := range []string{"Confirmed wording", "Confirmed boundary"} {
 		if strings.Contains(string(intent), banned) {
@@ -185,6 +198,8 @@ func TestTheCanonCarriesItsForcingFunctions(t *testing.T) {
 		"obtain exact owner confirmation",
 		"verification recipe",
 		"candidate-or-confirmed",
+		"Artifact Contract Version: 1",
+		"<id> version <number>",
 	} {
 		if !strings.Contains(string(schema), required) {
 			t.Fatalf("schema instructions lost %q", required)

@@ -3,6 +3,8 @@
 - **Context Pack ID:** <!-- stable change-level context identifier -->
 - **Version:** <!-- integer version -->
 - **Previous version:** <!-- prior version or pending -->
+- **Artifact Contract:** goalrail-context-intent
+- **Artifact Contract Version:** 1
 - **Started at:** <!-- ISO-8601 UTC timestamp -->
 - **Completed at:** <!-- ISO-8601 UTC timestamp -->
 - **Outcome:** <!-- sufficient | material_unknown | budget_exhausted -->
