@@ -10,6 +10,7 @@ import (
 
 const (
 	maxContextClaimRunes     = 512
+	maxContextRecipeRunes    = 512
 	maxContextRelevanceRunes = 320
 	maxContextUnknownRunes   = 512
 )
@@ -66,6 +67,13 @@ func ValidateContextPack(pack ContextPack) error {
 			v.add("context.item.kind_invalid", path+".kind", "context item kind must be repository or external")
 		}
 		validateContextText(v, path+".claim", item.Claim, maxContextClaimRunes)
+		// Empty is the legacy six-column representation. New seven-column
+		// artifacts are required by their adapter to carry a recipe; once present,
+		// it is retained and protected by the same bounded/sensitive-text rules as
+		// the other context fields.
+		if item.VerificationRecipe != "" {
+			validateContextText(v, path+".verification_recipe", item.VerificationRecipe, maxContextRecipeRunes)
+		}
 		validateContextText(v, path+".relevance", item.Relevance, maxContextRelevanceRunes)
 		validateContextSourceRef(v, path+".source_ref", item.SourceRef)
 		validateUTCTimestamp(v, path+".observed_at", item.ObservedAt)

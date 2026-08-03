@@ -163,10 +163,11 @@ func runUpdate(args []string, stdout, stderr io.Writer) error {
 		StateRoot:         stateRoot,
 		DiscardLocalEdits: *discard,
 	})
-	// A failed verification still made a backup and rewrote files. Discarding the
-	// report there would lose the backup path at exactly the moment the user needs
-	// it, so a report that names one is printed even on the error path.
-	if report.Backup != "" {
+	// A failed update can have made a recovery point or completed earlier file
+	// replacements before a later path changed. Print either fact on the error
+	// path; otherwise the CLI would hide a real partial update when every changed
+	// input began missing and therefore needed no backup.
+	if report.Backup != "" || updateReportHasChanges(report) {
 		if writeErr := writeJSON(stdout, report); writeErr != nil && err == nil {
 			return writeErr
 		}
@@ -176,6 +177,15 @@ func runUpdate(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	return writeJSON(stdout, report)
+}
+
+func updateReportHasChanges(report harness.UpdateReport) bool {
+	for _, outcome := range report.Files {
+		if outcome.Action == harness.ActionCreated || outcome.Action == harness.ActionUpdated {
+			return true
+		}
+	}
+	return false
 }
 
 func runVersion(args []string, stdout, stderr io.Writer) error {

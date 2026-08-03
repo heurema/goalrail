@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/heurema/goalrail/internal/ambient"
 )
@@ -16,11 +17,27 @@ import (
 // apart from a locally edited one: a file matching a version listed here is
 // behind, while a file matching nothing known was edited.
 //
-// It is empty in this version, because this is the first canon to ship. The
-// classification is still implemented and tested against a synthetic entry
-// rather than deferred: the alternative is discovering the shape of the state on
-// the day it first matters, in a user's repository.
-var previousCanons []Canon
+// The first entry is the canon that shipped from v0.1.1 through v0.1.8,
+// recorded the day the canon first changed. Without it, that change would have
+// classified every adopter's overlay as edited — their files match what an
+// earlier binary materialized, they edited nothing — and `gr update` would have
+// demanded --discard-local-edits for a routine upgrade. Found by the
+// adversarial exchange before it could happen; the migration test pins this
+// exact transition by digest.
+var previousCanons = []Canon{
+	{
+		ID: "sha256:12cf770fb566fd4ae7bbb9d8299064cbbe9d61386c5676850a2d8f329c5ee4ad",
+		Files: []CanonFile{
+			{Path: "openspec/schemas/goalrail-intent/schema.yaml", Digest: "sha256:b1599076b9ea7b00a6bc0268ce84e06439c0b571def31f6957cfacba252639d8"},
+			{Path: "openspec/schemas/goalrail-intent/templates/context.md", Digest: "sha256:6b7ad3dcd86a1a51ba9d5b6d589d302c0cc293fcfee4ebc2d7efb151a134940e"},
+			{Path: "openspec/schemas/goalrail-intent/templates/design.md", Digest: "sha256:3653a4ed89b6d1b2f575b75b98096c52744f5ee4a174d76146f6013f044b4cdd"},
+			{Path: "openspec/schemas/goalrail-intent/templates/intent.md", Digest: "sha256:11ce3c0af731300bcc785b8ea0a94850359b73607deb966858e52ef39d45c1e5"},
+			{Path: "openspec/schemas/goalrail-intent/templates/proposal.md", Digest: "sha256:b23361a7591957c6b9b708ea71ae804e86050909a8119eabf18be42b2fffc63e"},
+			{Path: "openspec/schemas/goalrail-intent/templates/spec.md", Digest: "sha256:64332d907be02c4402512504986392e18eb452715d0d17dc22acde2e4578e5dc"},
+			{Path: "openspec/schemas/goalrail-intent/templates/tasks.md", Digest: "sha256:b2a6a4c08c15f347a1d8c3e2d43e0c8fb066dc5cc0feb795f47555f176f9c421"},
+		},
+	},
+}
 
 // FileState is what one overlay file is, judged against the canon this binary
 // carries and the ones it remembers.
@@ -254,9 +271,54 @@ type FileOutcome struct {
 // deliberate local edit that was never committed, so the default is to leave it
 // and report it; the caller that has asked the user decides otherwise.
 func Materialize(repositoryRoot string, overwrite bool) ([]FileOutcome, error) {
+	return materializeExpected(repositoryRoot, overwrite, nil, nil)
+}
+
+var errOverlayChangedDuringUpdate = errors.New("overlay changed during update")
+
+type overlayChangedDuringUpdateError struct {
+	paths []string
+}
+
+func (err *overlayChangedDuringUpdateError) Error() string {
+	return fmt.Sprintf("%s: %s", errOverlayChangedDuringUpdate, strings.Join(err.paths, ", "))
+}
+
+func (err *overlayChangedDuringUpdateError) Unwrap() error {
+	return errOverlayChangedDuringUpdate
+}
+
+// materializeExpected is the update-specific compare-before-write seam. The
+// ordinary Materialize API retains its explicit overwrite behavior, while an
+// update can require every replaceable file to still have the digest it backed
+// up. A bulk comparison fails before any write, and a second per-file comparison
+// narrows the window immediately before each replacement. The latter can detect
+// a change after earlier paths were already updated, so callers retain both the
+// recovery point and the completed outcomes when reporting that partial update.
+func materializeExpected(
+	repositoryRoot string,
+	overwrite bool,
+	expected map[string]string,
+	beforeReplace func(string),
+) ([]FileOutcome, error) {
 	state, err := InspectOverlay(repositoryRoot)
 	if err != nil {
 		return nil, err
+	}
+	if len(expected) > 0 {
+		var changed []string
+		for _, finding := range state.Files {
+			digest, tracked := expected[finding.Path]
+			if !tracked || finding.State == FileCurrent {
+				continue
+			}
+			if finding.Digest != digest {
+				changed = append(changed, finding.Path)
+			}
+		}
+		if len(changed) > 0 {
+			return nil, &overlayChangedDuringUpdateError{paths: changed}
+		}
 	}
 	outcomes := make([]FileOutcome, 0, len(state.Files))
 	for _, finding := range state.Files {
@@ -286,22 +348,34 @@ func Materialize(repositoryRoot string, overwrite bool) ([]FileOutcome, error) {
 			})
 			continue
 		}
+		if beforeReplace != nil {
+			beforeReplace(finding.Path)
+		}
+		// The bulk comparison above prevents an update that already knows the
+		// overlay changed from starting any writes. Re-read each path again at the
+		// narrowest portable seam before its own replacement so later files do not
+		// inherit the time spent writing earlier ones. This is optimistic, not an
+		// atomic filesystem compare-and-swap: a non-cooperating writer can still
+		// change the path after this read.
+		if expectedErr := requireExpectedDigest(repositoryRoot, finding.Path, expected); expectedErr != nil {
+			return outcomes, expectedErr
+		}
 		content, contentErr := Content(finding.Path)
 		if contentErr != nil {
-			return nil, contentErr
+			return outcomes, contentErr
 		}
 		absolute := filepath.Join(repositoryRoot, filepath.FromSlash(finding.Path))
 		// The overlay honours the same containment as the registration: a checkout
 		// can ship a symlink at any of these paths, and writing through one would
 		// land canonical content outside the repository the user named.
 		if containErr := ambient.EnsureWriteWithinRepository(repositoryRoot, absolute); containErr != nil {
-			return nil, containErr
+			return outcomes, containErr
 		}
 		if mkdirErr := os.MkdirAll(filepath.Dir(absolute), 0o755); mkdirErr != nil {
-			return nil, fmt.Errorf("create %s: %w", filepath.Dir(finding.Path), mkdirErr)
+			return outcomes, fmt.Errorf("create %s: %w", filepath.Dir(finding.Path), mkdirErr)
 		}
 		if writeErr := os.WriteFile(absolute, content, 0o644); writeErr != nil {
-			return nil, fmt.Errorf("write %s: %w", finding.Path, writeErr)
+			return outcomes, fmt.Errorf("write %s: %w", finding.Path, writeErr)
 		}
 		action := ActionUpdated
 		if finding.State == FileMissing {
@@ -314,4 +388,27 @@ func Materialize(repositoryRoot string, overwrite bool) ([]FileOutcome, error) {
 		})
 	}
 	return outcomes, nil
+}
+
+func requireExpectedDigest(repositoryRoot, relativePath string, expected map[string]string) error {
+	if len(expected) == 0 {
+		return nil
+	}
+	expectedDigest, tracked := expected[relativePath]
+	if !tracked {
+		return &overlayChangedDuringUpdateError{paths: []string{relativePath}}
+	}
+	content, err := os.ReadFile(filepath.Join(repositoryRoot, filepath.FromSlash(relativePath)))
+	actualDigest := ""
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+	case err != nil:
+		return fmt.Errorf("recheck %s before update: %w", relativePath, err)
+	default:
+		actualDigest = Digest(content)
+	}
+	if actualDigest != expectedDigest {
+		return &overlayChangedDuringUpdateError{paths: []string{relativePath}}
+	}
+	return nil
 }

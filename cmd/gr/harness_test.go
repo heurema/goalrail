@@ -13,7 +13,23 @@ import (
 	"testing"
 
 	"github.com/heurema/goalrail/internal/ambient"
+	"github.com/heurema/goalrail/internal/harness"
 )
+
+func TestUpdateReportExposesAPartialMutationWithoutABackup(t *testing.T) {
+	report := harness.UpdateReport{Files: []harness.FileOutcome{
+		{Path: "unchanged", Action: harness.ActionUnchanged},
+		{Path: "created", Action: harness.ActionCreated},
+	}}
+	if !updateReportHasChanges(report) {
+		t.Fatal("a partial creation would be hidden on the update error path")
+	}
+	if updateReportHasChanges(harness.UpdateReport{Files: []harness.FileOutcome{
+		{Path: "unchanged", Action: harness.ActionUnchanged},
+	}}) {
+		t.Fatal("an unchanged preflight was reported as a partial mutation")
+	}
+}
 
 // scratchRepository is a git repository with the machine's own ignore
 // configuration kept out, so what these tests exercise is the repository's state

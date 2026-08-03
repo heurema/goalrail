@@ -314,21 +314,39 @@ func readIntent(reader io.Reader, contextPack *domain.ContextPack) (domain.Inten
 	if snapshot.SourceEvidence, err = parseSourceEvidence(sourceLines); err != nil {
 		return domain.IntentSnapshot{}, err
 	}
+	// Both heading generations are legal: the canon of 2026-08-02 neutralized
+	// "Confirmed wording" and "Confirmed boundary" because a heading must not
+	// assert what the status may deny, and artifacts written earlier keep the
+	// old headings forever.
 	if snapshot.DesiredOutcomes, err = parseIntentItems(
 		desiredLines,
-		[]string{"ID", "Confirmed wording", "Verification action", "Evidence"},
+		[]string{"ID", "Outcome", "Verification action", "Evidence"},
 		1,
 		3,
 	); err != nil {
-		return domain.IntentSnapshot{}, fmt.Errorf("parse desired outcomes: %w", err)
+		if snapshot.DesiredOutcomes, err = parseIntentItems(
+			desiredLines,
+			[]string{"ID", "Confirmed wording", "Verification action", "Evidence"},
+			1,
+			3,
+		); err != nil {
+			return domain.IntentSnapshot{}, fmt.Errorf("parse desired outcomes: %w", err)
+		}
 	}
 	if snapshot.NonGoals, err = parseIntentItems(
 		nonGoalLines,
-		[]string{"ID", "Confirmed boundary", "Evidence"},
+		[]string{"ID", "Boundary", "Evidence"},
 		1,
 		2,
 	); err != nil {
-		return domain.IntentSnapshot{}, fmt.Errorf("parse non-goals: %w", err)
+		if snapshot.NonGoals, err = parseIntentItems(
+			nonGoalLines,
+			[]string{"ID", "Confirmed boundary", "Evidence"},
+			1,
+			2,
+		); err != nil {
+			return domain.IntentSnapshot{}, fmt.Errorf("parse non-goals: %w", err)
+		}
 	}
 	if snapshot.SuccessSignals, err = parseIntentItems(
 		signalLines,
@@ -564,26 +582,46 @@ func parseSourceEvidence(lines []string) ([]domain.SourceEvidence, error) {
 }
 
 func parseContextItems(lines []string) ([]domain.ContextItem, error) {
+	// Two shapes are legal: the original six columns, and the canon of
+	// 2026-08-02 which adds a Verification recipe column. The reader accepts
+	// both because artifacts already written do not change shape when the
+	// template does — rejecting either side would strand half the repositories.
 	rows, err := parseMarkdownTable(
 		lines,
-		[]string{"ID", "Kind", "Claim", "Source", "Observed at", "Relevance"},
+		[]string{"ID", "Kind", "Claim", "Source", "Verification recipe", "Observed at", "Relevance"},
 	)
+	recipeIndex, observedIndex, relevanceIndex := 4, 5, 6
+	if err != nil {
+		rows, err = parseMarkdownTable(
+			lines,
+			[]string{"ID", "Kind", "Claim", "Source", "Observed at", "Relevance"},
+		)
+		recipeIndex, observedIndex, relevanceIndex = -1, 4, 5
+	}
 	if err != nil {
 		return nil, fmt.Errorf("parse context items: %w", err)
 	}
 	items := make([]domain.ContextItem, 0, len(rows))
 	for _, row := range rows {
-		observedAt, parseErr := parseArtifactTime(cleanInline(row[4]))
+		recipe := ""
+		if recipeIndex >= 0 {
+			recipe = cleanInline(row[recipeIndex])
+			if recipe == "" {
+				return nil, fmt.Errorf("%w: context item verification recipe is required", ErrMalformedArtifact)
+			}
+		}
+		observedAt, parseErr := parseArtifactTime(cleanInline(row[observedIndex]))
 		if parseErr != nil {
 			return nil, parseErr
 		}
 		items = append(items, domain.ContextItem{
-			ID:         domain.ContextItemID(cleanInline(row[0])),
-			Kind:       domain.ContextItemKind(strings.ToLower(cleanInline(row[1]))),
-			Claim:      cleanInline(row[2]),
-			SourceRef:  domain.EvidenceReference(cleanInline(row[3])),
-			ObservedAt: observedAt,
-			Relevance:  cleanInline(row[5]),
+			ID:                 domain.ContextItemID(cleanInline(row[0])),
+			Kind:               domain.ContextItemKind(strings.ToLower(cleanInline(row[1]))),
+			Claim:              cleanInline(row[2]),
+			SourceRef:          domain.EvidenceReference(cleanInline(row[3])),
+			VerificationRecipe: recipe,
+			ObservedAt:         observedAt,
+			Relevance:          cleanInline(row[relevanceIndex]),
 		})
 	}
 	return items, nil

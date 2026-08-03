@@ -16,8 +16,37 @@ func TestReadContextParsesBoundedPack(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read context: %v", err)
 	}
-	if pack.ID != "CONTEXT-TEST" || len(pack.Items) != 1 || pack.Items[0].SourceRef != "repo:README.md" {
+	if pack.ID != "CONTEXT-TEST" || len(pack.Items) != 1 || pack.Items[0].SourceRef != "repo:README.md" ||
+		pack.Items[0].VerificationRecipe != "Read README.md and expect the bounded flow." {
 		t.Fatalf("unexpected context pack: %#v", pack)
+	}
+}
+
+func TestReadContextAcceptsTheLegacyShapeWithoutInventingARecipe(t *testing.T) {
+	artifact := strings.ReplaceAll(
+		minimalContext("sufficient", "None."),
+		"| ID | Kind | Claim | Source | Verification recipe | Observed at | Relevance |\n|---|---|---|---|---|---|---|\n| CTX-1 | repository | The repository defines a bounded flow. | repo:README.md | Read README.md and expect the bounded flow. | 2026-07-20T08:01:00Z | This constrains the intended implementation. |",
+		"| ID | Kind | Claim | Source | Observed at | Relevance |\n|---|---|---|---|---|---|\n| CTX-1 | repository | The repository defines a bounded flow. | repo:README.md | 2026-07-20T08:01:00Z | This constrains the intended implementation. |",
+	)
+	pack, err := ReadContext(strings.NewReader(artifact))
+	if err != nil {
+		t.Fatalf("read legacy context: %v", err)
+	}
+	if pack.Items[0].VerificationRecipe != "" {
+		t.Fatalf("legacy context acquired an invented recipe: %#v", pack.Items[0])
+	}
+}
+
+func TestReadContextRejectsSensitiveVerificationRecipe(t *testing.T) {
+	artifact := strings.Replace(
+		minimalContext("sufficient", "None."),
+		"Read README.md and expect the bounded flow.",
+		"authorization: Bearer example",
+		1,
+	)
+	_, err := ReadContext(strings.NewReader(artifact))
+	if err == nil || !strings.Contains(err.Error(), "context.text.sensitive") {
+		t.Fatalf("sensitive verification recipe error = %v", err)
 	}
 }
 
@@ -384,9 +413,9 @@ func minimalContext(outcome, unknowns string) string {
 
 ## Context Items
 
-| ID | Kind | Claim | Source | Observed at | Relevance |
-|---|---|---|---|---|---|
-| CTX-1 | repository | The repository defines a bounded flow. | repo:README.md | 2026-07-20T08:01:00Z | This constrains the intended implementation. |
+| ID | Kind | Claim | Source | Verification recipe | Observed at | Relevance |
+|---|---|---|---|---|---|---|
+| CTX-1 | repository | The repository defines a bounded flow. | repo:README.md | Read README.md and expect the bounded flow. | 2026-07-20T08:01:00Z | This constrains the intended implementation. |
 
 ## Material Unknowns
 

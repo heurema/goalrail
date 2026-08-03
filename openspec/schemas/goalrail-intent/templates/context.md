@@ -9,9 +9,9 @@
 
 ## Context Items
 
-| ID | Kind | Claim | Source | Observed at | Relevance |
-|---|---|---|---|---|---|
-| CTX-1 | <!-- repository | external --> | <!-- one concise verified claim; no raw content --> | <!-- stable source reference --> | <!-- ISO-8601 UTC timestamp --> | <!-- how this could change intent or the current decision --> |
+| ID | Kind | Claim | Source | Verification recipe | Observed at | Relevance |
+|---|---|---|---|---|---|---|
+| CTX-1 | <!-- repository | external --> | <!-- one concise verified claim; no raw content --> | <!-- stable source reference --> | <!-- bounded, read-only; prerequisites and the expected observation. Historical or non-repeatable: "Not independently reproducible — <reason>; retained evidence: <stable ref>". A refresh command does not reproduce an earlier observation --> | <!-- ISO-8601 UTC timestamp --> | <!-- how this could change intent or the current decision --> |
 
 ## Material Unknowns
 

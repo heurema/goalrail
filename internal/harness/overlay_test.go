@@ -388,3 +388,66 @@ func TestMaterializeRefusesASymlinkedOverlayPath(t *testing.T) {
 		t.Fatalf("content escaped the repository: %v", entries)
 	}
 }
+
+// The first canon change in this project's history must read as an upgrade,
+// not as user edits. The previous canon's bytes live in testdata — extracted
+// from the commit that shipped through v0.1.8 — so this test is not circular:
+// an earlier version compared previousCanons against itself and would have
+// passed with a wrong recorded digest. This one materializes the old overlay,
+// diagnoses it, and updates across.
+func TestThePreviousCanonUpgradesCleanly(t *testing.T) {
+	if len(previousCanons) == 0 {
+		t.Fatal("the canon history is empty; the first canon change would read as user edits")
+	}
+	recorded := previousCanons[0]
+
+	root := t.TempDir()
+	if _, err := Materialize(root, false); err != nil {
+		t.Fatal(err)
+	}
+	// Overwrite the changed files with the shipped bytes, verifying each against
+	// the digest recorded in the history — if testdata and the recorded canon
+	// disagree, the test must fail rather than measure the wrong transition.
+	for _, name := range []string{"schema.yaml", "templates/context.md", "templates/design.md", "templates/intent.md"} {
+		shipped, err := os.ReadFile(filepath.Join("testdata", "canon-v1", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		path := "openspec/schemas/goalrail-intent/" + name
+		expected, known := recorded.Digest(path)
+		if !known {
+			t.Fatalf("the recorded canon does not carry %s", path)
+		}
+		if got := Digest(shipped); got != expected {
+			t.Fatalf("testdata for %s does not match the recorded previous canon: %s vs %s", name, got, expected)
+		}
+		if err := os.WriteFile(filepath.Join(root, filepath.FromSlash(path)), shipped, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Diagnose: every replaced file is behind, none edited.
+	overlay, err := InspectOverlay(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, finding := range overlay.Files {
+		if finding.State == FileEdited {
+			t.Fatalf("%s at its shipped bytes reads as edited — an adopter would be told they changed it", finding.Path)
+		}
+	}
+
+	// Update crosses without the discard flag, and the overlay is current after.
+	if _, err := Update(UpdateInput{RepositoryRoot: root, StateRoot: t.TempDir()}); err != nil {
+		t.Fatalf("the crossing demanded intervention: %v", err)
+	}
+	after, err := InspectOverlay(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, finding := range after.Files {
+		if finding.State != FileCurrent {
+			t.Fatalf("%s is %s after the update", finding.Path, finding.State)
+		}
+	}
+}

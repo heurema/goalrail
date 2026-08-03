@@ -1,6 +1,7 @@
 package harness
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -148,6 +149,408 @@ func TestUpdateRestoresAFileFromAnEarlierCanon(t *testing.T) {
 	}
 	if !report.Verified {
 		t.Error("the update was not verified")
+	}
+}
+
+func TestUpdateRefusesAnEditMadeAfterTheBehindFileWasBackedUp(t *testing.T) {
+	root, stateRoot := t.TempDir(), t.TempDir()
+	if _, err := Materialize(root, false); err != nil {
+		t.Fatalf("materialize: %v", err)
+	}
+	relative := OverlayDirectory + "/templates/design.md"
+	target := filepath.Join(root, filepath.FromSlash(relative))
+	older := []byte("## older\n")
+	if err := os.WriteFile(target, older, 0o644); err != nil {
+		t.Fatalf("write older content: %v", err)
+	}
+	restore := previousCanons
+	previousCanons = []Canon{{ID: "sha256:older", Files: []CanonFile{{Path: relative, Digest: Digest(older)}}}}
+	defer func() { previousCanons = restore }()
+
+	late := []byte("## my late edit\n")
+	report, err := update(
+		UpdateInput{RepositoryRoot: root, StateRoot: stateRoot, Now: fixedClock()},
+		updateTestHooks{afterBackup: func() {
+			if writeErr := os.WriteFile(target, late, 0o644); writeErr != nil {
+				t.Fatalf("write late edit: %v", writeErr)
+			}
+		}},
+	)
+	if !errors.Is(err, ErrLocalEdits) {
+		t.Fatalf("late edit error = %v, want ErrLocalEdits", err)
+	}
+	if report.Backup == "" {
+		t.Fatal("the pre-write refusal lost the existing recovery point")
+	}
+	content, readErr := os.ReadFile(target)
+	if readErr != nil {
+		t.Fatalf("read late edit: %v", readErr)
+	}
+	if string(content) != string(late) {
+		t.Fatalf("late edit was overwritten: %q", content)
+	}
+}
+
+func TestUpdateRefusesAnEditAtThePerFileFinalCheck(t *testing.T) {
+	root, stateRoot := t.TempDir(), t.TempDir()
+	if _, err := Materialize(root, false); err != nil {
+		t.Fatalf("materialize: %v", err)
+	}
+	relative := OverlayDirectory + "/templates/design.md"
+	target := filepath.Join(root, filepath.FromSlash(relative))
+	older := []byte("## older\n")
+	if err := os.WriteFile(target, older, 0o644); err != nil {
+		t.Fatalf("write older content: %v", err)
+	}
+	restore := previousCanons
+	previousCanons = []Canon{{ID: "sha256:older", Files: []CanonFile{{Path: relative, Digest: Digest(older)}}}}
+	defer func() { previousCanons = restore }()
+
+	late := []byte("## edited at the final check\n")
+	report, err := update(
+		UpdateInput{RepositoryRoot: root, StateRoot: stateRoot, Now: fixedClock()},
+		updateTestHooks{beforeReplace: func(path string) {
+			if path == relative {
+				if writeErr := os.WriteFile(target, late, 0o644); writeErr != nil {
+					t.Fatalf("write final-check edit: %v", writeErr)
+				}
+			}
+		}},
+	)
+	if !errors.Is(err, ErrLocalEdits) {
+		t.Fatalf("final-check edit error = %v, want ErrLocalEdits", err)
+	}
+	if report.Backup == "" {
+		t.Fatal("the final-check refusal lost the existing recovery point")
+	}
+	content, readErr := os.ReadFile(target)
+	if readErr != nil {
+		t.Fatalf("read final-check edit: %v", readErr)
+	}
+	if string(content) != string(late) {
+		t.Fatalf("final-check edit was overwritten: %q", content)
+	}
+}
+
+func TestUpdateRefusesAFileCreatedAfterItWasObservedMissing(t *testing.T) {
+	root, stateRoot := t.TempDir(), t.TempDir()
+	if _, err := Materialize(root, false); err != nil {
+		t.Fatalf("materialize: %v", err)
+	}
+	relative := OverlayDirectory + "/templates/tasks.md"
+	target := filepath.Join(root, filepath.FromSlash(relative))
+	if err := os.Remove(target); err != nil {
+		t.Fatalf("remove target: %v", err)
+	}
+	late := []byte("## created while update ran\n")
+	_, err := update(
+		UpdateInput{RepositoryRoot: root, StateRoot: stateRoot, Now: fixedClock()},
+		updateTestHooks{beforeReplace: func(path string) {
+			if path == relative {
+				if writeErr := os.WriteFile(target, late, 0o644); writeErr != nil {
+					t.Fatalf("create late file: %v", writeErr)
+				}
+			}
+		}},
+	)
+	if !errors.Is(err, ErrLocalEdits) {
+		t.Fatalf("late creation error = %v, want ErrLocalEdits", err)
+	}
+	content, readErr := os.ReadFile(target)
+	if readErr != nil {
+		t.Fatalf("read late file: %v", readErr)
+	}
+	if string(content) != string(late) {
+		t.Fatalf("late file was overwritten: %q", content)
+	}
+}
+
+func TestPartialMissingUpdateReportsTheEarlierCreationWithoutABackup(t *testing.T) {
+	root, stateRoot := t.TempDir(), t.TempDir()
+	if _, err := Materialize(root, false); err != nil {
+		t.Fatalf("materialize: %v", err)
+	}
+	first := OverlayDirectory + "/templates/context.md"
+	second := OverlayDirectory + "/templates/tasks.md"
+	for _, path := range []string{first, second} {
+		if err := os.Remove(filepath.Join(root, filepath.FromSlash(path))); err != nil {
+			t.Fatalf("remove %s: %v", path, err)
+		}
+	}
+	late := []byte("## user-created tasks\n")
+	report, err := update(
+		UpdateInput{RepositoryRoot: root, StateRoot: stateRoot, Now: fixedClock()},
+		updateTestHooks{beforeReplace: func(path string) {
+			if path == second {
+				if writeErr := os.WriteFile(
+					filepath.Join(root, filepath.FromSlash(second)),
+					late,
+					0o644,
+				); writeErr != nil {
+					t.Fatalf("create late second file: %v", writeErr)
+				}
+			}
+		}},
+	)
+	if !errors.Is(err, ErrLocalEdits) {
+		t.Fatalf("partial missing error = %v, want ErrLocalEdits", err)
+	}
+	if report.Backup != "" {
+		t.Fatalf("missing files unexpectedly produced backup %s", report.Backup)
+	}
+	created := false
+	for _, outcome := range report.Files {
+		if outcome.Path == first && outcome.Action == ActionCreated {
+			created = true
+		}
+	}
+	if !created {
+		t.Fatalf("partial creation is absent from report: %+v", report.Files)
+	}
+	content, readErr := os.ReadFile(filepath.Join(root, filepath.FromSlash(second)))
+	if readErr != nil || string(content) != string(late) {
+		t.Fatalf("late second file = %q, err=%v", content, readErr)
+	}
+}
+
+func TestUpdateRefusesAnEditToAFileThatWasCurrentAtInspection(t *testing.T) {
+	root, stateRoot := t.TempDir(), t.TempDir()
+	if _, err := Materialize(root, false); err != nil {
+		t.Fatalf("materialize: %v", err)
+	}
+	// Keep the update active while the target below starts out current.
+	missing := filepath.Join(root, filepath.FromSlash(OverlayDirectory+"/templates/proposal.md"))
+	if err := os.Remove(missing); err != nil {
+		t.Fatalf("remove companion file: %v", err)
+	}
+	relative := OverlayDirectory + "/templates/tasks.md"
+	target := filepath.Join(root, filepath.FromSlash(relative))
+	late := []byte("## edited after the file was observed current\n")
+	_, err := update(
+		UpdateInput{RepositoryRoot: root, StateRoot: stateRoot, Now: fixedClock()},
+		updateTestHooks{afterBackup: func() {
+			if writeErr := os.WriteFile(target, late, 0o644); writeErr != nil {
+				t.Fatalf("edit current file: %v", writeErr)
+			}
+		}},
+	)
+	if !errors.Is(err, ErrLocalEdits) {
+		t.Fatalf("late current-file edit error = %v, want ErrLocalEdits", err)
+	}
+	content, readErr := os.ReadFile(target)
+	if readErr != nil {
+		t.Fatalf("read late edit: %v", readErr)
+	}
+	if string(content) != string(late) {
+		t.Fatalf("late edit was overwritten: %q", content)
+	}
+}
+
+func TestExplicitDiscardBacksUpTheLatestConcurrentEdit(t *testing.T) {
+	root, stateRoot := t.TempDir(), t.TempDir()
+	if _, err := Materialize(root, false); err != nil {
+		t.Fatalf("materialize: %v", err)
+	}
+	relative := OverlayDirectory + "/templates/design.md"
+	target := filepath.Join(root, filepath.FromSlash(relative))
+	older := []byte("## older\n")
+	if err := os.WriteFile(target, older, 0o644); err != nil {
+		t.Fatalf("write older content: %v", err)
+	}
+	restore := previousCanons
+	previousCanons = []Canon{{ID: "sha256:older", Files: []CanonFile{{Path: relative, Digest: Digest(older)}}}}
+	defer func() { previousCanons = restore }()
+
+	late := []byte("## explicitly discarded late edit\n")
+	changed := false
+	report, err := update(
+		UpdateInput{
+			RepositoryRoot:    root,
+			StateRoot:         stateRoot,
+			DiscardLocalEdits: true,
+			Now:               fixedClock(),
+		},
+		updateTestHooks{beforeReplace: func(path string) {
+			if path == relative && !changed {
+				changed = true
+				if writeErr := os.WriteFile(target, late, 0o644); writeErr != nil {
+					t.Fatalf("write late edit: %v", writeErr)
+				}
+			}
+		}},
+	)
+	if err != nil {
+		t.Fatalf("discard late edit: %v", err)
+	}
+	if len(report.DiscardedLocalEdits) != 1 || report.DiscardedLocalEdits[0] != relative {
+		t.Fatalf("discard report = %+v", report.DiscardedLocalEdits)
+	}
+	recovered, readErr := os.ReadFile(filepath.Join(report.Backup, filepath.FromSlash(relative)))
+	if readErr != nil {
+		t.Fatalf("read latest backup: %v", readErr)
+	}
+	if string(recovered) != string(late) {
+		t.Fatalf("backup = %q, want latest edit %q", recovered, late)
+	}
+}
+
+func TestExplicitDiscardKeepsOneRecoverySetAcrossAPartialRetry(t *testing.T) {
+	root, stateRoot := t.TempDir(), t.TempDir()
+	if _, err := Materialize(root, false); err != nil {
+		t.Fatalf("materialize: %v", err)
+	}
+	first := OverlayDirectory + "/templates/context.md"
+	second := OverlayDirectory + "/templates/tasks.md"
+	firstOlder := []byte("## older context\n")
+	secondOlder := []byte("## older tasks\n")
+	for path, content := range map[string][]byte{first: firstOlder, second: secondOlder} {
+		if err := os.WriteFile(filepath.Join(root, filepath.FromSlash(path)), content, 0o644); err != nil {
+			t.Fatalf("write older %s: %v", path, err)
+		}
+	}
+	restore := previousCanons
+	previousCanons = []Canon{{ID: "sha256:older", Files: []CanonFile{
+		{Path: first, Digest: Digest(firstOlder)},
+		{Path: second, Digest: Digest(secondOlder)},
+	}}}
+	defer func() { previousCanons = restore }()
+
+	secondLate := []byte("## latest tasks edit\n")
+	changed := false
+	report, err := update(
+		UpdateInput{
+			RepositoryRoot:    root,
+			StateRoot:         stateRoot,
+			DiscardLocalEdits: true,
+			Now:               fixedClock(),
+		},
+		updateTestHooks{beforeReplace: func(path string) {
+			if path == second && !changed {
+				changed = true
+				if writeErr := os.WriteFile(
+					filepath.Join(root, filepath.FromSlash(second)),
+					secondLate,
+					0o644,
+				); writeErr != nil {
+					t.Fatalf("write late second edit: %v", writeErr)
+				}
+			}
+		}},
+	)
+	if err != nil {
+		t.Fatalf("partial retry: %v", err)
+	}
+	for path, want := range map[string][]byte{first: firstOlder, second: secondLate} {
+		got, readErr := os.ReadFile(filepath.Join(report.Backup, filepath.FromSlash(path)))
+		if readErr != nil {
+			t.Fatalf("read cumulative backup %s: %v", path, readErr)
+		}
+		if string(got) != string(want) {
+			t.Fatalf("cumulative backup %s = %q, want %q", path, got, want)
+		}
+	}
+	backups, globErr := filepath.Glob(filepath.Join(stateRoot, filepath.FromSlash(BackupDirectory), "*"))
+	if globErr != nil || len(backups) != 1 || backups[0] != report.Backup {
+		t.Fatalf("recovery sets = %v, report=%s, err=%v", backups, report.Backup, globErr)
+	}
+	updated := make(map[string]bool)
+	for _, outcome := range report.Files {
+		if outcome.Action == ActionUpdated {
+			updated[outcome.Path] = true
+		}
+	}
+	if !updated[first] || !updated[second] {
+		t.Fatalf("partial retry lost completed outcomes: %+v", report.Files)
+	}
+	if len(report.DiscardedLocalEdits) != 1 || report.DiscardedLocalEdits[0] != second {
+		t.Fatalf("partial retry lost discarded edit: %+v", report.DiscardedLocalEdits)
+	}
+}
+
+func TestBackupManifestDescribesTheBytesActuallyCopied(t *testing.T) {
+	root, stateRoot := t.TempDir(), t.TempDir()
+	if _, err := Materialize(root, false); err != nil {
+		t.Fatalf("materialize: %v", err)
+	}
+	relative := OverlayDirectory + "/templates/spec.md"
+	target := filepath.Join(root, filepath.FromSlash(relative))
+	if err := os.WriteFile(target, []byte("first edit\n"), 0o644); err != nil {
+		t.Fatalf("write first edit: %v", err)
+	}
+	state, err := InspectOverlay(root)
+	if err != nil {
+		t.Fatalf("inspect first edit: %v", err)
+	}
+	latest := []byte("latest edit copied by backup\n")
+	if err := os.WriteFile(target, latest, 0o644); err != nil {
+		t.Fatalf("write latest edit: %v", err)
+	}
+	directory, err := backupReplaced(root, stateRoot, state, fixedClock(), "")
+	if !errors.Is(err, errOverlayChangedDuringUpdate) {
+		t.Fatalf("backup stale inspection error = %v, want overlay change", err)
+	}
+	rawManifest, err := os.ReadFile(filepath.Join(directory, "manifest.json"))
+	if err != nil {
+		t.Fatalf("read manifest: %v", err)
+	}
+	var manifest backupManifest
+	if err := json.Unmarshal(rawManifest, &manifest); err != nil {
+		t.Fatalf("decode manifest: %v", err)
+	}
+	if len(manifest.Files) != 1 || manifest.Files[0].Path != relative ||
+		manifest.Files[0].Digest != Digest(latest) || manifest.Files[0].State != FileEdited {
+		t.Fatalf("manifest describes stale inspection, not copied bytes: %+v", manifest.Files)
+	}
+}
+
+func TestExplicitDiscardRetriesAnABADuringBackup(t *testing.T) {
+	root, stateRoot := t.TempDir(), t.TempDir()
+	if _, err := Materialize(root, false); err != nil {
+		t.Fatalf("materialize: %v", err)
+	}
+	relative := OverlayDirectory + "/templates/spec.md"
+	target := filepath.Join(root, filepath.FromSlash(relative))
+	first := []byte("E1 local edit\n")
+	if err := os.WriteFile(target, first, 0o644); err != nil {
+		t.Fatalf("write E1: %v", err)
+	}
+	temporary := []byte("E2 temporary edit\n")
+	report, err := update(
+		UpdateInput{
+			RepositoryRoot:    root,
+			StateRoot:         stateRoot,
+			DiscardLocalEdits: true,
+			Now:               fixedClock(),
+		},
+		updateTestHooks{
+			beforeBackup: func() {
+				if writeErr := os.WriteFile(target, temporary, 0o644); writeErr != nil {
+					t.Fatalf("write E2: %v", writeErr)
+				}
+			},
+			afterBackup: func() {
+				if writeErr := os.WriteFile(target, first, 0o644); writeErr != nil {
+					t.Fatalf("restore E1: %v", writeErr)
+				}
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("ABA retry: %v", err)
+	}
+	recovered, readErr := os.ReadFile(filepath.Join(report.Backup, filepath.FromSlash(relative)))
+	if readErr != nil {
+		t.Fatalf("read ABA recovery: %v", readErr)
+	}
+	if string(recovered) != string(first) {
+		t.Fatalf("ABA recovery = %q, want overwritten E1 %q", recovered, first)
+	}
+	if len(report.DiscardedLocalEdits) != 1 || report.DiscardedLocalEdits[0] != relative {
+		t.Fatalf("ABA discard report = %+v", report.DiscardedLocalEdits)
+	}
+	backups, globErr := filepath.Glob(filepath.Join(stateRoot, filepath.FromSlash(BackupDirectory), "*"))
+	if globErr != nil || len(backups) != 1 || backups[0] != report.Backup {
+		t.Fatalf("ABA recovery sets = %v, report=%s, err=%v", backups, report.Backup, globErr)
 	}
 }
 

@@ -48,9 +48,13 @@ func TestPinnedCLIAcceptsTheEmbeddedCanon(t *testing.T) {
 		t.Fatalf("ensure config: %v", err)
 	}
 
-	// The schema must resolve, its structure and templates must validate, and a
-	// change created against it must pass strict validation — which is the whole
-	// path a repository takes on its first change.
+	// What this proves, exactly: the pinned CLI accepts the schema's structure
+	// (`schema validate`), creates a change against it, and resolves every
+	// template. It does NOT run `openspec validate` on the created change, and
+	// running it would prove little: the validator was measured accepting a
+	// gutted design.md outright — it checks spec deltas, not sections. An
+	// earlier version of this comment promised "strict validation" that was
+	// never executed; a test's description must not claim more than it runs.
 	run := func(arguments ...string) (string, error) {
 		command := exec.Command("npx", append([]string{"--yes", "--offline", pinnedPackage}, arguments...)...)
 		command.Dir = root
