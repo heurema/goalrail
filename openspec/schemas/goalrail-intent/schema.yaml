@@ -10,6 +10,11 @@ artifacts:
       Assemble a concise Context Pack before interpreting the request as intent.
 
 
+      Emit the exact artifact contract rows `Artifact Contract:
+      goalrail-context-intent` and `Artifact Contract Version: 1`. The Intent
+      Snapshot emits the same two rows; neither artifact may declare only one.
+
+
       Read the repository anchors that can materially constrain the change.
       Gather external evidence only for a concrete unknown that could change
       the intended outcome or a current decision. Store concise claims, stable
@@ -36,6 +41,11 @@ artifacts:
     instruction: >
       Create the Intent Snapshot after the Context Pack and before proposing a
       solution.
+
+
+      Emit the exact artifact contract rows `Artifact Contract:
+      goalrail-context-intent` and `Artifact Contract Version: 1`, matching the
+      Context Pack. Use `<id> version <number>` for the Context Pack binding.
 
 
       Write the durable artifact in English using concise, explicit,

@@ -14,96 +14,121 @@ import (
 	"github.com/heurema/goalrail/internal/domain"
 )
 
-const MaxResolvedIntentBytes = 1 << 20
+const MaxResolvedIntentBytes = MaxPairArtifactBytes
 
 // IntentResolver verifies the current project intent artifact and exposes only
 // the provider-neutral verification result to the local-run service.
 type IntentResolver struct{}
 
+type ResolvedIntent struct {
+	Intent domain.IntentSnapshot
+	Pair   *ConformedPair
+}
+
 func (IntentResolver) Verify(
 	repositoryRoot string,
 	reference domain.WorkSpecIntentReference,
 ) error {
+	_, err := (IntentResolver{}).Resolve(repositoryRoot, reference)
+	return err
+}
+
+func (IntentResolver) Resolve(
+	repositoryRoot string,
+	reference domain.WorkSpecIntentReference,
+) (ResolvedIntent, error) {
 	root, err := filepath.EvalSymlinks(repositoryRoot)
 	if err != nil {
-		return fmt.Errorf("resolve repository root: %w", err)
+		return ResolvedIntent{}, fmt.Errorf("resolve repository root: %w", err)
 	}
 	root = filepath.Clean(root)
 	artifactPath := filepath.Join(root, filepath.FromSlash(reference.ArtifactRef))
 	resolvedArtifact, err := filepath.EvalSymlinks(artifactPath)
 	if err != nil {
-		return fmt.Errorf("resolve intent artifact: %w", err)
+		return ResolvedIntent{}, inputUnavailableDiagnostic(
+			safeReferencePath(reference.ArtifactRef, "intent.md"), ArtifactKindIntent, "unavailable input", err,
+		)
 	}
 	resolvedArtifact = filepath.Clean(resolvedArtifact)
 	if !pathWithin(root, resolvedArtifact) {
-		return fmt.Errorf("intent artifact escapes the repository")
+		return ResolvedIntent{}, fmt.Errorf("intent artifact escapes the repository")
 	}
 
 	raw, err := readBoundedRegularFile(resolvedArtifact, "intent artifact")
 	if err != nil {
-		return err
+		return ResolvedIntent{}, inputUnavailableDiagnostic(
+			safeReferencePath(reference.ArtifactRef, "intent.md"), ArtifactKindIntent, "unavailable or non-regular input", err,
+		)
 	}
 
 	sum := sha256.Sum256(raw)
 	observedDigest := "sha256:" + hex.EncodeToString(sum[:])
 	if observedDigest != reference.Digest {
-		return fmt.Errorf("intent digest mismatch: expected %s, got %s", reference.Digest, observedDigest)
+		return ResolvedIntent{}, fmt.Errorf("intent digest mismatch: expected %s, got %s", reference.Digest, observedDigest)
 	}
-	snapshot, err := readResolvedIntent(root, resolvedArtifact, raw)
+	resolved, err := readResolvedIntent(root, resolvedArtifact, raw)
 	if err != nil {
-		return fmt.Errorf("read confirmed intent: %w", err)
+		var diagnostic *ArtifactDiagnostic
+		if errors.As(err, &diagnostic) {
+			return ResolvedIntent{}, err
+		}
+		return ResolvedIntent{}, fmt.Errorf("read confirmed intent: %w", err)
 	}
-	if snapshot.Status != domain.IntentConfirmed {
-		return fmt.Errorf("intent status is %q, not confirmed", snapshot.Status)
+	if resolved.Intent.Status != domain.IntentConfirmed {
+		return ResolvedIntent{}, fmt.Errorf("intent status is %q, not confirmed", resolved.Intent.Status)
 	}
-	if snapshot.ID != reference.ID || snapshot.Version != reference.Version {
-		return fmt.Errorf(
+	if resolved.Intent.ID != reference.ID || resolved.Intent.Version != reference.Version {
+		return ResolvedIntent{}, fmt.Errorf(
 			"intent identity mismatch: expected %s version %d, got %s version %d",
 			reference.ID,
 			reference.Version,
-			snapshot.ID,
-			snapshot.Version,
+			resolved.Intent.ID,
+			resolved.Intent.Version,
 		)
 	}
-	return nil
+	return resolved, nil
 }
 
 func readResolvedIntent(
 	repositoryRoot string,
 	resolvedArtifact string,
 	rawIntent []byte,
-) (domain.IntentSnapshot, error) {
+) (ResolvedIntent, error) {
 	changeDir := filepath.Dir(resolvedArtifact)
 	contextPath := filepath.Join(changeDir, "context.md")
 	resolvedContext, err := filepath.EvalSymlinks(contextPath)
 	if errors.Is(err, os.ErrNotExist) {
-		return readIntentWithoutContext(changeDir, rawIntent)
+		snapshot, readErr := readIntentWithoutContext(changeDir, rawIntent)
+		return ResolvedIntent{Intent: snapshot}, readErr
 	}
 	if err != nil {
-		return domain.IntentSnapshot{}, fmt.Errorf("resolve intent context: %w", err)
+		return ResolvedIntent{}, inputUnavailableDiagnostic("context.md", ArtifactKindContext, "unavailable input", err)
 	}
 	resolvedContext = filepath.Clean(resolvedContext)
 	if !pathWithin(repositoryRoot, resolvedContext) {
-		return domain.IntentSnapshot{}, fmt.Errorf("intent context escapes the repository")
+		return ResolvedIntent{}, fmt.Errorf("intent context escapes the repository")
 	}
 
 	rawContext, err := readBoundedRegularFile(resolvedContext, "intent context")
 	if err != nil {
-		return domain.IntentSnapshot{}, err
+		return ResolvedIntent{}, inputUnavailableDiagnostic(
+			safeRelativePath(repositoryRoot, resolvedContext, "context.md"),
+			ArtifactKindContext,
+			"unavailable or non-regular input",
+			err,
+		)
 	}
 
-	contextPack, err := ReadContext(bytes.NewReader(rawContext))
+	pair, err := ConformPair(
+		rawContext,
+		rawIntent,
+		safeRelativePath(repositoryRoot, resolvedContext, "context.md"),
+		safeRelativePath(repositoryRoot, resolvedArtifact, "intent.md"),
+	)
 	if err != nil {
-		return domain.IntentSnapshot{}, fmt.Errorf("read intent context: %w", err)
+		return ResolvedIntent{}, err
 	}
-	snapshot, err := readIntent(bytes.NewReader(rawIntent), &contextPack)
-	if err != nil {
-		return domain.IntentSnapshot{}, err
-	}
-	if err := domain.ValidateFlowIntentSnapshot(snapshot); err != nil {
-		return domain.IntentSnapshot{}, fmt.Errorf("validate OpenSpec flow intent: %w", err)
-	}
-	return snapshot, nil
+	return ResolvedIntent{Intent: pair.Intent, Pair: &pair}, nil
 }
 
 // readIntentWithoutContext handles an intent whose sibling context.md is
@@ -119,9 +144,8 @@ func readIntentWithoutContext(
 		return domain.IntentSnapshot{}, err
 	}
 	if required {
-		return domain.IntentSnapshot{}, fmt.Errorf(
-			"%w: change requires a sibling context.md",
-			ErrContextRequired,
+		return domain.IntentSnapshot{}, inputUnavailableDiagnostic(
+			"context.md", ArtifactKindContext, "missing required input", ErrContextRequired,
 		)
 	}
 
@@ -130,9 +154,8 @@ func readIntentWithoutContext(
 		return domain.IntentSnapshot{}, err
 	}
 	if declaresContext {
-		return domain.IntentSnapshot{}, fmt.Errorf(
-			"%w: intent declares sibling context.md",
-			ErrContextRequired,
+		return domain.IntentSnapshot{}, inputUnavailableDiagnostic(
+			"context.md", ArtifactKindContext, "missing declared input", ErrContextRequired,
 		)
 	}
 	return ReadIntent(bytes.NewReader(rawIntent))
@@ -163,4 +186,19 @@ func pathWithin(root, candidate string) bool {
 		relative != ".." &&
 		!strings.HasPrefix(relative, ".."+string(filepath.Separator)) &&
 		!filepath.IsAbs(relative)
+}
+
+func safeReferencePath(reference string, fallback string) string {
+	if normalized, ok := normalizeLogicalPath(reference); ok {
+		return normalized
+	}
+	return fallback
+}
+
+func safeRelativePath(root string, candidate string, fallback string) string {
+	relative, err := filepath.Rel(root, candidate)
+	if err != nil {
+		return fallback
+	}
+	return safeReferencePath(filepath.ToSlash(relative), fallback)
 }

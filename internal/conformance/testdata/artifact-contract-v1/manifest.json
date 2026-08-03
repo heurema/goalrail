@@ -1,0 +1,272 @@
+{
+  "schema": "goalrail.artifact-conformance-corpus/v1",
+  "cases": [
+    {
+      "id": "binding-identity",
+      "provenance": "local relation fixture for Context Pack identity mutation",
+      "mode": "contract-v1",
+      "fixtures": [
+        {"role": "context", "path": "cases/binding-identity/context.md", "sha256": "sha256:817e122b9f42c7ad718e06ca488244581a669bf1bf871151c0119d7083bda8bd"},
+        {"role": "intent", "path": "cases/binding-identity/intent.md", "sha256": "sha256:2cd4a08303e7c31a7ab85eeab4f7919c0a6c3d812b83d2fb1fe21d9353688f9b"},
+        {"role": "proposal", "path": "cases/binding-identity/proposal.md", "sha256": "sha256:135a8bd3d4e95009c0184fa28b750cf59d6af824faedd86c170c57e2d01b0920"}
+      ],
+      "lanes": ["compiler"],
+      "expectation": {"diagnostic": {
+        "code": "ARTIFACT_CONTEXT_BINDING_INVALID", "path": "intent.md", "artifact_kind": "intent",
+        "contract_mode": "goalrail-context-intent/v1", "field_or_section": "Context Pack",
+        "observation": "CTXP-other version 1", "expectation": "the exact Context Pack ID and version from context.md",
+        "repair_hint": "correct the declaration because it does not match context.md"
+      }}
+    },
+    {
+      "id": "binding-version",
+      "provenance": "local relation fixture for Context Pack version mutation",
+      "mode": "contract-v1",
+      "fixtures": [
+        {"role": "context", "path": "cases/binding-version/context.md", "sha256": "sha256:817e122b9f42c7ad718e06ca488244581a669bf1bf871151c0119d7083bda8bd"},
+        {"role": "intent", "path": "cases/binding-version/intent.md", "sha256": "sha256:10b315282de23ba702d82ab0b5a2ff1bbbef2ed48103bd9f5e599841fdc0ed8c"},
+        {"role": "proposal", "path": "cases/binding-version/proposal.md", "sha256": "sha256:135a8bd3d4e95009c0184fa28b750cf59d6af824faedd86c170c57e2d01b0920"}
+      ],
+      "lanes": ["compiler"],
+      "expectation": {"diagnostic": {
+        "code": "ARTIFACT_CONTEXT_BINDING_INVALID", "path": "intent.md", "artifact_kind": "intent",
+        "contract_mode": "goalrail-context-intent/v1", "field_or_section": "Context Pack",
+        "observation": "CTXP-contract-corpus version 2", "expectation": "the exact Context Pack ID and version from context.md",
+        "repair_hint": "correct the declaration because it does not match context.md"
+      }}
+    },
+    {
+      "id": "contract-v1",
+      "provenance": "hand-authored contract-v1 baseline from INT-artifact-conformance-contract-v0",
+      "mode": "contract-v1",
+      "fixtures": [
+        {"role": "context", "path": "cases/contract-v1/context.md", "sha256": "sha256:817e122b9f42c7ad718e06ca488244581a669bf1bf871151c0119d7083bda8bd"},
+        {"role": "intent", "path": "cases/contract-v1/intent.md", "sha256": "sha256:2fe4876ee0a09ecbb9b7bc568661eafbe9df1b786f9fddc2d8c1e67cadfadd1e"},
+        {"role": "proposal", "path": "cases/contract-v1/proposal.md", "sha256": "sha256:135a8bd3d4e95009c0184fa28b750cf59d6af824faedd86c170c57e2d01b0920"}
+      ],
+      "lanes": ["compiler", "local-run", "ambient"],
+      "intent_ref": {"id": "INT-contract-corpus", "version": 1},
+      "expectation": {"semantic": {
+        "contract_mode": "goalrail-context-intent/v1", "context_id": "CTXP-contract-corpus", "context_version": 1,
+        "context_previous_version": 0, "context_items": 1, "first_recipe": "Inspect README.md for the bounded flow.",
+        "intent_id": "INT-contract-corpus", "intent_version": 1, "intent_previous_version": 0,
+        "desired_outcomes": 1, "non_goals": 1, "success_signals": 1
+      }}
+    },
+    {
+      "id": "hostile-contract",
+      "provenance": "hand-authored hostile secret-shaped contract identifier",
+      "mode": "contract-v1",
+      "fixtures": [
+        {"role": "context", "path": "cases/hostile-contract/context.md", "sha256": "sha256:dae4c4b1687640a408c3dc9bd6cd637d6257a53ac8f74770d83653ea146985ab"},
+        {"role": "intent", "path": "cases/hostile-contract/intent.md", "sha256": "sha256:706319b8c7abb902826291f6f5d02e982567bfa6bb78a5c58ed94170d44518d0"},
+        {"role": "proposal", "path": "cases/hostile-contract/proposal.md", "sha256": "sha256:135a8bd3d4e95009c0184fa28b750cf59d6af824faedd86c170c57e2d01b0920"}
+      ],
+      "lanes": ["compiler"],
+      "expectation": {"diagnostic": {
+        "code": "ARTIFACT_CONTRACT_UNSUPPORTED", "path": "context.md + intent.md", "artifact_kind": "pair",
+        "contract_mode": "unselected", "field_or_section": "artifact contract", "observation": "[REDACTED]/1",
+        "expectation": "goalrail-context-intent version 1",
+        "repair_hint": "use a supported declared contract or remove both declarations only for pinned legacy input"
+      }}
+    },
+    {
+      "id": "legacy-answering",
+      "provenance": "local preservation fixture for Previous version, Resolves, and Disposition",
+      "mode": "legacy-v0",
+      "fixtures": [
+        {"role": "context", "path": "cases/legacy-answering/context.md", "sha256": "sha256:d7f4da993738dcc005c5cbabfd68428ccb41ab329db1975d7aa40e5ef860bd82"},
+        {"role": "intent", "path": "cases/legacy-answering/intent.md", "sha256": "sha256:ceaaf8be3f9e1ffda72c1e3c52ecf1e5b752af59a8bfd1b95fab81f8b265f425"},
+        {"role": "proposal", "path": "cases/legacy-answering/proposal.md", "sha256": "sha256:135a8bd3d4e95009c0184fa28b750cf59d6af824faedd86c170c57e2d01b0920"}
+      ],
+      "lanes": ["compiler", "local-run"],
+      "intent_ref": {"id": "INT-answering", "version": 2},
+      "expectation": {"semantic": {
+        "contract_mode": "goalrail-context-intent/legacy-v0", "context_id": "CTXP-answering", "context_version": 2,
+        "context_previous_version": 1, "context_items": 1, "first_recipe": "Inspect README.md for the bounded flow.",
+        "intent_id": "INT-answering", "intent_version": 2, "intent_previous_version": 1,
+        "desired_outcomes": 1, "non_goals": 1, "success_signals": 1,
+        "resolved_id": "question-1234567890abcdef", "resolved_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "disposition": "answered"
+      }}
+    },
+    {
+      "id": "legacy-openspec-v1",
+      "provenance": "minimized binding spelling from openspec/changes/openspec-adoption-v0",
+      "mode": "legacy-v0",
+      "fixtures": [
+        {"role": "context", "path": "cases/legacy-openspec-v1/context.md", "sha256": "sha256:3a597e9553c9f03e9aca57469091ca960cf272b9b26501d64f0020b6f6717c37"},
+        {"role": "intent", "path": "cases/legacy-openspec-v1/intent.md", "sha256": "sha256:100dcea2d0fa4677dadce6082f3c2789e14f28b545dd92668efc56a00dd2544e"},
+        {"role": "proposal", "path": "cases/legacy-openspec-v1/proposal.md", "sha256": "sha256:135a8bd3d4e95009c0184fa28b750cf59d6af824faedd86c170c57e2d01b0920"}
+      ],
+      "lanes": ["compiler", "local-run", "ambient"],
+      "intent_ref": {"id": "INT-openspec-adoption-v0", "version": 1},
+      "expectation": {"semantic": {
+        "contract_mode": "goalrail-context-intent/legacy-v0", "context_id": "CTXP-openspec-adoption-v0", "context_version": 1,
+        "context_previous_version": 0, "context_items": 1, "first_recipe": "Inspect README.md for the bounded flow.",
+        "intent_id": "INT-openspec-adoption-v0", "intent_version": 1, "intent_previous_version": 0,
+        "desired_outcomes": 1, "non_goals": 1, "success_signals": 1
+      }}
+    },
+    {
+      "id": "legacy-pre-pr-v4",
+      "provenance": "minimized binding spelling from openspec/changes/pre-pr-review-v0",
+      "mode": "legacy-v0",
+      "fixtures": [
+        {"role": "context", "path": "cases/legacy-pre-pr-v4/context.md", "sha256": "sha256:6a54117cf8a4b7b18af526a99fd9f989d30d5ef903bdde7b47189be318a20165"},
+        {"role": "intent", "path": "cases/legacy-pre-pr-v4/intent.md", "sha256": "sha256:5b5ce8043b2714a6b4a56edbe4bdc6f16e482947ae2918886c47525e9155a51f"},
+        {"role": "proposal", "path": "cases/legacy-pre-pr-v4/proposal.md", "sha256": "sha256:135a8bd3d4e95009c0184fa28b750cf59d6af824faedd86c170c57e2d01b0920"}
+      ],
+      "lanes": ["compiler", "local-run"],
+      "intent_ref": {"id": "INT-pre-pr-review-v0", "version": 5},
+      "expectation": {"semantic": {
+        "contract_mode": "goalrail-context-intent/legacy-v0", "context_id": "CTXP-pre-pr-review-v0", "context_version": 4,
+        "context_previous_version": 3, "context_items": 1, "first_recipe": "Inspect README.md for the bounded flow.",
+        "intent_id": "INT-pre-pr-review-v0", "intent_version": 5, "intent_previous_version": 4,
+        "desired_outcomes": 1, "non_goals": 1, "success_signals": 1
+      }}
+    },
+    {
+      "id": "legacy-six-old",
+      "provenance": "pinned six-column Context Items and historical Intent headings",
+      "mode": "legacy-v0",
+      "fixtures": [
+        {"role": "context", "path": "cases/legacy-six-old/context.md", "sha256": "sha256:b2924c9f37019517191b0a8ec7707af50682c8c479c18299893a335484836d0c"},
+        {"role": "intent", "path": "cases/legacy-six-old/intent.md", "sha256": "sha256:0f14a5ae7c090741d61fac60bead9fb8f70e2ef2d7da9c6e1376fad6bd9fe990"},
+        {"role": "proposal", "path": "cases/legacy-six-old/proposal.md", "sha256": "sha256:135a8bd3d4e95009c0184fa28b750cf59d6af824faedd86c170c57e2d01b0920"}
+      ],
+      "lanes": ["compiler", "local-run"],
+      "intent_ref": {"id": "INT-legacy-six", "version": 1},
+      "expectation": {"semantic": {
+        "contract_mode": "goalrail-context-intent/legacy-v0", "context_id": "CTXP-legacy-six", "context_version": 1,
+        "context_previous_version": 0, "context_items": 1, "first_recipe": "",
+        "intent_id": "INT-legacy-six", "intent_version": 1, "intent_previous_version": 0,
+        "desired_outcomes": 1, "non_goals": 1, "success_signals": 1
+      }}
+    },
+    {
+      "id": "malformed-confirmed-ambient",
+      "provenance": "hand-authored malformed confirmed claimant coexisting with a valid pair",
+      "mode": "contract-v1",
+      "fixtures": [
+        {"role": "context", "path": "cases/malformed-confirmed-ambient/context.md", "sha256": "sha256:6b03694499d13fec809ece53a2ef89a784cf3fa34dc80a0615301a2113e4120c"},
+        {"role": "good-context", "path": "cases/malformed-confirmed-ambient/good-context.md", "sha256": "sha256:817e122b9f42c7ad718e06ca488244581a669bf1bf871151c0119d7083bda8bd"},
+        {"role": "good-intent", "path": "cases/malformed-confirmed-ambient/good-intent.md", "sha256": "sha256:2fe4876ee0a09ecbb9b7bc568661eafbe9df1b786f9fddc2d8c1e67cadfadd1e"},
+        {"role": "intent", "path": "cases/malformed-confirmed-ambient/intent.md", "sha256": "sha256:2fe4876ee0a09ecbb9b7bc568661eafbe9df1b786f9fddc2d8c1e67cadfadd1e"},
+        {"role": "proposal", "path": "cases/malformed-confirmed-ambient/proposal.md", "sha256": "sha256:135a8bd3d4e95009c0184fa28b750cf59d6af824faedd86c170c57e2d01b0920"}
+      ],
+      "lanes": ["ambient"],
+      "ambient_coexists_valid": true,
+      "expectation": {"diagnostic": {
+        "code": "ARTIFACT_CONTRACT_INVALID", "path": "context.md + intent.md", "artifact_kind": "pair",
+        "contract_mode": "unselected", "field_or_section": "artifact contract", "observation": "partial declaration",
+        "expectation": "both artifacts declare Artifact Contract and Artifact Contract Version",
+        "repair_hint": "add the complete equal declaration to both artifacts"
+      }}
+    },
+    {
+      "id": "malformed-contract",
+      "provenance": "hand-authored malformed declared contract version",
+      "mode": "contract-v1",
+      "fixtures": [
+        {"role": "context", "path": "cases/malformed-contract/context.md", "sha256": "sha256:4bb3f4e5177c548be43df7dd832b4948f8fdc10ef5626dfcd7b776cb2e494efb"},
+        {"role": "intent", "path": "cases/malformed-contract/intent.md", "sha256": "sha256:e93a07d976313b84f356af22e8ec32bb15913021c8bfbf82a9e4d085e440af6b"},
+        {"role": "proposal", "path": "cases/malformed-contract/proposal.md", "sha256": "sha256:135a8bd3d4e95009c0184fa28b750cf59d6af824faedd86c170c57e2d01b0920"}
+      ],
+      "lanes": ["compiler"],
+      "expectation": {"diagnostic": {
+        "code": "ARTIFACT_CONTRACT_INVALID", "path": "context.md + intent.md", "artifact_kind": "pair",
+        "contract_mode": "unselected", "field_or_section": "artifact contract", "observation": "malformed version",
+        "expectation": "a positive decimal Artifact Contract Version in both artifacts",
+        "repair_hint": "replace both version values with the supported integer"
+      }}
+    },
+    {
+      "id": "mismatched-contract",
+      "provenance": "hand-authored unequal pair declaration",
+      "mode": "contract-v1",
+      "fixtures": [
+        {"role": "context", "path": "cases/mismatched-contract/context.md", "sha256": "sha256:817e122b9f42c7ad718e06ca488244581a669bf1bf871151c0119d7083bda8bd"},
+        {"role": "intent", "path": "cases/mismatched-contract/intent.md", "sha256": "sha256:036418f9ef6c5a3f4f08586e001ac33855ae83d00942b8d1e023a992153e1a69"},
+        {"role": "proposal", "path": "cases/mismatched-contract/proposal.md", "sha256": "sha256:135a8bd3d4e95009c0184fa28b750cf59d6af824faedd86c170c57e2d01b0920"}
+      ],
+      "lanes": ["compiler"],
+      "expectation": {"diagnostic": {
+        "code": "ARTIFACT_CONTRACT_MISMATCH", "path": "context.md + intent.md", "artifact_kind": "pair",
+        "contract_mode": "unselected", "field_or_section": "artifact contract", "observation": "declarations differ",
+        "expectation": "identical contract identifier and version in both artifacts",
+        "repair_hint": "make the two declarations byte-equivalent"
+      }}
+    },
+    {
+      "id": "missing-reference",
+      "provenance": "local relation fixture for missing Context evidence",
+      "mode": "contract-v1",
+      "fixtures": [
+        {"role": "context", "path": "cases/missing-reference/context.md", "sha256": "sha256:817e122b9f42c7ad718e06ca488244581a669bf1bf871151c0119d7083bda8bd"},
+        {"role": "intent", "path": "cases/missing-reference/intent.md", "sha256": "sha256:51f1641501ad3104bb76cd2f24b89566ec5106956a398366b757ee31813a67ab"},
+        {"role": "proposal", "path": "cases/missing-reference/proposal.md", "sha256": "sha256:135a8bd3d4e95009c0184fa28b750cf59d6af824faedd86c170c57e2d01b0920"}
+      ],
+      "lanes": ["compiler"],
+      "expectation": {"diagnostic": {
+        "code": "ARTIFACT_CONTEXT_REFERENCE_MISSING", "path": "intent.md", "artifact_kind": "intent",
+        "contract_mode": "goalrail-context-intent/v1", "field_or_section": "intent context reference", "observation": "CTX-404",
+        "expectation": "a Context Item ID present in context.md",
+        "repair_hint": "add the referenced Context Item or correct the reference because the context item reference does not exist"
+      }}
+    },
+    {
+      "id": "partial-contract",
+      "provenance": "hand-authored partial pair declaration",
+      "mode": "contract-v1",
+      "fixtures": [
+        {"role": "context", "path": "cases/partial-contract/context.md", "sha256": "sha256:6b03694499d13fec809ece53a2ef89a784cf3fa34dc80a0615301a2113e4120c"},
+        {"role": "intent", "path": "cases/partial-contract/intent.md", "sha256": "sha256:2fe4876ee0a09ecbb9b7bc568661eafbe9df1b786f9fddc2d8c1e67cadfadd1e"},
+        {"role": "proposal", "path": "cases/partial-contract/proposal.md", "sha256": "sha256:135a8bd3d4e95009c0184fa28b750cf59d6af824faedd86c170c57e2d01b0920"}
+      ],
+      "lanes": ["compiler"],
+      "expectation": {"diagnostic": {
+        "code": "ARTIFACT_CONTRACT_INVALID", "path": "context.md + intent.md", "artifact_kind": "pair",
+        "contract_mode": "unselected", "field_or_section": "artifact contract", "observation": "partial declaration",
+        "expectation": "both artifacts declare Artifact Contract and Artifact Contract Version",
+        "repair_hint": "add the complete equal declaration to both artifacts"
+      }}
+    },
+    {
+      "id": "repaired-real-pair",
+      "provenance": "pinned copy of openspec/changes/archive/2026-08-03-canon-template-gaps-v0 repaired by PRs 56 and 57",
+      "mode": "legacy-v0",
+      "fixtures": [
+        {"role": "context", "path": "cases/repaired-real-pair/context.md", "sha256": "sha256:f83f8fbd4bc05993d0f1f148b4f72d7a70bdc40b15d2b5de50dbd929632762fe"},
+        {"role": "intent", "path": "cases/repaired-real-pair/intent.md", "sha256": "sha256:2245ab465878f7d6ed275890d050b7bb31a1434915dac0b04d9a814fb734d010"},
+        {"role": "proposal", "path": "cases/repaired-real-pair/proposal.md", "sha256": "sha256:16e2e6d06b6e7413dbc4c71d0d655588dd4fc670ee90a53d8d2f78fa49bee359"}
+      ],
+      "lanes": ["compiler", "local-run"],
+      "intent_ref": {"id": "INT-canon-template-gaps-v0", "version": 3},
+      "expectation": {"semantic": {
+        "contract_mode": "goalrail-context-intent/legacy-v0", "context_id": "CTXP-canon-template-gaps-v0", "context_version": 3,
+        "context_previous_version": 2, "context_items": 11, "first_recipe_nonempty": true,
+        "intent_id": "INT-canon-template-gaps-v0", "intent_version": 3, "intent_previous_version": 2,
+        "desired_outcomes": 6, "non_goals": 5, "success_signals": 5
+      }}
+    },
+    {
+      "id": "unknown-contract",
+      "provenance": "hand-authored unsupported declared contract version",
+      "mode": "contract-v1",
+      "fixtures": [
+        {"role": "context", "path": "cases/unknown-contract/context.md", "sha256": "sha256:a0d4c9dd18512805db56b07c1080a0f6243e340dad214d68b2f6efee46403fb8"},
+        {"role": "intent", "path": "cases/unknown-contract/intent.md", "sha256": "sha256:036418f9ef6c5a3f4f08586e001ac33855ae83d00942b8d1e023a992153e1a69"},
+        {"role": "proposal", "path": "cases/unknown-contract/proposal.md", "sha256": "sha256:135a8bd3d4e95009c0184fa28b750cf59d6af824faedd86c170c57e2d01b0920"}
+      ],
+      "lanes": ["compiler", "local-run"],
+      "intent_ref": {"id": "INT-contract-corpus", "version": 1},
+      "expectation": {"diagnostic": {
+        "code": "ARTIFACT_CONTRACT_UNSUPPORTED", "path": "context.md + intent.md", "artifact_kind": "pair",
+        "contract_mode": "unselected", "field_or_section": "artifact contract", "observation": "goalrail-context-intent/2",
+        "expectation": "goalrail-context-intent version 1",
+        "repair_hint": "use a supported declared contract or remove both declarations only for pinned legacy input"
+      }}
+    }
+  ]
+}

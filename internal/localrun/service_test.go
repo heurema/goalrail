@@ -3,6 +3,8 @@ package localrun
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/heurema/goalrail/internal/adapters/openspec"
 	"github.com/heurema/goalrail/internal/domain"
 )
 
@@ -108,6 +111,132 @@ func TestPrepareIsInspectableAndActivationDenialCreatesNoRun(t *testing.T) {
 	}
 	if exists {
 		t.Fatal("activation denial created a launch claim")
+	}
+}
+
+func TestPrepareStopsAtPairDiagnosticBeforeStateOrProviderEffects(t *testing.T) {
+	root := t.TempDir()
+	resolvedRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	changeDir := filepath.Join(resolvedRoot, "openspec", "changes", "contract-test")
+	if err := os.MkdirAll(changeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	contextArtifact := strings.Replace(servicePairContext(true), "Artifact Contract Version:** 1", "Artifact Contract Version:** 2", 1)
+	intentArtifact := strings.Replace(servicePairIntent(true, "CTXP-service version 1"), "Artifact Contract Version:** 1", "Artifact Contract Version:** 2", 1)
+	if err := os.WriteFile(filepath.Join(changeDir, "context.md"), []byte(contextArtifact), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(changeDir, "intent.md"), []byte(intentArtifact), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	observer := &fixtureObserver{
+		root:         resolvedRoot,
+		revision:     strings.Repeat("a", 40),
+		observations: []WorktreeObservation{fixtureObservation("base")},
+	}
+	adapter := &countingFixtureAdapter{}
+	service, err := NewFixtureService(store, observer, openspec.IntentResolver{}, adapter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var runIDCalls atomic.Int32
+	service.newRunID = func() (domain.RunID, error) {
+		runIDCalls.Add(1)
+		return "run-must-not-exist", nil
+	}
+	spec := fixtureWorkSpec(resolvedRoot, observer.revision)
+	spec.Intent = serviceIntentReference(intentArtifact)
+	raw, err := json.Marshal(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = service.Prepare(context.Background(), bytes.NewReader(raw))
+	var diagnostic *openspec.ArtifactDiagnostic
+	if !errors.As(err, &diagnostic) || diagnostic.Code != openspec.ArtifactContractUnsupported {
+		t.Fatalf("diagnostic = %+v, err = %v", diagnostic, err)
+	}
+	frozen, err := domain.FreezeWorkSpec(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, relative := range []string{
+		preparedPath(frozen.Digest(), "work-spec.json"),
+		preparedPath(frozen.Digest(), "preparation.json"),
+		preparedPath(frozen.Digest(), "launch-claim.json"),
+	} {
+		exists, existsErr := store.Exists(relative)
+		if existsErr != nil {
+			t.Fatal(existsErr)
+		}
+		if exists {
+			t.Fatalf("pair failure created %s", relative)
+		}
+	}
+	if observer.calls.Load() != 0 || adapter.calls.Load() != 0 || runIDCalls.Load() != 0 {
+		t.Fatalf("effects after pair failure: observe=%d provider=%d run-id=%d", observer.calls.Load(), adapter.calls.Load(), runIDCalls.Load())
+	}
+}
+
+func TestPrepareAcceptsContractV1AndPinnedLegacyPairs(t *testing.T) {
+	tests := []struct {
+		name     string
+		contract bool
+		binding  string
+	}{
+		{name: "contract v1", contract: true, binding: "CTXP-service version 1"},
+		{name: "legacy v binding", contract: false, binding: "CTXP-service v1"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			root := t.TempDir()
+			resolvedRoot, err := filepath.EvalSymlinks(root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			changeDir := filepath.Join(resolvedRoot, "openspec", "changes", "contract-test")
+			if err := os.MkdirAll(changeDir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			contextArtifact := servicePairContext(test.contract)
+			intentArtifact := servicePairIntent(test.contract, test.binding)
+			if err := os.WriteFile(filepath.Join(changeDir, "context.md"), []byte(contextArtifact), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(changeDir, "intent.md"), []byte(intentArtifact), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			store, err := NewStore(t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			observer := &fixtureObserver{
+				root:         resolvedRoot,
+				revision:     strings.Repeat("a", 40),
+				observations: []WorktreeObservation{fixtureObservation("base")},
+			}
+			service := NewService(store, observer, openspec.IntentResolver{})
+			spec := fixtureWorkSpec(resolvedRoot, observer.revision)
+			spec.Intent = serviceIntentReference(intentArtifact)
+			raw, err := json.Marshal(spec)
+			if err != nil {
+				t.Fatal(err)
+			}
+			prepared, err := service.Prepare(context.Background(), bytes.NewReader(raw))
+			if err != nil {
+				t.Fatalf("prepare: %v", err)
+			}
+			if prepared.State != StatePrepared || observer.calls.Load() != 1 {
+				t.Fatalf("prepared = %+v observer calls = %d", prepared, observer.calls.Load())
+			}
+		})
 	}
 }
 
@@ -624,4 +753,89 @@ func fixedClock() func() time.Time {
 	return func() time.Time {
 		return base.Add(time.Duration(sequence.Add(1)) * time.Second)
 	}
+}
+
+func serviceIntentReference(raw string) domain.WorkSpecIntentReference {
+	sum := sha256.Sum256([]byte(raw))
+	return domain.WorkSpecIntentReference{
+		ID:          "INT-service",
+		Version:     1,
+		ArtifactRef: "openspec/changes/contract-test/intent.md",
+		Digest:      "sha256:" + hex.EncodeToString(sum[:]),
+	}
+}
+
+func servicePairContext(contract bool) string {
+	contractRows := ""
+	if contract {
+		contractRows = "- **Artifact Contract:** goalrail-context-intent\n- **Artifact Contract Version:** 1\n"
+	}
+	return `# Context Pack
+
+- **Context Pack ID:** CTXP-service
+- **Version:** 1
+- **Previous version:** pending
+` + contractRows + `- **Started at:** 2026-08-03T06:00:00Z
+- **Completed at:** 2026-08-03T07:00:00Z
+- **Outcome:** sufficient
+
+## Context Items
+
+| ID | Kind | Claim | Source | Verification recipe | Observed at | Relevance |
+|---|---|---|---|---|---|---|
+| CTX-1 | repository | The repository defines a bounded flow. | repo:README.md | Inspect the repository fact. | 2026-08-03T06:30:00Z | This constrains the outcome. |
+
+## Material Unknowns
+
+None.
+`
+}
+
+func servicePairIntent(contract bool, binding string) string {
+	contractRows := ""
+	if contract {
+		contractRows = "- **Artifact Contract:** goalrail-context-intent\n- **Artifact Contract Version:** 1\n"
+	}
+	return `# Intent Snapshot
+
+- **Intent ID:** INT-service
+- **Version:** 1
+- **Previous version:** pending
+` + contractRows + `- **Status:** confirmed
+- **Owner:** owner
+- **Context Pack:** ` + binding + `
+- **Run references:** local service test
+
+## Source Evidence
+
+- **SE-1 — owner:** The owner requested a bounded result.
+
+## Desired Outcomes
+
+| ID | Outcome | Verification action | Evidence |
+|---|---|---|---|
+| OUT-1 | Produce the bounded result. | Inspect it. | SE-1, CTX-1 |
+
+## Non-Goals
+
+| ID | Boundary | Evidence |
+|---|---|---|
+| NG-1 | Do not publish. | SE-1, CTX-1 |
+
+## Observable Success Signals
+
+| ID | Signal | Measurement | Evidence |
+|---|---|---|---|
+| SIG-1 | The result is inspectable. | One local result exists. | SE-1, CTX-1 |
+
+## Ambiguities and Unknowns
+
+None.
+
+## Confirmation
+
+- **Confirmed by:** owner
+- **Confirmed at:** 2026-08-03T08:00:00Z
+- **Verification action:** The owner reviewed the three semantic groups.
+`
 }

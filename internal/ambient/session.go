@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	questionRecordSchema = "goalrail.ambient-question/v0"
+	questionRecordSchema = "goalrail.ambient-question/v1"
 	archiveDirectory     = "ambient/archive"
 	questionDirectory    = "ambient/questions"
 )
@@ -33,15 +33,16 @@ type QuestionRecord struct {
 	// rather than borrowing a run's.
 	QuestionID string `json:"question_id"`
 
-	Repository  string     `json:"repository"`
-	SessionRef  string     `json:"session_ref,omitempty"`
-	Path        string     `json:"path"`
-	Digest      string     `json:"digest"`
-	RetainedRef string     `json:"retained_ref"`
-	RecordedAt  time.Time  `json:"recorded_at"`
-	Intent      *IntentRef `json:"intent,omitempty"`
-	UnboundWhy  string     `json:"unbound_reason,omitempty"`
-	Invalid     string     `json:"invalid_reason,omitempty"`
+	Repository         string              `json:"repository"`
+	SessionRef         string              `json:"session_ref,omitempty"`
+	Path               string              `json:"path"`
+	Digest             string              `json:"digest"`
+	RetainedRef        string              `json:"retained_ref"`
+	RecordedAt         time.Time           `json:"recorded_at"`
+	Intent             *IntentRef          `json:"intent,omitempty"`
+	UnboundWhy         string              `json:"unbound_reason,omitempty"`
+	BindingDiagnostics []BindingDiagnostic `json:"binding_diagnostics,omitempty"`
+	Invalid            string              `json:"invalid_reason,omitempty"`
 }
 
 // newQuestionID mints a canonical identifier for one occurrence of a question.
@@ -213,11 +214,12 @@ func StopSession(
 	// Exact-or-explicitly-unbound: a guessed binding would poison the chain
 	// the record exists to serve, while an unbound question is still caught,
 	// retained, and answerable.
-	reference, reason := resolver.ActiveConfirmedIntent(repositoryRoot)
-	if reference != nil {
-		record.Intent = reference
+	resolution := resolver.ActiveConfirmedIntent(repositoryRoot)
+	if resolution.Reference != nil {
+		record.Intent = resolution.Reference
 	} else {
-		record.UnboundWhy = reason
+		record.UnboundWhy = resolution.UnboundReason
+		record.BindingDiagnostics = resolution.BindingDiagnostics
 	}
 
 	// The record is keyed by occurrence, not by payload: two sessions may ask
