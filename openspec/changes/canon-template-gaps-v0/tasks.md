@@ -29,4 +29,4 @@
 - [x] 5.3 Retain and validate Verification recipe while preserving the legacy six-column reader.
 - [x] 5.4 Make the design instruction stop, version intent, and obtain exact owner confirmation after a material Context Pack refresh; mirror and test the instruction.
 - [x] 5.5 Obtain exact owner confirmation of `INT-canon-template-gaps-v0 v3` after presenting its owner-language view.
-- [ ] 5.6 Run targeted, shuffled, race, full Go, and strict OpenSpec checks; disposition all eight review threads with evidence and finish with zero unresolved threads and green CI.
+- [x] 5.6 Run targeted, shuffled, race, full Go, and strict OpenSpec checks; disposition all eight review threads with evidence and finish with zero unresolved threads and green CI.
