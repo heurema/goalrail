@@ -22,8 +22,10 @@ nothing in the toolchain would ever report it.
   - how many rules the configuration carries, reproduced verbatim, with a plain
     statement that they were present when the schema was replaced and that
     Goalrail neither interprets nor edits them;
-  - how many open and archived changes still pin the replaced schema, so
-    whether its directory may be removed is counted rather than guessed.
+  - how many open and archived changes still pin the replaced schema and
+    whether a repository-local schema directory actually exists, so removal is
+    counted rather than guessed and a package-only schema produces no removal
+    advice.
 - The marker Goalrail already owns records the adoption: the replaced schema
   name, when it happened, and a digest of the rules block as it stood. A marker
   written before this change carries no adoption record, which reads as "never
@@ -41,7 +43,7 @@ nothing in the toolchain would ever report it.
 |---|---|---|
 | Artifact-level schema difference in the report | OUT-1, SIG-1 | Derived from the two schema files on disk; it reports that an instruction differs, never what the difference means (NG-1) |
 | Rules disclosed verbatim with a plain statement | OUT-2, SIG-2 | Reproduces and counts; renders no per-rule verdict (NG-1) and writes nothing back into the configuration (NG-2) |
-| Counted pins on the replaced schema | OUT-3, SIG-3 | Answers the removal question with a count; Goalrail neither moves nor deletes the directory (NG-4) |
+| Counted pins and repository-local directory state | OUT-3, SIG-3 | Offers removal language only for an observed local directory and gates it on the pin count; Goalrail neither moves nor deletes the directory (NG-4) |
 | Adoption recorded in the marker | OUT-4 | Written to Goalrail's own state, not to the user's configuration (NG-2); per clone by design (NG-5) |
 | Advisory line in the diagnosis, self-terminating | OUT-5, SIG-4 | Appears and disappears from a digest comparison alone, with no prompt and no dismissal (NG-3) |
 | Every surface stays machine-readable | SIG-5 | No terminal interaction is introduced anywhere (NG-3) |

@@ -54,12 +54,16 @@ against the active schema, so a rule that outlived its schema is reported here
 or nowhere.
 
 That section SHALL also state how many changes still name the replaced schema,
-counted from the changes present in the repository, and SHALL say that its
-directory must remain while that count is above zero. Every change records the
-schema it was written under, and removing a schema directory those changes still
-name would break them; whether removal is safe is therefore a count, not an
-opinion, and initialization MUST NOT remove, move or archive that directory
-either way.
+counted from the changes present in the repository. Where a repository-local
+directory for that schema exists, the section SHALL say that it must remain
+while the count is above zero and may be removed only when the count is zero.
+Every change records the schema it was written under, and removing a schema
+directory those changes still name would break them; whether removal is safe is
+therefore a count, not an opinion. Where no repository-local directory exists,
+as with a schema supplied only by the stock package, the section SHALL state
+that no removal action is available and MUST NOT direct the user toward files in
+the installed package. Initialization MUST NOT remove, move or archive a schema
+directory in any case.
 
 The adoption section SHALL be absent where no schema was replaced, and its
 presence MUST NOT make initialization interactive or change its exit status.
@@ -83,6 +87,7 @@ presence MUST NOT make initialization interactive or change its exit status.
 #### Scenario: The replaced schema is not a file in the repository
 - **WHEN** a switch replaced a schema that ships with the stock CLI rather than living in the repository
 - **THEN** the report states that the schemas could not be compared and why, and still reports the rules and the count of changes naming the replaced schema
+- **AND** the report states that no repository-local schema directory exists and offers no removal action
 
 #### Scenario: The overlay on disk differs from the embedded copy
 - **WHEN** a switch happens in a repository whose overlay schema file was edited and is therefore left alone
@@ -93,12 +98,17 @@ presence MUST NOT make initialization interactive or change its exit status.
 - **THEN** the report states their count, reproduces each rule verbatim, states that they were present when the schema was replaced, and states that Goalrail neither interprets nor edits them
 - **AND** the report renders no verdict on any individual rule and the configuration's rules are byte-identical afterwards
 
+#### Scenario: A multiline rules value is disclosed completely
+- **WHEN** a top-level `rules:` value begins with `{`, `[`, `|` or `>` and continues on later lines before another top-level key
+- **THEN** the report reproduces every source line belonging to that value and excludes the following top-level key
+- **AND** editing retained rule content changes the recorded digest even when the rules shape cannot be counted confidently
+
 #### Scenario: Whether the replaced schema may be removed is counted
 - **WHEN** a switch replaced a schema that changes in the repository still name
 - **THEN** the report states how many changes name it and that its directory must remain, and the directory is present and unmodified afterwards
 
 #### Scenario: Nothing still names the replaced schema
-- **WHEN** a switch replaced a schema that no change in the repository names
+- **WHEN** a switch replaced a schema whose repository-local directory exists and no change in the repository names it
 - **THEN** the report states a count of zero and that the directory may be removed, and initialization removes nothing
 
 #### Scenario: No schema was replaced
@@ -108,7 +118,7 @@ presence MUST NOT make initialization interactive or change its exit status.
 ## ADDED Requirements
 
 ### Requirement: An adoption is recorded where the harness keeps its own state
-**Intent IDs:** OUT-4, OUT-5, SIG-4
+**Intent IDs:** OUT-4, OUT-5, SIG-4, SIG-5
 
 Where initialization replaced another schema, it SHALL record the adoption in the
 marker it already owns: the name of the replaced schema, when the adoption
@@ -129,6 +139,16 @@ installation into a reported fault.
 The digest SHALL cover the rules block alone, so that editing the rules changes
 it and editing unrelated parts of the configuration does not.
 
+Where a valid marker already exists and adding the adoption record fails,
+initialization SHALL keep that marker, report the adoption and the recording
+failure, and complete normally. This degraded path applies only to additive
+evidence: where no valid marker exists, a failure to create one SHALL still fail
+initialization because the repository was not initialized.
+
+Extending an existing marker SHALL publish the complete replacement atomically.
+Any failure before publication SHALL leave the previous marker byte-identical
+and valid; initialization MUST NOT truncate or rewrite the live marker in place.
+
 #### Scenario: A switch is recorded
 - **WHEN** initialization replaces another schema
 - **THEN** the marker afterwards names the replaced schema, the time of the adoption, and a digest of the rules block
@@ -138,8 +158,16 @@ it and editing unrelated parts of the configuration does not.
 - **THEN** the marker carries no adoption record
 
 #### Scenario: A marker predating this requirement stays valid
-- **WHEN** a diagnosis or an update reads a marker that carries no adoption record
+- **WHEN** a diagnosis reads a marker that carries no adoption record
 - **THEN** it is read as a repository that never replaced a schema, and no fault is reported
+
+#### Scenario: Additive adoption evidence cannot be written
+- **WHEN** initialization switches a schema where a valid marker exists but cannot be extended with the adoption record
+- **THEN** initialization succeeds, the existing marker remains unchanged, and the adoption report names the recording failure
+
+#### Scenario: Existing marker replacement fails during publication
+- **WHEN** replacement marker bytes have been written but cannot be published over an existing valid marker
+- **THEN** initialization succeeds through the degraded path, and the previous marker remains byte-identical and valid
 
 #### Scenario: The record stays out of the user's configuration
 - **WHEN** initialization records an adoption

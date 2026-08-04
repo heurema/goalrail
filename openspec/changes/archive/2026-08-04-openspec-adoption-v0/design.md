@@ -21,8 +21,8 @@ Goals, from the confirmed intent:
   adopted one (OUT-1).
 - Disclose the configuration's rules verbatim, with their count and their
   provenance, and judge none of them (OUT-2).
-- Answer whether the replaced schema directory may be removed with a count
-  (OUT-3).
+- Answer whether an existing repository-local replaced-schema directory may be
+  removed with a count (OUT-3).
 - Record the adoption in Goalrail's own state so it outlives the session
   (OUT-4).
 - Carry one self-terminating advisory in the diagnosis (OUT-5).
@@ -59,7 +59,12 @@ A bounded line-oriented reader extracts, for each entry of the top-level
 `artifacts:` sequence, its `id`, its `requires` list, and the raw byte span of
 its `instruction`. Comparison then yields: artifacts present in only one schema,
 artifacts whose `requires` sets differ, and artifacts whose instruction spans
-differ by digest.
+differ by digest. Before digesting, CRLF is normalized to LF: line endings are a
+Git checkout transport choice, not an instruction change. For an inline scalar,
+the bounded scalar reader removes an actual trailing YAML comment while retaining
+`#` inside quotes as instruction content. For a block scalar, the prose stays
+opaque; only source tails that its chomping mode does not preserve are ignored.
+Nothing folds or interprets the instruction prose.
 
 Digesting the instruction span rather than reading it is what keeps this within
 the boundary: the requirement is to report *that* an instruction differs, never
@@ -80,6 +85,15 @@ the same column-zero discipline `schemaAssignment` already applies to `schema:`,
 and for the same reason: an indented `rules:` belongs to something else. That
 span is what gets reproduced verbatim and what gets digested.
 
+The boundary does not depend on the first line having an empty value. A
+non-empty value may open a multiline flow mapping, flow sequence, literal
+scalar, folded scalar, or continued plain value. The span therefore keeps
+scanning to the next top-level mapping key. While `{` or `[` remains open, a
+zero-column flow entry, quoted `:`, or closing delimiter is still part of the
+rules value; a small quote-aware delimiter tracker prevents it from becoming a
+false boundary. Counting may still refuse these shapes, but verbatim disclosure
+and the digest must remain complete.
+
 Where `rules:` is the last key, the span ends at the last line belonging to its
 value rather than at end of file. Trailing column-zero comments and blank lines
 are not part of the value, and including them would let an edit to an unrelated
@@ -91,7 +105,12 @@ the block style every configuration in evidence uses, and it silently reports
 zero for a legal flow mapping such as `rules: {intent: ["a", "b"]}`. The reader
 therefore gets the same refusal the schema reader has: a shape it cannot count
 confidently is reported as uncountable, and the rules are still reproduced
-verbatim. A count is a claim, and a wrong count is worse than an absent one.
+verbatim. Multiple top-level rules blocks are reproduced separately in source
+order and digested together without unrelated configuration keys. An
+uncountable block is retained as potentially unreviewed evidence; only a
+confidently counted zero permits the report and marker to say there were no
+rules. A count and an absence are both claims, and a wrong one is worse than an
+unknown one.
 
 **Digest the rules block alone, not the configuration.**
 
@@ -110,6 +129,14 @@ alive. Reuse rather than a second reader: two readers of the same file would
 eventually disagree, and the one used for reporting would be the one nobody
 tested.
 
+Removal language is gated on the repository-local directory actually existing.
+A zero pin count for `spec-driven` in a stock root does not create a removable
+path: that schema lives in the installed package, which Goalrail neither owns nor
+advises the user to edit. The report still carries the computed pin count, but
+states that no removal action is available. Only an observed repository-local
+directory can receive the count-derived "must remain" or "may be removed"
+statement.
+
 Reuse requires hardening it first. `readChangeSchema` trims whitespace and
 quotes but never strips an inline comment, so `schema: intent-driven # legacy`
 reads as `intent-driven # legacy` and matches nothing
@@ -125,18 +152,27 @@ trustworthy after the reader is.
 
 `.goalrail/ambient.json` gains an `adoption` object holding the replaced schema
 name, the adoption time, and the rules digest. Absence is meaningful and valid —
-every marker written before this change lacks it, and CTX-12's update path must
+every marker written before this change lacks it, and the diagnosis path must
 keep reading those without complaint. Nothing about the record is required for
 the harness to work; it is evidence, not configuration.
 
+Updates publish through a temporary file in the marker's directory: write the
+complete JSON, sync and close it, then rename it over the live marker. Failure
+before the rename removes the temporary file and leaves the previous marker
+byte-identical. In-place truncation is incompatible with the fail-open promise,
+because an interrupted write could otherwise erase the repository's opt-in
+while initialization reports that it was retained.
+
 **Adoption reporting is fail-open, always.**
 
-No failure in comparing schemas, reading rules, or counting pins may fail
-initialization or change its exit status. Initialization has already written the
-overlay and switched the configuration by the time any of this runs; turning a
-reporting fault into an aborted command would recreate precisely the half-installed
-state this project has already fixed once. A failure is reported as a notice
-naming what could not be produced.
+No failure in comparing schemas, reading rules, counting pins, or adding
+adoption evidence to an existing valid marker may fail initialization or change
+its exit status. Initialization has already written the overlay and switched the
+configuration by the time any of this runs; turning a reporting fault into an
+aborted command would recreate precisely the half-installed state this project
+has already fixed once. A failure is reported as a notice naming what could not
+be produced. Creating the initial marker remains fail-closed because without it
+the repository was not initialized at all.
 
 **The advisory lives in the diagnosis, not in update.**
 
@@ -165,8 +201,10 @@ on a real repository rather than a fixture:
   gained dependencies, both checkable by hand against the two schema files
   (SIG-1).
 - The rules section reproduces every rule and contains no verdict word (SIG-2).
-- Baseline's pin count is above zero and the report says the directory must
-  stay; a repository where nothing pins it reports zero (SIG-3).
+- Baseline's pin count is above zero and the report says its repository-local
+  directory must stay; an unpinned repository-local schema reports that it may
+  be removed, while a stock package schema reports that no local removal action
+  exists (SIG-3).
 - The diagnosis line appears after adoption and is gone after an edit to the
   rules block, with no flag involved (SIG-4).
 - Initialization and diagnosis produce the same machine-readable shape and exit

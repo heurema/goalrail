@@ -37,6 +37,8 @@ type initReport struct {
 	Config harness.ConfigOutcome `json:"config"`
 	Files  []harness.FileOutcome `json:"files"`
 
+	Adoption *adoptionReport `json:"adoption,omitempty"`
+
 	// The two writes are reported apart because they are not the same kind of
 	// thing. Ignore names entries added to the rules the repository shares, which
 	// only the explicit flag produces and which a commit carries to everyone.
@@ -138,12 +140,30 @@ func runInit(args []string, stdout, stderr io.Writer) error {
 				file.Path+" differs from the canon and was left alone; `gr doctor` names it")
 		}
 	}
+	adoptionReport, adoption := buildAdoptionReport(root, config)
+	report.Adoption = adoptionReport
 
-	marker, created, err := ambient.Initialize(root, time.Now)
-	if err != nil {
-		return err
+	markerTime := time.Now().UTC()
+	if adoption != nil {
+		adoption.AdoptedAt = markerTime
+		report.Adoption.AdoptedAt = markerTime
+	}
+	marker, created, markerErr := ambient.InitializeWithAdoption(root, func() time.Time { return markerTime }, adoption)
+	if markerErr != nil && !errors.Is(markerErr, ambient.ErrAdoptionNotRecorded) {
+		return markerErr
+	}
+	if markerErr != nil {
+		notice := "the adoption record could not be written; the existing marker was kept: " + markerErr.Error()
+		if report.Adoption != nil {
+			report.Adoption.Notices = append(report.Adoption.Notices, notice)
+		} else {
+			report.Notices = append(report.Notices, notice)
+		}
 	}
 	report.MarkerCreated, report.InitializedAt = created, marker.InitializedAt
+	if markerErr == nil && report.Adoption != nil && marker.Adoption != nil {
+		report.Adoption.AdoptedAt = marker.Adoption.AdoptedAt
+	}
 
 	// Making the registration path unshareable is part of registering, not a
 	// separate thing to ask the user for: this rule belongs to the clone alone,
