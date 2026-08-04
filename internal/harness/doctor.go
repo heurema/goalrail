@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/heurema/goalrail/internal/ambient"
 	"github.com/heurema/goalrail/internal/updatecheck"
@@ -67,6 +68,14 @@ type ReviewState struct {
 	Note string `json:"note,omitempty"`
 }
 
+// AdoptionAdvisory is a fact that ends when the user edits the rules. It is not
+// a problem and carries no next action.
+type AdoptionAdvisory struct {
+	ReplacedSchema string    `json:"replaced_schema"`
+	AdoptedAt      time.Time `json:"adopted_at"`
+	Note           string    `json:"note"`
+}
+
 // Diagnosis is one report covering everything a working harness requires.
 type Diagnosis struct {
 	Repository  string `json:"repository"`
@@ -85,6 +94,7 @@ type Diagnosis struct {
 	Observability ObservabilityState    `json:"observability"`
 	Update        UpdateAvailability    `json:"update"`
 	Review        ReviewState           `json:"review"`
+	Adoption      *AdoptionAdvisory     `json:"adoption,omitempty"`
 
 	// Invocation is the exact command the repository is driven by, printed so an
 	// agent working here does not have to guess it.
@@ -176,10 +186,32 @@ func Diagnose(input DiagnoseInput) (Diagnosis, error) {
 	diagnosis.Observability = InspectObservability(input.StateRoot, input.LookupEnvironment)
 	diagnosis.Update = availability(input.LatestRelease, diagnosis.Version)
 	diagnosis.Review = input.Review
+	diagnosis.Adoption = adoptionAdvisory(input.RepositoryRoot)
 
 	diagnosis.Problems, diagnosis.NextActions = summarize(diagnosis)
 	diagnosis.Working = len(diagnosis.Problems) == 0
 	return diagnosis, nil
+}
+
+func adoptionAdvisory(repositoryRoot string) *AdoptionAdvisory {
+	marker, err := ambient.ReadMarker(repositoryRoot)
+	if err != nil || marker.Adoption == nil || !marker.Adoption.HadRules || marker.Adoption.RulesDigest == "" ||
+		marker.Adoption.ReplacedSchema == "" || marker.Adoption.AdoptedAt.IsZero() {
+		return nil
+	}
+	rules, err := ReadRules(repositoryRoot)
+	if err != nil || rules.Digest != marker.Adoption.RulesDigest {
+		return nil
+	}
+	return &AdoptionAdvisory{
+		ReplacedSchema: marker.Adoption.ReplacedSchema,
+		AdoptedAt:      marker.Adoption.AdoptedAt,
+		Note: fmt.Sprintf(
+			"rules present when schema %q was replaced at %s have not changed since that adoption",
+			marker.Adoption.ReplacedSchema,
+			marker.Adoption.AdoptedAt.UTC().Format(time.RFC3339),
+		),
+	}
 }
 
 func diagnoseAttachment(scaffold ambient.Scaffold, home, repositoryRoot string) (AttachmentDiagnosis, error) {
@@ -332,6 +364,9 @@ func Describe(diagnosis Diagnosis) string {
 
 	if diagnosis.Review.Note != "" {
 		fmt.Fprintf(&report, "%s\n", diagnosis.Review.Note)
+	}
+	if diagnosis.Adoption != nil {
+		fmt.Fprintf(&report, "%s\n", diagnosis.Adoption.Note)
 	}
 
 	fmt.Fprintf(&report, "%s\n", diagnosis.Update.Note)

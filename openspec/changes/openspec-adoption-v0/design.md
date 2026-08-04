@@ -59,7 +59,9 @@ A bounded line-oriented reader extracts, for each entry of the top-level
 `artifacts:` sequence, its `id`, its `requires` list, and the raw byte span of
 its `instruction`. Comparison then yields: artifacts present in only one schema,
 artifacts whose `requires` sets differ, and artifacts whose instruction spans
-differ by digest.
+differ by digest. Before digesting, CRLF is normalized to LF: line endings are a
+Git checkout transport choice, not an instruction change. No other content is
+normalized or interpreted.
 
 Digesting the instruction span rather than reading it is what keeps this within
 the boundary: the requirement is to report *that* an instruction differs, never
@@ -91,7 +93,12 @@ the block style every configuration in evidence uses, and it silently reports
 zero for a legal flow mapping such as `rules: {intent: ["a", "b"]}`. The reader
 therefore gets the same refusal the schema reader has: a shape it cannot count
 confidently is reported as uncountable, and the rules are still reproduced
-verbatim. A count is a claim, and a wrong count is worse than an absent one.
+verbatim. Multiple top-level rules blocks are reproduced separately in source
+order and digested together without unrelated configuration keys. An
+uncountable block is retained as potentially unreviewed evidence; only a
+confidently counted zero permits the report and marker to say there were no
+rules. A count and an absence are both claims, and a wrong one is worse than an
+unknown one.
 
 **Digest the rules block alone, not the configuration.**
 

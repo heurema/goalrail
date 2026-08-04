@@ -218,7 +218,11 @@ func readChangeSchema(path string) (string, error) {
 		if schema != "" {
 			return "", fmt.Errorf("%w: duplicate schema in .openspec.yaml", ErrMalformedArtifact)
 		}
-		schema = strings.Trim(strings.TrimSpace(value), "'\"")
+		parsed, parseErr := changeSchemaScalar(value)
+		if parseErr != nil {
+			return "", fmt.Errorf("%w: %v", ErrMalformedArtifact, parseErr)
+		}
+		schema = parsed
 	}
 	if err := scanner.Err(); err != nil {
 		return "", fmt.Errorf("read OpenSpec change metadata: %w", err)
@@ -227,6 +231,36 @@ func readChangeSchema(path string) (string, error) {
 		return "", fmt.Errorf("%w: .openspec.yaml has no schema", ErrMalformedArtifact)
 	}
 	return schema, nil
+}
+
+// changeSchemaScalar applies the same YAML subset as the harness configuration
+// reader: a quoted value ends at its matching quote, while an unquoted comment
+// begins only at the value or after whitespace. Keeping this treatment here
+// prevents a commented pin from disappearing from adoption counts.
+func changeSchemaScalar(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" || strings.HasPrefix(value, "#") {
+		return "", nil
+	}
+	if value[0] == '\'' || value[0] == '"' {
+		quote := value[0]
+		end := strings.IndexByte(value[1:], quote)
+		if end < 0 {
+			return "", fmt.Errorf("unterminated quoted schema")
+		}
+		rest := strings.TrimSpace(value[2+end:])
+		if rest != "" && !strings.HasPrefix(rest, "#") {
+			return "", fmt.Errorf("content follows quoted schema")
+		}
+		return value[1 : 1+end], nil
+	}
+	for index := 0; index < len(value); index++ {
+		if value[index] != '#' || (index > 0 && value[index-1] != ' ' && value[index-1] != '\t') {
+			continue
+		}
+		return strings.TrimSpace(value[:index]), nil
+	}
+	return value, nil
 }
 
 func isArchivedChange(changeDir string) bool {

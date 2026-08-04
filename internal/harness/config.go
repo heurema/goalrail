@@ -38,6 +38,10 @@ type ConfigOutcome struct {
 
 	// PreviousSchema is what the configuration named before a switch.
 	PreviousSchema string `json:"previous_schema,omitempty"`
+
+	// Rules is captured only when an existing named schema is replaced. The
+	// exact span belongs to the repository and is reported, never rewritten.
+	Rules *RulesSnapshot `json:"rules,omitempty"`
 }
 
 // newConfig is what an absent configuration is created as: the managed key, and a
@@ -94,6 +98,10 @@ func EnsureConfig(repositoryRoot string, confirmForeignSwitch bool) (ConfigOutco
 	if named != "" && !stockSchemas[named] && !confirmForeignSwitch {
 		return outcome, fmt.Errorf("%w (%s); confirm the switch explicitly to adopt the Goalrail schema",
 			ErrForeignSchema, named)
+	}
+	if named != "" {
+		rules := extractRules(raw)
+		outcome.Rules = &rules
 	}
 
 	updated := content
