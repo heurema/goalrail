@@ -1,0 +1,65 @@
+# Context Pack
+
+- **Context Pack ID:** CTXP-pre-pr-review-v0
+- **Version:** 5
+- **Previous version:** 4
+- **Artifact Contract:** goalrail-context-intent
+- **Artifact Contract Version:** 1
+- **Started at:** 2026-08-01T11:55:00Z
+- **Completed at:** 2026-08-04T08:05:27Z
+- **Outcome:** sufficient
+
+> **Every claim below carries the command that reproduces it.** Version 3 and
+> earlier did not, and one of them — that the installed `claude` accepts
+> `--max-turns` — was simply invented, then used to justify calling the review
+> bounded when nothing bounded it. A Context Pack is the evidence a whole change
+> is compiled from; an unverifiable line in it is worse than a missing one,
+> because everything downstream inherits it as fact. Facts with checks, or
+> nothing.
+
+## Context Items
+
+| ID | Kind | Claim | Source | Verification recipe | Observed at | Relevance |
+|---|---|---|---|---|---|---|
+| CTX-1 | repository | The findings journal holds 14 entries from 2026-08-01, every one recorded after its pull request was already open | `local:~/personal/heurema/docs/portfolio/REVIEW-FINDINGS.jsonl` | `wc -l < ~/personal/heurema/docs/portfolio/REVIEW-FINDINGS.jsonl` → 14 at the time of writing; `jq -r 'select(.phase != "post-pr")' <file>` → empty for those 14 | 2026-08-01T11:30:00Z | The problem is timing and independence, not reviewer quality. The same reviewer run earlier would have caught the same defects before they were public |
+| CTX-2 | repository | Grouped by cause those findings collapse to six classes, two of which crossed a three-occurrence threshold on the first day of counting | `local:~/personal/heurema/docs/portfolio/REVIEW-FINDINGS.jsonl` | `jq -r .class <file> \| sort \| uniq -c \| sort -rn` → `5 input-space`, `3 governing-docs`, then four classes below three | 2026-08-01T11:40:00Z | Reviewer instructions are not static. Whatever runs the review must accept instructions that grow as classes are promoted |
+| CTX-3 | external | `codex review` is a non-interactive subcommand taking custom instructions as an argument or on stdin. Its scope flags `--base`, `--uncommitted` and `--commit` **cannot be combined with those instructions** | `external:installed-codex-cli` | `codex review --base main - </dev/null` → `error: the argument '--base <BRANCH>' cannot be used with '[PROMPT]'` | 2026-08-01T14:35:00Z | The reviewed range has to travel in the prose, because the flag that would carry it excludes the instructions. **Corrected in v4:** v1–v3 recorded the flags from `--help` without running them together, and the first live review died on exactly that |
+| CTX-4 | external | `claude -p` runs non-interactively with `--output-format`, `--allowed-tools`, `--disallowed-tools`, `--append-system-prompt`, `--effort` and `--model`. It has **no** `--max-turns`; the only cost-shaped bound is `--max-budget-usd` | `external:installed-claude-cli` | `claude --help \| grep -c max-turns` → 0; `claude --help \| grep -c -- --max-budget-usd` → 1; `claude --version` → 2.1.215 | 2026-08-01T14:40:00Z | A turn budget is not available, so any ceiling must come from something that is not a vendor flag. **Corrected in v4:** v1–v3 asserted `--max-turns` existed. It was never checked and does not exist. A review built on it would have been unbounded while claiming otherwise |
+| CTX-5 | repository | Initialization already detects both scaffolds and the diagnosis already reports each one's state | `repo:cmd/gr/harness.go; internal/ambient` | `gr doctor \| grep -cE '^(codex\|claude-code):'` → 2 | 2026-08-01T14:55:00Z | The registry of available reviewers is not new work. What is missing is what to do with it |
+| CTX-6 | repository | Goalrail already spawns external processes | `repo:internal; cmd` | `grep -rl "exec.Command" --include="*.go" internal/ cmd/ \| grep -v _test \| wc -l` → 5 | 2026-08-01T14:55:00Z | Spawning a process is not a new capability. Spawning a non-deterministic, metered one is |
+| CTX-7 | repository | The harness is required to work with no Node runtime, which is why Goalrail never executes the pinned OpenSpec CLI | `repo:openspec/specs/harness-init/spec.md` | `grep -c "needs no Node runtime" openspec/specs/harness-init/spec.md` → 1 | 2026-08-01T14:55:00Z | The strongest existing precedent points away from execution. Whether review is the exception, and why, is the central design question |
+| CTX-8 | external | nitpicker v0.8.2 supports Anthropic by API key only, with no path for a Claude subscription; its OpenAI subscription path reuses the Codex CLI OAuth client and its own README calls that arguably outside OpenAI's terms; its Gemini keyring path is documented as having caused account suspensions in 2026 | `https://raw.githubusercontent.com/arsenyinfo/nitpicker/main/README.md`; `local:docs/portfolio/EVIDENCE.jsonl#nitpicker-subscription-auth-2026-08-01` | Read the upstream README and search for `auth = "codex"` and `Research only`; compare the retained quoted lines | 2026-08-01T12:10:00Z | The obvious third-party option was evaluated and rejected. The installed vendor CLIs use the same subscriptions as their vendors intend |
+| CTX-9 | repository | The workspace contract requires a bounded pre-pull-request adversarial review in a fresh context, cross-provider, with every finding dispositioned and a three-occurrence promotion ratchet | `workspace:../AGENTS.md` | `grep -c "Independent review and the findings ratchet" ../AGENTS.md` → 1 | 2026-08-01T14:55:00Z | The policy exists and is prose. This change is what would make it executable, and prose disciplines are what the ratchet says lag |
+| CTX-10 | repository | A machine-readable usage guard exists and the global rules require reading it before substantial Codex work | `local:~/.local/state/vicc/codex-usage-guard/status.json` | `jq -r '.level, .operating_mode' ~/.local/state/vicc/codex-usage-guard/status.json` → `OK`, `NORMAL` at the time of writing | 2026-08-01T14:20:00Z | A review command that ignores the budget would be the first thing here to spend without a gate. It is also one user's file, so it belongs in configuration rather than in a released binary |
+| CTX-11 | repository | The findings journal lives in the Heurema workspace, which is not a Git repository, while Goalrail installs into one repository at a time | `local:~/personal/heurema` | `git -C ~/personal/heurema rev-parse --git-dir` → fails | 2026-08-01T14:55:00Z | Where a repository-scoped tool records findings, and how those reach a workspace-level ratchet, is unresolved by anything that exists today |
+| CTX-12 | repository | Nothing records which provider produced a given change; the diagnosis reports only which scaffolds are installed and active | `repo:gr doctor; internal/ambient` | `gr doctor \| grep -c "author"` → 0 | 2026-08-01T14:55:00Z | Authorship is not derivable from any stored record — but see CTX-13 |
+| CTX-13 | repository | A session's scaffold is visible in its own environment, and a Claude Code session on this machine simultaneously carries a Codex **companion** variable | `local:Claude Code environment observation` | `env \| grep -cE '^CLAUDECODE=\|^CODEX_COMPANION_SESSION_ID='` → 2, run inside a Claude Code session | 2026-08-01T14:55:00Z | Authorship needs no flag on the ordinary path. But a prefix match on `CODEX_*` would read that companion as authorship and hand the review back to its own author, so only a primary session marker may count |
+| CTX-14 | repository | The task ledger's checked count is stale: it reports 9/50 although reconciliation against current code, tests, and merged PRs #50–#55 classifies 38 tasks as implemented, 6 as superseded by later intent, 2 as partial, and 4 proof tasks as unmet | `repo:openspec/changes/pre-pr-review-v0/tasks.md`; `repo:internal/review`; `repo:cmd/gr`; `github:heurema/goalrail#50-#55` | Count the boxes with `awk '/^- \\[[ x]\\] [0-9]+\\.[0-9]+/{total++; if ($0 ~ /^- \\[x\\]/) done++} END{print done, total}' openspec/changes/pre-pr-review-v0/tasks.md` → `9 50`; verify superseded `1.3, 1.5, 2.1–2.3, 5.1`, partial `1.2, 7.5`, and unmet `8.1–8.4` against the cited code, tests, and PRs | 2026-08-04T07:35:00Z | Completion cannot be recovered by checking every old box: obsolete requirements must be named, current defects repaired, and the failed proof retained honestly |
+| CTX-15 | repository | The historical Baseline success signal did not hold. A 271-second receipt over `e93a129` reported clean at 17:26:23Z before PR #19 opened at 17:28:10Z; a 565-second pass over the same head reported material findings at 17:49:53Z, after the PR was public. PR #19 finished at `ed91959`, and the current per-clone state has no review receipt for that final head | `local:~/.local/state/goalrail/reviews/cd0f2a6f…-e93a1295…-f8307fa212e9.json`; `local:~/.local/state/goalrail/reviews/cd0f2a6f…-e93a1295…-b287eb94b495.json`; `https://github.com/heurema/baseline/pull/19` | Not independently reproducible — receipts are intentionally per-clone and the PR is historical; retained evidence: the two exact receipt paths and GitHub PR #19 metadata. On this clone, inspect receipt metadata with `jq` and confirm no receipt names head `ed91959`; expect the timestamps, durations, and heads stated here | 2026-08-04T07:48:00Z | SIG-5 cannot be marked complete or recreated retrospectively. A new real pre-PR canary must replace it while this failed attempt remains evidence |
+| CTX-16 | repository | Current Codex desktop sessions expose `CODEX_THREAD_ID`, while author detection and its tests recognize `CODEX_SESSION_ID`; ordinary desktop invocation therefore records the author as unknown and may select Codex fresh even when Claude is runnable | `repo:internal/review/author.go:37-40`; `repo:internal/review/author_test.go:20-30`; `local:current Codex desktop environment` | `env \| rg '^(CODEX|CLAUDE)' \| sed 's/=.*$/=<set>/'` → includes `CODEX_THREAD_ID` and not `CODEX_SESSION_ID`; `rg -n 'CODEX_SESSION_ID' internal/review/author.go internal/review/author_test.go` → detector and tests use the absent marker | 2026-08-04T07:31:00Z | OUT-1's inferred-authorship path has drifted from the environment it is meant to identify; the new canary must exercise the real desktop marker without `--author` |
+| CTX-17 | repository | The default review base is the local ref `main`. In this worktree local `main` remained at #55 while `origin/main` had advanced through #59, so the first review of #59 covered unrelated merged work; the corrected review required explicit `--base origin/main` | `repo:cmd/gr/review.go:43-55`; `local:git refs`; `local:~/.local/state/goalrail/reviews/972d24fd…-85c25f336592.json`; `local:~/.local/state/goalrail/reviews/972d24fd…-b7027087a1ca.json` | `git rev-parse main origin/main` → different commits; inspect the two receipts with `jq '{base_ref,base_commit,head_commit}'` → first binds `main@1d3e756`, corrected binds `origin/main@81bf6d9`, both at head `091dfa9` | 2026-08-04T07:57:00Z | A receipt can be internally valid while proving the wrong PR range. Omitted-base behavior must never silently choose a stale local default |
+| CTX-18 | repository | The state transition itself has a unit test, but no command-level test drives `gr review` or `reviewStateFor` to prove JSON output, exit-status neutrality, and operation without a terminal across initialization, review, and diagnosis | `repo:internal/review/receipt_test.go:206-256`; `repo:cmd/gr/*_test.go` | `rg -n 'runReview|reviewStateFor|runCommand\\(t, "review"|\\[\\]string\\{"review"' cmd/gr/*_test.go` → no matches; `rg -n 'TestStatusMovesWithTheBranchAndNeedsNobody' internal/review/receipt_test.go` → one unit test | 2026-08-04T07:52:00Z | Tasks 7.5 and 8.4 cannot be called complete until the public command surface, not only the receipt function, proves the no-interaction and exit-status contract |
+
+## Material Unknowns
+
+None. CTX-7's original question is settled by the shipped command: Goalrail runs
+one bounded review and the caller owns the loop. CTX-11 remains an intentional
+boundary rather than a material unknown: findings disposition stays outside
+Goalrail. The default-base discovery mechanism is left to design, but its
+observable outcome is not: an omitted base must not silently select a stale
+local ref.
+
+## Version history
+
+- **v5 (2026-08-04):** Reconciles the shipped implementation and historical
+  proof against the still-open change. Records that the Baseline canary failed
+  its stated timing and current-receipt signal, identifies live Codex marker and
+  default-base drift, and names the missing command-level non-interactive proof.
+  Migrates the artifact to contract v1 without changing CTX-1–CTX-13's meaning.
+- **v4 (2026-08-01):** Every item gained the command that reproduces it, after
+  the owner stopped the work over an invented claim. CTX-4 corrected: the
+  installed `claude` has no `--max-turns`. CTX-3 corrected: `codex review`
+  refuses its scope flags together with custom instructions, which the first
+  live review discovered by failing.
+- **v3:** Reproduction commands added to CTX-1 and CTX-2 only.
+- **v2:** CTX-13 added after measuring the session environment.

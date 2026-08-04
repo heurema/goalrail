@@ -37,7 +37,10 @@ tool. A vendor's refusal surfaces to the caller unchanged, and being runnable �
 the executable resolving, not a configuration directory existing — is what
 makes a provider a candidate.
 
-The command SHALL refuse in exactly one case: no reviewer can be run at all.
+Reviewer selection SHALL refuse in exactly one case: no reviewer can be run at
+all. Repository and base-resolution failures remain input errors, and a
+configured budget gate remains the separate policy refusal defined below;
+neither is a reviewer-selection decision.
 
 #### Scenario: One provider is installed
 - **WHEN** the command runs where only the author's own provider can be run
@@ -53,7 +56,7 @@ The command SHALL refuse in exactly one case: no reviewer can be run at all.
 
 #### Scenario: Nothing can review
 - **WHEN** no reviewer executable resolves at all
-- **THEN** the command refuses and names what is missing, and that is its only refusal besides the gate
+- **THEN** the command refuses and names what is missing, and this is the only reviewer-selection refusal
 
 #### Scenario: The reviewer cannot write
 - **WHEN** a reviewer is invoked
@@ -66,12 +69,15 @@ The command SHALL refuse in exactly one case: no reviewer can be run at all.
 ### Requirement: Authorship is inferred, and not knowing it refuses nothing
 **Intent IDs:** OUT-1, OUT-5
 
-The command SHALL infer the author's provider from the invoking environment,
-matching each provider's primary session marker only: `CLAUDECODE` for a Claude
-Code session, the Codex session identifier for a Codex one. A companion
-variable of one tool inside another's session is an ordinary configuration and
-MUST NOT count as authorship — a prefix match would have handed the review back
-to its own author while reporting success.
+The command SHALL infer the author's provider from the invoking environment by
+matching only registered primary session markers. The supported current marker
+set SHALL include `CLAUDECODE` for Claude Code and `CODEX_THREAD_ID` for Codex
+desktop. Multiple registered primary markers belonging to the same provider
+SHALL collapse to one provider identity rather than create ambiguity. A
+companion variable of one tool inside another's session, including
+`CODEX_COMPANION_SESSION_ID`, is ordinary configuration and MUST NOT count as
+authorship — a prefix match would have handed the review back to its own author
+while reporting success.
 
 An explicit override SHALL take precedence over detection unconditionally.
 
@@ -85,6 +91,10 @@ unknown and several runnable providers, selection SHALL be deterministic.
 - **WHEN** the environment carries exactly one provider's primary session marker
 - **THEN** that provider is the author and cross mode prefers the other
 
+#### Scenario: Codex desktop is recognized without an override
+- **WHEN** `CODEX_THREAD_ID` is set, no Claude primary marker is set, and no authorship override is given
+- **THEN** Codex is recorded as the author and a runnable Claude reviewer is selected in cross mode
+
 #### Scenario: Authorship cannot be determined
 - **WHEN** the environment carries no primary marker, or two
 - **THEN** the review proceeds, the receipt records the author as unknown, and the reviewer choice is deterministic
@@ -93,18 +103,55 @@ unknown and several runnable providers, selection SHALL be deterministic.
 - **WHEN** an authorship override is given
 - **THEN** it decides the author regardless of the environment
 
-### Requirement: A budget gate is the only other refusal
+### Requirement: An omitted base cannot select a stale local shadow
+**Intent IDs:** OUT-10, SIG-6
+
+An explicit base ref SHALL always win. The command SHALL resolve that ref to an
+immutable commit and record both the selected ref and commit in the receipt.
+
+Where the base is omitted, the command SHALL resolve one unambiguous repository
+default using local Git metadata. A remote-tracking default SHALL be preferred
+over a same-named local branch, so a stale local shadow cannot silently widen
+or change the reviewed range. If local metadata does not identify one
+unambiguous default, the command SHALL fail before invoking the budget gate or
+any reviewer and SHALL name explicit `--base` as the remedy.
+
+Base discovery MUST NOT fetch, contact a hosting service, or otherwise use the
+network. Refreshing remote-tracking refs remains the caller's responsibility.
+
+#### Scenario: An explicit base wins
+- **WHEN** the caller supplies `--base <ref>`
+- **THEN** that exact ref is resolved and receipted regardless of any repository default
+
+#### Scenario: A remote-tracking default beats its local shadow
+- **WHEN** the base is omitted, local and remote-tracking branches share the default name but resolve to different commits, and local metadata identifies the remote-tracking default unambiguously
+- **THEN** the review starts from the remote-tracking commit and the receipt records its ref and immutable commit
+
+#### Scenario: Default metadata is not unambiguous
+- **WHEN** the base is omitted and local Git metadata identifies no single repository default
+- **THEN** the command invokes neither the gate nor a reviewer and the input error names `--base`
+
+#### Scenario: Default discovery stays offline
+- **WHEN** an omitted base is resolved
+- **THEN** no fetch or hosting-service request is made
+
+#### Scenario: The selected default produces no branch changes
+- **WHEN** the omitted base resolves to a descendant of the checked-out head and the three-dot range is empty
+- **THEN** the command materializes no instructions, invokes neither the gate nor a reviewer, and reports that there is nothing to review
+
+### Requirement: A budget gate is the only policy refusal after valid inputs
 **Intent IDs:** OUT-2, SIG-2
 
-Where configuration names a gate command, the command SHALL run it before
-invoking any reviewer — including a refute round — and SHALL refuse on a
-non-zero exit, naming the gate as the reason. Every gate invocation SHALL run
-under the review's own deadline, bounded across its whole process tree, because
-a gate is routinely a pipeline whose descendant can outlive the shell. A gate
-the deadline stopped SHALL be reported as a timeout carrying its own output, and
-never as a refusal: it returned no verdict, and telling automation the budget
-denied the review is a different fact with a different response. The gate SHALL be a command named
-in configuration and MUST NOT be a path, provider, or budget service built into
+After repository and base inputs resolve successfully, where configuration
+names a gate command, the command SHALL run it before invoking any reviewer —
+including a refute round — and SHALL refuse on a non-zero exit, naming the gate
+as the reason. Every gate invocation SHALL run under the review's own deadline,
+bounded across its whole process tree, because a gate is routinely a pipeline
+whose descendant can outlive the shell. A gate the deadline stopped SHALL be
+reported as a timeout carrying its own output, and never as a refusal: it
+returned no verdict, and telling automation the budget denied the review is a
+different fact with a different response. The gate SHALL be a command named in
+configuration and MUST NOT be a path, provider, or budget service built into
 Goalrail. Where no gate is configured, the review SHALL proceed, and nothing
 SHALL be reported as missing.
 
@@ -156,11 +203,12 @@ incremental review carries.
 **Intent IDs:** OUT-8, SIG-3
 
 The command SHALL offer a refute round in every mode: a fresh session receives
-the previous report and the reviewed diff and is instructed to refute the
-findings rather than add new ones. The refuter SHALL be the other runnable
-provider where one exists and the same provider in a clean session otherwise —
-the value of the round is a fresh attempt to kill the findings before they are
-acted on, and that value does not require a second vendor.
+the previous report and the exact canonical diff of the reviewed range whose
+digest the receipt records, and is instructed to refute the findings rather
+than add new ones. The refuter SHALL be the other runnable provider where one
+exists and the same provider in a clean session otherwise — the value of the
+round is a fresh attempt to kill the findings before they are acted on, and
+that value does not require a second vendor.
 
 The round SHALL run only when the caller asks for it. The rule the caller
 applies is stated here so every loop applies the same one: findings exist and
@@ -174,7 +222,7 @@ each with its own digest. Which findings survived is the reader's judgement.
 
 #### Scenario: A refute round with two providers
 - **WHEN** the caller triggers refute where the other provider is runnable
-- **THEN** that provider receives the report and the diff in a fresh session, and the receipt carries both reports verbatim
+- **THEN** that provider receives the first report and the exact canonical reviewed diff in a fresh session, and the receipt carries both reports verbatim
 
 #### Scenario: A refute round with one provider
 - **WHEN** the caller triggers refute where only one provider is runnable
@@ -249,11 +297,12 @@ changing the review rules is a change.
 ### Requirement: The receipt is bound to what was reviewed, and to how
 **Intent IDs:** OUT-5, SIG-3
 
-A completed review SHALL leave a receipt carrying: the base and head commits of
-the reviewed range, the digest of that range's canonical diff, the digest of
-the branch's full canonical diff, the mode and the reason it was selected, the
-reviewer's identity, the author or `unknown`, the measured duration, the time,
-and every report as verbatim bytes with a digest per report.
+A completed review SHALL leave a receipt carrying: the selected base ref, the
+base and head commits of the reviewed range, the digest of that range's
+canonical diff, the digest of the branch's full canonical diff, the mode and
+the reason it was selected, the reviewer's identity, the author or `unknown`,
+the measured duration, the time, and every report as verbatim bytes with a
+digest per report.
 
 No field SHALL be derived by reading, parsing, scoring, or summarizing a
 report. The canonical diff SHALL be rendered with the reader's own git
@@ -267,7 +316,7 @@ complete or when it could never be read back within the receipt bound.
 
 #### Scenario: A receipt describes its own review
 - **WHEN** a review completes
-- **THEN** recomputing the range digest from the receipt's own commits reproduces it, the reports are byte-identical, and the mode, reason, author and duration are present
+- **THEN** recomputing the range digest from the receipt's own commits reproduces it, the reports are byte-identical, and the selected base ref, mode, reason, author and duration are present
 
 #### Scenario: The digest ignores the reader's configuration
 - **WHEN** a diff-affecting git setting changes after a review
@@ -319,7 +368,7 @@ command has. Measured on one range with one set of instructions, effort the only
 variable: the moderate default reviewed clean and missed three real defects, two
 of them P1, which the higher effort reported — recorded with its design, ranges,
 durations and reproduction command in
-`openspec/changes/pre-pr-review-v0/evidence/effort-experiment-2026-08-01.md`. The deadline travels with the
+`openspec/changes/archive/2026-08-04-pre-pr-review-v0/evidence/effort-experiment-2026-08-01.md`. The deadline travels with the
 effort because raising one without the other only moves the failure from a false
 clean verdict to an unfinished review.
 
@@ -334,6 +383,10 @@ clean verdict to an unfinished review.
 #### Scenario: A reviewer that outlives its child is still bounded
 - **WHEN** the reviewer's descendant keeps the pipes open past the deadline
 - **THEN** the review ends within the deadline plus a short grace, reports the deadline as the cause, and writes no receipt
+
+#### Scenario: Canonical diff rendering reaches the deadline
+- **WHEN** rendering the canonical reviewed range has not completed by the review deadline
+- **THEN** its Git process is stopped, no instructions, gate, or reviewer side effect occurs, and no receipt is written
 
 #### Scenario: The model is stated, per provider
 - **WHEN** a review runs with no model named by the caller
@@ -364,3 +417,20 @@ draw from the same committed source.
 #### Scenario: Edited instructions are used
 - **WHEN** the instructions file has been edited and the command runs again
 - **THEN** the reviewer receives the edited instructions and the file is unmodified afterwards
+
+### Requirement: The public review command remains machine-readable without a terminal
+**Intent IDs:** OUT-6, SIG-4
+
+The public review command SHALL accept complete non-interactive input without
+reading from a terminal or prompting the caller. A successful invocation SHALL
+emit one parseable JSON result through the established command surface. Missing
+terminal state MUST NOT change reviewer selection, repository observation,
+receipt contents, or success and failure semantics.
+
+#### Scenario: Review succeeds without a terminal
+- **WHEN** `gr review` receives valid repository inputs through a process with no terminal attached
+- **THEN** it runs without prompting and emits one parseable JSON result describing the stored receipt
+
+#### Scenario: Review input fails without a terminal
+- **WHEN** `gr review` receives malformed or ambiguous repository input through a process with no terminal attached
+- **THEN** it fails with the same input-error semantics as an attached invocation and does not attempt to prompt

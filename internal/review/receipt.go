@@ -2,6 +2,7 @@ package review
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -36,10 +37,10 @@ type Receipt struct {
 	Repository string `json:"repository"`
 	Branch     string `json:"branch"`
 
-	// BaseRef is what the branch was reviewed against, as the caller named it;
-	// BaseCommit is what that resolved to at review time. A branch name moves,
-	// a commit does not, and the digest below is only reproducible from the
-	// commit.
+	// BaseRef is the selected human-readable ref: either the caller's explicit
+	// value or the one unambiguous local remote default. BaseCommit is what that
+	// resolved to at review time. A branch name moves, a commit does not, and the
+	// digest below is only reproducible from the commit.
 	BaseRef    string `json:"base_ref"`
 	BaseCommit string `json:"base_commit"`
 	HeadCommit string `json:"head_commit"`
@@ -132,7 +133,11 @@ func digest(value []byte) string {
 // GIT_WORK_TREE would silently redirect the command into a different
 // repository, and a digest taken there would describe someone else's changes.
 func git(repositoryRoot string, arguments ...string) (string, error) {
-	command := exec.Command("git", append([]string{"-C", repositoryRoot}, arguments...)...)
+	return gitContext(context.Background(), repositoryRoot, arguments...)
+}
+
+func gitContext(ctx context.Context, repositoryRoot string, arguments ...string) (string, error) {
+	command := exec.CommandContext(ctx, "git", append([]string{"-C", repositoryRoot}, arguments...)...)
 	// Repository selectors are stripped, and the reader's global and system
 	// configuration is taken out of the answer. The repository's own .git/config
 	// survives that, so the diff-affecting keys are additionally overridden on
@@ -148,6 +153,9 @@ func git(repositoryRoot string, arguments ...string) (string, error) {
 	command.Stdout = &stdout
 	command.Stderr = &stderr
 	if err := command.Run(); err != nil {
+		if contextErr := ctx.Err(); contextErr != nil {
+			return "", fmt.Errorf("git %s: %w", strings.Join(arguments, " "), contextErr)
+		}
 		detail := strings.TrimSpace(stderr.String())
 		if detail == "" {
 			detail = err.Error()
@@ -204,6 +212,8 @@ func canonicalDiffArguments(baseCommit, headCommit string) []string {
 		"-c", "diff.algorithm=myers",
 		"-c", "diff.noprefix=false",
 		"-c", "diff.mnemonicPrefix=false",
+		"-c", "diff.srcPrefix=a/",
+		"-c", "diff.dstPrefix=b/",
 		"-c", "diff.relative=false",
 		"-c", "diff.indentHeuristic=true",
 		"-c", "diff.orderFile=/dev/null",
@@ -221,13 +231,25 @@ func canonicalDiffArguments(baseCommit, headCommit string) []string {
 	}
 }
 
+// renderCanonicalDiff returns the exact bytes that define a reviewed range.
+// Callers that both transport and digest a diff must keep this single rendering:
+// rendering twice would make the receipt a claim about bytes that need not be
+// the bytes a provider actually received.
+func renderCanonicalDiff(ctx context.Context, repositoryRoot, baseCommit, headCommit string) ([]byte, error) {
+	rendered, err := gitContext(ctx, repositoryRoot, canonicalDiffArguments(baseCommit, headCommit)...)
+	if err != nil {
+		return nil, err
+	}
+	return []byte(rendered), nil
+}
+
 // DiffDigest measures the reviewed range.
 func DiffDigest(repositoryRoot, baseCommit, headCommit string) (string, error) {
-	rendered, err := git(repositoryRoot, canonicalDiffArguments(baseCommit, headCommit)...)
+	rendered, err := renderCanonicalDiff(context.Background(), repositoryRoot, baseCommit, headCommit)
 	if err != nil {
 		return "", err
 	}
-	return digest([]byte(rendered)), nil
+	return digest(rendered), nil
 }
 
 // Resolve reports the commit a ref names.

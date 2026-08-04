@@ -27,6 +27,21 @@ func TestDetectAuthorReadsEachSingleProviderSession(t *testing.T) {
 	if err != nil || codex != ambient.ScaffoldCodex {
 		t.Fatalf("a Codex session detected as %q (%v)", codex, err)
 	}
+
+	desktop, err := DetectAuthor(environment(map[string]string{"CODEX_THREAD_ID": "thread-1"}))
+	if err != nil || desktop != ambient.ScaffoldCodex {
+		t.Fatalf("a Codex desktop session detected as %q (%v)", desktop, err)
+	}
+}
+
+func TestDetectAuthorCollapsesMarkersFromTheSameProvider(t *testing.T) {
+	author, err := DetectAuthor(environment(map[string]string{
+		"CODEX_THREAD_ID":  "thread-1",
+		"CODEX_SESSION_ID": "session-1",
+	}))
+	if err != nil || author != ambient.ScaffoldCodex {
+		t.Fatalf("two Codex primary markers produced %q (%v)", author, err)
+	}
 }
 
 // The case that makes the narrow matching necessary. This environment was
@@ -50,13 +65,13 @@ func TestDetectAuthorIgnoresACompanionOfTheOtherProvider(t *testing.T) {
 
 func TestDetectAuthorRefusesWhenTwoSessionsClaimTheProcess(t *testing.T) {
 	_, err := DetectAuthor(environment(map[string]string{
-		"CLAUDECODE":       "1",
-		"CODEX_SESSION_ID": "abc",
+		"CLAUDECODE":      "1",
+		"CODEX_THREAD_ID": "thread-1",
 	}))
 	if !errors.Is(err, ErrAuthorAmbiguous) {
 		t.Fatalf("two primary markers produced %v", err)
 	}
-	for _, name := range []string{"CLAUDECODE", "CODEX_SESSION_ID"} {
+	for _, name := range []string{"CLAUDECODE", "CODEX_THREAD_ID"} {
 		if !strings.Contains(err.Error(), name) {
 			t.Fatalf("the refusal does not name %s: %v", name, err)
 		}
@@ -79,8 +94,8 @@ func TestDetectAuthorRefusesAnEmptyEnvironment(t *testing.T) {
 // as presence is the same silent misattribution the narrow matching prevents.
 func TestDetectAuthorTreatsAnEmptyMarkerAsAbsent(t *testing.T) {
 	author, err := DetectAuthor(environment(map[string]string{
-		"CLAUDECODE":       "",
-		"CODEX_SESSION_ID": "abc",
+		"CLAUDECODE":      "",
+		"CODEX_THREAD_ID": "thread-1",
 	}))
 	if err != nil || author != ambient.ScaffoldCodex {
 		t.Fatalf("an empty marker was read as presence: %q (%v)", author, err)
