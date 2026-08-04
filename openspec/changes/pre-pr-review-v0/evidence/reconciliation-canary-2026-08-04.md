@@ -56,6 +56,7 @@ outside repository evidence.
 | Round | Command kind | Provider invocations | Head | Result |
 |---|---|---:|---|---|
 | 1 | ordinary | 1 | `51f695c8f24f1488a357d2386a4eac02cedfbda8` | completed; no material finding |
+| 2 | explicit full | 1 | `82148e890a04b8755f417b0a3ea05b9b33a1a423` | completed; current receipt; no material finding |
 
 ## Round 1 receipt
 
@@ -95,3 +96,49 @@ and one provider invocation.
 
 No code fix was accepted or applied. The only working-tree changes are this
 canary evidence and the corresponding task-ledger updates.
+
+## Round 2 full-pass receipt
+
+- Command: `go run ./cmd/gr review --repo . --full`.
+- Author: `codex`, inferred from the live desktop environment without an
+  override.
+- Reviewer and mode: `claude-code`, `cross`.
+- Selected base: `origin/main` at
+  `0efd542e6aabe57ff74d4f793bda1e6266d31987`.
+- Head and reviewed base:
+  `82148e890a04b8755f417b0a3ea05b9b33a1a423` and
+  `0efd542e6aabe57ff74d4f793bda1e6266d31987`.
+- Duration, effort, and model: 206 seconds, `high`, `opus`.
+- Full and reviewed diff digest:
+  `c3877fa09178142a38a60ce7de221225cececebcb920eb64300e0de6f7b4f4e6`.
+- Report digest:
+  `c5db4bea4a061f6512f395c3cd4e265362732584e33bc62a1a58a06a3a5aa2c9`.
+- Reviewed at: `2026-08-04T09:57:15Z`.
+- Receipt state after the command: `current`. Diagnosis still exited 1 only
+  for its independent pre-existing initialization and attachment problems;
+  review state did not enter that verdict.
+- Caller disposition: the verbatim report ended with
+  `REVIEW-VERDICT: nothing-material` and identified no behavior-changing
+  defect or unresolved intent issue.
+- Pull requests for the branch after the command: none.
+
+Counts after round 2 are two review commands and two provider invocations. The
+canary remains below both declared ceilings.
+
+## Completion-head protocol
+
+Recording round 2 in repository evidence necessarily creates a new commit and
+makes that round's receipt stale. At 2026-08-04T10:32:26Z, after this lifecycle
+boundary and the exact completion protocol were presented, the owner authorized
+one completion-evidence commit and the final explicit full pass with `да`.
+
+The completion commit marks task 6.5 as the terminal task state. That state is
+valid only if the immediately following command
+`go run ./cmd/gr review --repo . --full` succeeds on that exact unchanged head,
+its receipt is `current`, and the caller finds no material issue. This is round
+3 of 3 and provider invocation 3 of 4. A failure leaves the canary failed and
+opens no pull request.
+
+The round 3 per-clone receipt is the final proof. No repository file is changed
+after that pass: copying its metadata back into this file would create another
+head and invalidate the receipt it was meant to record.
