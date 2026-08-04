@@ -143,12 +143,25 @@ func runInit(args []string, stdout, stderr io.Writer) error {
 	adoptionReport, adoption := buildAdoptionReport(root, config)
 	report.Adoption = adoptionReport
 
-	marker, created, err := ambient.InitializeWithAdoption(root, time.Now, adoption)
-	if err != nil {
-		return err
+	markerTime := time.Now().UTC()
+	if adoption != nil {
+		adoption.AdoptedAt = markerTime
+		report.Adoption.AdoptedAt = markerTime
+	}
+	marker, created, markerErr := ambient.InitializeWithAdoption(root, func() time.Time { return markerTime }, adoption)
+	if markerErr != nil && !errors.Is(markerErr, ambient.ErrAdoptionNotRecorded) {
+		return markerErr
+	}
+	if markerErr != nil {
+		notice := "the adoption record could not be written; the existing marker was kept: " + markerErr.Error()
+		if report.Adoption != nil {
+			report.Adoption.Notices = append(report.Adoption.Notices, notice)
+		} else {
+			report.Notices = append(report.Notices, notice)
+		}
 	}
 	report.MarkerCreated, report.InitializedAt = created, marker.InitializedAt
-	if report.Adoption != nil && marker.Adoption != nil {
+	if markerErr == nil && report.Adoption != nil && marker.Adoption != nil {
 		report.Adoption.AdoptedAt = marker.Adoption.AdoptedAt
 	}
 

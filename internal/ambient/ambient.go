@@ -72,6 +72,12 @@ The payload format is goalrail.escalation/v0.`
 // sessions and wrapped runs use one channel, not two.
 const ReservedEscalationPath = ".goalrail/blocked.md"
 
+// ErrAdoptionNotRecorded means an existing valid marker could not be extended
+// with additive adoption evidence. The existing marker remains authoritative;
+// callers may report this degraded evidence path without treating the harness
+// as uninitialized.
+var ErrAdoptionNotRecorded = errors.New("adoption record was not written")
+
 // Initialize marks a repository as participating. It is an explicit user act,
 // so unlike the hook paths it reports failure loudly.
 func Initialize(repositoryRoot string, now func() time.Time) (Marker, bool, error) {
@@ -87,11 +93,12 @@ func InitializeWithAdoption(repositoryRoot string, now func() time.Time, adoptio
 		if adoption == nil {
 			return existing, false, nil
 		}
-		existing.Adoption = completedAdoption(adoption, now)
-		if err := writeMarker(markerPath, existing); err != nil {
-			return Marker{}, false, err
+		updated := existing
+		updated.Adoption = completedAdoption(adoption, now)
+		if err := writeMarker(markerPath, updated); err != nil {
+			return existing, false, fmt.Errorf("%w: %w", ErrAdoptionNotRecorded, err)
 		}
-		return existing, false, nil
+		return updated, false, nil
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return Marker{}, false, err
 	}

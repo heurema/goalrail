@@ -69,6 +69,24 @@ func TestInstructionDifferenceIgnoresCheckoutLineEndingsAndOuterComments(t *test
 	}
 }
 
+func TestInstructionDifferenceIgnoresYAMLInsignificantTails(t *testing.T) {
+	left := []byte("artifacts:\n  - id: intent\n    requires: []\n    instruction: |\n      Same instruction.\n\n  - id: design\n    requires: []\n    instruction: design   # source note\n\n")
+	right := []byte("artifacts:\n  - id: intent\n    requires: []\n    instruction: |\n      Same instruction.\n  - id: design\n    requires: []\n    instruction: design\n")
+	difference := compareSchemaBytes(left, right)
+	if !difference.Comparable || len(difference.InstructionsChanged) != 0 {
+		t.Fatalf("YAML-insignificant tails changed an instruction: %#v", difference)
+	}
+}
+
+func TestInstructionDifferencePreservesKeepChompingTails(t *testing.T) {
+	left := []byte("artifacts:\n  - id: intent\n    requires: []\n    instruction: |+\n      Same instruction.\n\n")
+	right := []byte("artifacts:\n  - id: intent\n    requires: []\n    instruction: |+\n      Same instruction.\n")
+	difference := compareSchemaBytes(left, right)
+	if !difference.Comparable || !reflect.DeepEqual(difference.InstructionsChanged, []string{"intent"}) {
+		t.Fatalf("keep-chomped tail was lost: %#v", difference)
+	}
+}
+
 func TestRepositorySchemaComparisonUsesTheOverlayOnDisk(t *testing.T) {
 	root := t.TempDir()
 	writeSchema := func(name, content string) {
@@ -122,6 +140,22 @@ func TestRulesSnapshotKeepsOnlyTheTopLevelBlock(t *testing.T) {
 	}
 	if snapshot.Digest != digestBytes([]byte(expected)) {
 		t.Fatal("rules digest did not cover the extracted span alone")
+	}
+}
+
+func TestRulesSnapshotKeepsUncountableLiteralContentVerbatim(t *testing.T) {
+	left := "schema: old\nrules:\n  intent:\n    - |\n      Use this template:\n      \tname: value\n    - keep evidence distinct\n"
+	right := strings.Replace(left, "keep evidence distinct", "keep evidence separate", 1)
+	snapshot := extractRules([]byte(left))
+	if !snapshot.Present || !snapshot.HasRules || snapshot.Counted {
+		t.Fatalf("literal-tab rules snapshot = %#v", snapshot)
+	}
+	if snapshot.Text != strings.TrimPrefix(left, "schema: old\n") ||
+		!strings.Contains(snapshot.Text, "keep evidence distinct") {
+		t.Fatalf("rules text was truncated: %q", snapshot.Text)
+	}
+	if snapshot.Digest == extractRules([]byte(right)).Digest {
+		t.Fatal("an edit below uncountable literal content did not change the rules digest")
 	}
 }
 

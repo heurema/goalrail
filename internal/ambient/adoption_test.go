@@ -1,8 +1,10 @@
 package ambient
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -56,5 +58,39 @@ func TestLegacyMarkerRemainsValidAndCanGainAnAdoption(t *testing.T) {
 	})
 	if err != nil || created || updated.Adoption == nil {
 		t.Fatalf("updated marker = %#v, created = %v, err = %v", updated, created, err)
+	}
+}
+
+func TestFailedAdoptionWriteReturnsTheExistingMarker(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not enforce the marker mode used to force this write failure")
+	}
+	root := t.TempDir()
+	existing, created, err := Initialize(root, func() time.Time {
+		return time.Date(2026, time.August, 4, 12, 0, 0, 0, time.UTC)
+	})
+	if err != nil || !created {
+		t.Fatalf("initialize marker = %#v, created = %v, err = %v", existing, created, err)
+	}
+	markerPath := filepath.Join(root, filepath.FromSlash(MarkerPath))
+	if err := os.Chmod(markerPath, 0o400); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(markerPath, 0o600) })
+
+	returned, created, err := InitializeWithAdoption(root, time.Now, &Adoption{
+		ReplacedSchema: "intent-driven",
+		RulesDigest:    "digest",
+		HadRules:       true,
+	})
+	if !errors.Is(err, ErrAdoptionNotRecorded) || created {
+		t.Fatalf("failed adoption write = %#v, created = %v, err = %v", returned, created, err)
+	}
+	if returned.Adoption != nil || returned.InitializedAt != existing.InitializedAt {
+		t.Fatalf("returned marker does not describe persisted state: %#v", returned)
+	}
+	persisted, readErr := ReadMarker(root)
+	if readErr != nil || persisted.Adoption != nil {
+		t.Fatalf("persisted marker = %#v, err = %v", persisted, readErr)
 	}
 }

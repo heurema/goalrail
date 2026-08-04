@@ -161,7 +161,7 @@ presence MUST NOT make initialization interactive or change its exit status.
 - **THEN** the report carries no adoption section
 
 ### Requirement: An adoption is recorded where the harness keeps its own state
-**Intent IDs:** OUT-4, OUT-5, SIG-4
+**Intent IDs:** OUT-4, OUT-5, SIG-4, SIG-5
 
 Where initialization replaced another schema, it SHALL record the adoption in the
 marker it already owns: the name of the replaced schema, when the adoption
@@ -182,6 +182,12 @@ installation into a reported fault.
 The digest SHALL cover the rules block alone, so that editing the rules changes
 it and editing unrelated parts of the configuration does not.
 
+Where a valid marker already exists and adding the adoption record fails,
+initialization SHALL keep that marker, report the adoption and the recording
+failure, and complete normally. This degraded path applies only to additive
+evidence: where no valid marker exists, a failure to create one SHALL still fail
+initialization because the repository was not initialized.
+
 #### Scenario: A switch is recorded
 - **WHEN** initialization replaces another schema
 - **THEN** the marker afterwards names the replaced schema, the time of the adoption, and a digest of the rules block
@@ -191,8 +197,12 @@ it and editing unrelated parts of the configuration does not.
 - **THEN** the marker carries no adoption record
 
 #### Scenario: A marker predating this requirement stays valid
-- **WHEN** a diagnosis or an update reads a marker that carries no adoption record
+- **WHEN** a diagnosis reads a marker that carries no adoption record
 - **THEN** it is read as a repository that never replaced a schema, and no fault is reported
+
+#### Scenario: Additive adoption evidence cannot be written
+- **WHEN** initialization switches a schema where a valid marker exists but cannot be extended with the adoption record
+- **THEN** initialization succeeds, the existing marker remains unchanged, and the adoption report names the recording failure
 
 #### Scenario: The record stays out of the user's configuration
 - **WHEN** initialization records an adoption

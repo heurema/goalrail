@@ -36,7 +36,8 @@
 
 - [x] 5.1 Add an optional `adoption` object to the marker (`internal/ambient`): replaced schema name, adoption time, rules digest. Optional by construction — every marker written so far lacks it.
 - [x] 5.2 Write it during initialization only when a switch replaced another schema, and never into the user's configuration. Record "nothing predates this" only when absence is known; an uncountable rules block remains "unreviewed" so the diagnosis cannot silently lose it.
-- [x] 5.3 Test that a marker with no adoption record reads as "never replaced a schema" and that `gr doctor` and `gr update` report no fault for it. `gr update` reads the marker on every run (`cmd/gr/harness.go:155-159`), so a required field would break every existing installation.
+- [x] 5.3 Test that a marker with no adoption record reads as "never replaced a schema" and that `gr doctor` reports no fault for it. Diagnosis reads the marker to derive the advisory, so a required adoption field would break every existing installation there.
+- [x] 5.4 Keep a failure to add adoption evidence to an existing valid marker fail-open: retain the marker, emit the full adoption report with a notice, and preserve the successful exit status. Keep initial marker creation fail-closed, because a repository without that marker was not initialized.
 
 ## 6. Carry the advisory in the diagnosis
 

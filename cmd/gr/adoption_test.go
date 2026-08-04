@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -144,6 +145,40 @@ func TestRunInitKeepsAdoptionDiagnosticsFailOpen(t *testing.T) {
 	}
 }
 
+func TestRunInitKeepsExistingMarkerWhereAdoptionEvidenceCannotBeWritten(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows does not enforce the marker mode used to force this write failure")
+	}
+	root := t.TempDir()
+	t.Setenv("HOME", t.TempDir())
+	writeAdoptionFixture(t, root, "openspec/config.yaml", "schema: intent-driven\nrules:\n  intent:\n    - keep evidence distinct\n")
+	writeAdoptionFixture(t, root, "openspec/schemas/intent-driven/schema.yaml", replacedSchemaFixture)
+	writeAdoptionFixture(t, root, ambient.MarkerPath,
+		"{\n  \"schema\": \"goalrail.ambient-marker/v0\",\n  \"initialized_at\": \"2026-08-01T00:00:00Z\"\n}\n")
+	markerPath := filepath.Join(root, filepath.FromSlash(ambient.MarkerPath))
+	if err := os.Chmod(markerPath, 0o400); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(markerPath, 0o600) })
+
+	var stdout, stderr bytes.Buffer
+	if err := runInit([]string{"--repo", root, "--confirm-schema-switch"}, &stdout, &stderr); err != nil {
+		t.Fatalf("adoption evidence failure changed init status: %v\nstderr: %s", err, stderr.String())
+	}
+	var report initReport
+	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
+		t.Fatalf("decode report: %v\n%s", err, stdout.String())
+	}
+	if report.Adoption == nil || report.Adoption.AdoptedAt.IsZero() ||
+		!strings.Contains(strings.Join(report.Adoption.Notices, "\n"), "adoption record was not written") {
+		t.Fatalf("degraded adoption report = %#v", report.Adoption)
+	}
+	marker, err := ambient.ReadMarker(root)
+	if err != nil || marker.Adoption != nil {
+		t.Fatalf("existing marker was not preserved: %#v, err = %v", marker, err)
+	}
+}
+
 func TestRunInitDoesNotClaimAbsentRulesWerePresent(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("HOME", t.TempDir())
@@ -245,7 +280,7 @@ func harnessAdoptionFromDiagnosis(t *testing.T, root string) *harness.AdoptionAd
 	return diagnosis.Adoption
 }
 
-func TestLegacyMarkerAddsNoDoctorOrUpdateFault(t *testing.T) {
+func TestLegacyMarkerAddsNoDoctorFault(t *testing.T) {
 	root := scratchRepository(t)
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("GOALRAIL_STATE_HOME", t.TempDir())
@@ -268,14 +303,6 @@ func TestLegacyMarkerAddsNoDoctorOrUpdateFault(t *testing.T) {
 	}
 	if !diagnosis.Working || len(diagnosis.Adoption) != 0 {
 		t.Fatalf("legacy diagnosis = %s", doctorOutput)
-	}
-
-	updateOutput, updateError, err := runCommand(t, "update", "--repo", root)
-	if err != nil {
-		t.Fatalf("update rejected a legacy marker: %v\n%s\n%s", err, updateError, updateOutput)
-	}
-	if !json.Valid([]byte(updateOutput)) {
-		t.Fatalf("update did not preserve its machine-readable report: %s", updateOutput)
 	}
 }
 

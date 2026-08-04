@@ -122,12 +122,40 @@ func compareSchemaBytes(replaced, adopted []byte) SchemaDifference {
 	return difference
 }
 
-// instructionDigest keeps the instruction opaque while removing the one
-// transport-level difference Git may introduce across clones. CRLF and LF are
-// the same YAML line break; treating them as prose changes would make a Windows
-// checkout report every shared instruction as changed.
+// instructionDigest keeps the instruction opaque while removing source noise
+// that YAML does not include in the scalar value. It deliberately does not fold
+// or otherwise interpret the prose inside a block scalar.
 func instructionDigest(span []byte) string {
-	return digestBytes(bytes.ReplaceAll(span, []byte("\r\n"), []byte("\n")))
+	normalized := bytes.ReplaceAll(span, []byte("\r\n"), []byte("\n"))
+	lines := splitSourceLines(normalized)
+	if len(lines) == 0 {
+		return digestBytes(nil)
+	}
+	_, value, ok := yamlMapping(strings.TrimSpace(lines[0].body))
+	if !ok {
+		return digestBytes(normalized)
+	}
+	value = strings.TrimSpace(stripUnquotedComment(value))
+	if !strings.HasPrefix(value, ">") && !strings.HasPrefix(value, "|") {
+		return digestBytes([]byte(value))
+	}
+
+	end := len(lines)
+	// Default and strip chomping do not preserve extra blank lines at the end
+	// of the source span. Keep chomping does, so those bytes remain evidence.
+	if !strings.Contains(value, "+") {
+		for end > 1 && strings.TrimSpace(lines[end-1].body) == "" {
+			end--
+		}
+	}
+	var comparable bytes.Buffer
+	comparable.WriteString(value)
+	comparable.WriteByte('\n')
+	for index := 1; index < end; index++ {
+		comparable.WriteString(lines[index].body)
+		comparable.WriteByte('\n')
+	}
+	return digestBytes(comparable.Bytes())
 }
 
 func sameStringSet(left, right []string) bool {
@@ -528,7 +556,10 @@ func rulesSourceSpan(raw []byte, lines []sourceLine, start int) (string, string,
 			}
 			indent, err := sourceIndent(line.body)
 			if err != nil {
-				end = index + 1
+				// An unreadable indentation makes counting untrustworthy, but it
+				// cannot prove that the rules value ended. Keep scanning for the
+				// next readable top-level key so the verbatim span and digest stay
+				// complete even when the bounded counter must refuse the shape.
 				continue
 			}
 			if indent == 0 {

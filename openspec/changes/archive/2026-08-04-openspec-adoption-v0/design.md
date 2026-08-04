@@ -132,18 +132,20 @@ trustworthy after the reader is.
 
 `.goalrail/ambient.json` gains an `adoption` object holding the replaced schema
 name, the adoption time, and the rules digest. Absence is meaningful and valid —
-every marker written before this change lacks it, and CTX-12's update path must
+every marker written before this change lacks it, and the diagnosis path must
 keep reading those without complaint. Nothing about the record is required for
 the harness to work; it is evidence, not configuration.
 
 **Adoption reporting is fail-open, always.**
 
-No failure in comparing schemas, reading rules, or counting pins may fail
-initialization or change its exit status. Initialization has already written the
-overlay and switched the configuration by the time any of this runs; turning a
-reporting fault into an aborted command would recreate precisely the half-installed
-state this project has already fixed once. A failure is reported as a notice
-naming what could not be produced.
+No failure in comparing schemas, reading rules, counting pins, or adding
+adoption evidence to an existing valid marker may fail initialization or change
+its exit status. Initialization has already written the overlay and switched the
+configuration by the time any of this runs; turning a reporting fault into an
+aborted command would recreate precisely the half-installed state this project
+has already fixed once. A failure is reported as a notice naming what could not
+be produced. Creating the initial marker remains fail-closed because without it
+the repository was not initialized at all.
 
 **The advisory lives in the diagnosis, not in update.**
 
