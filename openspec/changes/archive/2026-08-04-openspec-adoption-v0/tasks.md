@@ -17,6 +17,7 @@
 - [x] 2.4 Give the count the same refusal the schema reader has. Item counting holds for the block style every configuration in evidence uses and silently reports zero for a legal flow mapping such as `rules: {intent: ["a", "b"]}`. A shape that cannot be counted confidently is reported as uncountable while every rules block is still reproduced verbatim and retained as potentially unreviewed evidence — a wrong count or false absence is worse than an absent count. Test the flow mapping and duplicate top-level keys explicitly.
 - [x] 2.5 Digest the extracted span alone. Not the file: a digest over the whole configuration would be reset by an edit to `context:`, and the advisory's stop condition would stop meaning what it says.
 - [x] 2.6 Test a configuration with no `rules:` key, one with an empty block, one with an indented `rules:` elsewhere in the file, one where `rules:` is the final key with no trailing newline, and one where a comment follows the final rules block.
+- [x] 2.7 Preserve a non-empty multiline `rules:` value through its complete source span. Cover flow mappings, flow sequences, literal scalars and folded scalars; prove the report includes their contents, excludes the following top-level key, and changes the digest when any retained rule text changes.
 
 ## 3. Count what still pins the replaced schema
 

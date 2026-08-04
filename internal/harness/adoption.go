@@ -572,38 +572,41 @@ func extractRules(raw []byte) RulesSnapshot {
 func rulesSourceSpan(raw []byte, lines []sourceLine, start int) (string, string, int) {
 	_, value, _ := yamlMapping(lines[start].body)
 	inline := strings.TrimSpace(stripUnquotedComment(value))
-	end := start + 1
-	if inline == "" {
-		end = len(lines)
-		for index := start + 1; index < len(lines); index++ {
-			line := lines[index]
-			trimmed := strings.TrimSpace(line.body)
-			if trimmed == "" || strings.HasPrefix(trimmed, "#") {
-				continue
-			}
-			indent, err := sourceIndent(line.body)
-			if err != nil {
-				// An unreadable indentation makes counting untrustworthy, but it
-				// cannot prove that the rules value ended. Keep scanning for the
-				// next readable top-level key so the verbatim span and digest stay
-				// complete even when the bounded counter must refuse the shape.
-				continue
-			}
-			if indent == 0 {
-				end = index
-				break
-			}
+	flow := yamlFlowSpanState{}
+	flow.scan(value)
+	end := len(lines)
+	for index := start + 1; index < len(lines); index++ {
+		line := lines[index]
+		if flow.depth > 0 || flow.quote != 0 {
+			flow.scan(line.body)
+			continue
 		}
-		for end > start+1 {
-			line := lines[end-1].body
-			trimmed := strings.TrimSpace(line)
-			indent, err := sourceIndent(line)
-			if trimmed == "" || (err == nil && indent == 0 && strings.HasPrefix(trimmed, "#")) {
-				end--
-				continue
-			}
+		trimmed := strings.TrimSpace(line.body)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		indent, err := sourceIndent(line.body)
+		if err != nil {
+			// An unreadable indentation makes counting untrustworthy, but it
+			// cannot prove that the rules value ended. Keep scanning for the
+			// next readable top-level key so the verbatim span and digest stay
+			// complete even when the bounded counter must refuse the shape.
+			continue
+		}
+		if indent == 0 {
+			end = index
 			break
 		}
+	}
+	for end > start+1 {
+		line := lines[end-1].body
+		trimmed := strings.TrimSpace(line)
+		indent, err := sourceIndent(line)
+		if trimmed == "" || (err == nil && indent == 0 && strings.HasPrefix(trimmed, "#")) {
+			end--
+			continue
+		}
+		break
 	}
 	spanEnd := lines[start].end
 	if end > start {
@@ -611,6 +614,52 @@ func rulesSourceSpan(raw []byte, lines []sourceLine, start int) (string, string,
 	}
 	text := string(raw[lines[start].start:spanEnd])
 	return text, inline, end
+}
+
+type yamlFlowSpanState struct {
+	depth int
+	quote byte
+}
+
+func (state *yamlFlowSpanState) scan(value string) {
+	escaped := false
+	for index := 0; index < len(value); index++ {
+		character := value[index]
+		if state.quote != 0 {
+			if state.quote == '"' && escaped {
+				escaped = false
+				continue
+			}
+			if state.quote == '"' && character == '\\' {
+				escaped = true
+				continue
+			}
+			if character != state.quote {
+				continue
+			}
+			if state.quote == '\'' && index+1 < len(value) && value[index+1] == '\'' {
+				index++
+				continue
+			}
+			state.quote = 0
+			continue
+		}
+		if character == '#' && (index == 0 || value[index-1] == ' ' || value[index-1] == '\t') {
+			return
+		}
+		if character == '\'' || character == '"' {
+			state.quote = character
+			continue
+		}
+		switch character {
+		case '{', '[':
+			state.depth++
+		case '}', ']':
+			if state.depth > 0 {
+				state.depth--
+			}
+		}
+	}
 }
 
 func splitSourceLines(raw []byte) []sourceLine {

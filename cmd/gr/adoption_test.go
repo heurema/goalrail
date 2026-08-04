@@ -117,7 +117,7 @@ func TestRunInitReportsAndRecordsSchemaAdoption(t *testing.T) {
 func TestRunInitKeepsAdoptionDiagnosticsFailOpen(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("HOME", t.TempDir())
-	writeAdoptionFixture(t, root, "openspec/config.yaml", "schema: spec-driven\nrules: {intent: [\"a\", \"b\"]}\n")
+	writeAdoptionFixture(t, root, "openspec/config.yaml", "schema: spec-driven\nrules: {\n  intent: [\"a\", \"b\"]\n}\n")
 	writeAdoptionFixture(t, root, "openspec/changes/broken/.openspec.yaml", "not-schema: x\n")
 
 	var stdout, stderr bytes.Buffer
@@ -134,7 +134,7 @@ func TestRunInitKeepsAdoptionDiagnosticsFailOpen(t *testing.T) {
 	if report.Adoption.SchemaDifference.Comparable || !strings.Contains(report.Adoption.SchemaDifference.Reason, "not a file") {
 		t.Fatalf("stock schema comparison = %#v", report.Adoption.SchemaDifference)
 	}
-	if report.Adoption.Rules.Counted || report.Adoption.Rules.Text == "" {
+	if report.Adoption.Rules.Counted || !strings.Contains(report.Adoption.Rules.Text, "intent: [\"a\", \"b\"]") {
 		t.Fatalf("flow rules were not disclosed as uncountable: %#v", report.Adoption.Rules)
 	}
 	if report.Adoption.Pins != nil || len(report.Adoption.Notices) < 3 {

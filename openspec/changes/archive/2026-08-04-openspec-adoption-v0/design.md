@@ -85,6 +85,15 @@ the same column-zero discipline `schemaAssignment` already applies to `schema:`,
 and for the same reason: an indented `rules:` belongs to something else. That
 span is what gets reproduced verbatim and what gets digested.
 
+The boundary does not depend on the first line having an empty value. A
+non-empty value may open a multiline flow mapping, flow sequence, literal
+scalar, folded scalar, or continued plain value. The span therefore keeps
+scanning to the next top-level mapping key. While `{` or `[` remains open, a
+zero-column flow entry, quoted `:`, or closing delimiter is still part of the
+rules value; a small quote-aware delimiter tracker prevents it from becoming a
+false boundary. Counting may still refuse these shapes, but verbatim disclosure
+and the digest must remain complete.
+
 Where `rules:` is the last key, the span ends at the last line belonging to its
 value rather than at end of file. Trailing column-zero comments and blank lines
 are not part of the value, and including them would let an edit to an unrelated

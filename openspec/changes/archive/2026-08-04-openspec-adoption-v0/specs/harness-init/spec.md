@@ -98,6 +98,11 @@ presence MUST NOT make initialization interactive or change its exit status.
 - **THEN** the report states their count, reproduces each rule verbatim, states that they were present when the schema was replaced, and states that Goalrail neither interprets nor edits them
 - **AND** the report renders no verdict on any individual rule and the configuration's rules are byte-identical afterwards
 
+#### Scenario: A multiline rules value is disclosed completely
+- **WHEN** a top-level `rules:` value begins with `{`, `[`, `|` or `>` and continues on later lines before another top-level key
+- **THEN** the report reproduces every source line belonging to that value and excludes the following top-level key
+- **AND** editing retained rule content changes the recorded digest even when the rules shape cannot be counted confidently
+
 #### Scenario: Whether the replaced schema may be removed is counted
 - **WHEN** a switch replaced a schema that changes in the repository still name
 - **THEN** the report states how many changes name it and that its directory must remain, and the directory is present and unmodified afterwards

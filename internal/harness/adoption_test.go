@@ -190,6 +190,31 @@ func TestRulesSnapshotKeepsUncountableLiteralContentVerbatim(t *testing.T) {
 	}
 }
 
+func TestRulesSnapshotKeepsMultilineInlineValuesVerbatim(t *testing.T) {
+	tests := map[string]string{
+		"flow mapping":   "rules: {\nintent: [\"ask once: http://example.test\"]\n}\n",
+		"flow sequence":  "rules: [\n\"ask once: http://example.test\"\n]\n",
+		"literal scalar": "rules: |\n  ask once\n",
+		"folded scalar":  "rules: >\n  ask once\n",
+	}
+	for name, rules := range tests {
+		t.Run(name, func(t *testing.T) {
+			left := "schema: old\n" + rules + "context: keep\n"
+			right := strings.Replace(left, "ask once", "ask twice", 1)
+			snapshot := extractRules([]byte(left))
+			if !snapshot.Present || !snapshot.HasRules || snapshot.Counted {
+				t.Fatalf("multiline rules snapshot = %#v", snapshot)
+			}
+			if snapshot.Text != rules || strings.Contains(snapshot.Text, "context: keep") {
+				t.Fatalf("rules text = %q, want %q", snapshot.Text, rules)
+			}
+			if snapshot.Digest == extractRules([]byte(right)).Digest {
+				t.Fatal("an edit inside the multiline rules value did not change its digest")
+			}
+		})
+	}
+}
+
 func TestRulesSnapshotDistinguishesAbsentEmptyAndUncountable(t *testing.T) {
 	absent := extractRules([]byte("schema: old\ncontext:\n  rules:\n    - nested\n"))
 	if absent.Present || !absent.Counted || absent.Digest != digestBytes(nil) {
@@ -200,9 +225,14 @@ func TestRulesSnapshotDistinguishesAbsentEmptyAndUncountable(t *testing.T) {
 	if !empty.Present || empty.HasRules || !empty.Counted || empty.Count != 0 || empty.Text != "rules:\n" {
 		t.Fatalf("empty rules = %#v", empty)
 	}
+	inlineEmpty := extractRules([]byte("schema: old\nrules: []\ncontext: keep\n"))
+	if !inlineEmpty.Present || inlineEmpty.HasRules || !inlineEmpty.Counted || inlineEmpty.Text != "rules: []\n" {
+		t.Fatalf("inline empty rules = %#v", inlineEmpty)
+	}
 
-	flow := extractRules([]byte("schema: old\nrules: {intent: [\"a\", \"b\"]}\n"))
-	if !flow.Present || !flow.HasRules || flow.Counted || !strings.Contains(flow.CountReason, "inline") {
+	flow := extractRules([]byte("schema: old\nrules: {intent: [\"a\", \"b\"]}\ncontext: keep\n"))
+	if !flow.Present || !flow.HasRules || flow.Counted || !strings.Contains(flow.CountReason, "inline") ||
+		strings.Contains(flow.Text, "context: keep") {
 		t.Fatalf("flow rules = %#v", flow)
 	}
 

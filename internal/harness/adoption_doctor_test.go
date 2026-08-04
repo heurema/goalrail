@@ -55,6 +55,42 @@ func TestAdoptionAdvisoryFollowsOnlyTheRulesDigest(t *testing.T) {
 	}
 }
 
+func TestAdoptionAdvisoryStopsAfterMultilineFlowRulesEdit(t *testing.T) {
+	root := t.TempDir()
+	configPath := filepath.Join(root, filepath.FromSlash(ConfigPath))
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	config := "schema: goalrail-intent\nrules: {\n  intent: [\"ask once\"]\n}\ncontext: keep\n"
+	if err := os.WriteFile(configPath, []byte(config), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rules, err := ReadRules(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(rules.Text, "ask once") {
+		t.Fatalf("rules text was truncated: %q", rules.Text)
+	}
+	if _, _, err := ambient.InitializeWithAdoption(root, time.Now, &ambient.Adoption{
+		ReplacedSchema: "intent-driven",
+		RulesDigest:    rules.Digest,
+		HadRules:       true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if adoptionAdvisory(root) == nil {
+		t.Fatal("matching multiline rules produced no advisory")
+	}
+	edited := strings.Replace(config, "ask once", "ask twice", 1)
+	if err := os.WriteFile(configPath, []byte(edited), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if adoptionAdvisory(root) != nil {
+		t.Fatal("a multiline flow-rules edit left the advisory standing")
+	}
+}
+
 func TestAdoptionAdvisoryIsAbsentForLegacyOrRulelessMarkers(t *testing.T) {
 	root := t.TempDir()
 	if _, _, err := ambient.Initialize(root, time.Now); err != nil {
