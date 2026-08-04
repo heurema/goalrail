@@ -36,10 +36,6 @@ const reviewEffortEnvironment = "GOALRAIL_REVIEW_EFFORT"
 // run on whatever model that session picked for authoring.
 const reviewModelEnvironment = "GOALRAIL_REVIEW_MODEL"
 
-// defaultBaseRef is what a branch is reviewed against when the caller says
-// nothing.
-const defaultBaseRef = "main"
-
 func runReview(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	set := flag.NewFlagSet("review", flag.ContinueOnError)
 	set.SetOutput(stderr)
@@ -51,7 +47,7 @@ func runReview(ctx context.Context, args []string, stdout, stderr io.Writer) err
 	}
 	repository := set.String("repo", ".", "repository whose branch to review")
 	stateDirectory := set.String("state-dir", "", "Goalrail local state directory")
-	base := set.String("base", defaultBaseRef, "ref the branch is reviewed against")
+	base := set.String("base", "", "ref the branch is reviewed against; omit to use one unambiguous local remote default")
 	full := set.Bool("full", false, "review the whole branch even where a previous receipt would make the round incremental")
 	refute := set.Bool("refute", false, "run a second fresh session that tries to refute the findings; use when findings exist and you are about to act on them")
 	author := set.String("author", "", "authoring agent (codex or claude-code); omit to detect from the environment")
@@ -74,6 +70,9 @@ func runReview(ctx context.Context, args []string, stdout, stderr io.Writer) err
 	// opposite of what the caller asked for.
 	if isSet(set, "deadline") && *deadline <= 0 {
 		return fmt.Errorf("--deadline must be positive; %s asks for no time at all", *deadline)
+	}
+	if isSet(set, "base") && strings.TrimSpace(*base) == "" {
+		return fmt.Errorf("--base must name a non-empty Git ref")
 	}
 
 	root, err := filepath.Abs(*repository)
@@ -223,6 +222,13 @@ func resolveAuthor(explicit string) (ambient.Scaffold, error) {
 // head, has no review state, and reporting that as a problem would make an
 // ordinary situation look broken.
 func reviewStateFor(repositoryRoot, stateRoot string) harness.ReviewState {
+	// Receipts are keyed by the worktree path Git itself reports. filepath.Abs
+	// can retain a symlinked spelling (notably /var versus /private/var on
+	// macOS), which would make doctor look under a different key and report an
+	// existing review as absent.
+	if toplevel, err := review.WorktreeRoot(repositoryRoot); err == nil && toplevel != "" {
+		repositoryRoot = toplevel
+	}
 	branch, err := review.CurrentBranch(repositoryRoot)
 	if err != nil || branch == "" {
 		return harness.ReviewState{}

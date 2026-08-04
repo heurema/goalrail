@@ -96,7 +96,8 @@ type Input struct {
 	RepositoryRoot string
 	StateRoot      string
 
-	// BaseRef is what the branch is reviewed against.
+	// BaseRef is what the branch is reviewed against. Empty asks ResolveBase to
+	// discover one unambiguous default from local remote-HEAD metadata.
 	BaseRef string
 
 	// Author is the provider that wrote the change. Detection fills it; an
@@ -164,16 +165,17 @@ func Run(ctx context.Context, input Input) (Result, error) {
 		return Result{}, fmt.Errorf("HEAD is detached, so there is no branch to file a review against")
 	}
 
-	baseCommit, err := Resolve(input.RepositoryRoot, input.BaseRef)
+	base, err := ResolveBase(input.RepositoryRoot, input.BaseRef)
 	if err != nil {
-		return Result{}, fmt.Errorf("resolve base ref %q: %w", input.BaseRef, err)
+		return Result{}, err
 	}
+	baseCommit := base.Commit
 	headCommit, err := Resolve(input.RepositoryRoot, "HEAD")
 	if err != nil {
 		return Result{}, err
 	}
 	if baseCommit == headCommit {
-		return Result{}, fmt.Errorf("the branch has no changes against %s, so there is nothing to review", input.BaseRef)
+		return Result{}, fmt.Errorf("the branch has no changes against %s, so there is nothing to review", base.Ref)
 	}
 
 	// A round costs what the round is about: where a previous receipt exists,
@@ -225,6 +227,24 @@ func Run(ctx context.Context, input Input) (Result, error) {
 		}
 	}
 
+	// Freeze and render the immutable ranges before creating instructions,
+	// running the gate or invoking a provider. The reviewed-range bytes are
+	// rendered exactly once and then reused for transport and proof. The full
+	// branch remains a separate staleness measurement on incremental rounds.
+	fullDiff, err := renderCanonicalDiff(input.RepositoryRoot, baseCommit, headCommit)
+	if err != nil {
+		return Result{}, err
+	}
+	reviewedDiff := fullDiff
+	if reviewedBase != baseCommit {
+		reviewedDiff, err = renderCanonicalDiff(input.RepositoryRoot, reviewedBase, headCommit)
+		if err != nil {
+			return Result{}, err
+		}
+	}
+	diffDigest := digest(fullDiff)
+	reviewedDigest := digest(reviewedDiff)
+
 	instructions, materialized, err := EnsureInstructions(input.RepositoryRoot)
 	if err != nil {
 		return Result{}, err
@@ -273,16 +293,13 @@ func Run(ctx context.Context, input Input) (Result, error) {
 	}
 	started := now()
 	rangeSpec := reviewedBase + "..." + headCommit
-	// The Claude reviewer has no shell, so the diff it reviews is rendered
-	// here — the same canonical form the digest measures — and embedded.
+	// The Claude reviewer has no shell, so the exact canonical bytes already
+	// measured above travel in its prompt. Codex keeps its native range-based
+	// custom-instruction invocation and reads the immutable commit range itself.
 	invokeInstructions := instructions
 	if input.Selection.Reviewer == ambient.ScaffoldClaudeCode {
-		rendered, renderErr := git(input.RepositoryRoot, canonicalDiffArguments(reviewedBase, headCommit)...)
-		if renderErr != nil {
-			return Result{InstructionsMaterialized: materialized}, renderErr
-		}
-		invokeInstructions = append(append([]byte{}, instructions...),
-			[]byte("\n\n--- DIFF UNDER REVIEW ---\n"+rendered)...)
+		invokeInstructions = append(append(append([]byte{}, instructions...),
+			[]byte("\n\n--- DIFF UNDER REVIEW ---\n")...), reviewedDiff...)
 	}
 	report, err := invoke(bounded, input.Selection.Reviewer, input.RepositoryRoot, rangeSpec, effort, modelFor(input.Selection.Reviewer), invokeInstructions)
 	if err != nil {
@@ -313,9 +330,13 @@ func Run(ctx context.Context, input Input) (Result, error) {
 		// saw the repository's own rules could refute findings those rules
 		// require.
 		// The whole policy, including the refute directives, comes from the
-		// committed file the receipt hashes; the binary adds only the report.
-		refutePrompt := string(instructions) + "\n\n--- REPORT UNDER CHALLENGE ---\n" + report
-		refutation, refuteErr = invoke(bounded, refuterSelection.Reviewer, input.RepositoryRoot, rangeSpec, effort, modelFor(refuterSelection.Reviewer), []byte(refutePrompt))
+		// committed file the receipt hashes; the binary adds the verbatim report
+		// and the exact canonical diff bytes whose digest the receipt records.
+		refutePrompt := append(append(append(append([]byte{}, instructions...),
+			[]byte("\n\n--- REPORT UNDER CHALLENGE ---\n")...), []byte(report)...),
+			[]byte("\n\n--- DIFF UNDER REVIEW ---\n")...)
+		refutePrompt = append(refutePrompt, reviewedDiff...)
+		refutation, refuteErr = invoke(bounded, refuterSelection.Reviewer, input.RepositoryRoot, rangeSpec, effort, modelFor(refuterSelection.Reviewer), refutePrompt)
 		if refuteErr != nil {
 			return Result{InstructionsMaterialized: materialized}, refuteErr
 		}
@@ -330,20 +351,11 @@ func Run(ctx context.Context, input Input) (Result, error) {
 		refuterModelRecorded = recordedModel(refuterModel)
 	}
 
-	diffDigest, err := DiffDigest(input.RepositoryRoot, baseCommit, headCommit)
-	if err != nil {
-		return Result{InstructionsMaterialized: materialized}, err
-	}
-	reviewedDigest, err := DiffDigest(input.RepositoryRoot, reviewedBase, headCommit)
-	if err != nil {
-		return Result{InstructionsMaterialized: materialized}, err
-	}
-
 	receipt := Receipt{
 		Schema:             ReceiptSchema,
 		Repository:         input.RepositoryRoot,
 		Branch:             branch,
-		BaseRef:            input.BaseRef,
+		BaseRef:            base.Ref,
 		BaseCommit:         baseCommit,
 		HeadCommit:         headCommit,
 		ReviewedBase:       reviewedBase,

@@ -36,10 +36,10 @@ type Receipt struct {
 	Repository string `json:"repository"`
 	Branch     string `json:"branch"`
 
-	// BaseRef is what the branch was reviewed against, as the caller named it;
-	// BaseCommit is what that resolved to at review time. A branch name moves,
-	// a commit does not, and the digest below is only reproducible from the
-	// commit.
+	// BaseRef is the selected human-readable ref: either the caller's explicit
+	// value or the one unambiguous local remote default. BaseCommit is what that
+	// resolved to at review time. A branch name moves, a commit does not, and the
+	// digest below is only reproducible from the commit.
 	BaseRef    string `json:"base_ref"`
 	BaseCommit string `json:"base_commit"`
 	HeadCommit string `json:"head_commit"`
@@ -221,13 +221,25 @@ func canonicalDiffArguments(baseCommit, headCommit string) []string {
 	}
 }
 
+// renderCanonicalDiff returns the exact bytes that define a reviewed range.
+// Callers that both transport and digest a diff must keep this single rendering:
+// rendering twice would make the receipt a claim about bytes that need not be
+// the bytes a provider actually received.
+func renderCanonicalDiff(repositoryRoot, baseCommit, headCommit string) ([]byte, error) {
+	rendered, err := git(repositoryRoot, canonicalDiffArguments(baseCommit, headCommit)...)
+	if err != nil {
+		return nil, err
+	}
+	return []byte(rendered), nil
+}
+
 // DiffDigest measures the reviewed range.
 func DiffDigest(repositoryRoot, baseCommit, headCommit string) (string, error) {
-	rendered, err := git(repositoryRoot, canonicalDiffArguments(baseCommit, headCommit)...)
+	rendered, err := renderCanonicalDiff(repositoryRoot, baseCommit, headCommit)
 	if err != nil {
 		return "", err
 	}
-	return digest([]byte(rendered)), nil
+	return digest(rendered), nil
 }
 
 // Resolve reports the commit a ref names.

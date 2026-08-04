@@ -5,7 +5,8 @@
 // same blind spots. So the review is performed by a provider the author did not
 // write with, in a process that never sees the author's session — and the whole
 // point collapses if the author is guessed wrong, because the failure is
-// silent. Everything here is built around refusing rather than guessing.
+// silent. Detection therefore uses explicit primary markers and records an
+// unknown author rather than guessing when its caller cannot decide.
 package review
 
 import (
@@ -25,18 +26,19 @@ var ErrAuthorUndetectable = errors.New("no agent session was detected in the env
 // ErrAuthorAmbiguous reports an environment carrying more than one.
 var ErrAuthorAmbiguous = errors.New("more than one agent session was detected in the environment")
 
-// primaryMarkers is the one variable per scaffold whose presence means "a
+// primaryMarkers is the registered set of variables whose presence means "a
 // session of this scaffold is running this process".
 //
-// Deliberately one variable each, and deliberately not a prefix match. A Claude
-// Code session on this machine also carries CODEX_COMPANION_SESSION_ID, because
-// a companion is reachable from it — matching any CODEX_* variable would have
+// Deliberately a registry, and deliberately not a prefix match. A Claude Code
+// session on this machine also carries CODEX_COMPANION_SESSION_ID, because a
+// companion is reachable from it — matching any CODEX_* variable would have
 // read that as Codex authorship and handed the review straight back to the
-// author. `CODEX_SESSION_ID` is the same variable the hook path already treats
-// as the Codex session reference.
-var primaryMarkers = map[ambient.Scaffold]string{
-	ambient.ScaffoldClaudeCode: "CLAUDECODE",
-	ambient.ScaffoldCodex:      "CODEX_SESSION_ID",
+// author. Codex desktop currently exposes CODEX_THREAD_ID; CODEX_SESSION_ID is
+// retained as the primary marker accepted by earlier Goalrail releases. Two
+// markers of one provider are one identity, not an ambiguity.
+var primaryMarkers = map[ambient.Scaffold][]string{
+	ambient.ScaffoldClaudeCode: {"CLAUDECODE"},
+	ambient.ScaffoldCodex:      {"CODEX_THREAD_ID", "CODEX_SESSION_ID"},
 }
 
 // Lookup reads one environment variable, reporting whether it was set at all.
@@ -48,9 +50,9 @@ type Lookup func(name string) (string, bool)
 // MarkerNames lists the variables detection consults, so a refusal can name
 // them without restating them from memory.
 func MarkerNames() []string {
-	names := make([]string, 0, len(primaryMarkers))
-	for _, name := range primaryMarkers {
-		names = append(names, name)
+	var names []string
+	for _, markers := range primaryMarkers {
+		names = append(names, markers...)
 	}
 	sort.Strings(names)
 	return names
@@ -64,12 +66,18 @@ func MarkerNames() []string {
 // above exists to prevent.
 func DetectAuthor(lookup Lookup) (ambient.Scaffold, error) {
 	var found []ambient.Scaffold
+	detected := make(map[ambient.Scaffold][]string)
 	for _, scaffold := range ambient.SupportedScaffolds() {
-		marker, known := primaryMarkers[scaffold]
+		markers, known := primaryMarkers[scaffold]
 		if !known {
 			continue
 		}
-		if value, set := lookup(marker); set && strings.TrimSpace(value) != "" {
+		for _, marker := range markers {
+			if value, set := lookup(marker); set && strings.TrimSpace(value) != "" {
+				detected[scaffold] = append(detected[scaffold], marker)
+			}
+		}
+		if len(detected[scaffold]) > 0 {
 			found = append(found, scaffold)
 		}
 	}
@@ -82,7 +90,7 @@ func DetectAuthor(lookup Lookup) (ambient.Scaffold, error) {
 	default:
 		names := make([]string, 0, len(found))
 		for _, scaffold := range found {
-			names = append(names, fmt.Sprintf("%s (%s)", scaffold, primaryMarkers[scaffold]))
+			names = append(names, fmt.Sprintf("%s (%s)", scaffold, strings.Join(detected[scaffold], ", ")))
 		}
 		return "", fmt.Errorf("%w: %s; state the authoring agent explicitly",
 			ErrAuthorAmbiguous, strings.Join(names, " and "))
@@ -110,6 +118,7 @@ func AuthorMarkers() []string {
 		"CLAUDE_AGENT_SDK_VERSION",
 		"CLAUDE_CODE_EXECPATH",
 		"CLAUDE_EFFORT",
+		"CODEX_THREAD_ID",
 		"CODEX_SESSION_ID",
 		"CODEX_COMPANION_SESSION_ID",
 	}

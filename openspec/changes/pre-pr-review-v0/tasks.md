@@ -1,82 +1,51 @@
-## 1. Decide the author, or refuse
+# Reconciliation Ledger
 
-- [ ] 1.1 Enumerate the legal invoking environments before writing any detection: exactly one provider's primary session marker, two, none, and an explicit override. Every one gets a decided outcome; there is no default branch. This is the promoted `input-space` discipline applied to the first thing the command does.
-- [ ] 1.2 Detect a Claude Code session by `CLAUDECODE` and a Codex session by its own `CODEX_*` session marker. Match the **primary session marker only** — measured on this machine, a Claude Code session also carried `CODEX_COMPANION_SESSION_ID`, so treating any `CODEX_*` variable as evidence would make the first real invocation choose the author as its own reviewer.
-- [ ] 1.3 Refuse on two primary markers or none: state what was seen and name the override. Refusing is the requirement, not a fallback — a silent wrong choice here fails invisibly.
-- [ ] 1.4 Add the authorship override and give it precedence over detection unconditionally.
-- [ ] 1.5 Test all four environments, including the two-marker case built from the real variable names, and assert no code path picks a provider without evidence.
+The previous 50-item checklist described several superseded intent versions and
+was no longer a trustworthy apply queue. This ledger preserves its disposition
+without relabeling failed historical proof as success. Only the checkboxes below
+this table are active implementation tasks.
 
-## 2. Select the reviewer from what is installed
+| Disposition | Previous task IDs | Reconciliation result |
+|---|---|---|
+| Implemented | 1.1, 1.4, 3.1–3.4, 4.1–4.5, 5.2–5.4, 6.1–6.5, 7.1–7.4, 9.1–9.6, 10.1–10.4, 11.1–11.5 | Existing code and tests implement these behaviors; do not reopen them except where an active repair task below requires a narrow edit |
+| Superseded | 1.3, 1.5, 2.1–2.3, 5.1 | Later confirmed intent replaced author refusal, installed-only selection, and the unusable original Codex invocation contract |
+| Partial | 1.2, 7.5 | Primary-marker detection exists but misses `CODEX_THREAD_ID`; receipt-state unit coverage exists but not the public command flow |
+| Historical proof failed | 8.1–8.4 | The Baseline run did not finish with a current receipt on the PR's final head before publication; retain it as failed evidence and use the replacement canary below |
 
-- [ ] 2.1 Read the installed and active scaffolds from `internal/ambient` rather than introducing a second notion of what is available; initialization and the diagnosis already report exactly this (CTX-5).
-- [ ] 2.2 Select as reviewer an installed provider that is not the author's. Where none exists, refuse and name the missing side.
-- [ ] 2.3 Test a repository where only the author's provider is installed and assert it refuses rather than reviewing with the author's own provider.
+## 1. Repair authorship detection
 
-## 3. Run the budget gate first
+- [x] 1.1 Replace the one-marker-per-provider table with registered marker sets: keep `CLAUDECODE`, add `CODEX_THREAD_ID`, retain `CODEX_SESSION_ID` as a compatibility marker, and keep companion variables non-author evidence.
+- [x] 1.2 Collapse multiple non-empty markers for the same provider to one identity, preserve `unknown` for zero or multiple detected providers, preserve unconditional valid-override precedence, and strip every registered and companion marker from reviewer child environments.
+- [x] 1.3 Add table tests for real Codex desktop detection without `--author`, both Codex markers together, the Claude-plus-companion case, empty markers, cross-provider ambiguity, invalid and valid overrides, and the complete stripped-marker set.
 
-- [ ] 3.1 Add a configuration key naming a gate command. It is a command, never a path, provider, or budget service compiled in — the workspace's personal guard belongs in one user's configuration, not in a released binary.
-- [ ] 3.2 Run the gate before invoking any reviewer; a non-zero exit refuses the review and the refusal names the gate as the reason.
-- [ ] 3.3 No gate configured means the review proceeds. Do not report a missing gate as a condition; turning absence into a refusal would reintroduce the consent step the intent removes.
-- [ ] 3.4 Test all three: gate fails, gate passes, no gate.
+## 2. Resolve the review base safely
 
-## 4. Assemble the instructions as repository content
+- [x] 2.1 Remove the semantic `main` default from `--base` and add a resolver result that carries the selected human-readable ref and its immutable commit while distinguishing omitted input from an explicit value.
+- [x] 2.2 Make explicit `--base` authoritative; otherwise accept exactly one locally resolvable `refs/remotes/*/HEAD` symbolic target, prefer it over a same-named local branch, and return an input error naming `--base` for zero or multiple targets without fetch or hosting-service access.
+- [x] 2.3 Resolve repository root, attached branch, selected base, immutable base/head commits, and a non-empty range before instructions materialization, the gate, or any provider invocation; use immutable commits for every reviewed range while retaining the selected ref in the receipt.
+- [x] 2.4 Add Git fixtures for explicit precedence, divergent local and remote-tracking defaults, absent and multiple remote HEADs, unresolvable refs, and invalid input invoking neither a gate nor reviewer; make the offline case fail fast even when the configured remote URL is unreachable.
 
-- [ ] 4.1 Read the instructions from a committed dot-prefixed file at the repository root. It must not sit under `.goalrail/`, which Goalrail's own ignore rule excludes from version control — instructions that cannot be committed cannot be shared.
-- [ ] 4.2 Materialize a default when the file is absent, and never overwrite an existing one.
-- [ ] 4.3 Write the default to carry what the ratchet has already promoted: check the diff against the repository's own `AGENTS.md`, and challenge every claim of absence, count, or consistency that ships without its check.
-- [ ] 4.4 Have the default ask the reviewer to end its report with a fixed marker stating whether anything material remains. It is the reviewer's statement, stored verbatim; Goalrail must not require, validate, or act on it, and a report without it must still produce a valid receipt.
-- [ ] 4.5 Test that an edited file is used verbatim and is unmodified afterwards, and that materialization happens exactly once.
+## 3. Give the refuter the exact reviewed diff
 
-## 5. Invoke the reviewer through its own interface
+- [x] 3.1 Render the canonical reviewed-range diff once after commits are frozen and reuse those exact bytes for its digest, the Claude reviewer input where applicable, and every refute prompt without changing Codex's native custom-instruction invocation.
+- [x] 3.2 Extend refute tests so the stub receives the first report plus byte-identical canonical diff content whose digest is stored in the receipt, while both reports remain verbatim and no finding field or decision is derived.
 
-- [ ] 5.1 Invoke `codex review --base <ref>` with the instructions on stdin, and `claude -p` with the instructions and a bounded tool surface. Minimum documented flags only: every flag is a surface that can drift, and neither CLI is pinnable.
-- [ ] 5.2 Surface a non-zero exit or unusable invocation to the caller as the reviewer's own failure. Do not retry with altered arguments and do not translate the vendor's message — a wrapper turns a loud break into a quiet one.
-- [ ] 5.3 Write no receipt when the reviewer did not complete. A receipt for a review that did not happen is worse than none.
-- [ ] 5.4 Test both providers against a stub that exits non-zero and assert no receipt appears.
+## 4. Prove the public no-terminal contract
 
-## 6. Write a receipt that measures rather than reads
+- [x] 4.1 Add a command-level fixture that drives initialization, `gr review`, and diagnosis through the real `gr` dispatcher with a real Git repository, stub provider executables, buffered streams, and no terminal; decode every successful result as JSON and assert no prompt.
+- [x] 4.2 In that fixture, prove review → current, commit → stale, re-review → current, and corrupted receipt → unreadable while the doctor verdict and exit status remain determined only by independent repository health.
+- [x] 4.3 Cover malformed and ambiguous base input through the same no-terminal command surface, asserting the same input-error semantics, no prompt, and no gate or provider invocation.
 
-- [ ] 6.1 Render the reviewed range as a canonical diff — no external diff drivers, no colour, no textconv, full index — so the same range digests identically on any machine. The staleness comparison in section 7 is only meaningful if this is stable.
-- [ ] 6.2 Record base commit, head commit, diff digest, reviewer identity, time, the report as verbatim bytes, and a digest of those bytes.
-- [ ] 6.3 Derive no field from the report's content. Not a summary, not a count, not a severity, not the marker from 4.4. Goalrail stores what was said and what was reviewed; deciding what is real belongs to the loop's author.
-- [ ] 6.4 Write the receipt to the per-clone state root (`internal/localrun` already resolves it) and never into the repository. A receipt someone else receives by pulling would assert a review of a diff they may not have.
-- [ ] 6.5 Test that recomputing the digest from the receipt's own base and head reproduces the recorded value, that the stored report is byte-identical, and that the repository is unchanged apart from a first-use instructions file.
+## 5. Complete deterministic verification
 
-## 7. Report the review state in the diagnosis
+- [x] 5.1 Run formatting and the focused review/CLI suites with an explicit five-minute Go test timeout, record their elapsed time, and fix any deterministic failure without widening the change.
+- [x] 5.2 Run `go test -timeout 5m ./...` and `go vet ./...`; stop at the first conclusive failure rather than starting the real canary.
+- [x] 5.3 Run `git diff --check` and strict pinned OpenSpec validation, inspect the final diff for unrelated or generated files, and mark only tasks whose stated verification actually passed.
 
-- [ ] 7.1 Add one diagnosis line for the current branch: current where the recomputed diff digest matches the receipt's, stale where it does not, absent where there is no receipt (`internal/harness/doctor.go`).
-- [ ] 7.2 Report it as a fact, not a fault: no effect on the overall verdict, no effect on exit status, no next action. Follow the observability line already in that report, which exists for this shape.
-- [ ] 7.3 Derive the state from the digest comparison alone — no flag, no acknowledgement command, no stored dismissal. A commit makes it stale by itself and a fresh review makes it current by itself.
-- [ ] 7.4 Never reprint the report; the receipt holds it verbatim for whoever wants it.
-- [ ] 7.5 Test the full sequence on one branch: review → current, commit → stale, re-review → current, with exit status unchanged throughout.
+## 6. Run the owner-gated replacement canary
 
-## 8. Prove the loop on the work that motivated it
-
-- [ ] 8.1 Run the whole path on the Baseline API extraction branch before its pull request opens: review, fix what is real in the same session, re-review to a current receipt. Record the receipts as evidence.
-- [ ] 8.2 Declare the round ceiling and the stop condition before the first round, and report reaching the ceiling with findings still open as the loop's honest result rather than absorbing it.
-- [ ] 8.3 Count user interactions across the run and assert zero on the clean path.
-- [ ] 8.4 Assert that initialization, review, and diagnosis produce unchanged machine-readable shape and exit status with no terminal attached, so nothing here became interactive.
-
-## 9. v4: modes, incremental rounds, refute (supersedes 1.3/2.2-2.3 refusal semantics)
-
-- [ ] 9.1 Fresh mode: with only the author's provider runnable, review with it in a clean session instead of refusing. The single refusal left is "no reviewer runs at all". Record mode (fresh/cross) and the selection reason in the receipt; a cross downgraded to fresh because the other CLI would not run must say so.
-- [ ] 9.2 Unknown author: undetectable authorship proceeds, records `author: unknown`, and picks the reviewer deterministically. The override still wins.
-- [ ] 9.3 Receipt v4 fields: mode, mode_reason, duration_seconds, reviewed base/head (this round) alongside the full branch digest used for staleness.
-- [ ] 9.4 Incremental by default: where a receipt exists, the new round's base is the previous receipt's head; `--full` reviews the whole branch. The chain of receipts proves cumulative coverage.
-- [ ] 9.5 Refute round (`--refute`): a fresh session — the other runnable provider, else the same — receives the previous report and the diff with refuter instructions from the same committed file; both reports stored verbatim, each with its own digest. The gate runs again for it.
-- [ ] 9.6 Tests for each mode, the fallback reason, unknown author, incremental base selection, and the refuted receipt carrying two verbatim reports.
-
-## 10. Stalemate measurement (adopted from ralphex's review-patience)
-
-- [x] 10.1 Record consecutive rounds that reviewed the same head with no change of the author's in the tree, resetting to zero when work moves. Measured from the receipt chain and `git status`, never from a report.
-- [x] 10.2 Exclude the instructions file Goalrail materialized from the tree check, so its own artifact cannot suppress its own signal in a repository that has not committed it yet.
-- [x] 10.3 Report the count and act on nothing: the loop belongs to the caller, and the workspace policy is where "stop on a stalemate" lives.
-- [x] 10.4 Test the accumulation, the reset after a commit, a dirty tree as not-a-stalemate, and the materialized instructions file as not-work.
-
-## 11. v5: the reviewer's model is stated, not inherited (OUT-9)
-
-- [x] 11.1 Resolve the model per provider, with a default only where evidence supports one: Opus for Claude, whose session-inherited model was measured failing; nothing for Codex, whose configuration is left alone rather than overridden by a vendor identifier that would age.
-- [x] 11.2 Pass a caller-named model to whichever provider reviews — `codex -c model=` is accepted, and the earlier claim that it was not is what let the asymmetry survive its own review.
-- [x] 11.3 Resolve the model per invocation, never once: a refuter is by definition another provider, and carrying the reviewer's name there fails the second invocation after the first has been paid for.
-- [x] 11.4 Record effort, model and the refuter's model in the receipt, and include the settings in the storage key so two rounds at one head with different settings do not overwrite each other.
-- [x] 11.5 Where no model was pinned, record that the provider used its own configuration rather than leaving the field empty — and state in the spec that what the configuration named is outside what the receipt can prove.
+- [ ] 6.1 Before any commit or paid provider call, obtain separate owner authorization for the exact validated head and record in `evidence/reconciliation-canary-2026-08-04.md`: branch, head, commands, maximum three `gr review` rounds, maximum four provider invocations, final-full-pass requirement, and the no-PR failure stop.
+- [ ] 6.2 Run the first ordinary review from the real Codex desktop environment without `--author` or `--base`; record non-sensitive receipt fields, duration, selected author/reviewer/mode, base ref/commit, head, and report digests without copying raw reports or local absolute paths into repository evidence.
+- [ ] 6.3 If findings exist and the caller is about to act, run at most one `--refute` command before fixing and disposition its two verbatim reports outside Goalrail; if no findings exist, skip the refute command and record why no provider invocation was spent.
+- [ ] 6.4 Apply only confirmed in-scope findings, rerun deterministic verification, and obtain separate commit authorization for any changed final head; a real intent divergence or hole stops for the single owner question, while an improvement idea is recorded outside this change.
+- [ ] 6.5 Run the final explicit `--full` review on the committed final head and record success only when its receipt is current and the caller finds no material issue left; reaching either ceiling or retaining a material finding records failed canary evidence and stops before push or PR.

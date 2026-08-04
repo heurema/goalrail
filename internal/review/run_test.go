@@ -1,6 +1,7 @@
 package review
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -169,9 +170,11 @@ func TestGatePermitsAndAbsenceOfAGateIsNotARefusal(t *testing.T) {
 func TestTheReviewerDoesNotInheritTheAuthorsSessionIdentity(t *testing.T) {
 	root := branchWithWork(t)
 	stateRoot := t.TempDir()
-	t.Setenv("CLAUDECODE", "1")
-	t.Setenv("CLAUDE_CODE_SESSION_ID", "parent-session")
-	stubReviewer(t, "codex", `cat >/dev/null; echo "CLAUDECODE=[${CLAUDECODE:-unset}] SESSION=[${CLAUDE_CODE_SESSION_ID:-unset}]"`)
+	for _, name := range AuthorMarkers() {
+		t.Setenv(name, "parent-session")
+	}
+	t.Setenv("GOALRAIL_ENV_SURVIVES", "yes")
+	stubReviewer(t, "codex", `cat >/dev/null; env`)
 
 	result, err := Run(context.Background(), Input{
 		RepositoryRoot: root, StateRoot: stateRoot, BaseRef: "main",
@@ -180,9 +183,13 @@ func TestTheReviewerDoesNotInheritTheAuthorsSessionIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(result.Receipt.Report, "CLAUDECODE=[unset]") ||
-		!strings.Contains(result.Receipt.Report, "SESSION=[unset]") {
-		t.Fatalf("the reviewer inherited the author's session: %q", result.Receipt.Report)
+	for _, name := range AuthorMarkers() {
+		if strings.Contains(result.Receipt.Report, name+"=") {
+			t.Fatalf("the reviewer inherited %s: %q", name, result.Receipt.Report)
+		}
+	}
+	if !strings.Contains(result.Receipt.Report, "GOALRAIL_ENV_SURVIVES=yes") {
+		t.Fatalf("the reviewer lost unrelated environment: %q", result.Receipt.Report)
 	}
 }
 
@@ -383,8 +390,10 @@ func TestReReviewIsIncrementalByDefaultAndFullByFlag(t *testing.T) {
 func TestRefuteStoresBothReportsVerbatim(t *testing.T) {
 	root := branchWithWork(t)
 	stateRoot := t.TempDir()
+	refuteCapture := filepath.Join(t.TempDir(), "refute-stdin")
+	t.Setenv("REFUTE_CAPTURE", refuteCapture)
 	stubReviewer(t, "codex", `cat >/dev/null; echo "the finding"`)
-	stubReviewer(t, "claude", `cat >/dev/null; echo "REFUTED: not real"`)
+	stubReviewer(t, "claude", `cat >"$REFUTE_CAPTURE"; echo "REFUTED: not real"`)
 
 	result, err := Run(context.Background(), Input{
 		RepositoryRoot: root, StateRoot: stateRoot, BaseRef: "main",
@@ -405,6 +414,26 @@ func TestRefuteStoresBothReportsVerbatim(t *testing.T) {
 	}
 	if result.Receipt.RefutationSHA256 != digest([]byte(result.Receipt.Refutation)) {
 		t.Fatal("the refutation digest does not describe the stored refutation")
+	}
+
+	reviewedDiff, err := renderCanonicalDiff(root, result.Receipt.ReviewedBase, result.Receipt.HeadCommit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Receipt.ReviewedDiffSHA256 != digest(reviewedDiff) {
+		t.Fatal("the reviewed digest does not describe the canonical diff")
+	}
+	refuteInput, err := os.ReadFile(refuteCapture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, exact := range [][]byte{
+		[]byte("--- REPORT UNDER CHALLENGE ---\n" + result.Receipt.Report),
+		append([]byte("--- DIFF UNDER REVIEW ---\n"), reviewedDiff...),
+	} {
+		if !bytes.Contains(refuteInput, exact) {
+			t.Fatalf("refuter input omitted exact bytes %q:\n%s", exact, refuteInput)
+		}
 	}
 }
 
