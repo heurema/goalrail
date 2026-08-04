@@ -7,6 +7,7 @@
 - [x] 1.5 Read the adopted side from the materialized overlay file, not from the embedded canon. `Materialize(root, false)` reaches `ActionKept` for an overlay file the user edited (`internal/harness/overlay.go`), and OpenSpec compiles against what is on disk; comparing the canon would describe a schema the switch did not adopt. Test with an edited overlay and assert the comparison follows the file.
 - [x] 1.6 Handle a replaced schema that is not a file in the repository: report "could not compare" and the reason, and let sections 2 and 3 still produce their output. A stock schema resolves from the installed package (`openspec schema which spec-driven` → `Source: package`), and reading it there would put a Node package path on the harness's critical path, which `harness-init` forbids. This is the ordinary adoption path for a stock root, not an edge case — test it as such.
 - [x] 1.7 Test the pair that will actually be compared in practice: Baseline's `intent-driven` against the materialized `goalrail-intent`. Assert `context` is reported as added and `design` as having gained dependencies.
+- [x] 1.8 Preserve `#` inside a quoted inline instruction as scalar content while ignoring a real trailing source comment. Add a regression where `"Ask #1 question"` changes to `"Ask #2 question"`; both must remain distinguishable in `instructions_changed`.
 
 ## 2. Extract the rules block without owning it
 
@@ -23,6 +24,7 @@
 - [x] 3.2 Count changes naming a given schema across `openspec/changes/*/.openspec.yaml` and `openspec/changes/archive/*/.openspec.yaml`, reusing the hardened `readChangeSchema` rather than adding a second reader of the same file.
 - [x] 3.3 Report active and archived counts separately in the data, even though the requirement only obliges a total; whether the thing pinning a schema is finished work or work in flight is the first question anyone asks next.
 - [x] 3.4 Test a repository where nothing names the schema, one where only the archive does, and one with no changes directory at all.
+- [x] 3.5 Gate directory-removal language on an observed repository-local schema directory. A stock package schema with zero pins must report that no local removal action exists; an unpinned repository-local schema may still report that its directory may be removed.
 
 ## 4. Put the adoption section in the initialization report
 
@@ -38,6 +40,7 @@
 - [x] 5.2 Write it during initialization only when a switch replaced another schema, and never into the user's configuration. Record "nothing predates this" only when absence is known; an uncountable rules block remains "unreviewed" so the diagnosis cannot silently lose it.
 - [x] 5.3 Test that a marker with no adoption record reads as "never replaced a schema" and that `gr doctor` reports no fault for it. Diagnosis reads the marker to derive the advisory, so a required adoption field would break every existing installation there.
 - [x] 5.4 Keep a failure to add adoption evidence to an existing valid marker fail-open: retain the marker, emit the full adoption report with a notice, and preserve the successful exit status. Keep initial marker creation fail-closed, because a repository without that marker was not initialized.
+- [x] 5.5 Replace an existing marker atomically through a same-directory temporary file and rename. Add a deterministic publish-failure regression that observes the completed temporary marker, rejects the rename, and proves the previous marker bytes remain unchanged and valid.
 
 ## 6. Carry the advisory in the diagnosis
 

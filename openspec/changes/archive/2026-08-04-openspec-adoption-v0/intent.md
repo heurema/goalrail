@@ -39,7 +39,7 @@
 |---|---|---|---|
 | OUT-1 | When Goalrail switches a repository from another schema to its own, the initialization report states what the switch mechanically changed: which artifacts the adopted schema adds or removes, which artifact dependencies changed, and which artifact instructions differ. | Read the report from a real switch and compare it against a hand-made diff of the two schema files. | SE-1, CTX-13 |
 | OUT-2 | The same report states how many project rules the configuration carries, echoes them verbatim, and says plainly that they were present when the schema was replaced and that Goalrail neither interprets nor edits them. | Read the report on a repository whose rules are known to be stale, and confirm it neither judges nor omits them. | SE-1, SE-4, SE-5, SE-6 |
-| OUT-3 | The same report states how many open and archived changes still pin the previous schema, so "can I delete it" has a computed answer rather than an opinion. | Read the count on Baseline and compare it against the `.openspec.yaml` files that name `intent-driven`. | SE-2, SE-7, SE-8 |
+| OUT-3 | The same report states how many open and archived changes still pin the previous schema and whether its directory exists in the repository, so "can I delete it" has a computed answer rather than an opinion. | Read the count and directory state on Baseline and compare them against the repository's schema directory and the `.openspec.yaml` files that name `intent-driven`. | SE-2, SE-7, SE-8 |
 | OUT-4 | The adoption is recorded where Goalrail already keeps its own state — which schema was replaced, when, and a digest of the rules block as it stood — so the fact outlives the session that performed the switch. | Inspect the recorded state after a switch and confirm it names the previous schema and a digest. | SE-9 |
 | OUT-5 | The diagnosis carries one advisory line for as long as the rules block is unchanged since adoption, and stops carrying it once the rules are edited, without the user having to dismiss anything. | Run the diagnosis after a switch, edit the rules, run it again, and confirm the line appears and then disappears. | SE-1, SE-9 |
 
@@ -60,7 +60,7 @@
 |---|---|---|---|
 | SIG-1 | The report names the artifact difference correctly on a real adoption. | On Baseline's switch, the report names `context` as added and names `design` as having gained dependencies; both are checkable against the two schema files. | CTX-13 |
 | SIG-2 | The report discloses rules without judging them. | The rules section reproduces every rule and contains no per-rule verdict word such as "stale", "remove", or "superseded". | SE-5, NG-1 |
-| SIG-3 | The superseded-schema answer is computed, not asserted. | On Baseline the count is greater than zero and the report says the directory must stay; on a repository where nothing pins it the count is zero and the report says it may be removed. | CTX-8 |
+| SIG-3 | The superseded-schema answer is computed, not asserted. | On Baseline the count is greater than zero and the report says the repository-local directory must stay; where such a directory exists and nothing pins it, the count is zero and the report says it may be removed; where no local directory exists, the report offers no removal action. | CTX-8 |
 | SIG-4 | The advisory ends by itself. | The diagnosis shows the line after adoption, and stops showing it after any edit to the rules block, with no flag and no acknowledgement command. | OUT-5 |
 | SIG-5 | Nothing becomes interactive. | Initialization and diagnosis produce the same machine-readable shape and exit status as before when no terminal is attached. | NG-3 |
 
@@ -88,3 +88,9 @@ directory will never become removable, because its archive keeps pinning it.
   schema was replaced. The confirmed meaning is unchanged and is what forced the
   correction: an outcome whose purpose is honest disclosure cannot be served by
   an unprovable claim.
+- **SIG-3, 2026-08-04.** "Its directory" means a directory present in the
+  repository. A zero pin count does not imply that such a directory exists: a
+  stock schema may live only in the installed package. The report therefore
+  offers removal language only for an observed repository-local directory and
+  reports no available removal action otherwise. This corrects an impossible
+  instruction without changing OUT-3 or NG-4.

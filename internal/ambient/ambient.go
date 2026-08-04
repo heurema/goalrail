@@ -126,12 +126,46 @@ func completedAdoption(adoption *Adoption, now func() time.Time) *Adoption {
 }
 
 func writeMarker(markerPath string, marker Marker) error {
+	return writeMarkerWithRename(markerPath, marker, os.Rename)
+}
+
+func writeMarkerWithRename(markerPath string, marker Marker, rename func(string, string) error) error {
 	encoded, err := json.MarshalIndent(marker, "", "  ")
 	if err != nil {
-		return err
+		return fmt.Errorf("encode ambient marker: %w", err)
 	}
-	if err := os.WriteFile(markerPath, append(encoded, '\n'), 0o644); err != nil {
-		return fmt.Errorf("write ambient marker: %w", err)
+	mode := os.FileMode(0o644)
+	if existing, err := os.Stat(markerPath); err == nil {
+		mode = existing.Mode().Perm()
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("inspect ambient marker mode: %w", err)
+	}
+	temporary, err := os.CreateTemp(filepath.Dir(markerPath), ".ambient-marker-*")
+	if err != nil {
+		return fmt.Errorf("create temporary ambient marker: %w", err)
+	}
+	temporaryPath := temporary.Name()
+	defer os.Remove(temporaryPath)
+	closeOnFailure := func() {
+		_ = temporary.Close()
+	}
+	if _, err := temporary.Write(append(encoded, '\n')); err != nil {
+		closeOnFailure()
+		return fmt.Errorf("write temporary ambient marker: %w", err)
+	}
+	if err := temporary.Chmod(mode); err != nil {
+		closeOnFailure()
+		return fmt.Errorf("set temporary ambient marker mode: %w", err)
+	}
+	if err := temporary.Sync(); err != nil {
+		closeOnFailure()
+		return fmt.Errorf("sync temporary ambient marker: %w", err)
+	}
+	if err := temporary.Close(); err != nil {
+		return fmt.Errorf("close temporary ambient marker: %w", err)
+	}
+	if err := rename(temporaryPath, markerPath); err != nil {
+		return fmt.Errorf("publish ambient marker: %w", err)
 	}
 	return nil
 }

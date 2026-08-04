@@ -54,23 +54,34 @@ func buildAdoptionReport(repositoryRoot string, config harness.ConfigOutcome) (*
 		report.Notices = append(report.Notices, "the rules count could not be produced: "+rules.CountReason)
 	}
 
-	pins, err := openspecadapter.CountSchemaPins(repositoryRoot, config.PreviousSchema)
-	if err != nil {
-		report.Notices = append(report.Notices, "the previous-schema pin count could not be produced: "+err.Error())
-		report.SchemaDirectory = "whether the previous schema directory is still pinned could not be determined"
+	pins, pinsErr := openspecadapter.CountSchemaPins(repositoryRoot, config.PreviousSchema)
+	if pinsErr != nil {
+		report.Notices = append(report.Notices, "the previous-schema pin count could not be produced: "+pinsErr.Error())
 	} else {
 		report.Pins = &pins
-		if pins.Total() > 0 {
-			report.SchemaDirectory = fmt.Sprintf(
-				"%d change(s) still name %q; its schema directory must remain",
-				pins.Total(), config.PreviousSchema,
-			)
-		} else {
-			report.SchemaDirectory = fmt.Sprintf(
-				"no change still names %q; its schema directory may be removed, but Goalrail did not remove it",
-				config.PreviousSchema,
-			)
-		}
+	}
+	directoryExists, directoryErr := harness.RepositorySchemaDirectoryExists(repositoryRoot, config.PreviousSchema)
+	switch {
+	case directoryErr != nil:
+		report.Notices = append(report.Notices, "the previous-schema directory state could not be produced: "+directoryErr.Error())
+		report.SchemaDirectory = "whether a repository-local previous-schema directory exists could not be determined"
+	case !directoryExists:
+		report.SchemaDirectory = fmt.Sprintf(
+			"no repository-local schema directory exists for %q; no removal action is available",
+			config.PreviousSchema,
+		)
+	case pinsErr != nil:
+		report.SchemaDirectory = "whether the repository-local previous-schema directory is still pinned could not be determined"
+	case pins.Total() > 0:
+		report.SchemaDirectory = fmt.Sprintf(
+			"%d change(s) still name %q; its schema directory must remain",
+			pins.Total(), config.PreviousSchema,
+		)
+	default:
+		report.SchemaDirectory = fmt.Sprintf(
+			"no change still names %q; its schema directory may be removed, but Goalrail did not remove it",
+			config.PreviousSchema,
+		)
 	}
 	return report, &ambient.Adoption{
 		ReplacedSchema: config.PreviousSchema,

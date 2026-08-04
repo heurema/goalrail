@@ -143,6 +143,10 @@ func TestRunInitKeepsAdoptionDiagnosticsFailOpen(t *testing.T) {
 	if !strings.Contains(strings.Join(report.Adoption.Notices, "\n"), "schema difference") {
 		t.Fatalf("schema comparison failure was not disclosed as a notice: %#v", report.Adoption.Notices)
 	}
+	if !strings.Contains(report.Adoption.SchemaDirectory, "no repository-local schema directory") ||
+		strings.Contains(report.Adoption.SchemaDirectory, "may be removed") {
+		t.Fatalf("stock schema received removal advice: %q", report.Adoption.SchemaDirectory)
+	}
 }
 
 func TestRunInitKeepsExistingMarkerWhereAdoptionEvidenceCannotBeWritten(t *testing.T) {
@@ -156,10 +160,11 @@ func TestRunInitKeepsExistingMarkerWhereAdoptionEvidenceCannotBeWritten(t *testi
 	writeAdoptionFixture(t, root, ambient.MarkerPath,
 		"{\n  \"schema\": \"goalrail.ambient-marker/v0\",\n  \"initialized_at\": \"2026-08-01T00:00:00Z\"\n}\n")
 	markerPath := filepath.Join(root, filepath.FromSlash(ambient.MarkerPath))
-	if err := os.Chmod(markerPath, 0o400); err != nil {
+	markerDirectory := filepath.Dir(markerPath)
+	if err := os.Chmod(markerDirectory, 0o500); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = os.Chmod(markerPath, 0o600) })
+	t.Cleanup(func() { _ = os.Chmod(markerDirectory, 0o700) })
 
 	var stdout, stderr bytes.Buffer
 	if err := runInit([]string{"--repo", root, "--confirm-schema-switch"}, &stdout, &stderr); err != nil {
@@ -195,6 +200,9 @@ func TestRunInitDoesNotClaimAbsentRulesWerePresent(t *testing.T) {
 	}
 	if report.Adoption == nil || report.Adoption.Rules.HasRules || report.Adoption.RulesDisclosure != noRulesDisclosure {
 		t.Fatalf("ruleless adoption = %#v", report.Adoption)
+	}
+	if !strings.Contains(report.Adoption.SchemaDirectory, "may be removed") {
+		t.Fatalf("repository-local unpinned schema directory = %q", report.Adoption.SchemaDirectory)
 	}
 	marker, err := ambient.ReadMarker(root)
 	if err != nil {

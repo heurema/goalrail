@@ -78,6 +78,21 @@ func TestInstructionDifferenceIgnoresYAMLInsignificantTails(t *testing.T) {
 	}
 }
 
+func TestInstructionDifferencePreservesHashInsideQuotedScalar(t *testing.T) {
+	left := []byte("artifacts:\n  - id: intent\n    requires: []\n    instruction: \"Ask #1 question\" # left note\n")
+	right := []byte("artifacts:\n  - id: intent\n    requires: []\n    instruction: \"Ask #2 question\" # right note\n")
+	difference := compareSchemaBytes(left, right)
+	if !difference.Comparable || !reflect.DeepEqual(difference.InstructionsChanged, []string{"intent"}) {
+		t.Fatalf("quoted hash content was lost: %#v", difference)
+	}
+
+	same := []byte("artifacts:\n  - id: intent\n    requires: []\n    instruction: \"Ask #1 question\" # another source note\n")
+	difference = compareSchemaBytes(left, same)
+	if !difference.Comparable || len(difference.InstructionsChanged) != 0 {
+		t.Fatalf("a comment after a quoted instruction changed its value: %#v", difference)
+	}
+}
+
 func TestInstructionDifferencePreservesKeepChompingTails(t *testing.T) {
 	left := []byte("artifacts:\n  - id: intent\n    requires: []\n    instruction: |+\n      Same instruction.\n\n")
 	right := []byte("artifacts:\n  - id: intent\n    requires: []\n    instruction: |+\n      Same instruction.\n")
@@ -125,6 +140,22 @@ func TestRepositorySchemaComparisonUsesTheOverlayOnDisk(t *testing.T) {
 	missing := CompareRepositorySchemas(root, "spec-driven")
 	if missing.Comparable || !strings.Contains(missing.Reason, "not a file in the repository") {
 		t.Fatalf("package schema produced %#v", missing)
+	}
+}
+
+func TestRepositorySchemaDirectoryExistsDistinguishesPackageSchemas(t *testing.T) {
+	root := t.TempDir()
+	present, err := RepositorySchemaDirectoryExists(root, "spec-driven")
+	if err != nil || present {
+		t.Fatalf("package schema directory = %v, err = %v", present, err)
+	}
+	path := filepath.Join(root, "openspec", "schemas", "local-schema")
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	present, err = RepositorySchemaDirectoryExists(root, "local-schema")
+	if err != nil || !present {
+		t.Fatalf("repository schema directory = %v, err = %v", present, err)
 	}
 }
 

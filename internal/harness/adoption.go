@@ -82,6 +82,28 @@ func repositorySchemaPath(repositoryRoot, name string) (string, error) {
 	return filepath.Join(repositoryRoot, "openspec", "schemas", name, "schema.yaml"), nil
 }
 
+// RepositorySchemaDirectoryExists reports only on a schema directory owned by
+// this repository. A stock schema resolved from the OpenSpec package is not a
+// removable repository path, even when no local change pins its name.
+func RepositorySchemaDirectoryExists(repositoryRoot, name string) (bool, error) {
+	schemaPath, err := repositorySchemaPath(repositoryRoot, name)
+	if err != nil {
+		return false, err
+	}
+	directory := filepath.Dir(schemaPath)
+	info, err := os.Stat(directory)
+	if errors.Is(err, fs.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("inspect repository schema directory: %w", err)
+	}
+	if !info.IsDir() {
+		return false, fmt.Errorf("repository schema path %q is not a directory", directory)
+	}
+	return true, nil
+}
+
 func compareSchemaBytes(replaced, adopted []byte) SchemaDifference {
 	left, err := readSchemaArtifacts(replaced)
 	if err != nil {
@@ -135,9 +157,14 @@ func instructionDigest(span []byte) string {
 	if !ok {
 		return digestBytes(normalized)
 	}
-	value = strings.TrimSpace(stripUnquotedComment(value))
+	rawValue := strings.TrimSpace(value)
+	value = strings.TrimSpace(stripUnquotedComment(rawValue))
 	if !strings.HasPrefix(value, ">") && !strings.HasPrefix(value, "|") {
-		return digestBytes([]byte(value))
+		scalar, err := simpleYAMLScalar(rawValue)
+		if err != nil {
+			return digestBytes([]byte(rawValue))
+		}
+		return digestBytes([]byte(scalar))
 	}
 
 	end := len(lines)

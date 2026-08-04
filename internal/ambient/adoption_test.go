@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 )
@@ -73,10 +74,11 @@ func TestFailedAdoptionWriteReturnsTheExistingMarker(t *testing.T) {
 		t.Fatalf("initialize marker = %#v, created = %v, err = %v", existing, created, err)
 	}
 	markerPath := filepath.Join(root, filepath.FromSlash(MarkerPath))
-	if err := os.Chmod(markerPath, 0o400); err != nil {
+	markerDirectory := filepath.Dir(markerPath)
+	if err := os.Chmod(markerDirectory, 0o500); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = os.Chmod(markerPath, 0o600) })
+	t.Cleanup(func() { _ = os.Chmod(markerDirectory, 0o700) })
 
 	returned, created, err := InitializeWithAdoption(root, time.Now, &Adoption{
 		ReplacedSchema: "intent-driven",
@@ -92,5 +94,61 @@ func TestFailedAdoptionWriteReturnsTheExistingMarker(t *testing.T) {
 	persisted, readErr := ReadMarker(root)
 	if readErr != nil || persisted.Adoption != nil {
 		t.Fatalf("persisted marker = %#v, err = %v", persisted, readErr)
+	}
+}
+
+func TestAtomicMarkerReplacementPreservesExistingBytesWhenPublishFails(t *testing.T) {
+	root := t.TempDir()
+	existing, created, err := Initialize(root, func() time.Time {
+		return time.Date(2026, time.August, 4, 12, 0, 0, 0, time.UTC)
+	})
+	if err != nil || !created {
+		t.Fatalf("initialize marker = %#v, created = %v, err = %v", existing, created, err)
+	}
+	markerPath := filepath.Join(root, filepath.FromSlash(MarkerPath))
+	before, err := os.ReadFile(markerPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated := existing
+	updated.Adoption = &Adoption{
+		ReplacedSchema: "intent-driven",
+		AdoptedAt:      time.Date(2026, time.August, 4, 13, 0, 0, 0, time.UTC),
+		RulesDigest:    "digest",
+		HadRules:       true,
+	}
+	publishErr := errors.New("injected publish failure")
+	publishCalled := false
+	err = writeMarkerWithRename(markerPath, updated, func(temporaryPath, targetPath string) error {
+		publishCalled = true
+		if targetPath != markerPath {
+			t.Fatalf("publish target = %q", targetPath)
+		}
+		temporaryBytes, readErr := os.ReadFile(temporaryPath)
+		if readErr != nil || !strings.Contains(string(temporaryBytes), "intent-driven") {
+			t.Fatalf("temporary marker = %q, err = %v", temporaryBytes, readErr)
+		}
+		return publishErr
+	})
+	if !publishCalled || !errors.Is(err, publishErr) {
+		t.Fatalf("publish called = %v, err = %v", publishCalled, err)
+	}
+	after, err := os.ReadFile(markerPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(before) {
+		t.Fatalf("existing marker changed after failed publish:\n%s", after)
+	}
+	persisted, err := ReadMarker(root)
+	if err != nil || persisted.Adoption != nil || persisted.InitializedAt != existing.InitializedAt {
+		t.Fatalf("existing marker became invalid after failed publish: %#v, err = %v", persisted, err)
+	}
+	entries, err := os.ReadDir(filepath.Dir(markerPath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Name() != filepath.Base(markerPath) {
+		t.Fatalf("temporary marker was not cleaned up: %#v", entries)
 	}
 }

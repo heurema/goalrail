@@ -21,8 +21,8 @@ Goals, from the confirmed intent:
   adopted one (OUT-1).
 - Disclose the configuration's rules verbatim, with their count and their
   provenance, and judge none of them (OUT-2).
-- Answer whether the replaced schema directory may be removed with a count
-  (OUT-3).
+- Answer whether an existing repository-local replaced-schema directory may be
+  removed with a count (OUT-3).
 - Record the adoption in Goalrail's own state so it outlives the session
   (OUT-4).
 - Carry one self-terminating advisory in the diagnosis (OUT-5).
@@ -60,8 +60,11 @@ A bounded line-oriented reader extracts, for each entry of the top-level
 its `instruction`. Comparison then yields: artifacts present in only one schema,
 artifacts whose `requires` sets differ, and artifacts whose instruction spans
 differ by digest. Before digesting, CRLF is normalized to LF: line endings are a
-Git checkout transport choice, not an instruction change. No other content is
-normalized or interpreted.
+Git checkout transport choice, not an instruction change. For an inline scalar,
+the bounded scalar reader removes an actual trailing YAML comment while retaining
+`#` inside quotes as instruction content. For a block scalar, the prose stays
+opaque; only source tails that its chomping mode does not preserve are ignored.
+Nothing folds or interprets the instruction prose.
 
 Digesting the instruction span rather than reading it is what keeps this within
 the boundary: the requirement is to report *that* an instruction differs, never
@@ -117,6 +120,14 @@ alive. Reuse rather than a second reader: two readers of the same file would
 eventually disagree, and the one used for reporting would be the one nobody
 tested.
 
+Removal language is gated on the repository-local directory actually existing.
+A zero pin count for `spec-driven` in a stock root does not create a removable
+path: that schema lives in the installed package, which Goalrail neither owns nor
+advises the user to edit. The report still carries the computed pin count, but
+states that no removal action is available. Only an observed repository-local
+directory can receive the count-derived "must remain" or "may be removed"
+statement.
+
 Reuse requires hardening it first. `readChangeSchema` trims whitespace and
 quotes but never strips an inline comment, so `schema: intent-driven # legacy`
 reads as `intent-driven # legacy` and matches nothing
@@ -135,6 +146,13 @@ name, the adoption time, and the rules digest. Absence is meaningful and valid â
 every marker written before this change lacks it, and the diagnosis path must
 keep reading those without complaint. Nothing about the record is required for
 the harness to work; it is evidence, not configuration.
+
+Updates publish through a temporary file in the marker's directory: write the
+complete JSON, sync and close it, then rename it over the live marker. Failure
+before the rename removes the temporary file and leaves the previous marker
+byte-identical. In-place truncation is incompatible with the fail-open promise,
+because an interrupted write could otherwise erase the repository's opt-in
+while initialization reports that it was retained.
 
 **Adoption reporting is fail-open, always.**
 
@@ -174,8 +192,10 @@ on a real repository rather than a fixture:
   gained dependencies, both checkable by hand against the two schema files
   (SIG-1).
 - The rules section reproduces every rule and contains no verdict word (SIG-2).
-- Baseline's pin count is above zero and the report says the directory must
-  stay; a repository where nothing pins it reports zero (SIG-3).
+- Baseline's pin count is above zero and the report says its repository-local
+  directory must stay; an unpinned repository-local schema reports that it may
+  be removed, while a stock package schema reports that no local removal action
+  exists (SIG-3).
 - The diagnosis line appears after adoption and is gone after an edit to the
   rules block, with no flag involved (SIG-4).
 - Initialization and diagnosis produce the same machine-readable shape and exit
