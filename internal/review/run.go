@@ -41,7 +41,7 @@ const cancelGrace = 5 * time.Second
 // median rather than above the worst tail: at this spread a cheap failure that
 // can be retried beats a generous wait that cannot be undone. The first choice
 // here was 45 minutes, picked by eye and corrected once the spread was measured.
-// Evidence: openspec/changes/pre-pr-review-v0/evidence/effort-experiment-2026-08-01.md
+// Evidence: openspec/changes/archive/2026-08-04-pre-pr-review-v0/evidence/effort-experiment-2026-08-01.md
 const (
 	FullEffort   = "high"
 	FullDeadline = 25 * time.Minute
@@ -227,17 +227,33 @@ func Run(ctx context.Context, input Input) (Result, error) {
 		}
 	}
 
+	deadline := input.Deadline
+	if deadline <= 0 {
+		deadline = DefaultDeadline
+		if input.Full {
+			deadline = FullDeadline
+		}
+	}
+	// Canonical rendering is review work too. Start the advertised deadline
+	// before it and pass the bound into Git, so a large diff cannot spend past
+	// the caller's limit before the gate or reviewer even starts.
+	bounded, cancel := context.WithTimeout(ctx, deadline)
+	defer cancel()
+
 	// Freeze and render the immutable ranges before creating instructions,
 	// running the gate or invoking a provider. The reviewed-range bytes are
 	// rendered exactly once and then reused for transport and proof. The full
 	// branch remains a separate staleness measurement on incremental rounds.
-	fullDiff, err := renderCanonicalDiff(input.RepositoryRoot, baseCommit, headCommit)
+	fullDiff, err := renderCanonicalDiff(bounded, input.RepositoryRoot, baseCommit, headCommit)
 	if err != nil {
 		return Result{}, err
 	}
+	if len(fullDiff) == 0 {
+		return Result{}, fmt.Errorf("the branch has no changes against %s, so there is nothing to review", base.Ref)
+	}
 	reviewedDiff := fullDiff
 	if reviewedBase != baseCommit {
-		reviewedDiff, err = renderCanonicalDiff(input.RepositoryRoot, reviewedBase, headCommit)
+		reviewedDiff, err = renderCanonicalDiff(bounded, input.RepositoryRoot, reviewedBase, headCommit)
 		if err != nil {
 			return Result{}, err
 		}
@@ -271,19 +287,6 @@ func Run(ctx context.Context, input Input) (Result, error) {
 		}
 		return DefaultModel(reviewer)
 	}
-	deadline := input.Deadline
-	if deadline <= 0 {
-		deadline = DefaultDeadline
-		if input.Full {
-			deadline = FullDeadline
-		}
-	}
-	// The bound is created before the gate, because it is advertised as a bound
-	// on the whole review and a gate is part of the review. A gate that blocks
-	// under an unbounded context makes that promise false.
-	bounded, cancel := context.WithTimeout(ctx, deadline)
-	defer cancel()
-
 	// The gate runs before anything is spawned, because its whole purpose is to
 	// stop the spend rather than to report it afterwards.
 	if strings.TrimSpace(input.Gate) != "" {

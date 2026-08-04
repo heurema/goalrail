@@ -208,6 +208,59 @@ func TestRunRefusesWhereThereIsNothingToReview(t *testing.T) {
 	}
 }
 
+func TestRunRefusesAnEmptyThreeDotRangeBeforeSideEffects(t *testing.T) {
+	root := repository(t)
+	workHead, err := Resolve(root, "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	branch(t, root, "work")
+	if _, err := git(root, "checkout", "-q", "main"); err != nil {
+		t.Fatal(err)
+	}
+	write(t, root, "base-only.txt", "base advanced\n")
+	commit(t, root, "advance base")
+	baseHead, err := Resolve(root, "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	setRemoteDefault(t, root, "origin", "main", baseHead)
+	if _, err := git(root, "checkout", "-q", "work"); err != nil {
+		t.Fatal(err)
+	}
+	if workHead == baseHead {
+		t.Fatal("the fixture did not advance the remote default beyond the work head")
+	}
+
+	gateMarker := filepath.Join(t.TempDir(), "gate-ran")
+	reviewerMarker := filepath.Join(t.TempDir(), "reviewer-ran")
+	t.Setenv("GATE_MARKER", gateMarker)
+	t.Setenv("REVIEWER_MARKER", reviewerMarker)
+	stubReviewer(t, "codex", `touch "$REVIEWER_MARKER"; cat >/dev/null; echo reviewed`)
+
+	result, err := Run(context.Background(), Input{
+		RepositoryRoot: root,
+		StateRoot:      t.TempDir(),
+		Selection: Selection{
+			Reviewer: ambient.ScaffoldCodex,
+			Mode:     "cross",
+			Reason:   "test",
+		},
+		Gate: `touch "$GATE_MARKER"`,
+	})
+	if err == nil || !strings.Contains(err.Error(), "nothing to review") {
+		t.Fatalf("an empty three-dot range produced %v", err)
+	}
+	if result.InstructionsMaterialized {
+		t.Fatal("an empty range materialized review instructions")
+	}
+	for _, path := range []string{gateMarker, reviewerMarker, filepath.Join(root, InstructionsPath)} {
+		if _, statErr := os.Stat(path); !os.IsNotExist(statErr) {
+			t.Fatalf("an empty range created %s: %v", path, statErr)
+		}
+	}
+}
+
 func TestRunRefusesADetachedHead(t *testing.T) {
 	root := branchWithWork(t)
 	stateRoot := t.TempDir()
@@ -416,7 +469,7 @@ func TestRefuteStoresBothReportsVerbatim(t *testing.T) {
 		t.Fatal("the refutation digest does not describe the stored refutation")
 	}
 
-	reviewedDiff, err := renderCanonicalDiff(root, result.Receipt.ReviewedBase, result.Receipt.HeadCommit)
+	reviewedDiff, err := renderCanonicalDiff(context.Background(), root, result.Receipt.ReviewedBase, result.Receipt.HeadCommit)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -793,6 +846,38 @@ func TestATimeoutCarriesWhatTheReviewerHadProduced(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "PROGRESS-MARKER") {
 		t.Fatalf("the timeout discarded the reviewer's progress: %v", err)
+	}
+}
+
+// Rendering the reviewed range is part of the advertised deadline too.
+func TestTheReviewContextCoversDiffRenderingBeforeSideEffects(t *testing.T) {
+	root := branchWithWork(t)
+	reviewerMarker := filepath.Join(t.TempDir(), "reviewer-ran")
+	t.Setenv("REVIEWER_MARKER", reviewerMarker)
+	stubReviewer(t, "codex", `touch "$REVIEWER_MARKER"; cat >/dev/null; echo reviewed`)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	result, err := Run(ctx, Input{
+		RepositoryRoot: root,
+		StateRoot:      t.TempDir(),
+		BaseRef:        "main",
+		Selection: Selection{
+			Reviewer: ambient.ScaffoldCodex,
+			Mode:     "cross",
+			Reason:   "test",
+		},
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled diff rendering produced %v", err)
+	}
+	if result.InstructionsMaterialized {
+		t.Fatal("canceled diff rendering materialized review instructions")
+	}
+	for _, path := range []string{reviewerMarker, filepath.Join(root, InstructionsPath)} {
+		if _, statErr := os.Stat(path); !os.IsNotExist(statErr) {
+			t.Fatalf("canceled diff rendering created %s: %v", path, statErr)
+		}
 	}
 }
 

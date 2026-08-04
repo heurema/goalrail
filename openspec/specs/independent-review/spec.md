@@ -143,6 +143,10 @@ network. Refreshing remote-tracking refs remains the caller's responsibility.
 - **WHEN** an omitted base is resolved
 - **THEN** no fetch or hosting-service request is made
 
+#### Scenario: The selected default produces no branch changes
+- **WHEN** the omitted base resolves to a descendant of the checked-out head and the three-dot range is empty
+- **THEN** the command materializes no instructions, invokes neither the gate nor a reviewer, and reports that there is nothing to review
+
 ### Requirement: A budget gate is the only policy refusal after valid inputs
 **Intent IDs:** OUT-2, SIG-2
 
@@ -372,7 +376,7 @@ command has. Measured on one range with one set of instructions, effort the only
 variable: the moderate default reviewed clean and missed three real defects, two
 of them P1, which the higher effort reported — recorded with its design, ranges,
 durations and reproduction command in
-`openspec/changes/pre-pr-review-v0/evidence/effort-experiment-2026-08-01.md`. The deadline travels with the
+`openspec/changes/archive/2026-08-04-pre-pr-review-v0/evidence/effort-experiment-2026-08-01.md`. The deadline travels with the
 effort because raising one without the other only moves the failure from a false
 clean verdict to an unfinished review.
 
@@ -387,6 +391,10 @@ clean verdict to an unfinished review.
 #### Scenario: A reviewer that outlives its child is still bounded
 - **WHEN** the reviewer's descendant keeps the pipes open past the deadline
 - **THEN** the review ends within the deadline plus a short grace, reports the deadline as the cause, and writes no receipt
+
+#### Scenario: Canonical diff rendering reaches the deadline
+- **WHEN** rendering the canonical reviewed range has not completed by the review deadline
+- **THEN** its Git process is stopped, no instructions, gate, or reviewer side effect occurs, and no receipt is written
 
 #### Scenario: The model is stated, per provider
 - **WHEN** a review runs with no model named by the caller
