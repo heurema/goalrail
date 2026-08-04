@@ -287,6 +287,8 @@ func TestDiffDigestIgnoresTheReadersOwnDiffConfiguration(t *testing.T) {
 		{"diff.algorithm", "histogram"},
 		{"diff.noprefix", "true"},
 		{"diff.mnemonicPrefix", "true"},
+		{"diff.srcPrefix", "custom-old/"},
+		{"diff.dstPrefix", "custom-new/"},
 		{"diff.relative", "true"},
 		{"core.abbrev", "7"},
 	} {

@@ -204,6 +204,8 @@ func canonicalDiffArguments(baseCommit, headCommit string) []string {
 		"-c", "diff.algorithm=myers",
 		"-c", "diff.noprefix=false",
 		"-c", "diff.mnemonicPrefix=false",
+		"-c", "diff.srcPrefix=a/",
+		"-c", "diff.dstPrefix=b/",
 		"-c", "diff.relative=false",
 		"-c", "diff.indentHeuristic=true",
 		"-c", "diff.orderFile=/dev/null",
