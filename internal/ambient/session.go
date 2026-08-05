@@ -79,6 +79,21 @@ func StartSession(
 	if !IsInitialized(repositoryRoot) {
 		return "", false, nil
 	}
+	return startSession(store, repositoryRoot, now)
+}
+
+// StartDeclaredProjectSession is the marker-free entrypoint for a caller that
+// has already validated the committed project declaration. Keeping that claim
+// check at the hook boundary ensures payload bytes are not read first.
+func StartDeclaredProjectSession(
+	store Store,
+	repositoryRoot string,
+	now func() time.Time,
+) (announcement string, archived bool, err error) {
+	return startSession(store, repositoryRoot, now)
+}
+
+func startSession(store Store, repositoryRoot string, now func() time.Time) (announcement string, archived bool, err error) {
 	archived, err = archiveStaleQuestion(store, repositoryRoot, now)
 	if err != nil {
 		return "", false, err
@@ -155,6 +170,28 @@ func StopSession(
 	if !IsInitialized(repositoryRoot) {
 		return nil, nil
 	}
+	return stopSession(store, repositoryRoot, sessionRef, resolver, now)
+}
+
+// StopDeclaredProjectSession is the marker-free counterpart used only after a
+// valid declaration claim has been established before payload parsing.
+func StopDeclaredProjectSession(
+	store Store,
+	repositoryRoot string,
+	sessionRef string,
+	resolver IntentResolver,
+	now func() time.Time,
+) (*QuestionRecord, error) {
+	return stopSession(store, repositoryRoot, sessionRef, resolver, now)
+}
+
+func stopSession(
+	store Store,
+	repositoryRoot string,
+	sessionRef string,
+	resolver IntentResolver,
+	now func() time.Time,
+) (*QuestionRecord, error) {
 	questionPath := filepath.Join(repositoryRoot, filepath.FromSlash(ReservedEscalationPath))
 	if _, err := os.Lstat(questionPath); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {

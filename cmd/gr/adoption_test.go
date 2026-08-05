@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -44,7 +45,7 @@ artifacts:
 `
 
 func TestRunInitReportsAndRecordsSchemaAdoption(t *testing.T) {
-	root := t.TempDir()
+	root := scratchRepository(t)
 	t.Setenv("HOME", t.TempDir())
 	original := "schema: intent-driven\ncontext: keep exactly\nrules:\n  intent:\n    - ask exactly one question\n    - keep evidence distinct\n"
 	writeAdoptionFixture(t, root, "openspec/config.yaml", original)
@@ -53,7 +54,7 @@ func TestRunInitReportsAndRecordsSchemaAdoption(t *testing.T) {
 	writeAdoptionFixture(t, root, "openspec/changes/archive/finished/.openspec.yaml", "schema: 'intent-driven' # archived\n")
 
 	var stdout, stderr bytes.Buffer
-	if err := runInit([]string{"--repo", root, "--confirm-schema-switch"}, &stdout, &stderr); err != nil {
+	if err := runInit(context.Background(), []string{"--repo", root, "--confirm-schema-switch"}, &stdout, &stderr); err != nil {
 		t.Fatalf("run init: %v\nstderr: %s", err, stderr.String())
 	}
 	var report initReport
@@ -115,13 +116,13 @@ func TestRunInitReportsAndRecordsSchemaAdoption(t *testing.T) {
 }
 
 func TestRunInitKeepsAdoptionDiagnosticsFailOpen(t *testing.T) {
-	root := t.TempDir()
+	root := scratchRepository(t)
 	t.Setenv("HOME", t.TempDir())
 	writeAdoptionFixture(t, root, "openspec/config.yaml", "schema: spec-driven\nrules: {\n  intent: [\"a\", \"b\"]\n}\n")
 	writeAdoptionFixture(t, root, "openspec/changes/broken/.openspec.yaml", "not-schema: x\n")
 
 	var stdout, stderr bytes.Buffer
-	if err := runInit([]string{"--repo", root}, &stdout, &stderr); err != nil {
+	if err := runInit(context.Background(), []string{"--repo", root}, &stdout, &stderr); err != nil {
 		t.Fatalf("reporting failure changed init status: %v\nstderr: %s", err, stderr.String())
 	}
 	var report initReport
@@ -153,8 +154,12 @@ func TestRunInitKeepsExistingMarkerWhereAdoptionEvidenceCannotBeWritten(t *testi
 	if runtime.GOOS == "windows" {
 		t.Skip("Windows does not enforce the marker mode used to force this write failure")
 	}
-	root := t.TempDir()
+	root := scratchRepository(t)
 	t.Setenv("HOME", t.TempDir())
+	var initialStdout, initialStderr bytes.Buffer
+	if err := runInit(context.Background(), []string{"--repo", root}, &initialStdout, &initialStderr); err != nil {
+		t.Fatalf("initialize managed project fixture: %v\nstderr: %s", err, initialStderr.String())
+	}
 	writeAdoptionFixture(t, root, "openspec/config.yaml", "schema: intent-driven\nrules:\n  intent:\n    - keep evidence distinct\n")
 	writeAdoptionFixture(t, root, "openspec/schemas/intent-driven/schema.yaml", replacedSchemaFixture)
 	writeAdoptionFixture(t, root, ambient.MarkerPath,
@@ -167,7 +172,7 @@ func TestRunInitKeepsExistingMarkerWhereAdoptionEvidenceCannotBeWritten(t *testi
 	t.Cleanup(func() { _ = os.Chmod(markerDirectory, 0o700) })
 
 	var stdout, stderr bytes.Buffer
-	if err := runInit([]string{"--repo", root, "--confirm-schema-switch"}, &stdout, &stderr); err != nil {
+	if err := runInit(context.Background(), []string{"--repo", root, "--confirm-schema-switch"}, &stdout, &stderr); err != nil {
 		t.Fatalf("adoption evidence failure changed init status: %v\nstderr: %s", err, stderr.String())
 	}
 	var report initReport
@@ -185,13 +190,13 @@ func TestRunInitKeepsExistingMarkerWhereAdoptionEvidenceCannotBeWritten(t *testi
 }
 
 func TestRunInitDoesNotClaimAbsentRulesWerePresent(t *testing.T) {
-	root := t.TempDir()
+	root := scratchRepository(t)
 	t.Setenv("HOME", t.TempDir())
 	writeAdoptionFixture(t, root, "openspec/config.yaml", "schema: intent-driven\ncontext: retained\n")
 	writeAdoptionFixture(t, root, "openspec/schemas/intent-driven/schema.yaml", replacedSchemaFixture)
 
 	var stdout, stderr bytes.Buffer
-	if err := runInit([]string{"--repo", root, "--confirm-schema-switch"}, &stdout, &stderr); err != nil {
+	if err := runInit(context.Background(), []string{"--repo", root, "--confirm-schema-switch"}, &stdout, &stderr); err != nil {
 		t.Fatalf("run init: %v\n%s", err, stderr.String())
 	}
 	var report initReport
@@ -214,14 +219,14 @@ func TestRunInitDoesNotClaimAbsentRulesWerePresent(t *testing.T) {
 }
 
 func TestRunInitKeepsUncountableRulesAsUnreviewedEvidence(t *testing.T) {
-	root := t.TempDir()
+	root := scratchRepository(t)
 	t.Setenv("HOME", t.TempDir())
 	rules := "rules:\n  intent:\n    [\n      \"ask exactly one question\"\n    ]\n"
 	writeAdoptionFixture(t, root, "openspec/config.yaml", "schema: intent-driven\n"+rules)
 	writeAdoptionFixture(t, root, "openspec/schemas/intent-driven/schema.yaml", replacedSchemaFixture)
 
 	var stdout, stderr bytes.Buffer
-	if err := runInit([]string{"--repo", root, "--confirm-schema-switch"}, &stdout, &stderr); err != nil {
+	if err := runInit(context.Background(), []string{"--repo", root, "--confirm-schema-switch"}, &stdout, &stderr); err != nil {
 		t.Fatalf("run init: %v\n%s", err, stderr.String())
 	}
 	var report initReport
@@ -246,7 +251,7 @@ func TestRunInitKeepsUncountableRulesAsUnreviewedEvidence(t *testing.T) {
 }
 
 func TestRunInitReproducesEachDuplicateRulesBlock(t *testing.T) {
-	root := t.TempDir()
+	root := scratchRepository(t)
 	t.Setenv("HOME", t.TempDir())
 	first := "rules:\n  intent:\n    - first rule\n"
 	second := "rules:\n  proposal:\n    - second rule\n"
@@ -255,7 +260,7 @@ func TestRunInitReproducesEachDuplicateRulesBlock(t *testing.T) {
 	writeAdoptionFixture(t, root, "openspec/schemas/intent-driven/schema.yaml", replacedSchemaFixture)
 
 	var stdout, stderr bytes.Buffer
-	if err := runInit([]string{"--repo", root, "--confirm-schema-switch"}, &stdout, &stderr); err != nil {
+	if err := runInit(context.Background(), []string{"--repo", root, "--confirm-schema-switch"}, &stdout, &stderr); err != nil {
 		t.Fatalf("run init: %v\n%s", err, stderr.String())
 	}
 	var report initReport
@@ -292,25 +297,21 @@ func TestLegacyMarkerAddsNoDoctorFault(t *testing.T) {
 	root := scratchRepository(t)
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("GOALRAIL_STATE_HOME", t.TempDir())
-	if _, stderr, err := runCommand(t, "init", "--repo", root, "--scaffold", "claude-code", "--fix-gitignore"); err != nil {
+	if _, stderr, err := runCommand(t, "init", "--repo", root, "--scaffold", "claude-code"); err != nil {
 		t.Fatalf("init: %v\n%s", err, stderr)
 	}
+	beforeOutput, beforeError, beforeErr := runCommand(t, "doctor", "--repo", root, "--scaffold", "claude-code", "--json")
 	writeAdoptionFixture(t, root, ambient.MarkerPath,
 		"{\n  \"schema\": \"goalrail.ambient-marker/v0\",\n  \"initialized_at\": \"2026-08-01T00:00:00Z\"\n}\n")
 
 	doctorOutput, doctorError, err := runCommand(t, "doctor", "--repo", root, "--scaffold", "claude-code", "--json")
-	if err != nil {
-		t.Fatalf("doctor rejected a legacy marker: %v\n%s\n%s", err, doctorError, doctorOutput)
-	}
-	var diagnosis struct {
-		Working  bool            `json:"working"`
-		Adoption json.RawMessage `json:"adoption"`
-	}
-	if err := json.Unmarshal([]byte(doctorOutput), &diagnosis); err != nil {
-		t.Fatal(err)
-	}
-	if !diagnosis.Working || len(diagnosis.Adoption) != 0 {
-		t.Fatalf("legacy diagnosis = %s", doctorOutput)
+	if (beforeErr == nil) != (err == nil) ||
+		beforeOutput != doctorOutput ||
+		beforeError != doctorError {
+		t.Fatalf(
+			"legacy marker changed diagnosis\nbefore error: %v\nafter error: %v\nbefore stderr: %s\nafter stderr: %s\nbefore: %s\nafter: %s",
+			beforeErr, err, beforeError, doctorError, beforeOutput, doctorOutput,
+		)
 	}
 }
 

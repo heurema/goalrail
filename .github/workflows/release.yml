@@ -43,7 +43,7 @@ jobs:
       # the canon `gr` embeds is one that CLI accepts.
       - uses: actions/setup-node@v7
         with:
-          node-version: '22'
+          node-version: '22.18.0'
 
       # The pinned package is derived from the binary's own report rather than
       # copied into this file, so a pin bump in Go needs no edit here. The
@@ -131,13 +131,16 @@ jobs:
           set -euo pipefail
           dist="${RUNNER_TEMP}/dist"
           mkdir -p "${dist}"
-          for target in darwin/arm64 darwin/amd64 linux/amd64 linux/arm64; do
+          while IFS= read -r target; do
             goos="${target%/*}"
             goarch="${target#*/}"
             mkdir -p "${dist}/${goos}_${goarch}"
             CGO_ENABLED=0 GOOS="${goos}" GOARCH="${goarch}" \
-              go build -o "${dist}/${goos}_${goarch}/gr" ./cmd/gr
-          done
+              go build \
+                -ldflags "-X github.com/heurema/goalrail/internal/harness.releaseVersion=${GITHUB_REF_NAME}" \
+                -o "${dist}/${goos}_${goarch}/gr" \
+                ./cmd/gr
+          done < <(jq -r '.platforms[] | "\(.os)/\(.arch)"' release/setup/source-lock.json)
 
       # Read without executing: three of the four platforms cannot run here.
       # Exact equality, because a tree dirtied by anything stamps `<tag>+dirty`,
@@ -146,7 +149,7 @@ jobs:
         run: |
           set -euo pipefail
           for binary in "${RUNNER_TEMP}"/dist/*/gr; do
-            stamped="$(go version -m "${binary}" | awk '$1 == "mod" { print $3; exit }')"
+            stamped="$(go run ./cmd/goalrail-release binary-version --path "${binary}")"
             if [ "${stamped}" != "${GITHUB_REF_NAME}" ]; then
               echo "${binary} reports ${stamped}, not ${GITHUB_REF_NAME}" >&2
               exit 1
@@ -154,20 +157,42 @@ jobs:
             echo "${binary}: ${stamped}"
           done
 
-      # The licence travels with every distributed copy. Flat archive root, so
-      # `tar -xzf <archive> gr` takes only the binary.
-      - name: Assemble the archives and the checksums file
+      # The licence travels with every minimal distribution. The optional setup
+      # bundles are assembled separately from exact source pins below.
+      - name: Assemble the minimal archives
         run: |
           set -euo pipefail
           dist="${RUNNER_TEMP}/dist"
           for platform in "${dist}"/*/; do
             name="$(basename "${platform}")"
             cp LICENSE "${platform}/LICENSE"
-            tar -czf "${dist}/gr_${GITHUB_REF_NAME}_${name}.tar.gz" -C "${platform}" gr LICENSE
+            COPYFILE_DISABLE=1 tar -czf "${dist}/gr_${GITHUB_REF_NAME}_${name}.tar.gz" -C "${platform}" gr LICENSE
           done
-          cd "${dist}"
-          sha256sum gr_*.tar.gz > checksums.txt
-          cat checksums.txt
+
+      # Build output and verified upstream source archives stay under
+      # RUNNER_TEMP. Package lifecycle scripts are never executed: the release
+      # tool extracts the exact integrity-pinned npm tarballs itself.
+      - name: Build the optional setup archives and release metadata
+        run: |
+          set -euo pipefail
+          go run ./cmd/goalrail-release build \
+            --repo . \
+            --dist "${RUNNER_TEMP}/dist" \
+            --source-cache "${RUNNER_TEMP}/release-sources" \
+            --version "${GITHUB_REF_NAME}" \
+            > "${RUNNER_TEMP}/release-build.json"
+          jq '{release_version, supported_platforms: [.supported_platforms[].platform]}' \
+            "${RUNNER_TEMP}/release-build.json"
+
+      - name: Verify every release identity before publication
+        run: |
+          set -euo pipefail
+          go run ./cmd/goalrail-release verify \
+            --repo . \
+            --dist "${RUNNER_TEMP}/dist" \
+            --source-cache "${RUNNER_TEMP}/release-sources" \
+            --version "${GITHUB_REF_NAME}"
+          cat "${RUNNER_TEMP}/dist/checksums.txt"
 
       # `gh release create` with assets stages a draft, uploads everything, and
       # publishes last, so a failed upload leaves a draft rather than a partial
@@ -179,11 +204,17 @@ jobs:
           set -euo pipefail
           shopt -s nullglob
           dist="${RUNNER_TEMP}/dist"
-          archives=("${dist}"/gr_*.tar.gz)
+          minimal_archives=("${dist}"/gr_*.tar.gz)
+          setup_archives=("${dist}"/goalrail-setup_*.tar.gz)
+          setup_manifests=("${dist}"/goalrail-setup_*.manifest.json)
           # Publication happens only after every artifact exists. Counting them
           # here is what makes that a check rather than an assumption.
-          if [ "${#archives[@]}" -ne 4 ] || [ ! -f "${dist}/checksums.txt" ]; then
-            echo "expected four archives and a checksums file; found:" >&2
+          if [ "${#minimal_archives[@]}" -ne 4 ] \
+            || [ "${#setup_archives[@]}" -ne 4 ] \
+            || [ "${#setup_manifests[@]}" -ne 4 ] \
+            || [ ! -f "${dist}/current-release.json" ] \
+            || [ ! -f "${dist}/checksums.txt" ]; then
+            echo "expected four minimal archives, four setup archives, four setup manifests, current metadata, and checksums; found:" >&2
             ls -1 "${dist}" >&2
             exit 1
           fi
@@ -213,8 +244,12 @@ jobs:
 
           gh release create "${GITHUB_REF_NAME}" \
             --title "${GITHUB_REF_NAME}" \
-            --notes "Install: download the archive for your platform, verify it against \`checksums.txt\`, and put \`gr\` somewhere durable. The README's install section has the exact commands. Every binary here reports \`${GITHUB_REF_NAME}\` from \`gr version\`." \
-            "${archives[@]}" "${dist}/checksums.txt"
+            --notes "Install: use the minimal archive for a standalone \`gr\`, or the optional setup archive for the exact private Node/OpenSpec planning runtime. Verify every asset against \`checksums.txt\`; \`current-release.json\` carries the bounded machine-readable platform metadata. Every binary here reports \`${GITHUB_REF_NAME}\` from \`gr version\`." \
+            "${minimal_archives[@]}" \
+            "${setup_archives[@]}" \
+            "${setup_manifests[@]}" \
+            "${dist}/current-release.json" \
+            "${dist}/checksums.txt"
 
       # The module proxy is what `gr doctor` asks whether a newer release exists,
       # and it discovers a tag late when nobody asks — measured on this repository

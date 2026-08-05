@@ -186,6 +186,11 @@ func TestHelpDescribesLifecycleAndCommandFlagsWithoutService(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, fragment := range []string{
+		"init or migrate → doctor → exact setup consent",
+		"confirmed intent/change",
+		"lineage begin",
+		"Protected shared admission",
+		"independently verified",
 		"prepare → inspect → start → finish",
 		"gr help <command>",
 	} {
@@ -216,6 +221,52 @@ func TestHelpDescribesLifecycleAndCommandFlagsWithoutService(t *testing.T) {
 	}
 	if called {
 		t.Fatal("help constructed a service")
+	}
+}
+
+func TestPublicGovernanceCommandsExposeBuiltInFlagHelp(t *testing.T) {
+	factory := func(string) (runService, error) {
+		return nil, errors.New("service must not be constructed for governance help")
+	}
+	commands := [][]string{
+		{"migrate"},
+		{"setup", "plan"},
+		{"setup", "verify-plan"},
+		{"setup", "apply"},
+		{"setup", "rollback"},
+		{"lineage", "begin"},
+		{"lineage", "attach"},
+		{"lineage", "inspect"},
+		{"verify-lineage"},
+	}
+	for _, command := range commands {
+		variants := [][]string{
+			append(append([]string(nil), command...), "--help"),
+			append([]string{"help"}, command...),
+		}
+		for _, args := range variants {
+			t.Run(strings.Join(args, "_"), func(t *testing.T) {
+				var output bytes.Buffer
+				if err := run(
+					context.Background(), args, bytes.NewReader(nil), &output, &output, factory,
+				); err != nil {
+					t.Fatalf("%v: %v", args, err)
+				}
+				if !strings.Contains(output.String(), "usage:") && !strings.Contains(output.String(), "Usage of") {
+					t.Fatalf("%v did not print flag guidance: %s", args, output.String())
+				}
+			})
+		}
+	}
+
+	var topLevel bytes.Buffer
+	if err := writeHelp(&topLevel); err != nil {
+		t.Fatal(err)
+	}
+	for _, internal := range []string{"hook", "github-collect", "commit-msg"} {
+		if isCommand(internal) || strings.Contains(topLevel.String(), "  "+internal+" ") {
+			t.Fatalf("internal command %q is public", internal)
+		}
 	}
 }
 

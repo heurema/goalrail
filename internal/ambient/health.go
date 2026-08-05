@@ -43,12 +43,20 @@ const (
 // Pending trust matters most: it is the state that otherwise looks exactly like
 // a broken installation.
 type AttachmentState struct {
+	ClaimState  string     `json:"claim_state"`
+	ClaimReason string     `json:"claim_reason,omitempty"`
+	ClaimDetail string     `json:"claim_detail,omitempty"`
 	Scaffold    Scaffold   `json:"scaffold"`
 	Connected   bool       `json:"connected"`
 	Initialized bool       `json:"initialized"`
+	Managed     bool       `json:"managed"`
+	ProjectID   string     `json:"project_id,omitempty"`
 	Trust       TrustState `json:"trust"`
 	Working     bool       `json:"working"`
-	NextAction  string     `json:"next_action,omitempty"`
+	// EnforcementScope makes the local boundary explicit: a healthy hook is
+	// advisory attachment evidence, never proof of protected shared admission.
+	EnforcementScope string `json:"enforcement_scope"`
+	NextAction       string `json:"next_action,omitempty"`
 
 	// Unverifiable names what this report could not establish. A health command
 	// that hides its own blind spots is worse than none, because a green result
@@ -199,17 +207,36 @@ func SupersededEventNotice(scaffold Scaffold, replaced []string) string {
 // working attachment as absent — a confident wrong answer, which is worse than
 // none.
 func Inspect(scaffold Scaffold, home, repositoryRoot string) (AttachmentState, error) {
+	return inspectAttachmentState(scaffold, home, repositoryRoot, IsInitialized(repositoryRoot), "")
+}
+
+// InspectForProject judges attachment health for an already validated committed
+// project identity. The caller must establish that identity before invoking
+// this function; doing so keeps this package free of project-discovery cycles
+// and prevents a checkout-local marker from deciding managed state.
+func InspectForProject(scaffold Scaffold, home, repositoryRoot, projectID string) (AttachmentState, error) {
+	return inspectAttachmentState(scaffold, home, repositoryRoot, true, projectID)
+}
+
+func inspectAttachmentState(scaffold Scaffold, home, repositoryRoot string, managed bool, projectID string) (AttachmentState, error) {
 	target, err := RegistrationTarget(scaffold, home, repositoryRoot)
 	if err != nil {
 		return AttachmentState{}, err
 	}
 	configPath := target.Path
 	state := AttachmentState{
-		Scaffold:    scaffold,
-		Initialized: IsInitialized(repositoryRoot),
-		Trust:       TrustUnknown,
-		ConfigPath:  configPath,
-		Repository:  repositoryRoot,
+		ClaimState:       "unmanaged",
+		Scaffold:         scaffold,
+		Initialized:      managed,
+		Managed:          managed,
+		ProjectID:        projectID,
+		Trust:            TrustUnknown,
+		EnforcementScope: "local_advisory_only",
+		ConfigPath:       configPath,
+		Repository:       repositoryRoot,
+	}
+	if managed {
+		state.ClaimState = "managed"
 	}
 
 	connected, connectErr := isConnected(scaffold, configPath)
@@ -230,7 +257,7 @@ func Inspect(scaffold Scaffold, home, repositoryRoot string) (AttachmentState, e
 	switch {
 	case !state.Connected:
 		state.NextAction = registrationAction(scaffold)
-	case !state.Initialized:
+	case !state.Managed:
 		state.NextAction = "run `gr init` in this repository"
 	case state.Trust == TrustPending:
 		state.NextAction = TrustSurface(scaffold)

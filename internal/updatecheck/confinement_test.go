@@ -24,19 +24,23 @@ import (
 // handed to the diagnosis as a value, constructed in one place; these tests pin
 // both halves.
 
-// TestOnlyTheTransportPackageImportsAnHTTPClient pins the first half at the
-// granularity Go actually has.
+// TestOnlyTheTransportPackagesImportAnHTTPClient pins the first half at the
+// granularity Go actually has. The GitHub admission adapter is the second
+// explicit read-only transport boundary; the pure admission core, setup,
+// project, and command packages still cannot construct HTTP requests.
 func TestOnlyTheTransportPackageImportsAnHTTPClient(t *testing.T) {
 	importers := packagesImporting(t, "net/http")
 	for _, importer := range importers {
 		switch importer {
 		case "internal/updatecheck":
-			// This package. The one that may.
-		case "internal/adapters/langfuse", "cmd/goalrail-canary":
-			// The separate canary binary and its read-only telemetry client,
-			// neither of which `gr` links.
+			// Anonymous release metadata reads.
+		case "internal/githubadmission":
+			// Authenticated read-only pull-request and protection observations.
+		case "internal/adapters/langfuse", "cmd/goalrail-canary", "cmd/goalrail-release":
+			// The separate canary and release binaries and the read-only
+			// telemetry client, none of which `gr` links.
 		default:
-			t.Errorf("%s imports net/http; the transport belongs in internal/updatecheck alone", importer)
+			t.Errorf("%s imports net/http; transport is confined to updatecheck and githubadmission", importer)
 		}
 	}
 }

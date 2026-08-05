@@ -393,8 +393,9 @@ func dogfoodServiceFixture(
 	if err != nil {
 		t.Fatal(err)
 	}
+	service.authority = &fixtureManagedAuthorityVerifier{}
 	service.now = fixedClock()
-	return service, fixtureWorkSpec(resolvedRoot, revision), store
+	return service, managedFixtureWorkSpec(fixtureWorkSpec(resolvedRoot, revision)), store
 }
 
 func validDogfoodAdmission(

@@ -12,7 +12,8 @@ import (
 	"testing"
 
 	"github.com/heurema/goalrail/internal/ambient"
-	"github.com/heurema/goalrail/internal/harness"
+	projectdoctor "github.com/heurema/goalrail/internal/doctor"
+	projectstate "github.com/heurema/goalrail/internal/project"
 	"github.com/heurema/goalrail/internal/review"
 )
 
@@ -76,13 +77,13 @@ func doctorExitCode(err error) int {
 	return -1
 }
 
-func doctorThroughDispatcher(t *testing.T, terminal io.Reader, root, stateRoot string) (harness.Diagnosis, int) {
+func doctorThroughDispatcher(t *testing.T, terminal io.Reader, root, stateRoot string) (projectdoctor.Diagnosis, int) {
 	t.Helper()
 	stdout, _, err := runThroughDispatcher(t, terminal,
 		"doctor", "--repo", root, "--state-dir", stateRoot,
 		"--scaffold", "claude-code", "--json",
 	)
-	var diagnosis harness.Diagnosis
+	var diagnosis projectdoctor.Diagnosis
 	if decodeErr := json.Unmarshal(stdout, &diagnosis); decodeErr != nil {
 		t.Fatalf("doctor did not return JSON: %v\n%s", decodeErr, stdout)
 	}
@@ -102,12 +103,12 @@ func TestPublicReviewFlowNeedsNoTerminalAndKeepsDoctorAdvisory(t *testing.T) {
 	terminal := &forbiddenTerminal{}
 
 	initialized, _, err := runThroughDispatcher(t, terminal,
-		"init", "--repo", root, "--scaffold", "claude-code", "--fix-gitignore",
+		"init", "--repo", root, "--scaffold", "claude-code",
 	)
 	if err != nil {
 		t.Fatalf("init: %v", err)
 	}
-	var initResult initReport
+	var initResult projectstate.InitializeReport
 	if err := json.Unmarshal(initialized, &initResult); err != nil {
 		t.Fatalf("init did not return JSON: %v\n%s", err, initialized)
 	}

@@ -1,0 +1,797 @@
+package admission
+
+import (
+	"encoding/json"
+	"fmt"
+	"sort"
+	"strings"
+	"time"
+
+	"github.com/heurema/goalrail/internal/domain"
+)
+
+const VerifierVersion = "goalrail-admission-v1"
+
+const (
+	ExitAllowed = 0
+	ExitDenied  = 3
+)
+
+// ChangedPath is frozen Git object data. It contains no checkout-local path,
+// wall-clock value, provider response, or mutable ref.
+type ChangedPath struct {
+	Path         string            `json:"path"`
+	PreviousPath string            `json:"previous_path,omitempty"`
+	Kind         domain.ChangeKind `json:"kind"`
+	OldMode      string            `json:"old_mode"`
+	NewMode      string            `json:"new_mode"`
+	OldObject    string            `json:"old_object"`
+	NewObject    string            `json:"new_object"`
+	Commits      []string          `json:"commits"`
+}
+
+// FrozenRange is the complete deterministic input collected from explicit Git
+// commits. Base governance is authoritative; head governance is validated but
+// never used to weaken evaluation of its own range.
+type FrozenRange struct {
+	BaseRevision          string
+	HeadRevision          string
+	BaseDeclaration       *domain.ProjectDeclaration
+	BaseDeclarationDigest domain.SHA256Digest
+	BasePolicy            *domain.ProjectPolicy
+	BasePolicyDigest      domain.SHA256Digest
+	BaseGovernanceInvalid bool
+	HeadDeclaration       *domain.ProjectDeclaration
+	HeadDeclarationDigest domain.SHA256Digest
+	HeadPolicy            *domain.ProjectPolicy
+	HeadPolicyDigest      domain.SHA256Digest
+	HeadGovernanceInvalid bool
+	Changes               []ChangedPath
+	Commits               []string
+	Graph                 WorkUnitGraph
+}
+
+type Input struct {
+	Range  FrozenRange
+	Packet domain.AdmissionPacket
+}
+
+type PathDecision struct {
+	Path                  string
+	Kind                  domain.ChangeKind
+	Classification        domain.MaterialityClassification
+	RuleIDs               []domain.PolicyRuleID
+	RequiredEvidenceKinds []string
+}
+
+type PolicyEvaluation struct {
+	Decisions             []PathDecision
+	MaterialPaths         []string
+	EvidencePaths         []string
+	RequiredEvidenceKinds []string
+	ConflictRefs          []string
+}
+
+type exceptionEnvelope struct {
+	Schema       string                `json:"schema"`
+	AuthorityID  string                `json:"authority_id"`
+	Class        domain.ExceptionClass `json:"class"`
+	ActorRef     string                `json:"actor_ref"`
+	PathPrefixes []string              `json:"path_prefixes"`
+	EffectScopes []string              `json:"effect_scopes"`
+	IssuedAt     time.Time             `json:"issued_at"`
+	ExpiresAt    time.Time             `json:"expires_at"`
+}
+
+// Verify evaluates only its explicit input. It does not read environment,
+// filesystem, network, credentials, clocks, refs, or provider state.
+func Verify(input Input) (domain.AdmissionResult, error) {
+	packet := input.Packet
+	if err := domain.ValidateAdmissionPacket(packet); err != nil {
+		return domain.AdmissionResult{}, fmt.Errorf("validate admission packet: %w", err)
+	}
+	result := baseResult(packet)
+	if packet.BaseRevision != input.Range.BaseRevision || packet.HeadRevision != input.Range.HeadRevision {
+		return deny(result, domain.AdmissionInvalid, domain.ReasonRangeMismatch, "packet:range"), nil
+	}
+
+	declaration, declarationDigest, policy, policyDigest, bootstrap, authorityReason := resolveAuthority(input.Range)
+	if authorityReason != "" {
+		return deny(result, domain.AdmissionInvalid, authorityReason, "repo:root/.goalrail/project.json"), nil
+	}
+	result.ProjectID = declaration.ProjectID
+	result.PolicyDigest = policyDigest
+	if packet.ProjectID != declaration.ProjectID || packet.DeclarationDigest != declarationDigest || packet.PolicyDigest != policyDigest {
+		return deny(result, domain.AdmissionInvalid, domain.ReasonDeclarationInvalid, "packet:authority"), nil
+	}
+
+	policyEvaluation := EvaluatePolicy(*policy, input.Range.Changes)
+	result.MaterialPaths = policyEvaluation.MaterialPaths
+	if len(policyEvaluation.ConflictRefs) > 0 {
+		result.Classification = domain.AdmissionAmbiguous
+		result.Outcome = domain.AdmissionDeny
+		result.Reasons = []domain.AdmissionReason{{Code: domain.ReasonPolicyConflict, EvidenceRefs: policyEvaluation.ConflictRefs}}
+		result.ConflictRefs = policyEvaluation.ConflictRefs
+		return result, nil
+	}
+
+	if reason, refs := verifyGraphBinding(input.Range.Graph, packet, input.Range.Commits, input.Range.Changes, policyEvaluation.MaterialPaths, declarationDigest, policyDigest); reason != "" {
+		classification := domain.AdmissionInvalid
+		if reason == domain.ReasonLineageConflict {
+			classification = domain.AdmissionAmbiguous
+		}
+		return denyMany(result, classification, reason, refs), nil
+	}
+	if ownerDecisionPresent, ownerDecisionAllowed := ownerDecisionAuthorized(input.Range.Graph, *policy); ownerDecisionPresent && !ownerDecisionAllowed {
+		return deny(result, domain.AdmissionInvalid, domain.ReasonOwnerDecisionMissing, "lineage:owner_decision"), nil
+	}
+	if reason, refs := verifyPacketEvidence(input.Range.Graph, packet); reason != "" {
+		classification := domain.AdmissionInvalid
+		if reason == domain.ReasonMaterialPathUnbound || reason == domain.ReasonTrustedTimeMissing {
+			classification = domain.AdmissionMissing
+		} else if reason == domain.ReasonLineageConflict {
+			classification = domain.AdmissionAmbiguous
+		}
+		return denyMany(result, classification, reason, refs), nil
+	}
+
+	missingKinds := missingEvidenceKinds(policyEvaluation.RequiredEvidenceKinds, input.Range.Graph, packet)
+	if len(missingKinds) > 0 {
+		refs := make([]string, 0, len(missingKinds))
+		for _, kind := range missingKinds {
+			refs = append(refs, "evidence-kind:"+kind)
+		}
+		return denyMany(result, domain.AdmissionMissing, domain.ReasonGeneratedEvidenceMissing, refs), nil
+	}
+
+	evaluatedAt := input.Range.Graph.Unit.CreatedAt.UTC()
+	if packet.EvaluationTime != nil {
+		evaluatedAt = packet.EvaluationTime.UTC()
+	}
+	completeness, err := EvaluateCompleteness(input.Range.Graph, evaluatedAt)
+	if err != nil {
+		return deny(result, domain.AdmissionInvalid, domain.ReasonPacketInvalid, "lineage:exception"), nil
+	}
+	if len(completeness.ExpiredExceptions) > 0 {
+		refs := digestsToRefs(completeness.ExpiredExceptions)
+		return denyMany(result, domain.AdmissionInvalid, domain.ReasonExceptionExpired, refs), nil
+	}
+	if len(completeness.Ambiguous) > 0 {
+		refs := graphConflictRefs(input.Range.Graph)
+		return denyMany(result, domain.AdmissionAmbiguous, domain.ReasonLineageConflict, refs), nil
+	}
+
+	exceptionClass, exceptionAllowed, exceptionObserved := authorizedException(input.Range.Graph, *policy, result.MaterialPaths, evaluatedAt)
+	if exceptionAllowed {
+		if !hasRelation(input.Range.Graph, domain.LineageOwnerDecision) {
+			return deny(result, domain.AdmissionMissing, domain.ReasonOwnerDecisionMissing, "lineage:owner_decision"), nil
+		}
+		if !exceptionMayBypass(completeness.Missing) {
+			reason, refs := missingLineageReason(completeness.Missing)
+			return denyMany(result, domain.AdmissionMissing, reason, refs), nil
+		}
+		result.Classification = admissionClass(exceptionClass)
+		result.Outcome = domain.AdmissionAllow
+		result.Reasons = []domain.AdmissionReason{{Code: domain.ReasonExceptionApplied, EvidenceRefs: []string{"lineage:exception"}}}
+		return result, nil
+	}
+	if exceptionObserved {
+		return deny(result, domain.AdmissionInvalid, domain.ReasonExceptionScopeMismatch, "lineage:exception"), nil
+	}
+
+	admissionMissing := withoutClosure(completeness.Missing)
+	if len(admissionMissing) > 0 || len(completeness.Unavailable) > 0 {
+		missing := append([]domain.LineageRelation(nil), admissionMissing...)
+		missing = append(missing, completeness.Unavailable...)
+		reason, refs := missingLineageReason(uniqueRelations(missing))
+		return denyMany(result, domain.AdmissionMissing, reason, refs), nil
+	}
+	if completeness.Lifecycle != domain.WorkUnitAdmissionReady && completeness.Lifecycle != domain.WorkUnitClosed {
+		return deny(result, domain.AdmissionMissing, domain.ReasonMaterialPathUnbound, "lineage:lifecycle"), nil
+	}
+	if bootstrap {
+		result.Classification = domain.AdmissionBootstrap
+		result.Outcome = domain.AdmissionAllow
+		result.Reasons = []domain.AdmissionReason{{Code: domain.ReasonBootstrapRange, EvidenceRefs: []string{"git:head/" + packet.HeadRevision}}}
+		return result, nil
+	}
+	result.Classification = domain.AdmissionValid
+	result.Outcome = domain.AdmissionAllow
+	return result, nil
+}
+
+// CanonicalResult is the single output/exit contract used by local and shared
+// entrypoints. The trailing newline is part of the public CLI representation.
+func CanonicalResult(result domain.AdmissionResult) ([]byte, int, error) {
+	artifact, err := domain.FreezeAdmissionResult(result)
+	if err != nil {
+		return nil, 0, err
+	}
+	encoded := append(artifact.CanonicalJSON(), '\n')
+	if result.Outcome == domain.AdmissionAllow {
+		return encoded, ExitAllowed, nil
+	}
+	return encoded, ExitDenied, nil
+}
+
+func EvaluatePolicy(policy domain.ProjectPolicy, changes []ChangedPath) PolicyEvaluation {
+	result := PolicyEvaluation{}
+	required := make(map[string]struct{})
+	material := make(map[string]struct{})
+	evidence := make(map[string]struct{})
+	conflicts := make(map[string]struct{})
+	for _, change := range changes {
+		paths := []string{change.Path}
+		if change.PreviousPath != "" && change.PreviousPath != change.Path {
+			paths = append(paths, change.PreviousPath)
+		}
+		for _, path := range paths {
+			decision := evaluatePath(policy, path, change.Kind)
+			result.Decisions = append(result.Decisions, decision)
+			if len(decision.RuleIDs) > 1 {
+				for _, id := range decision.RuleIDs {
+					conflicts["policy-rule:"+string(id)] = struct{}{}
+				}
+				continue
+			}
+			switch decision.Classification {
+			case domain.MaterialityEvidence:
+				evidence[path] = struct{}{}
+			case domain.MaterialityGenerated:
+				for _, kind := range decision.RequiredEvidenceKinds {
+					required[kind] = struct{}{}
+				}
+			case domain.MaterialityNonMaterial:
+			default:
+				material[path] = struct{}{}
+				for _, kind := range decision.RequiredEvidenceKinds {
+					required[kind] = struct{}{}
+				}
+			}
+		}
+	}
+	result.MaterialPaths = sortedKeys(material)
+	result.EvidencePaths = sortedKeys(evidence)
+	result.RequiredEvidenceKinds = sortedKeys(required)
+	result.ConflictRefs = sortedKeys(conflicts)
+	sort.Slice(result.Decisions, func(i, j int) bool {
+		if result.Decisions[i].Path != result.Decisions[j].Path {
+			return result.Decisions[i].Path < result.Decisions[j].Path
+		}
+		return result.Decisions[i].Kind < result.Decisions[j].Kind
+	})
+	return result
+}
+
+func evaluatePath(policy domain.ProjectPolicy, path string, kind domain.ChangeKind) PathDecision {
+	decision := PathDecision{Path: path, Kind: kind, Classification: domain.MaterialityMaterial}
+	priority := -1
+	for _, rule := range policy.Rules {
+		if !ruleMatches(rule, path, kind) {
+			continue
+		}
+		if rule.Priority > priority {
+			priority = rule.Priority
+			decision.Classification = rule.Classification
+			decision.RequiredEvidenceKinds = append([]string(nil), rule.RequiredEvidenceKinds...)
+			decision.RuleIDs = []domain.PolicyRuleID{rule.ID}
+		} else if rule.Priority == priority {
+			decision.RuleIDs = append(decision.RuleIDs, rule.ID)
+		}
+	}
+	sort.Slice(decision.RuleIDs, func(i, j int) bool { return decision.RuleIDs[i] < decision.RuleIDs[j] })
+	sort.Strings(decision.RequiredEvidenceKinds)
+	return decision
+}
+
+func ruleMatches(rule domain.PolicyPathRule, path string, kind domain.ChangeKind) bool {
+	kindMatch := false
+	for _, allowed := range rule.ChangeKinds {
+		if allowed == kind {
+			kindMatch = true
+			break
+		}
+	}
+	if !kindMatch {
+		return false
+	}
+	switch rule.Matcher.Kind {
+	case domain.PathMatcherExact:
+		return path == rule.Matcher.Path
+	case domain.PathMatcherPrefix:
+		return path == rule.Matcher.Path || strings.HasPrefix(path, strings.TrimSuffix(rule.Matcher.Path, "/")+"/")
+	default:
+		return false
+	}
+}
+
+func resolveAuthority(frozen FrozenRange) (*domain.ProjectDeclaration, domain.SHA256Digest, *domain.ProjectPolicy, domain.SHA256Digest, bool, domain.AdmissionReasonCode) {
+	if frozen.HeadGovernanceInvalid || frozen.HeadDeclaration == nil || frozen.HeadPolicy == nil || !validGovernance(*frozen.HeadDeclaration, frozen.HeadDeclarationDigest, *frozen.HeadPolicy, frozen.HeadPolicyDigest) {
+		return nil, "", nil, "", false, domain.ReasonDeclarationInvalid
+	}
+	if frozen.BaseDeclaration == nil {
+		if frozen.BaseGovernanceInvalid {
+			return nil, "", nil, "", false, domain.ReasonPolicyConflict
+		}
+		return frozen.HeadDeclaration, frozen.HeadDeclarationDigest, frozen.HeadPolicy, frozen.HeadPolicyDigest, true, ""
+	}
+	if frozen.BaseGovernanceInvalid || frozen.BasePolicy == nil || !validGovernance(*frozen.BaseDeclaration, frozen.BaseDeclarationDigest, *frozen.BasePolicy, frozen.BasePolicyDigest) {
+		return nil, "", nil, "", false, domain.ReasonPolicyConflict
+	}
+	return frozen.BaseDeclaration, frozen.BaseDeclarationDigest, frozen.BasePolicy, frozen.BasePolicyDigest, false, ""
+}
+
+func validGovernance(declaration domain.ProjectDeclaration, declarationDigest domain.SHA256Digest, policy domain.ProjectPolicy, policyDigest domain.SHA256Digest) bool {
+	frozenDeclaration, err := domain.FreezeProjectDeclaration(declaration)
+	if err != nil || frozenDeclaration.Digest() != declarationDigest {
+		return false
+	}
+	frozenPolicy, err := domain.FreezeProjectPolicy(policy)
+	return err == nil && frozenPolicy.Digest() == policyDigest && declaration.Policy.Digest == policyDigest && policy.ProjectID == declaration.ProjectID
+}
+
+func verifyGraphBinding(graph WorkUnitGraph, packet domain.AdmissionPacket, commits []string, changes []ChangedPath, materialPaths []string, declarationDigest, policyDigest domain.SHA256Digest) (domain.AdmissionReasonCode, []string) {
+	unitArtifact, err := domain.FreezeWorkUnit(graph.Unit)
+	if err != nil || unitArtifact.Digest() != packet.WorkUnitRef.Digest || packet.WorkUnitRef.Identity != "work-unit:"+string(graph.Unit.ID) {
+		return domain.ReasonChangeMismatch, []string{"packet:work-unit"}
+	}
+	if graph.Unit.ProjectID != packet.ProjectID || graph.Unit.DeclarationDigest != declarationDigest || graph.Unit.PolicyDigest != policyDigest {
+		return domain.ReasonDeclarationInvalid, []string{"lineage:work-unit"}
+	}
+	if !hasRequiredSpine(graph.Unit.RequiredRelations) {
+		return domain.ReasonPacketInvalid, []string{"lineage:required-relations"}
+	}
+	if graph.Unit.IntentRef.ArtifactKind != "intent" {
+		return domain.ReasonIntentUnconfirmed, []string{"lineage:confirmed_intent"}
+	}
+	if graph.Unit.ChangeRef.ArtifactKind != "change" {
+		return domain.ReasonChangeMismatch, []string{"lineage:change"}
+	}
+	if !relationTargets(graph, domain.LineageConfirmedIntent, graph.Unit.IntentRef) || !relationTargets(graph, domain.LineageChange, graph.Unit.ChangeRef) {
+		return domain.ReasonLineageConflict, []string{string(graph.Unit.IntentRef.Digest), string(graph.Unit.ChangeRef.Digest)}
+	}
+	for _, event := range graph.Events {
+		if !containsEvidenceReference(event.Sources, packet.WorkUnitRef) {
+			return domain.ReasonPacketInvalid, []string{"lineage:source-binding"}
+		}
+	}
+	if ok, refs := graphCommitSetMatches(graph, commits, changes, materialPaths); !ok {
+		return domain.ReasonChangeMismatch, refs
+	}
+	if len(graph.Conflicts) > 0 {
+		return domain.ReasonLineageConflict, graphConflictRefs(graph)
+	}
+	return "", nil
+}
+
+func hasRequiredSpine(requirements []domain.LineageRequirement) bool {
+	want := RequiredSpine()
+	if len(requirements) != len(want) {
+		return false
+	}
+	actual := make(map[domain.LineageRelation]domain.RelationCardinality, len(requirements))
+	for _, requirement := range requirements {
+		actual[requirement.Relation] = requirement.Cardinality
+	}
+	for _, requirement := range want {
+		if actual[requirement.Relation] != requirement.Cardinality {
+			return false
+		}
+	}
+	return true
+}
+
+func verifyPacketEvidence(graph WorkUnitGraph, packet domain.AdmissionPacket) (domain.AdmissionReasonCode, []string) {
+	if hasRelation(graph, domain.LineageException) && !hasTrustedEvaluationTime(packet) {
+		return domain.ReasonTrustedTimeMissing, []string{"packet:evaluation-time"}
+	}
+	packetRefs := make(map[string]domain.ContentAddressedEvidenceReference, len(packet.Evidence))
+	for _, reference := range packet.Evidence {
+		if previous, exists := packetRefs[reference.Identity]; exists && previous != reference {
+			return domain.ReasonLineageConflict, []string{string(previous.Digest), string(reference.Digest)}
+		}
+		packetRefs[reference.Identity] = reference
+	}
+	provenance := make(map[string]domain.AdmissionProviderProvenance)
+	for _, item := range packet.Provenance {
+		key := item.AdapterID + "\x00" + string(item.EvidenceDigest)
+		provenance[key] = item
+	}
+	for _, event := range graph.Events {
+		for _, reference := range event.Targets {
+			if trustedWithoutPacket(reference, packet) {
+				continue
+			}
+			claimed, ok := packetRefs[reference.Identity]
+			if !ok {
+				return domain.ReasonMaterialPathUnbound, []string{reference.Identity}
+			}
+			if claimed != reference {
+				return domain.ReasonPacketInvalid, []string{reference.Identity}
+			}
+			item, ok := provenance[reference.AdapterID+"\x00"+string(reference.Digest)]
+			if !ok || !item.Authenticated || item.ObservedAt.After(packet.EvaluationTime.UTC()) {
+				return domain.ReasonProvenanceUntrusted, []string{reference.Identity}
+			}
+		}
+	}
+	return "", nil
+}
+
+func hasTrustedEvaluationTime(packet domain.AdmissionPacket) bool {
+	if packet.EvaluationTime == nil || packet.TimeAuthorityRef == "" {
+		return false
+	}
+	for _, item := range packet.Provenance {
+		if item.Authenticated && item.ProviderRef == packet.TimeAuthorityRef && !item.ObservedAt.After(packet.EvaluationTime.UTC()) {
+			return true
+		}
+	}
+	return false
+}
+
+func trustedWithoutPacket(reference domain.ContentAddressedEvidenceReference, packet domain.AdmissionPacket) bool {
+	if strings.HasPrefix(reference.SourceRef, "repo:root/") || reference.ArtifactKind == "commit" {
+		return true
+	}
+	if strings.HasPrefix(reference.SourceRef, "git:") {
+		return (reference.ArtifactKind == "project_declaration" && reference.Digest == packet.DeclarationDigest) ||
+			(reference.ArtifactKind == "project_policy" && reference.Digest == packet.PolicyDigest)
+	}
+	return false
+}
+
+func missingEvidenceKinds(required []string, graph WorkUnitGraph, packet domain.AdmissionPacket) []string {
+	present := make(map[string]struct{})
+	for _, reference := range packet.Evidence {
+		present[reference.ArtifactKind] = struct{}{}
+	}
+	for _, event := range graph.Events {
+		for _, reference := range event.Targets {
+			present[reference.ArtifactKind] = struct{}{}
+		}
+	}
+	var missing []string
+	for _, kind := range required {
+		if _, ok := present[kind]; !ok {
+			missing = append(missing, kind)
+		}
+	}
+	return missing
+}
+
+func authorizedException(graph WorkUnitGraph, policy domain.ProjectPolicy, materialPaths []string, evaluatedAt time.Time) (domain.ExceptionClass, bool, bool) {
+	observed := false
+	for _, event := range graph.Events {
+		if event.Relation != domain.LineageException {
+			continue
+		}
+		for _, target := range event.Targets {
+			raw := graph.Replicas[target.Digest]
+			if len(raw) == 0 {
+				continue
+			}
+			var envelope exceptionEnvelope
+			if json.Unmarshal(raw, &envelope) != nil || envelope.Schema != LineageExceptionSchemaV1 || envelope.ExpiresAt.IsZero() || !evaluatedAt.Before(envelope.ExpiresAt.UTC()) {
+				continue
+			}
+			observed = true
+			for _, authority := range policy.ExceptionAuthorities {
+				if authority.ID != envelope.AuthorityID || authority.Class != envelope.Class || !contains(authority.ActorRefs, envelope.ActorRef) || !contains(authority.ActorRefs, event.ActorRef) {
+					continue
+				}
+				if envelope.IssuedAt.IsZero() || envelope.ExpiresAt.Before(envelope.IssuedAt) || envelope.ExpiresAt.Sub(envelope.IssuedAt) > time.Duration(authority.MaxDurationSeconds)*time.Second {
+					continue
+				}
+				if !subset(envelope.EffectScopes, authority.EffectScopes) || !pathsCovered(materialPaths, authority.PathPrefixes) || !pathsCovered(materialPaths, envelope.PathPrefixes) {
+					continue
+				}
+				return envelope.Class, true, true
+			}
+		}
+	}
+	return "", false, observed
+}
+
+func ownerDecisionAuthorized(graph WorkUnitGraph, policy domain.ProjectPolicy) (bool, bool) {
+	if !policy.OwnerDecision.Required {
+		return false, true
+	}
+	present := false
+	for _, event := range graph.Events {
+		if event.Relation != domain.LineageOwnerDecision {
+			continue
+		}
+		present = true
+		if contains(policy.OwnerDecision.AuthorityRefs, event.ActorRef) && len(event.Targets) == 1 {
+			return true, true
+		}
+	}
+	return present, false
+}
+
+func exceptionMayBypass(missing []domain.LineageRelation) bool {
+	for _, relation := range missing {
+		switch relation {
+		case domain.LineageRunSession, domain.LineagePullRequest, domain.LineageReviewIndex,
+			domain.LineageCheckSet, domain.LineageTerminalReceipt, domain.LineageClosure:
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func admissionClass(class domain.ExceptionClass) domain.AdmissionClassification {
+	switch class {
+	case domain.ExceptionExempted:
+		return domain.AdmissionExempted
+	case domain.ExceptionBreakGlass:
+		return domain.AdmissionBreakGlass
+	default:
+		return domain.AdmissionBootstrap
+	}
+}
+
+func baseResult(packet domain.AdmissionPacket) domain.AdmissionResult {
+	return domain.AdmissionResult{
+		Schema: domain.AdmissionResultSchemaV1, ProjectID: packet.ProjectID, PolicyDigest: packet.PolicyDigest,
+		BaseRevision: packet.BaseRevision, HeadRevision: packet.HeadRevision,
+		MaterialPaths: []string{}, WorkUnitRef: packet.WorkUnitRef,
+		Classification: domain.AdmissionInvalid, Outcome: domain.AdmissionDeny,
+		Reasons: []domain.AdmissionReason{}, MissingRefs: []string{}, ConflictRefs: []string{},
+		VerifierVersion: VerifierVersion,
+	}
+}
+
+func deny(result domain.AdmissionResult, classification domain.AdmissionClassification, reason domain.AdmissionReasonCode, reference string) domain.AdmissionResult {
+	return denyMany(result, classification, reason, []string{reference})
+}
+
+func denyMany(result domain.AdmissionResult, classification domain.AdmissionClassification, reason domain.AdmissionReasonCode, references []string) domain.AdmissionResult {
+	refs := uniqueStrings(references)
+	sort.Strings(refs)
+	result.Classification = classification
+	result.Outcome = domain.AdmissionDeny
+	result.Reasons = []domain.AdmissionReason{{Code: reason, EvidenceRefs: refs}}
+	if classification == domain.AdmissionMissing {
+		result.MissingRefs = refs
+	}
+	if classification == domain.AdmissionAmbiguous {
+		result.ConflictRefs = refs
+	}
+	return result
+}
+
+func uniqueStrings(values []string) []string {
+	set := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		set[value] = struct{}{}
+	}
+	result := make([]string, 0, len(set))
+	for value := range set {
+		result = append(result, value)
+	}
+	return result
+}
+
+func relationTargets(graph WorkUnitGraph, relation domain.LineageRelation, reference domain.ContentAddressedEvidenceReference) bool {
+	for _, event := range graph.Events {
+		if event.Relation != relation {
+			continue
+		}
+		for _, target := range event.Targets {
+			if target == reference {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func containsEvidenceReference(values []domain.ContentAddressedEvidenceReference, want domain.ContentAddressedEvidenceReference) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
+func graphCommitSetMatches(graph WorkUnitGraph, revisions []string, changes []ChangedPath, materialPaths []string) (bool, []string) {
+	allowed := make(map[string]struct{}, len(revisions))
+	for _, revision := range revisions {
+		allowed[revision] = struct{}{}
+	}
+	seen := false
+	linked := make(map[string]struct{})
+	var invalid []string
+	for _, event := range graph.Events {
+		if event.Relation != domain.LineageCommit {
+			continue
+		}
+		for _, target := range event.Targets {
+			if target.ArtifactKind != "commit" {
+				invalid = append(invalid, target.Identity)
+				continue
+			}
+			revision := strings.TrimPrefix(target.Identity, "git-commit:")
+			if revision == target.Identity {
+				revision = strings.TrimPrefix(target.SourceRef, "git:commit/")
+			}
+			if revision == target.SourceRef {
+				revision = strings.TrimPrefix(target.SourceRef, "git:")
+			}
+			if _, ok := allowed[revision]; !ok {
+				invalid = append(invalid, "git:commit/"+revision)
+				continue
+			}
+			seen = true
+			linked[revision] = struct{}{}
+		}
+	}
+	material := make(map[string]struct{}, len(materialPaths))
+	for _, path := range materialPaths {
+		material[path] = struct{}{}
+	}
+	for _, change := range changes {
+		_, pathMaterial := material[change.Path]
+		_, previousMaterial := material[change.PreviousPath]
+		if !pathMaterial && !previousMaterial {
+			continue
+		}
+		for _, revision := range change.Commits {
+			if _, ok := linked[revision]; !ok {
+				invalid = append(invalid, "git:commit/"+revision)
+			}
+		}
+	}
+	if !seen && len(invalid) == 0 {
+		invalid = append(invalid, "lineage:commit")
+	}
+	sort.Strings(invalid)
+	return seen && len(invalid) == 0, invalid
+}
+
+func hasRelation(graph WorkUnitGraph, relation domain.LineageRelation) bool {
+	for _, event := range graph.Events {
+		if event.Relation == relation && len(event.Targets) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func missingLineageReason(relations []domain.LineageRelation) (domain.AdmissionReasonCode, []string) {
+	sort.Slice(relations, func(i, j int) bool { return relations[i] < relations[j] })
+	reason := domain.ReasonMaterialPathUnbound
+	for _, preferred := range []domain.LineageRelation{
+		domain.LineageProjectPolicy, domain.LineageConfirmedIntent, domain.LineageChange,
+		domain.LineageWorkSpec, domain.LineageRunSession, domain.LineageCommit,
+		domain.LineagePullRequest, domain.LineageReviewIndex, domain.LineageCheckSet,
+		domain.LineageTerminalReceipt, domain.LineageOwnerDecision,
+	} {
+		if !containsRelation(relations, preferred) {
+			continue
+		}
+		switch preferred {
+		case domain.LineageConfirmedIntent:
+			reason = domain.ReasonIntentUnconfirmed
+		case domain.LineageChange, domain.LineageCommit:
+			reason = domain.ReasonChangeMismatch
+		case domain.LineageWorkSpec:
+			reason = domain.ReasonWorkSpecMissing
+		case domain.LineageRunSession:
+			reason = domain.ReasonRunSessionMissing
+		case domain.LineagePullRequest:
+			reason = domain.ReasonPullRequestMissing
+		case domain.LineageReviewIndex:
+			reason = domain.ReasonReviewMissing
+		case domain.LineageCheckSet:
+			reason = domain.ReasonCheckMissing
+		case domain.LineageTerminalReceipt:
+			reason = domain.ReasonReceiptMissing
+		case domain.LineageOwnerDecision:
+			reason = domain.ReasonOwnerDecisionMissing
+		case domain.LineageProjectPolicy:
+			reason = domain.ReasonDeclarationInvalid
+		}
+		break
+	}
+	refs := make([]string, len(relations))
+	for index, relation := range relations {
+		refs[index] = "lineage:" + string(relation)
+	}
+	return reason, refs
+}
+
+func withoutClosure(values []domain.LineageRelation) []domain.LineageRelation {
+	result := make([]domain.LineageRelation, 0, len(values))
+	for _, value := range values {
+		if value != domain.LineageClosure {
+			result = append(result, value)
+		}
+	}
+	return result
+}
+
+func containsRelation(values []domain.LineageRelation, want domain.LineageRelation) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
+func graphConflictRefs(graph WorkUnitGraph) []string {
+	var refs []string
+	for _, conflict := range graph.Conflicts {
+		refs = append(refs, digestsToRefs(conflict.Digests)...)
+	}
+	sort.Strings(refs)
+	return refs
+}
+
+func digestsToRefs(digests []domain.SHA256Digest) []string {
+	refs := make([]string, len(digests))
+	for index, digest := range digests {
+		refs[index] = string(digest)
+	}
+	return refs
+}
+
+func uniqueRelations(values []domain.LineageRelation) []domain.LineageRelation {
+	set := make(map[domain.LineageRelation]struct{}, len(values))
+	for _, value := range values {
+		set[value] = struct{}{}
+	}
+	result := make([]domain.LineageRelation, 0, len(set))
+	for value := range set {
+		result = append(result, value)
+	}
+	return result
+}
+
+func pathsCovered(paths, prefixes []string) bool {
+	for _, path := range paths {
+		covered := false
+		for _, prefix := range prefixes {
+			if path == prefix || strings.HasPrefix(path, strings.TrimSuffix(prefix, "/")+"/") {
+				covered = true
+				break
+			}
+		}
+		if !covered {
+			return false
+		}
+	}
+	return true
+}
+
+func subset(values, allowed []string) bool {
+	for _, value := range values {
+		if !contains(allowed, value) {
+			return false
+		}
+	}
+	return true
+}
+
+func contains(values []string, value string) bool {
+	for _, candidate := range values {
+		if candidate == value {
+			return true
+		}
+	}
+	return false
+}
+
+func sortedKeys[T ~string](values map[T]struct{}) []T {
+	result := make([]T, 0, len(values))
+	for value := range values {
+		result = append(result, value)
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i] < result[j] })
+	return result
+}

@@ -44,6 +44,18 @@ type ConfigOutcome struct {
 	Rules *RulesSnapshot `json:"rules,omitempty"`
 }
 
+// ConfigPlan is the read-only result of deciding the one managed config edit.
+// It lets project initialization reject every other target before its first
+// write. Apply rechecks the original bytes to avoid overwriting a concurrent
+// owner edit.
+type ConfigPlan struct {
+	Outcome  ConfigOutcome
+	absolute string
+	before   []byte
+	desired  []byte
+	existed  bool
+}
+
 // newConfig is what an absent configuration is created as: the managed key, and a
 // statement that the rest of the file belongs to the repository. No placeholder
 // prose is written, because a placeholder that nobody edits ends up describing
@@ -61,30 +73,38 @@ const newConfig = `schema: ` + SchemaName + `
 // carries the project's own comments and prose, and round-tripping it through a
 // serializer would silently reformat content this package does not own.
 func EnsureConfig(repositoryRoot string, confirmForeignSwitch bool) (ConfigOutcome, error) {
+	plan, err := PlanConfig(repositoryRoot, confirmForeignSwitch)
+	if err != nil {
+		return plan.Outcome, err
+	}
+	return plan.Apply()
+}
+
+// PlanConfig validates and computes the OpenSpec config change without writing.
+func PlanConfig(repositoryRoot string, confirmForeignSwitch bool) (ConfigPlan, error) {
 	absolute := filepath.Join(repositoryRoot, filepath.FromSlash(ConfigPath))
 	outcome := ConfigOutcome{Path: ConfigPath}
+	plan := ConfigPlan{Outcome: outcome, absolute: absolute}
 
 	// The configuration honours the same containment as every repository-scope
 	// write: a symlinked openspec directory or config file would redirect this
 	// write outside the repository the user named.
 	if containErr := ambient.EnsureWriteWithinRepository(repositoryRoot, absolute); containErr != nil {
-		return outcome, containErr
+		return plan, containErr
 	}
 
 	raw, err := os.ReadFile(absolute)
 	if errors.Is(err, fs.ErrNotExist) {
-		if mkdirErr := os.MkdirAll(filepath.Dir(absolute), 0o755); mkdirErr != nil {
-			return outcome, fmt.Errorf("create %s: %w", filepath.Dir(ConfigPath), mkdirErr)
-		}
-		if writeErr := os.WriteFile(absolute, []byte(newConfig), 0o644); writeErr != nil {
-			return outcome, fmt.Errorf("write %s: %w", ConfigPath, writeErr)
-		}
 		outcome.Action = ConfigCreated
-		return outcome, nil
+		plan.Outcome = outcome
+		plan.desired = []byte(newConfig)
+		return plan, nil
 	}
 	if err != nil {
-		return outcome, fmt.Errorf("read %s: %w", ConfigPath, err)
+		return plan, fmt.Errorf("read %s: %w", ConfigPath, err)
 	}
+	plan.existed = true
+	plan.before = append([]byte(nil), raw...)
 
 	content := string(raw)
 	named, index := schemaAssignment(content)
@@ -93,10 +113,13 @@ func EnsureConfig(repositoryRoot string, confirmForeignSwitch bool) (ConfigOutco
 	if named == SchemaName {
 		outcome.Action = ConfigUnchanged
 		outcome.PreviousSchema = ""
-		return outcome, nil
+		plan.Outcome = outcome
+		plan.desired = append([]byte(nil), raw...)
+		return plan, nil
 	}
 	if named != "" && !stockSchemas[named] && !confirmForeignSwitch {
-		return outcome, fmt.Errorf("%w (%s); confirm the switch explicitly to adopt the Goalrail schema",
+		plan.Outcome = outcome
+		return plan, fmt.Errorf("%w (%s); confirm the switch explicitly to adopt the Goalrail schema",
 			ErrForeignSchema, named)
 	}
 	if named != "" {
@@ -113,11 +136,36 @@ func EnsureConfig(repositoryRoot string, confirmForeignSwitch bool) (ConfigOutco
 		// No key at all: prepend it, keeping the rest byte-identical.
 		updated = "schema: " + SchemaName + "\n" + content
 	}
-	if writeErr := os.WriteFile(absolute, []byte(updated), 0o644); writeErr != nil {
-		return outcome, fmt.Errorf("write %s: %w", ConfigPath, writeErr)
-	}
 	outcome.Action = ConfigSwitched
-	return outcome, nil
+	plan.Outcome = outcome
+	plan.desired = []byte(updated)
+	return plan, nil
+}
+
+// Apply performs a previously validated config plan after a byte-for-byte
+// compare with the state PlanConfig observed.
+func (plan ConfigPlan) Apply() (ConfigOutcome, error) {
+	if plan.Outcome.Action == ConfigUnchanged {
+		return plan.Outcome, nil
+	}
+	raw, err := os.ReadFile(plan.absolute)
+	switch {
+	case plan.existed && err != nil:
+		return plan.Outcome, fmt.Errorf("recheck %s: %w", ConfigPath, err)
+	case plan.existed && string(raw) != string(plan.before):
+		return plan.Outcome, fmt.Errorf("%s changed after validation", ConfigPath)
+	case !plan.existed && err == nil:
+		return plan.Outcome, fmt.Errorf("%s appeared after validation", ConfigPath)
+	case !plan.existed && !errors.Is(err, fs.ErrNotExist):
+		return plan.Outcome, fmt.Errorf("recheck %s: %w", ConfigPath, err)
+	}
+	if err := os.MkdirAll(filepath.Dir(plan.absolute), 0o755); err != nil {
+		return plan.Outcome, fmt.Errorf("create %s: %w", filepath.Dir(ConfigPath), err)
+	}
+	if err := os.WriteFile(plan.absolute, plan.desired, 0o644); err != nil {
+		return plan.Outcome, fmt.Errorf("write %s: %w", ConfigPath, err)
+	}
+	return plan.Outcome, nil
 }
 
 // ConfiguredSchema reports the schema a repository's configuration names, and

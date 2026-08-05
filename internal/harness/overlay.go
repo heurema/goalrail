@@ -51,6 +51,15 @@ var previousCanons = []Canon{
 	},
 }
 
+// LegacyV018Canon returns a defensive copy of the overlay canon shipped by
+// Goalrail v0.1.8. Project migration uses the exact file digests as evidence;
+// merely finding similarly named files is not sufficient.
+func LegacyV018Canon() Canon {
+	legacy := previousCanons[0]
+	legacy.Files = append([]CanonFile(nil), legacy.Files...)
+	return legacy
+}
+
 // FileState is what one overlay file is, judged against the canon this binary
 // carries and the ones it remembers.
 type FileState string

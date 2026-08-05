@@ -18,10 +18,11 @@ import (
 )
 
 var (
-	ErrActivationRequired    = errors.New("ACTIVATION_REQUIRED")
-	ErrLaunchAlreadyClaimed  = errors.New("WorkSpec launch was already attempted")
-	ErrInvalidProviderResult = errors.New("invalid provider observation")
-	ErrTerminalReceiptExists = errors.New("terminal receipt already exists")
+	ErrActivationRequired      = errors.New("ACTIVATION_REQUIRED")
+	ErrLegacyWorkSpecAuthority = errors.New("legacy WorkSpec authority cannot prepare a normal run")
+	ErrLaunchAlreadyClaimed    = errors.New("WorkSpec launch was already attempted")
+	ErrInvalidProviderResult   = errors.New("invalid provider observation")
+	ErrTerminalReceiptExists   = errors.New("terminal receipt already exists")
 )
 
 type PreparedRun struct {
@@ -63,19 +64,25 @@ type Service struct {
 	store     *Store
 	observer  WorktreeObserver
 	intent    IntentVerifier
-	adapter   Adapter
-	admission *dogfoodAdmission
-	now       func() time.Time
-	newRunID  func() (domain.RunID, error)
+	authority ManagedAuthorityVerifier
+	// This exception exists only behind NewFixtureService so historical local
+	// execution tests can exercise stored v0 artifacts without exposing a
+	// production path for new legacy-authority runs.
+	allowLegacyFixture bool
+	adapter            Adapter
+	admission          *dogfoodAdmission
+	now                func() time.Time
+	newRunID           func() (domain.RunID, error)
 }
 
 func NewService(store *Store, observer WorktreeObserver, intent IntentVerifier) *Service {
 	return &Service{
-		store:    store,
-		observer: observer,
-		intent:   intent,
-		now:      func() time.Time { return time.Now().UTC() },
-		newRunID: randomRunID,
+		store:     store,
+		observer:  observer,
+		intent:    intent,
+		authority: newRepositoryManagedAuthorityVerifier(),
+		now:       func() time.Time { return time.Now().UTC() },
+		newRunID:  randomRunID,
 	}
 }
 
@@ -92,6 +99,7 @@ func NewFixtureService(
 	}
 	service := NewService(store, observer, intent)
 	service.adapter = adapter
+	service.allowLegacyFixture = true
 	return service, nil
 }
 
@@ -125,6 +133,9 @@ func (service *Service) Prepare(ctx context.Context, reader io.Reader) (Prepared
 	if err != nil {
 		return PreparedRun{}, err
 	}
+	if spec.Schema == domain.WorkSpecSchemaV0 && !service.allowLegacyFixture {
+		return PreparedRun{}, ErrLegacyWorkSpecAuthority
+	}
 	root, revision, err := service.observer.ResolveRepository(
 		ctx,
 		spec.Repository.Root,
@@ -154,6 +165,14 @@ func (service *Service) Prepare(ctx context.Context, reader io.Reader) (Prepared
 	}
 	if err := service.intent.Verify(root, spec.Intent); err != nil {
 		return PreparedRun{}, err
+	}
+	if spec.Schema == domain.WorkSpecSchemaV1 {
+		if service.authority == nil {
+			return PreparedRun{}, fmt.Errorf("managed authority verifier is unavailable")
+		}
+		if err := service.authority.Verify(ctx, root, spec); err != nil {
+			return PreparedRun{}, err
+		}
 	}
 
 	if prepared, err := service.InspectPrepared(frozen.Digest()); err == nil {

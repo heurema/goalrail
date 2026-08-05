@@ -1,0 +1,8 @@
+schema: goalrail.prepared-admission/v1
+adapter_id: github-actions
+state: prepared
+required_check: goalrail/lineage
+workflow_path: .github/workflows/goalrail-lineage.yml
+activation_authority: owner-authorized-external-action
+# This file describes a prepared adapter. Its presence is not evidence that a
+# workflow, required check, ruleset, or protected admission is active.

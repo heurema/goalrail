@@ -23,6 +23,25 @@ func TestReadRegularFileReadsWithinTheBound(t *testing.T) {
 	}
 }
 
+func TestReadRegularFileWithInfoIdentifiesTheOpenedInode(t *testing.T) {
+	directory := t.TempDir()
+	path := filepath.Join(directory, "artifact.json")
+	if err := os.WriteFile(path, []byte("fixture"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	pathInfo, err := os.Lstat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, openedInfo, err := ReadRegularFileWithInfo(path, "fixture", 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(raw) != "fixture" || !os.SameFile(pathInfo, openedInfo) {
+		t.Fatal("returned bytes were not bound to the opened path inode")
+	}
+}
+
 func TestReadRegularFileRejectsOversizedArtifact(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "artifact.md")
 	if err := os.WriteFile(path, []byte(strings.Repeat("x", 65)), 0o644); err != nil {

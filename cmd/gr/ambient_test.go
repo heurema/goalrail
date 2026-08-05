@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/heurema/goalrail/internal/ambient"
+	projectstate "github.com/heurema/goalrail/internal/project"
 )
 
 // runHookIn drives the ambient entry point the way a scaffold would: from the
@@ -52,11 +53,11 @@ func TestHookIsSilentInAnUninitializedDirectory(t *testing.T) {
 	}
 }
 
-func TestHookAnnouncesInAnInitializedDirectory(t *testing.T) {
-	directory := t.TempDir()
+func TestHookAnnouncesInADeclaredProjectWithoutALocalMarker(t *testing.T) {
+	directory := managedHookRepository(t)
 	t.Setenv("GOALRAIL_STATE_HOME", t.TempDir())
-	if _, _, err := ambient.Initialize(directory, nowUTC); err != nil {
-		t.Fatal(err)
+	if ambient.IsInitialized(directory) {
+		t.Fatal("portable project fixture unexpectedly has a checkout-local marker")
 	}
 
 	output, err := runHookIn(t, directory, `{"hook_event_name":"SessionStart","source":"startup"}`)
@@ -78,11 +79,8 @@ func TestHookAnnouncesInAnInitializedDirectory(t *testing.T) {
 }
 
 func TestHookStaysSilentOnRecurringSessionEvents(t *testing.T) {
-	directory := t.TempDir()
+	directory := managedHookRepository(t)
 	t.Setenv("GOALRAIL_STATE_HOME", t.TempDir())
-	if _, _, err := ambient.Initialize(directory, nowUTC); err != nil {
-		t.Fatal(err)
-	}
 
 	for _, source := range []string{"resume", "clear", "compact"} {
 		output, err := runHookIn(
@@ -99,12 +97,9 @@ func TestHookStaysSilentOnRecurringSessionEvents(t *testing.T) {
 }
 
 func TestHookRetainsAQuestionAtSessionStop(t *testing.T) {
-	directory := t.TempDir()
+	directory := managedHookRepository(t)
 	stateHome := t.TempDir()
 	t.Setenv("GOALRAIL_STATE_HOME", stateHome)
-	if _, _, err := ambient.Initialize(directory, nowUTC); err != nil {
-		t.Fatal(err)
-	}
 	question := filepath.Join(directory, filepath.FromSlash(ambient.ReservedEscalationPath))
 	if err := os.WriteFile(question, []byte("Which document governs here?\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -124,12 +119,9 @@ func TestHookRetainsAQuestionAtSessionStop(t *testing.T) {
 // only Stop made retention silently never fire there, while every diagnosis
 // reported the attachment as active. Found by the pre-PR review.
 func TestHookRetainsAQuestionAtSessionEnd(t *testing.T) {
-	directory := t.TempDir()
+	directory := managedHookRepository(t)
 	stateHome := t.TempDir()
 	t.Setenv("GOALRAIL_STATE_HOME", stateHome)
-	if _, _, err := ambient.Initialize(directory, nowUTC); err != nil {
-		t.Fatal(err)
-	}
 	question := filepath.Join(directory, filepath.FromSlash(ambient.ReservedEscalationPath))
 	if err := os.WriteFile(question, []byte("Which document governs here?\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -146,11 +138,8 @@ func TestHookRetainsAQuestionAtSessionEnd(t *testing.T) {
 func TestHookNeverFailsIntoTheSession(t *testing.T) {
 	// Fail-quiet: whatever is malformed, missing, or broken, an ordinary
 	// session must proceed as if Goalrail were not installed.
-	directory := t.TempDir()
+	directory := managedHookRepository(t)
 	t.Setenv("GOALRAIL_STATE_HOME", t.TempDir())
-	if _, _, err := ambient.Initialize(directory, nowUTC); err != nil {
-		t.Fatal(err)
-	}
 
 	for name, payload := range map[string]string{
 		"empty":            "",
@@ -169,7 +158,7 @@ func TestHookNeverFailsIntoTheSession(t *testing.T) {
 }
 
 func TestInitCommandIsExplicitAndReportsItself(t *testing.T) {
-	directory := t.TempDir()
+	directory := scratchRepository(t)
 	var stdout bytes.Buffer
 	if err := run(
 		context.Background(),
@@ -182,33 +171,34 @@ func TestInitCommandIsExplicitAndReportsItself(t *testing.T) {
 		t.Fatal(err)
 	}
 	var decoded struct {
-		MarkerCreated bool   `json:"marker_created"`
-		Marker        string `json:"marker"`
-		Canon         string `json:"canon"`
+		Managed       bool   `json:"managed"`
+		LocallyReady  bool   `json:"locally_ready"`
+		SetupRequired bool   `json:"setup_required"`
+		ProjectID     string `json:"project_id"`
+		ProjectCanon  string `json:"project_canon"`
 		Invocation    string `json:"invocation"`
-		Files         []struct {
+		ProjectFiles  []struct {
 			Path   string `json:"path"`
 			Action string `json:"action"`
-		} `json:"files"`
+		} `json:"project_files"`
 		Next []string `json:"next"`
 	}
 	if err := json.Unmarshal(stdout.Bytes(), &decoded); err != nil {
 		t.Fatal(err)
 	}
-	if !decoded.MarkerCreated || decoded.Marker != ambient.MarkerPath {
+	if !decoded.Managed || decoded.ProjectID == "" || decoded.LocallyReady || !decoded.SetupRequired {
 		t.Fatalf("init reported %+v", decoded)
 	}
-	if !ambient.IsInitialized(directory) {
-		t.Fatal("init did not initialize the repository")
+	if ambient.IsInitialized(directory) {
+		t.Fatal("v1 init created a checkout-local identity marker")
 	}
-	// Initialization installs the harness, not just the marker, and says so.
-	if decoded.Canon == "" {
-		t.Fatal("init did not report which overlay it installed")
+	if decoded.ProjectCanon == "" {
+		t.Fatal("init did not report which project canon it installed")
 	}
-	if len(decoded.Files) == 0 {
+	if len(decoded.ProjectFiles) == 0 {
 		t.Fatal("init reported no materialized files")
 	}
-	for _, file := range decoded.Files {
+	for _, file := range decoded.ProjectFiles {
 		if file.Action != "created" {
 			t.Fatalf("%s reported %q in a fresh repository", file.Path, file.Action)
 		}
@@ -288,7 +278,7 @@ func TestHelpPresentsBackgroundSurfaceAndHidesTheHook(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := stdout.String()
-	for _, required := range []string{"connect", "disconnect", "init", "no Goalrail command"} {
+	for _, required := range []string{"connect", "disconnect", "init", "migrate", "local setup"} {
 		if !strings.Contains(text, required) {
 			t.Fatalf("help does not mention %q:\n%s", required, text)
 		}
@@ -351,6 +341,40 @@ func TestHookDoesNotReadThePayloadInAnUninitializedDirectory(t *testing.T) {
 	}
 }
 
+func TestHookDoesNotReadPayloadForInvalidDeclaration(t *testing.T) {
+	directory := scratchRepository(t)
+	writeFile(t, filepath.Join(directory, ".goalrail", "project.json"), "{")
+	t.Setenv("GOALRAIL_STATE_HOME", t.TempDir())
+	previous, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(directory); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(previous) })
+
+	if err := run(
+		context.Background(),
+		[]string{"hook"},
+		tattlingReader{t: t},
+		&bytes.Buffer{},
+		&bytes.Buffer{},
+		productionService,
+	); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func managedHookRepository(t *testing.T) string {
+	t.Helper()
+	directory := scratchRepository(t)
+	if _, err := projectstate.Initialize(context.Background(), directory, projectstate.InitializeOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	return directory
+}
+
 func TestConnectOutputDisclosesTheTrustStep(t *testing.T) {
 	// Without this the user connects, works, observes nothing, and reasonably
 	// concludes the product is broken. That happened during live verification.
@@ -392,7 +416,7 @@ func TestConnectOutputDisclosesTheTrustStep(t *testing.T) {
 func TestHealthCommandReportsWhatIsMissing(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	directory := t.TempDir()
+	directory := managedHookRepository(t)
 	var stdout bytes.Buffer
 	if err := run(
 		context.Background(),
@@ -405,18 +429,64 @@ func TestHealthCommandReportsWhatIsMissing(t *testing.T) {
 		t.Fatal(err)
 	}
 	var decoded struct {
-		Connected  bool   `json:"connected"`
-		Working    bool   `json:"working"`
-		NextAction string `json:"next_action"`
+		ClaimState       string `json:"claim_state"`
+		ProjectID        string `json:"project_id"`
+		Managed          bool   `json:"managed"`
+		Initialized      bool   `json:"initialized"`
+		Connected        bool   `json:"connected"`
+		Working          bool   `json:"working"`
+		EnforcementScope string `json:"enforcement_scope"`
+		NextAction       string `json:"next_action"`
 	}
 	if err := json.Unmarshal(stdout.Bytes(), &decoded); err != nil {
 		t.Fatal(err)
 	}
-	if decoded.Connected || decoded.Working {
+	if decoded.ClaimState != "managed" || decoded.ProjectID == "" || !decoded.Managed || !decoded.Initialized || decoded.Connected || decoded.Working {
 		t.Fatalf("health reported %+v on an unconnected scaffold", decoded)
+	}
+	if decoded.EnforcementScope != "local_advisory_only" {
+		t.Fatalf("attachment health claimed the wrong enforcement scope: %+v", decoded)
 	}
 	if !strings.Contains(decoded.NextAction, "gr connect") {
 		t.Fatalf("health did not name the next action: %q", decoded.NextAction)
+	}
+}
+
+func TestHealthSkipsAttachmentObservationOutsideAValidProject(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	// A directory at the config path would make attachment inspection fail. The
+	// claim-first path must return unmanaged/invalid without touching it.
+	if err := os.MkdirAll(filepath.Join(home, ".codex", "config.toml"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for name, fixture := range map[string]struct {
+		root string
+		want string
+	}{
+		"unmanaged": {root: scratchRepository(t), want: "unmanaged"},
+		"invalid": func() struct{ root, want string } {
+			root := scratchRepository(t)
+			writeFile(t, filepath.Join(root, ".goalrail", "project.json"), "{")
+			return struct{ root, want string }{root: root, want: "declared_invalid"}
+		}(),
+	} {
+		t.Run(name, func(t *testing.T) {
+			var stdout bytes.Buffer
+			if err := run(
+				context.Background(), []string{"health", "--scaffold", "codex", "--repo", fixture.root},
+				strings.NewReader(""), &stdout, &bytes.Buffer{}, productionService,
+			); err != nil {
+				t.Fatal(err)
+			}
+			var state ambient.AttachmentState
+			if err := json.Unmarshal(stdout.Bytes(), &state); err != nil {
+				t.Fatal(err)
+			}
+			if state.ClaimState != fixture.want || state.Managed || state.ConfigError != "" || state.ConfigPath != "" {
+				t.Fatalf("claim-first health = %#v", state)
+			}
+		})
 	}
 }
 
@@ -433,10 +503,7 @@ func TestHelpPresentsTheDiagnosisAndWhatItDistinguishes(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := strings.ToLower(stdout.String())
-	// The states the diagnosis distinguishes — a pending review step, an overlay
-	// that has drifted — are otherwise indistinguishable from a broken install, so
-	// help has to point at the command that names them.
-	for _, required := range []string{"doctor", "review step", "drifted", "broken install"} {
+	for _, required := range []string{"doctor", "managed", "local", "shared admission"} {
 		if !strings.Contains(text, required) {
 			t.Fatalf("help omits %q:\n%s", required, text)
 		}
