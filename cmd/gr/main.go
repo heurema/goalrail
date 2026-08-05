@@ -63,7 +63,7 @@ func run(
 	factory serviceFactory,
 ) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: gr <init|doctor|review|update|version|connect|disconnect|health|prepare|inspect|start|finish> [flags]; run gr help")
+		return fmt.Errorf("usage: gr <init|migrate|setup|lineage|verify-lineage|doctor|review|update|version|connect|disconnect|health|prepare|inspect|start|finish> [flags]; run gr help")
 	}
 	switch args[0] {
 	case "prepare":
@@ -75,7 +75,23 @@ func run(
 	case "finish":
 		return runFinish(ctx, args[1:], stdout, stderr, factory)
 	case "init":
-		return runInit(args[1:], stdout, stderr)
+		return runInit(ctx, args[1:], stdout, stderr)
+	case "migrate":
+		return runMigrate(ctx, args[1:], stdout, stderr)
+	case "setup":
+		return runSetup(ctx, args[1:], stdout, stderr)
+	case "lineage":
+		return runLineage(ctx, args[1:], stdout, stderr)
+	case "verify-lineage":
+		return runVerifyLineage(ctx, args[1:], stdout, stderr)
+	case "github-collect":
+		// Internal shared-admission adapter. It is intentionally absent from
+		// operator help and performs read-only provider collection only.
+		return runGitHubCollect(ctx, args[1:], stdout, stderr)
+	case "commit-msg":
+		// Internal local early-feedback adapter. A trailer is only an index;
+		// this command never produces an admission verdict.
+		return runCommitMessageCheck(args[1:], stdout, stderr)
 	case "connect":
 		return runConnect(args[1:], stdout, stderr)
 	case "disconnect":
@@ -103,7 +119,10 @@ func run(
 		if len(args) == 2 && isCommand(args[1]) {
 			return run(ctx, []string{args[1], "--help"}, stdin, stdout, stderr, factory)
 		}
-		return fmt.Errorf("usage: gr help [init|doctor|review|update|version|connect|disconnect|health|prepare|inspect|start|finish]")
+		if len(args) == 3 && isHelpSubcommand(args[1], args[2]) {
+			return run(ctx, []string{args[1], args[2], "--help"}, stdin, stdout, stderr, factory)
+		}
+		return fmt.Errorf("usage: gr help <command> [subcommand]")
 	case "-h", "--help":
 		return writeHelp(stdout)
 	default:
@@ -111,10 +130,26 @@ func run(
 	}
 }
 
+func isHelpSubcommand(command, subcommand string) bool {
+	switch command {
+	case "setup":
+		switch subcommand {
+		case "plan", "verify-plan", "apply", "no-write", "rollback":
+			return true
+		}
+	case "lineage":
+		switch subcommand {
+		case "begin", "attach", "inspect":
+			return true
+		}
+	}
+	return false
+}
+
 func isCommand(value string) bool {
 	switch value {
 	case "prepare", "inspect", "start", "finish",
-		"init", "doctor", "review", "update", "connect", "disconnect", "health", "version":
+		"init", "migrate", "setup", "lineage", "verify-lineage", "doctor", "review", "update", "connect", "disconnect", "health", "version":
 		return true
 	default:
 		return false
@@ -122,13 +157,17 @@ func isCommand(value string) bool {
 }
 
 func writeHelp(output io.Writer) error {
-	_, err := fmt.Fprint(output, `usage: gr <init|doctor|review|update|version|connect|disconnect|health|prepare|inspect|start|finish> [flags]
+	_, err := fmt.Fprint(output, `usage: gr <init|migrate|setup|lineage|verify-lineage|doctor|review|update|version|connect|disconnect|health|prepare|inspect|start|finish> [flags]
 
-The harness:
-  init → work normally; ordinary work needs no Goalrail command
+Managed project lifecycle:
+  init or migrate → doctor → exact setup consent → confirmed intent/change
+  → lineage begin → bounded work → lineage attach/inspect → verify-lineage
 
-  init        install the harness here: the OpenSpec overlay with the Goalrail
-              schema, the repository marker, and the session hooks
+  init        create portable committed project governance; no local attachment
+  migrate     explicitly add v1 governance to an exact v0.1.8 project
+  setup       plan, verify, apply, or roll back an exact local setup bundle
+  lineage     create or extend the append-only repository work-unit graph
+  verify-lineage  evaluate one frozen Git range and admission packet; read-only
   doctor      report whether the harness is intact, and what to run if not
   review      review this branch with an agent that did not write it
   update      bring this repository's harness up to what this gr carries
@@ -136,11 +175,18 @@ The harness:
   disconnect  remove every registration, in whichever scope it lives
   version     report this binary's version and the overlay it carries
 
-  Most scaffolds register inside the repository, so "init" is the whole
-  attachment. Where a scaffold can only register at user scope, "init" says so
-  and names "connect" as the remaining step. "doctor" tells you if a review step
-  is pending or the overlay has drifted — states that otherwise look exactly
-  like a broken install.
+  Managed project identity is committed and follows every clone and worktree,
+  but it does not prove local readiness or protected enforcement. On a clean
+  clone, doctor reports the exact missing setup and the supported agent must
+  present one read-only plan before requesting consent for those exact writes.
+  Confirmed intent and the current change bind the work unit before code work;
+  lineage then joins the change, run/session, commit, pull request, checks, and
+  review as content-addressed evidence.
+
+  Local hooks are advisory. A prepared workflow file is not activation
+  evidence. Protected shared admission is active only after the required check
+  and branch protection are independently verified. Until then, doctor reports
+  local readiness separately and gives local advice without claiming enforcement.
 
   "update" refreshes this repository's files. It does not update the gr binary.
 

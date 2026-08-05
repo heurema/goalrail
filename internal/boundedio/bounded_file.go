@@ -21,29 +21,45 @@ import (
 // from blocking, and the descriptor that is then inspected is the one that is
 // read.
 func ReadRegularFile(path string, label string, limit int) ([]byte, error) {
+	raw, _, err := ReadRegularFileWithInfo(path, label, limit)
+	return raw, err
+}
+
+// ReadRegularFileWithInfo returns the bytes together with descriptor-backed
+// file identity. Callers that protect a later mutation can compare this info
+// with pathname snapshots and prove that the bytes came from the checked inode.
+func ReadRegularFileWithInfo(path string, label string, limit int) ([]byte, os.FileInfo, error) {
 	if limit <= 0 {
-		return nil, fmt.Errorf("read %s: size bound must be positive", label)
+		return nil, nil, fmt.Errorf("read %s: size bound must be positive", label)
 	}
 	file, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
 	if err != nil {
-		return nil, fmt.Errorf("open %s: %w", label, err)
+		return nil, nil, fmt.Errorf("open %s: %w", label, err)
 	}
 	defer file.Close()
 
-	info, err := file.Stat()
+	before, err := file.Stat()
 	if err != nil {
-		return nil, fmt.Errorf("stat %s: %w", label, err)
+		return nil, nil, fmt.Errorf("stat %s: %w", label, err)
 	}
-	if !info.Mode().IsRegular() {
-		return nil, fmt.Errorf("%s is not a regular file", label)
+	if !before.Mode().IsRegular() {
+		return nil, nil, fmt.Errorf("%s is not a regular file", label)
 	}
 
 	raw, err := io.ReadAll(io.LimitReader(file, int64(limit)+1))
 	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", label, err)
+		return nil, nil, fmt.Errorf("read %s: %w", label, err)
 	}
 	if len(raw) > limit {
-		return nil, fmt.Errorf("%s exceeds %d bytes", label, limit)
+		return nil, nil, fmt.Errorf("%s exceeds %d bytes", label, limit)
 	}
-	return raw, nil
+	after, err := file.Stat()
+	if err != nil {
+		return nil, nil, fmt.Errorf("stat %s after read: %w", label, err)
+	}
+	if !os.SameFile(before, after) || before.Mode() != after.Mode() ||
+		before.Size() != after.Size() || !before.ModTime().Equal(after.ModTime()) {
+		return nil, nil, fmt.Errorf("%s changed while it was read", label)
+	}
+	return raw, after, nil
 }

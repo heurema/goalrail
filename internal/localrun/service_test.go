@@ -225,6 +225,8 @@ func TestPrepareAcceptsContractV1AndPinnedLegacyPairs(t *testing.T) {
 			service := NewService(store, observer, openspec.IntentResolver{})
 			spec := fixtureWorkSpec(resolvedRoot, observer.revision)
 			spec.Intent = serviceIntentReference(intentArtifact)
+			spec = managedFixtureWorkSpec(spec)
+			service.authority = &fixtureManagedAuthorityVerifier{}
 			raw, err := json.Marshal(spec)
 			if err != nil {
 				t.Fatal(err)
@@ -609,7 +611,8 @@ func TestPrepareRejectsScopedSymlinkEscapeAndMissingIntent(t *testing.T) {
 	}
 	verifier := &fixtureIntentVerifier{err: os.ErrNotExist}
 	service := NewService(store, observer, verifier)
-	spec := fixtureWorkSpec(root, revision)
+	service.authority = &fixtureManagedAuthorityVerifier{}
+	spec := managedFixtureWorkSpec(fixtureWorkSpec(root, revision))
 	spec.Paths = []string{"escaped"}
 	raw, err := json.Marshal(spec)
 	if err != nil {
@@ -653,8 +656,9 @@ func productionServiceFixture(
 	}
 	verifier := &fixtureIntentVerifier{}
 	service := NewService(store, observer, verifier)
+	service.authority = &fixtureManagedAuthorityVerifier{}
 	service.now = fixedClock()
-	return service, fixtureWorkSpec(resolvedRoot, revision), store, verifier
+	return service, managedFixtureWorkSpec(fixtureWorkSpec(resolvedRoot, revision)), store, verifier
 }
 
 func fixtureService(

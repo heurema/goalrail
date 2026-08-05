@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -8,8 +9,10 @@ import (
 	"os"
 	"path/filepath"
 
+	projectdoctor "github.com/heurema/goalrail/internal/doctor"
 	"github.com/heurema/goalrail/internal/harness"
 	"github.com/heurema/goalrail/internal/localrun"
+	projectstate "github.com/heurema/goalrail/internal/project"
 	"github.com/heurema/goalrail/internal/updatecheck"
 )
 
@@ -20,13 +23,31 @@ import (
 const exitDiagnosis = 1
 
 // diagnosisError carries a non-zero exit for an otherwise successful report.
-type diagnosisError struct{ problems int }
+type diagnosisError struct {
+	category projectdoctor.Category
+	problems int
+}
 
 func (err diagnosisError) Error() string {
 	return fmt.Sprintf("%d harness problem(s) reported", err.problems)
 }
 
-func (err diagnosisError) ExitCode() int { return exitDiagnosis }
+func (err diagnosisError) ExitCode() int {
+	switch err.category {
+	case projectdoctor.CategoryUnmanaged, projectdoctor.CategoryMigrationRequired:
+		return 3
+	case projectdoctor.CategoryDeclaredInvalid, projectdoctor.CategoryGovernanceInvalid:
+		return 4
+	case projectdoctor.CategorySetupRequired:
+		return 5
+	case projectdoctor.CategoryLocalNotReady:
+		return 6
+	case projectdoctor.CategoryAdvisory:
+		return 7
+	default:
+		return exitDiagnosis
+	}
+}
 
 // doctorFailure marks a diagnosis that did not run — bad usage or an internal
 // failure — as distinct from one that ran and found problems. A script watching
@@ -62,32 +83,32 @@ func runDoctor(args []string, stdout, stderr io.Writer) error {
 		if err := writeJSON(stdout, diagnosis); err != nil {
 			return doctorFailure{cause: err}
 		}
-	} else if _, err := fmt.Fprint(stdout, harness.Describe(diagnosis)); err != nil {
+	} else if _, err := fmt.Fprint(stdout, projectdoctor.Describe(diagnosis)); err != nil {
 		// A report that could not be written is a failed check, not a failed
 		// harness: an unattended caller reading the exit status must not confuse
 		// a broken pipe with an unhealthy repository.
 		return doctorFailure{cause: err}
 	}
 	if !diagnosis.Working {
-		return diagnosisError{problems: len(diagnosis.Problems)}
+		return diagnosisError{category: diagnosis.Category, problems: len(diagnosis.Problems)}
 	}
 	return nil
 }
 
-func diagnose(repository, scaffold, stateDirectory string) (harness.Diagnosis, error) {
+func diagnose(repository, scaffold, stateDirectory string) (projectdoctor.Diagnosis, error) {
 	root, err := filepath.Abs(repository)
 	if err != nil {
-		return harness.Diagnosis{}, err
+		return projectdoctor.Diagnosis{}, err
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return harness.Diagnosis{}, err
+		return projectdoctor.Diagnosis{}, err
 	}
-	input := harness.DiagnoseInput{RepositoryRoot: root, Home: home}
+	input := projectdoctor.DiagnoseInput{RepositoryRoot: root, Home: home}
 	if scaffold != "" {
 		selected, parseErr := parseScaffold(scaffold)
 		if parseErr != nil {
-			return harness.Diagnosis{}, parseErr
+			return projectdoctor.Diagnosis{}, parseErr
 		}
 		input.Scaffolds = append(input.Scaffolds, selected)
 	}
@@ -101,13 +122,13 @@ func diagnose(repository, scaffold, stateDirectory string) (harness.Diagnosis, e
 	// other command — and it is also why the diagnosis itself still writes
 	// nothing: remembering the answer happens in here, not in there.
 	input.LatestRelease = updatecheck.New(input.StateRoot, updatecheck.Environment{})
-	// The review state is computed here rather than inside the diagnosis,
-	// because deciding it means running git and a diagnosis that reaches for a
-	// repository on its own cannot be tested without one.
+	// The callback is invoked only after a valid committed declaration has been
+	// established. An unrelated repository therefore causes no review or local
+	// attachment observation.
 	if input.StateRoot != "" {
-		input.Review = reviewStateFor(root, input.StateRoot)
+		input.Review = func() harness.ReviewState { return reviewStateFor(root, input.StateRoot) }
 	}
-	return harness.Diagnose(input)
+	return projectdoctor.Diagnose(context.Background(), input)
 }
 
 // runHealth is the superseded name. It keeps its exact stdout, because a script
@@ -158,16 +179,34 @@ func runUpdate(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	report, err := harness.Update(harness.UpdateInput{
+	report := repositoryUpdateReport{}
+	projectReport, err := projectstate.UpdateProjectCanon(context.Background(), projectstate.CanonUpdateInput{
 		RepositoryRoot:    root,
 		StateRoot:         stateRoot,
 		DiscardLocalEdits: *discard,
 	})
+	report.Project = projectReport
+	if err != nil {
+		if projectUpdateReportHasChanges(projectReport) || projectReport.Backup != "" {
+			if writeErr := writeJSON(stdout, report); writeErr != nil {
+				return writeErr
+			}
+		}
+		return err
+	}
+	overlayReport, err := harness.Update(harness.UpdateInput{
+		RepositoryRoot:    projectReport.Repository,
+		StateRoot:         stateRoot,
+		DiscardLocalEdits: *discard,
+	})
+	report.Overlay = overlayReport
+	report.AlreadyCurrent = projectReport.AlreadyCurrent && overlayReport.AlreadyCurrent
+	report.Verified = projectReport.Verified && overlayReport.Verified
 	// A failed update can have made a recovery point or completed earlier file
 	// replacements before a later path changed. Print either fact on the error
 	// path; otherwise the CLI would hide a real partial update when every changed
 	// input began missing and therefore needed no backup.
-	if report.Backup != "" || updateReportHasChanges(report) {
+	if overlayReport.Backup != "" || updateReportHasChanges(overlayReport) || projectUpdateReportHasChanges(projectReport) {
 		if writeErr := writeJSON(stdout, report); writeErr != nil && err == nil {
 			return writeErr
 		}
@@ -177,6 +216,24 @@ func runUpdate(args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	return writeJSON(stdout, report)
+}
+
+type repositoryUpdateReport struct {
+	Project        projectstate.CanonUpdateReport `json:"project"`
+	Overlay        harness.UpdateReport           `json:"overlay"`
+	AlreadyCurrent bool                           `json:"already_current"`
+	Verified       bool                           `json:"verified"`
+}
+
+func projectUpdateReportHasChanges(report projectstate.CanonUpdateReport) bool {
+	for _, outcomes := range [][]projectstate.CanonUpdateOutcome{report.Files, report.ManagedBlocks} {
+		for _, outcome := range outcomes {
+			if outcome.Action == projectstate.CanonUpdateCreated || outcome.Action == projectstate.CanonUpdateUpdated {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func updateReportHasChanges(report harness.UpdateReport) bool {

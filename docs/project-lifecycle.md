@@ -73,8 +73,20 @@ transcripts, credentials, or private source bodies.
 
 ## Current local commands
 
-Until the installation contract changes, OpenSpec commands use the pinned,
-telemetry-disabled prefix documented in `AGENTS.md`. Canary v1 and v2 are
-selected explicitly by manifest version; v2 instructions live in
-`canary/intent-canary-v0/operator-flow-v2.md`. Both real canaries remain
+The managed-project operator sequence is:
+
+```text
+init or migrate -> doctor -> exact setup consent -> confirmed intent/change
+-> lineage begin -> bounded work -> lineage attach/inspect -> verify-lineage
+```
+
+The complete v0.2 machine contract is in [contracts-v0.2.md](contracts-v0.2.md).
+Clean-machine setup and exact authorization are in [install.md](install.md), and
+the one-project legacy transition is in
+[migration-v0.2.md](migration-v0.2.md). OpenSpec development commands for this
+repository continue to use the pinned, telemetry-disabled prefix in
+`AGENTS.md`; that development pin is not a substitute for a managed setup plan.
+
+Canary v1 and v2 are selected explicitly by manifest version; v2 instructions
+live in `canary/intent-canary-v0/operator-flow-v2.md`. Both real canaries remain
 unactivated.

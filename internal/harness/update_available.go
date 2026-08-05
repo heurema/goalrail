@@ -100,3 +100,16 @@ func availability(check updatecheck.Check, local string) UpdateAvailability {
 		local, state.CheckedAt, updatecheck.Source)
 	return state
 }
+
+// InspectUpdateAvailability exposes the existing bounded, optional release
+// fact to the project-aware doctor without moving network authority into that
+// package. A nil check remains a read-free "not checked" result.
+func InspectUpdateAvailability(
+	check func(context.Context) (version string, checkedAt time.Time, err error),
+	local string,
+) UpdateAvailability {
+	if check == nil {
+		return availability(nil, local)
+	}
+	return availability(updatecheck.Check(check), local)
+}

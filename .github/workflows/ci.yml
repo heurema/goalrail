@@ -42,6 +42,8 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
+      - name: Verify the setup source and compiler closure pins
+        run: go run ./cmd/goalrail-release lock-check --repo .
       # Exactly the platforms the installation documentation claims. windows is
       # absent by decision, not by omission: the escalation artifact is opened
       # with flags that platform lacks, and those flags are how a promoted
@@ -49,11 +51,11 @@ jobs:
       - name: Cross-compile the published platforms
         run: |
           set -euo pipefail
-          for target in darwin/arm64 darwin/amd64 linux/amd64 linux/arm64; do
+          while IFS= read -r target; do
             goos="${target%/*}"
             goarch="${target#*/}"
             echo "::group::${target}"
             CGO_ENABLED=0 GOOS="${goos}" GOARCH="${goarch}" \
               go build -o "${RUNNER_TEMP}/gr-${goos}-${goarch}" ./cmd/gr
             echo "::endgroup::"
-          done
+          done < <(jq -r '.platforms[] | "\(.os)/\(.arch)"' release/setup/source-lock.json)

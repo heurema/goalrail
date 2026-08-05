@@ -25,8 +25,10 @@ type (
 
 const (
 	WorkSpecSchemaV0 = "goalrail.work-spec/v0"
+	WorkSpecSchemaV1 = "goalrail.work-spec/v1"
 
 	PostureTrustedLocalProviderEnforcedV0 WorkSpecPosture = "trusted-local-provider-enforced-v0"
+	PostureTrustedLocalProviderEnforcedV1 WorkSpecPosture = "trusted-local-provider-enforced-v1"
 
 	CheckResultPass        CheckResultState = "pass"
 	CheckResultFail        CheckResultState = "fail"
@@ -56,6 +58,33 @@ var (
 	}
 )
 
+// ClassifyLegacyWorkSpecBootstrap permits legacy authority only for an
+// explicitly bounded set of migration/setup path prefixes. It never returns
+// VALID and does not mutate or upgrade the legacy WorkSpec.
+func ClassifyLegacyWorkSpecBootstrap(spec WorkSpec, allowedPathPrefixes []string) AdmissionClassification {
+	if spec.Schema != WorkSpecSchemaV0 || len(allowedPathPrefixes) == 0 || len(allowedPathPrefixes) > MaxWorkSpecPaths {
+		return AdmissionInvalid
+	}
+	for _, prefix := range allowedPathPrefixes {
+		if validateRepositoryRelativePath(prefix) != nil {
+			return AdmissionInvalid
+		}
+	}
+	for _, scopedPath := range spec.Paths {
+		allowed := false
+		for _, prefix := range allowedPathPrefixes {
+			if scopedPath == prefix || strings.HasPrefix(scopedPath, prefix+"/") {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			return AdmissionInvalid
+		}
+	}
+	return AdmissionBootstrap
+}
+
 type WorkSpecRepository struct {
 	Root         string `json:"root"`
 	BaseRevision string `json:"base_revision"`
@@ -66,6 +95,40 @@ type WorkSpecIntentReference struct {
 	Version     uint32   `json:"version"`
 	ArtifactRef string   `json:"artifact_ref"`
 	Digest      string   `json:"digest"`
+}
+
+// WorkSpecProjectReference binds a managed run to the committed project
+// declaration that controls admission for the repository.
+type WorkSpecProjectReference struct {
+	ID          ProjectID    `json:"id"`
+	ArtifactRef string       `json:"artifact_ref"`
+	Digest      SHA256Digest `json:"digest"`
+}
+
+// WorkSpecPolicyReference binds a managed run to the exact committed policy
+// revision used for admission.
+type WorkSpecPolicyReference struct {
+	ArtifactRef string       `json:"artifact_ref"`
+	Digest      SHA256Digest `json:"digest"`
+}
+
+// WorkSpecChangeReference identifies the current Goalrail change and records
+// the confirmed intent version that the change was compiled from.
+type WorkSpecChangeReference struct {
+	ID            string       `json:"id"`
+	ArtifactRef   string       `json:"artifact_ref"`
+	Digest        SHA256Digest `json:"digest"`
+	IntentID      IntentID     `json:"intent_id"`
+	IntentVersion uint32       `json:"intent_version"`
+	IntentDigest  SHA256Digest `json:"intent_digest"`
+}
+
+// WorkSpecWorkUnitReference binds the immutable execution authority to one
+// open repository-local work unit.
+type WorkSpecWorkUnitReference struct {
+	ID          WorkUnitID   `json:"id"`
+	ArtifactRef string       `json:"artifact_ref"`
+	Digest      SHA256Digest `json:"digest"`
 }
 
 type WorkSpecCheck struct {
@@ -82,16 +145,20 @@ type WorkSpecStopCondition struct {
 // repository-local run. Provider configuration and session identity are
 // deliberately absent.
 type WorkSpec struct {
-	Schema         string                  `json:"schema"`
-	ID             WorkSpecID              `json:"id"`
-	Version        uint32                  `json:"version"`
-	Repository     WorkSpecRepository      `json:"repository"`
-	Intent         WorkSpecIntentReference `json:"intent"`
-	Task           string                  `json:"task"`
-	Paths          []string                `json:"paths"`
-	Checks         []WorkSpecCheck         `json:"checks"`
-	StopConditions []WorkSpecStopCondition `json:"stop_conditions"`
-	Posture        WorkSpecPosture         `json:"posture"`
+	Schema         string                     `json:"schema"`
+	ID             WorkSpecID                 `json:"id"`
+	Version        uint32                     `json:"version"`
+	Project        *WorkSpecProjectReference  `json:"project,omitempty"`
+	Policy         *WorkSpecPolicyReference   `json:"policy,omitempty"`
+	Change         *WorkSpecChangeReference   `json:"change,omitempty"`
+	WorkUnit       *WorkSpecWorkUnitReference `json:"work_unit,omitempty"`
+	Repository     WorkSpecRepository         `json:"repository"`
+	Intent         WorkSpecIntentReference    `json:"intent"`
+	Task           string                     `json:"task"`
+	Paths          []string                   `json:"paths"`
+	Checks         []WorkSpecCheck            `json:"checks"`
+	StopConditions []WorkSpecStopCondition    `json:"stop_conditions"`
+	Posture        WorkSpecPosture            `json:"posture"`
 }
 
 // FrozenWorkSpec retains canonical bytes and their deterministic identity.
@@ -174,7 +241,12 @@ func (frozen FrozenWorkSpec) Digest() WorkSpecDigest {
 func ValidateWorkSpec(spec WorkSpec) error {
 	v := &validator{}
 
-	if spec.Schema != WorkSpecSchemaV0 {
+	switch spec.Schema {
+	case WorkSpecSchemaV0:
+		validateWorkSpecV0Authority(v, spec)
+	case WorkSpecSchemaV1:
+		validateWorkSpecV1Authority(v, spec)
+	default:
 		v.add("work_spec.schema.invalid", "schema", "unsupported WorkSpec schema")
 	}
 	if !IsCanonicalID(string(spec.ID)) {
@@ -189,10 +261,87 @@ func ValidateWorkSpec(spec WorkSpec) error {
 	validatePaths(v, spec.Paths)
 	validateChecks(v, spec.Checks)
 	validateStopConditions(v, spec.StopConditions)
+	return v.result()
+}
+
+func validateWorkSpecV0Authority(v *validator, spec WorkSpec) {
+	if spec.Project != nil || spec.Policy != nil || spec.Change != nil || spec.WorkUnit != nil {
+		v.add("work_spec.v0.authority_forbidden", "schema", "v0 cannot carry managed-project authority bindings")
+	}
 	if spec.Posture != PostureTrustedLocalProviderEnforcedV0 {
 		v.add("work_spec.posture.unsupported", "posture", "v0 accepts only trusted-local provider-enforced posture")
 	}
-	return v.result()
+}
+
+func validateWorkSpecV1Authority(v *validator, spec WorkSpec) {
+	if spec.Project == nil {
+		v.add("work_spec.project.required", "project", "managed WorkSpec requires a project declaration reference")
+	} else {
+		validateWorkSpecProjectReference(v, *spec.Project)
+	}
+	if spec.Policy == nil {
+		v.add("work_spec.policy.required", "policy", "managed WorkSpec requires a policy reference")
+	} else {
+		validateWorkSpecPolicyReference(v, *spec.Policy)
+	}
+	if spec.Change == nil {
+		v.add("work_spec.change.required", "change", "managed WorkSpec requires a Goalrail change reference")
+	} else {
+		validateWorkSpecChangeReference(v, spec, *spec.Change)
+	}
+	if spec.WorkUnit == nil {
+		v.add("work_spec.work_unit.required", "work_unit", "managed WorkSpec requires a work-unit reference")
+	} else {
+		validateWorkSpecWorkUnitReference(v, *spec.WorkUnit)
+	}
+	if spec.Posture != PostureTrustedLocalProviderEnforcedV1 {
+		v.add("work_spec.posture.unsupported", "posture", "v1 accepts only trusted-local provider-enforced posture")
+	}
+}
+
+func validateWorkSpecProjectReference(v *validator, reference WorkSpecProjectReference) {
+	if !IsCanonicalID(string(reference.ID)) {
+		v.add("work_spec.project.id_invalid", "project.id", "project ID must be canonical")
+	}
+	validateWorkSpecArtifactReference(v, "project", reference.ArtifactRef, reference.Digest)
+}
+
+func validateWorkSpecPolicyReference(v *validator, reference WorkSpecPolicyReference) {
+	validateWorkSpecArtifactReference(v, "policy", reference.ArtifactRef, reference.Digest)
+}
+
+func validateWorkSpecChangeReference(v *validator, spec WorkSpec, reference WorkSpecChangeReference) {
+	if !IsCanonicalID(reference.ID) {
+		v.add("work_spec.change.id_invalid", "change.id", "change ID must be canonical")
+	}
+	validateWorkSpecArtifactReference(v, "change", reference.ArtifactRef, reference.Digest)
+	if !IsCanonicalID(string(reference.IntentID)) {
+		v.add("work_spec.change.intent_id_invalid", "change.intent_id", "change intent ID must be canonical")
+	}
+	if reference.IntentVersion == 0 {
+		v.add("work_spec.change.intent_version_invalid", "change.intent_version", "change intent version must be at least 1")
+	}
+	validateDigestField(v, "work_spec.change.intent_digest_invalid", "change.intent_digest", reference.IntentDigest)
+	if reference.IntentID != spec.Intent.ID || reference.IntentVersion != spec.Intent.Version || string(reference.IntentDigest) != spec.Intent.Digest {
+		v.add("work_spec.change.intent_mismatch", "change", "change must bind the exact confirmed intent carried by the WorkSpec")
+	}
+}
+
+func validateWorkSpecWorkUnitReference(v *validator, reference WorkSpecWorkUnitReference) {
+	if !IsCanonicalID(string(reference.ID)) || !strings.HasPrefix(string(reference.ID), "wu_") {
+		v.add("work_spec.work_unit.id_invalid", "work_unit.id", "work-unit ID must be canonical")
+	}
+	validateWorkSpecArtifactReference(v, "work_unit", reference.ArtifactRef, reference.Digest)
+}
+
+func validateWorkSpecArtifactReference(v *validator, prefix, artifactRef string, digest SHA256Digest) {
+	if err := validateRepositoryRelativePath(artifactRef); err != nil {
+		v.add("work_spec."+prefix+".artifact_ref_invalid", prefix+".artifact_ref", err.Error())
+	}
+	if len(artifactRef) > MaxReferenceBytes {
+		v.add("work_spec."+prefix+".artifact_ref_too_large", prefix+".artifact_ref", "artifact reference exceeds the retention bound")
+	}
+	validateDigestField(v, "work_spec."+prefix+".digest_invalid", prefix+".digest", digest)
 }
 
 func validateRepository(v *validator, repository WorkSpecRepository) {
@@ -335,6 +484,35 @@ func normalizeWorkSpec(spec WorkSpec) WorkSpec {
 	spec.Intent.ID = IntentID(strings.TrimSpace(string(spec.Intent.ID)))
 	spec.Intent.ArtifactRef = normalizeRelativePath(spec.Intent.ArtifactRef)
 	spec.Intent.Digest = strings.ToLower(strings.TrimSpace(spec.Intent.Digest))
+	if spec.Project != nil {
+		reference := *spec.Project
+		reference.ID = ProjectID(strings.TrimSpace(string(reference.ID)))
+		reference.ArtifactRef = normalizeRelativePath(reference.ArtifactRef)
+		reference.Digest = SHA256Digest(strings.ToLower(strings.TrimSpace(string(reference.Digest))))
+		spec.Project = &reference
+	}
+	if spec.Policy != nil {
+		reference := *spec.Policy
+		reference.ArtifactRef = normalizeRelativePath(reference.ArtifactRef)
+		reference.Digest = SHA256Digest(strings.ToLower(strings.TrimSpace(string(reference.Digest))))
+		spec.Policy = &reference
+	}
+	if spec.Change != nil {
+		reference := *spec.Change
+		reference.ID = strings.TrimSpace(reference.ID)
+		reference.ArtifactRef = normalizeRelativePath(reference.ArtifactRef)
+		reference.Digest = SHA256Digest(strings.ToLower(strings.TrimSpace(string(reference.Digest))))
+		reference.IntentID = IntentID(strings.TrimSpace(string(reference.IntentID)))
+		reference.IntentDigest = SHA256Digest(strings.ToLower(strings.TrimSpace(string(reference.IntentDigest))))
+		spec.Change = &reference
+	}
+	if spec.WorkUnit != nil {
+		reference := *spec.WorkUnit
+		reference.ID = WorkUnitID(strings.TrimSpace(string(reference.ID)))
+		reference.ArtifactRef = normalizeRelativePath(reference.ArtifactRef)
+		reference.Digest = SHA256Digest(strings.ToLower(strings.TrimSpace(string(reference.Digest))))
+		spec.WorkUnit = &reference
+	}
 	spec.Task = normalizeText(spec.Task)
 	spec.Posture = WorkSpecPosture(strings.TrimSpace(string(spec.Posture)))
 

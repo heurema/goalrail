@@ -11,49 +11,35 @@ shareable registration path — and that installing or maintaining the harness
 never depends on the runtime the checking toolchain needs.
 ## Requirements
 ### Requirement: One command installs the whole harness in one repository
-**Intent IDs:** OUT-1, SIG-1, SIG-2
+**Intent IDs:** OUT-1, OUT-2, OUT-9, SIG-1, SIG-2, SIG-11
 
-Initialization SHALL install everything a repository needs to be driven as a
-Goalrail repository, not merely mark it. That payload is the canonical overlay —
-the OpenSpec configuration naming the Goalrail schema, the schema itself, and its
-templates — materialized from copies carried inside the `gr` binary, together
-with the existing participation marker.
+Initialization SHALL establish everything a repository needs to declare Goalrail governance: the OpenSpec overlay selected by the project, the versioned Goalrail project declaration, the initial repository-owned governance policy, canonical human guidance, supported-agent bootstrap adapters, and the prepared shared-admission integration. Canon-owned content SHALL be materialized from copies carried inside the `gr` binary; repository-owned project identity and policy values SHALL be created once and thereafter preserved as owner content.
 
-The canonical copy SHALL live in the binary and be materialized per repository.
-A repository's files are therefore a copy that can drift, never the source of
-truth, and every later comparison is made against the binary's canon rather than
-against the repository's own history.
+The declaration, policy, overlay, and bootstrap/admission files SHALL be repository content that the owner reviews and commits. Initialization SHALL report every created or changed path, the exact pinned OpenSpec invocation, which content is canon-owned or repository-owned, and that committing the project declaration is the act that makes future clones and worktrees managed. It MUST NOT use a per-clone or per-worktree marker as project identity.
 
-The canon covers the schema and its templates. The OpenSpec configuration is
-repository-owned content that carries the project's own description alongside the
-schema name, so initialization SHALL create it when absent and SHALL manage only
-the key that names the schema. Comparing the whole configuration against a canon
-would report every project's own description as drift, which would train the user
-to ignore the report that matters.
+The canonical overlay SHALL remain a materialized copy that can drift. OpenSpec configuration is repository-owned except for the selected schema key, so initialization SHALL preserve the project description and manage only the schema selection. Initialization MUST NOT run the checking CLI, require its runtime, create a commit, enable a remote required check, or claim protected enforcement.
 
-Initialization SHALL report what it created, what it changed, and what it left
-alone. The report SHALL name the exact pinned invocation the repository is now
-driven by, including the explicit schema argument the pinned version requires,
-because a repository holding only the files still fails on its first change
-otherwise. The report SHALL also state that the materialized files are the
-user's to commit: initialization leaves uncommitted repository content, and a
-user who expects a self-contained act would otherwise not know that.
-
-Repeating initialization SHALL leave the repository byte-identical. Nothing in
-the payload is generated per run, so a second run has nothing legitimate to
-change.
+Repeating initialization against identical content SHALL leave every project file byte-identical. A reserved declaration path with invalid or conflicting content SHALL fail before the first project write rather than be replaced or treated as a fresh unmanaged repository.
 
 #### Scenario: A fresh repository is initialized
-- **WHEN** the user runs initialization in a directory that has no Goalrail marker and no OpenSpec root
-- **THEN** the overlay and the marker are materialized from the binary's canon, and the report names what was created, the pinned invocation with its explicit schema argument, and that committing the new files is the user's act
+- **WHEN** the owner runs initialization in a worktree with no Goalrail declaration and no conflicting OpenSpec custom schema
+- **THEN** the overlay, declaration, policy, human guidance, supported-agent adapters, and prepared admission integration are materialized, and the report names every path, ownership boundary, pinned planning invocation, and required commit
 
 #### Scenario: Initialization is repeated
-- **WHEN** the user runs initialization a second time in a repository it already initialized
-- **THEN** every file is byte-identical to what the first run produced
+- **WHEN** initialization runs again against the exact project content it previously created
+- **THEN** every project file is byte-identical and the report says no project initialization change is required
 
-#### Scenario: The materialized overlay is the one the checking CLI accepts
-- **WHEN** the overlay carried in the binary is materialized into a repository
-- **THEN** the stock OpenSpec CLI validates that overlay and creates a change with the Goalrail schema, verified on the development side rather than in the user's repository
+#### Scenario: The declaration is cloned
+- **WHEN** initialized project content is committed and cloned or opened through a linked worktree
+- **THEN** the checkout resolves the committed managed-project identity without another initialization command or marker
+
+#### Scenario: The materialized overlay is checked in development
+- **WHEN** the overlay carried in the binary is exercised by Goalrail's conformance suite
+- **THEN** the pinned stock OpenSpec CLI validates the overlay and creates a change using the Goalrail schema without requiring that CLI during repository initialization
+
+#### Scenario: Declaration path already conflicts
+- **WHEN** initialization finds malformed, unsupported, linked, or owner-authored content at the reserved declaration path
+- **THEN** it names the conflict and performs zero project writes rather than overwriting the governance claim
 
 ### Requirement: An existing OpenSpec root survives initialization
 **Intent IDs:** OUT-1, OUT-2, OUT-3, SIG-1, SIG-2, SIG-3, SIG-5
@@ -227,193 +213,47 @@ and valid; initialization MUST NOT truncate or rewrite the live marker in place.
 - **THEN** the configuration differs from its prior contents only in the schema key
 
 ### Requirement: Initialization registers the attachment where the scaffold allows it
-**Intent IDs:** OUT-1, OUT-2, OUT-3, OUT-4, OUT-5, OUT-6, SIG-1, SIG-2, SIG-3, SIG-4, SIG-5, SIG-6, SIG-7
+**Intent IDs:** OUT-2, OUT-3, OUT-4, OUT-10, SIG-2, SIG-3, SIG-12
 
-Initialization SHALL register the session hooks for a scaffold whose settings
-layer permits registration inside the repository, because marking a repository
-and attaching to its sessions are one act, and a registration that lives in the
-repository is never invoked in unrelated sessions at all.
+Initialization MAY attach a detected or explicitly selected supported scaffold only within the exact local mutations disclosed by the invoking setup or initialization action. Project identity SHALL remain established by committed content whether attachment succeeds, is declined, requires a scaffold trust step, or no supported scaffold is present.
 
-The scaffold SHALL be selected by detection, with an explicit flag override.
-Where no supported scaffold is detected, initialization SHALL still install the
-overlay and the marker, and the report SHALL name the command that registers the
-attachment later; installing the harness must not depend on which agent
-environment happens to be present. Where a supported scaffold registers only at
-user scope, the report SHALL name that separate consented command rather than
-implying the attachment is complete.
+Where a scaffold permits repository-scope registration in a non-executable or user-approved settings surface, Goalrail SHALL use that supported scope. Where registration is user-local, Goalrail SHALL write it only under explicit authorization that enumerates the exact path, executable, events, rollback, and any clone-local ignore entries. It MUST NOT write or simulate provider trust records, silently change user-wide or system-wide configuration, or make one user's executable registration committable for teammates.
 
-The registration SHALL be written to the scaffold's per-user project settings
-file, and MUST NOT be written to a settings file the repository could supply to
-someone else. A registration a repository could carry would run in every
-teammate's session on the strength of one user's consent, and consent to run a
-command in one's own sessions is not transferable.
+Clone-local ignore entries and repository-relative settings paths SHALL be resolved through Git for the exact target worktree. Writes SHALL preserve unrelated content, refuse unsafe links and path escapes, and remain idempotent. A shared ignore or instruction change MUST be part of the enumerated repository-content plan; it MUST NOT be smuggled into local attachment consent.
 
-Registration SHALL therefore happen only where that path is ignored by the
-version control system, and initialization SHALL make it so by the same act,
-using a rule that belongs to the clone alone and that no commit can carry. That
-rule is not repository content and needs nobody else's agreement, so writing it
-belongs to registering rather than to a separate thing the user must be asked
-for. The entries it adds SHALL be reported among initialization's changes,
-because a write the user cannot see is one they can neither audit nor undo.
+The registered events SHALL match session-open and session-end semantics rather than a stop-like event that fires every turn. Re-running SHALL repair only stale registrations Goalrail can prove it owns, leave correct registrations byte-identical, and leave foreign handlers untouched. A repository with no work tree SHALL be refused before any project or attachment write.
 
-Initialization MUST NOT modify ignore rules the version control system would
-share with anyone else unasked, and MUST NOT register in the hope that nobody
-commits the file. Where the path cannot be made unshareable by the clone's own rule —
-because it is already tracked, or because a shared rule outranks the clone's —
-initialization SHALL install the rest of the harness, refuse the registration,
-and name the reason, the exact ignore entry that would make it possible, and the
-flag that adds it. An explicit flag SHALL add the missing entries to the shared
-rules and proceed, reporting them among its changes, because there they are
-repository content exactly as the overlay is, and because a shared rule that
-outranks the clone's is the one condition only shared content can answer.
-
-The clone's rule SHALL be located by asking the version control system where it
-belongs rather than by assuming a path, because the assumed path is not a
-directory in a linked worktree or a submodule and its parent is not guaranteed to
-exist anywhere. Every such question SHALL be asked about the directory
-initialization was given, with any repository the caller's environment selects
-disregarded: an answer about another repository would put the rule there and then
-read it back as though it governed this one. Writing the rule SHALL preserve what
-the user already put there, SHALL NOT follow a link out of the repository, and
-SHALL express each entry so that it covers the path from wherever that rule is
-read — which is not always the directory the user named. Re-running SHALL add
-nothing it has already added.
-
-Where the rule cannot be written — the directory is not a repository, the version
-control system is unavailable or unintelligible, the target is not a file
-initialization may write, or the write fails — initialization SHALL complete
-without it and let the refusal above answer for the consequence. Making a path
-unshareable is a service initialization performs where it can, never a
-precondition it imposes: the harness is inert repository content, and installing
-it has never required a repository or the tool that manages one.
-
-A repository with no work tree is the one case that is not merely skipped. It has
-nowhere for repository content to live, so no path that installs or maintains the
-harness SHALL write into it — not the overlay, not the marker, and not an ignore
-rule under any flag. That SHALL be refused with the reason named, before the
-first write.
-
-Where the directory is not a repository, no rule is needed and none can be
-written, but the registration becomes committable the moment the directory
-becomes one. Initialization SHALL state that and complete, because the exposure
-that earns a refusal elsewhere must not arrive here in silence.
-
-The participation marker carries the same exposure for a weaker reason: it is per
-clone, and committing it would make one user's initialization a shared repository
-fact. Its entry SHALL be written by the same act as the registration's. Where it
-cannot be, initialization SHALL still complete and SHALL say so, because refusing
-to install the harness over an ignore rule would be a disproportionate response
-to a recoverable condition.
-
-The events registered SHALL be the ones whose cadence matches the meaning they
-carry: the occurrence that opens a session, and the event that fires when a session
-ends. Where a scaffold's stop-like event fires once per turn instead, it MUST NOT
-be the one registered — a question left at the reserved path would be retained
-again on every turn, minting a record per turn out of one session's single
-question.
-
-Re-running initialization SHALL repair a registration of ours that is stale,
-unscoped, or naming a superseded event, under the same discipline connection
-follows: replace rather than accompany, leave a correct registration
-byte-identical, and leave a handler it did not add untouched.
-
-Initialization MUST NOT modify user-level scaffold configuration for any reason,
-including removing a registration that belongs to an earlier arrangement. It MUST
-NOT write an ignore rule outside the repository it was invoked on, including into
-configuration that would govern every other repository the user clones: consent
-to initialize one repository is not consent to configure the machine.
-
-#### Scenario: A scaffold is detected
-- **WHEN** initialization runs where exactly one supported repository-scope scaffold is present
-- **THEN** the hooks are registered for that scaffold in its per-user project settings file
-
-#### Scenario: The scaffold is named explicitly
-- **WHEN** the user names a scaffold with the override flag
-- **THEN** that scaffold is used regardless of what detection would have concluded
+#### Scenario: A scaffold is detected during authorized setup
+- **WHEN** the exact setup plan authorizes attachment for a detected supported scaffold
+- **THEN** Goalrail applies only the enumerated local registration, reports any required provider trust action, and keeps project identity independent of attachment health
 
 #### Scenario: No scaffold is detected
-- **WHEN** initialization runs where no supported scaffold is present
-- **THEN** the overlay and the marker are still installed and the report names the command that registers the attachment later
+- **WHEN** initialization creates project content on a machine with no supported scaffold
+- **THEN** project initialization completes, the report names local setup as pending, and no scaffold configuration is guessed or changed
 
-#### Scenario: The scaffold registers only at user scope
-- **WHEN** initialization runs for a scaffold whose repository-scope route is externally blocked
-- **THEN** the report names the separate consented connection command instead of implying the attachment is complete
+#### Scenario: User-local configuration was not authorized
+- **WHEN** initialization would need to modify a user-local registration absent an exact consented setup plan
+- **THEN** it leaves user configuration unchanged and reports the separate setup action
 
-#### Scenario: The project settings path is not ignored
-- **WHEN** initialization would register hooks in a per-user project settings file the version control system does not yet ignore, and the clone's own rule can cover it
-- **THEN** that rule is written, the registration proceeds, the report names the entries among its changes, and no rule the repository could supply to someone else is modified
+#### Scenario: Registration path could be committed accidentally
+- **WHEN** a local executable registration would land in tracked or otherwise shareable project content without being an explicit safe bootstrap adapter
+- **THEN** Goalrail refuses that registration and names the exact conflict rather than relying on the user not to commit it
 
-#### Scenario: A shared rule outranks the clone's rule
-- **WHEN** initialization would register hooks in a path that a rule the repository shares keeps from being ignored, so the clone's own rule cannot cover it
-- **THEN** the registration is refused, the rest of the harness is installed, and the report names the reason, the exact ignore entry, and the flag that adds it
-
-#### Scenario: The project settings path is already tracked
-- **WHEN** initialization would register hooks in a per-user project settings file the repository already tracks
-- **THEN** the registration is refused with the reason named, because no ignore rule protects a tracked file
-
-#### Scenario: The user asks for the ignore entries to be added
-- **WHEN** initialization runs with the explicit flag that manages ignore rules
-- **THEN** the missing entries are added to the rules the repository shares, the registration proceeds, and the report names the entries among its changes
-
-#### Scenario: The repository's layout is not the assumed one
-- **WHEN** initialization runs in a linked worktree or a submodule, where the assumed location of the clone's rule is not a directory
-- **THEN** the rule is written where the version control system says it belongs, and the registration proceeds
-
-#### Scenario: The clone's rule file already has content
-- **WHEN** initialization writes the clone's rule into a file the user has already written in, including one whose last line has no terminator
-- **THEN** every line the user wrote still means what it meant, both entries take effect, and a second initialization changes no byte
-
-#### Scenario: The directory is not a repository
-- **WHEN** initialization runs where the version control system is available and the directory is not under version control
-- **THEN** the harness is installed, nothing is refused, no rule is written, and the report states that the registration becomes committable if the directory becomes a repository
-
-#### Scenario: The version control system is unavailable
-- **WHEN** initialization runs on a machine where the version control system cannot be executed
-- **THEN** initialization completes and installs the harness, because making a path unshareable is a service it performs where it can and never a precondition
-
-#### Scenario: The repository has no work tree
-- **WHEN** initialization runs against a repository that has no work tree, whether because it is bare or because the directory named is the repository's own
-- **THEN** it is refused with the reason named before the first write, and no ignore rule and no harness content are written into it, by any path including the explicit flag
-
-#### Scenario: The environment selects another repository
-- **WHEN** initialization runs where the caller's environment names a repository other than the directory it was given
-- **THEN** every question is asked and every rule written about the directory it was given, and the registration is refused unless that directory's own rules cover the path
-
-#### Scenario: The directory named is below the top of the work tree
-- **WHEN** initialization runs on a directory inside a repository rather than at the top of its work tree
-- **THEN** the entries written cover the paths under that directory, and no rule the repository shares is modified
-
-#### Scenario: The clone's rule cannot be written
-- **WHEN** the rule this clone would be given cannot be written, because the location is not a file initialization may write or the write fails
-- **THEN** the harness is still installed, the report says so, and the registration is refused with the reason named rather than the command failing
-
-#### Scenario: The marker's ignore entry is missing
-- **WHEN** initialization writes the participation marker where the clone's rule cannot cover it
-- **THEN** initialization completes and the report states that the marker is committable, so one user's initialization does not silently become a shared repository fact
-
-#### Scenario: The scaffold's stop-like event fires once per turn
-- **WHEN** initialization registers hooks on a scaffold whose stop-like event fires once per turn and which also exposes an event that fires when a session ends
-- **THEN** the session-ending event is registered and the per-turn event is not
-
-#### Scenario: Re-initialization meets a registration naming a per-turn event
-- **WHEN** initialization runs where its own registration names the per-turn event from an earlier arrangement
-- **THEN** that registration is replaced with the session-ending event, leaving exactly one registration per event and no residue
-
-#### Scenario: Re-initialization meets a stale registration
-- **WHEN** initialization runs where its own registration names an executable other than the one it was invoked with
-- **THEN** exactly one registration per event remains, naming the current executable, with no duplicate and no residue
+#### Scenario: Existing foreign handler shares an event
+- **WHEN** the target scaffold event already contains a handler Goalrail did not create
+- **THEN** Goalrail preserves the foreign handler and adds, repairs, or refuses only its own bounded registration according to the disclosed plan
 
 #### Scenario: Re-initialization meets a correct registration
-- **WHEN** initialization runs where its own registration already names the current executable and the correct occurrence
-- **THEN** the settings file is left byte-identical
+- **WHEN** the exact Goalrail registration already points to the planned durable executable and current events
+- **THEN** re-running leaves it byte-identical
 
-#### Scenario: A foreign handler shares the event
-- **WHEN** initialization registers or repairs an event that also carries a handler it did not add
-- **THEN** the foreign handler survives unchanged, including its occurrence
+#### Scenario: Provider trust is required
+- **WHEN** the scaffold does not run the registration until the user completes its own trust step
+- **THEN** Goalrail reports that state and next action without writing, reproducing, or pre-approving the trust record
 
-#### Scenario: User-level configuration would be modified
-- **WHEN** any initialization path would write to user-level scaffold configuration, or would write an ignore rule outside the repository it was invoked on
-- **THEN** that modification is refused, including when it would remove a registration from an earlier arrangement
+#### Scenario: Repository has no work tree
+- **WHEN** initialization targets a bare repository or another Git repository with no work tree
+- **THEN** it performs zero project and attachment writes and names the unsupported condition
 
 ### Requirement: Installing and maintaining the harness needs no Node runtime
 **Intent IDs:** OUT-1, OUT-6, SIG-12

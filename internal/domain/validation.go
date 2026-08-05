@@ -84,6 +84,12 @@ func IsEvidenceReference(value string) bool {
 	return evidenceReferencePattern.MatchString(value) && !hasSecretShapedContent(value)
 }
 
+// ContainsSecretShapedContent exposes the canonical bounded-payload guard to
+// packages that validate provider-neutral replicas before retaining bytes.
+func ContainsSecretShapedContent(value string) bool {
+	return hasSecretShapedContent(value)
+}
+
 // ValidateIntentSnapshot checks provider-neutral lifecycle and provenance
 // invariants. It validates structure but never grants effect authority.
 func ValidateIntentSnapshot(snapshot IntentSnapshot) error {

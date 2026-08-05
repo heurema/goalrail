@@ -10,53 +10,45 @@ rather than being overwritten, and the command never updates the binary itself o
 consults a release channel.
 ## Requirements
 ### Requirement: One command brings a repository's harness to the installed binary's canon
-**Intent IDs:** OUT-3, SIG-3
+**Intent IDs:** OUT-10, SIG-12
 
-Updating a repository's harness SHALL be one command. It SHALL re-materialize the
-overlay from the binary's canon, verify the result by comparing digests rather
-than by assuming the write succeeded, and report every file it rewrote together
-with what the repository moved from and to.
+Updating a managed repository's harness SHALL be one explicit command. It SHALL re-materialize only canon-owned overlay files, bootstrap files or managed instruction blocks, and prepared admission adapters from the installed binary's known canon, then verify the result by digest and report every file, block, and contract version moved from and to. It SHALL preserve the immutable project identifier and every repository-owned policy value, owner-authored instruction byte, semantic intent, change, WorkSpec, lineage, run, review, and receipt artifact.
 
-The update MUST NOT run as a side effect of another command. A zero-action update
-could change strict-validation behaviour underneath a working agent, which is the
-class of silent breakage this project exists to remove; seamless means one
-command, not zero.
+Update MUST NOT run as a side effect of diagnosis, setup, hooks, verification, or ordinary work. A governance schema migration that changes repository-owned meaning SHALL remain a separate explicit migration or policy amendment rather than being hidden inside canon update.
 
-A repository with no work tree has nowhere for the overlay to live, so updating
-SHALL refuse it with the reason named rather than writing beside the repository's
-own contents. That boundary belongs to the harness rather than to one command:
-initialization and update install the same files, and a rule enforced in one of
-them is a manner rather than a guarantee.
+The previous canon-owned state SHALL remain recoverable through the existing bounded backup discipline. A repository with no work tree SHALL be refused before any write. Update MUST NOT require a planning runtime, network access, release lookup, or the stock OpenSpec CLI, and MUST NOT update the `gr` binary or activate an external shared check.
 
-The previous state SHALL remain recoverable after an update, so a user who
-dislikes the result can return to what they had.
+#### Scenario: Overlay and bootstrap are behind
+- **WHEN** canon-owned overlay and managed bootstrap paths match a previous retained canon
+- **THEN** update materializes the current canon, verifies every changed digest, preserves repository-owned values, and reports each version transition
 
-Updating MUST NOT require a Node runtime, network access, or the stock OpenSpec
-CLI: the canon is already inside the binary.
+#### Scenario: Harness is already current
+- **WHEN** every canon-owned path and managed block matches the installed binary's current canon
+- **THEN** nothing is rewritten and the report says the harness is current
 
-#### Scenario: The overlay is behind the canon
-- **WHEN** the user runs the update in a repository whose overlay matches an older canon
-- **THEN** the overlay is re-materialized, the result is verified by digest, and the report names every rewritten file and the move from the old canon to the new one
+#### Scenario: Owner-authored instruction surrounds a managed block
+- **WHEN** update replaces a Goalrail-owned instruction block inside an otherwise owner-authored file
+- **THEN** bytes outside the proven managed block remain identical and the updated block verifies against canon
 
-#### Scenario: The overlay is already current
-- **WHEN** the user runs the update where every overlay file already matches the canon
-- **THEN** nothing is rewritten and the report says the repository is already current
+#### Scenario: Update would change project policy
+- **WHEN** the current canon differs in a way that would require changing repository-owned identity, materiality, exception, or owner-prose content
+- **THEN** update refuses that semantic migration and names the separate explicit action
 
-#### Scenario: An update would run implicitly
-- **WHEN** any other command would apply an update as a side effect
+#### Scenario: Update would run implicitly
+- **WHEN** another command attempts to apply canon changes as a side effect
 - **THEN** that violates this requirement
 
-#### Scenario: The previous state is wanted back
-- **WHEN** a user wants the pre-update overlay after an update
-- **THEN** what the command left behind is sufficient to restore it
+#### Scenario: Previous state is wanted back
+- **WHEN** an owner needs the pre-update canon-owned bytes after a completed or partial update
+- **THEN** the bounded recovery set and report are sufficient to restore them without rewriting repository-owned policy
 
 #### Scenario: No runtime or network is available
-- **WHEN** the update runs with no Node runtime and no network access
-- **THEN** it completes normally
+- **WHEN** update runs with no external planning runtime and no network
+- **THEN** it completes using only the canon embedded in the installed binary
 
-#### Scenario: The repository has no work tree
-- **WHEN** the update runs against a repository that has no work tree
-- **THEN** it is refused with the reason named, and nothing is written into it
+#### Scenario: Repository has no work tree
+- **WHEN** update targets a repository with no work tree
+- **THEN** it is refused with zero project writes
 
 ### Requirement: Local drift stops an update rather than being overwritten
 **Intent IDs:** OUT-1, SIG-1, SIG-4
@@ -166,3 +158,20 @@ rather than by discipline.
 #### Scenario: A release channel exists
 - **WHEN** published releases are available to query
 - **THEN** this command still performs no lookup, and the question is answered by the diagnosis instead
+
+### Requirement: Update reconciles managed blocks without claiming whole-file ownership
+**Intent IDs:** OUT-10, SIG-12
+
+A canon-owned adapter embedded in an owner-editable instruction or integration file SHALL be delimited by a stable Goalrail block identity and digest. Update SHALL replace a block only when the current bytes match a retained known canon or the owner supplies the existing explicit discard authority for that exact block. Missing, duplicated, nested, moved, or locally edited block boundaries SHALL be drift and MUST NOT be repaired by guessing.
+
+#### Scenario: Managed block matches a previous canon
+- **WHEN** one uniquely delimited block matches a retained previous Goalrail canon
+- **THEN** update replaces only that block and leaves the rest of the file byte-identical
+
+#### Scenario: Managed block was edited
+- **WHEN** a delimited block matches no known canon
+- **THEN** update names the block as drift and changes nothing without exact discard authority
+
+#### Scenario: Block markers are ambiguous
+- **WHEN** block markers are duplicated, nested, malformed, or identify more than one candidate
+- **THEN** update fails closed for that file and does not choose a block heuristically

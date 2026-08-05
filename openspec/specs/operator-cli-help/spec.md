@@ -6,59 +6,39 @@ Define concise built-in lifecycle and command help for the `gr` operator
 surface without changing machine-readable command results.
 ## Requirements
 ### Requirement: Gr exposes a concise lifecycle help surface
-**Intent IDs:** OUT-1, OUT-2, OUT-7, SIG-8
+**Intent IDs:** OUT-2, OUT-4, OUT-5, OUT-7, OUT-10, SIG-2, SIG-3, SIG-5, SIG-12
 
-The `gr help` command SHALL describe the `prepare → inspect → start → finish`
-lifecycle, state that start remains explicit and owner-assisted, and identify
-how to obtain help for each command. The help text MUST NOT expose fixture-only
-or broader activation controls.
+The `gr help` command SHALL describe the existing `prepare → inspect → start → finish` run lifecycle, state that start remains explicit and owner-assisted, and identify built-in help for each command. It SHALL also describe the managed-project lifecycle in its dependency order: initialize or migrate project governance; diagnose project and local readiness; plan and explicitly authorize missing setup; confirm intent and select one current Goalrail change; prepare and run bounded work; inspect lineage; verify the immutable base/head range; and use the same verifier at shared admission.
 
-Help SHALL additionally present the harness as its own surface, distinct from
-that lifecycle: installing the harness in a repository, diagnosing it, updating
-it to what the installed binary carries, connecting a scaffold that registers
-only at user scope, and disconnecting. It SHALL make plain that after
-installation ordinary work needs no Goalrail command, so an operator cannot
-mistake the wrapper lifecycle for something they must run per task.
+Help MUST NOT state that material ordinary work needs no per-task Goalrail flow. It SHALL instead say that supported agents perform the flow through committed bootstrap guidance, while the operator can inspect each artifact and verdict. It SHALL distinguish project identity, local setup, advisory local checks, and protected shared admission, and MUST NOT call local hooks or `prek` unbypassable.
 
-The diagnosis command SHALL be discoverable from help, because the states it
-reports — hooks registered but not yet trusted, or an overlay that has drifted
-from the canonical one — are otherwise indistinguishable from a broken
-installation.
+Initialization, migration, setup planning, setup execution, diagnosis, update, connection, disconnection, lineage inspection, and lineage verification SHALL be discoverable as separate operations with their authority boundaries. Help SHALL state that setup permission covers only an exact plan, that Goalrail does not automate provider trust, and that external required-check activation is separate owner-authorized work.
 
-A command name that is superseded SHALL keep working and SHALL name its
-successor, and every remedy the tool prints SHALL name a command the tool
-accepts. Renaming a surface while printed advice still names the old one leaves
-the user following instructions that fail.
-
-The hook entry point SHALL NOT appear in help. It is invoked by the scaffold,
-never by a person, and listing it would invite manual invocation of a
-fail-quiet path whose silence would then read as breakage.
+A superseded command name SHALL keep working during its declared migration window and name its successor. Every printed remedy SHALL name an accepted command or an exact documented user/provider action. Internal hook entry points, fixture-only controls, and broader activation controls MUST NOT appear as operator commands.
 
 #### Scenario: Operator requests top-level help
 - **WHEN** an operator invokes `gr help`
-- **THEN** the command prints the concise lifecycle and points to help for
-  `prepare`, `inspect`, `start`, and `finish`
+- **THEN** help presents both the bounded run lifecycle and the managed-project setup, intent/change, lineage, and admission lifecycle in dependency order
 
-#### Scenario: Operator looks for the background surface
-- **WHEN** an operator invokes `gr help`
-- **THEN** installation, diagnosis, updating, connection, and disconnection are
-  presented as a separate surface, and the text states that ordinary work needs
-  no per-task Goalrail command
+#### Scenario: Operator looks for ordinary feature flow
+- **WHEN** an operator reads top-level help after cloning a managed project
+- **THEN** help directs supported agents through diagnosis and exact setup when needed, then confirmed intent and one current change before material code work
 
-#### Scenario: Operator cannot tell untrusted from broken
-- **WHEN** an operator's attachment is registered but not yet trusted, or the
-  repository's overlay has drifted from the canonical one
-- **THEN** help points at the diagnosis command that names that exact state
+#### Scenario: Operator compares local and shared checks
+- **WHEN** an operator reads help for lineage verification
+- **THEN** help states that local integrations are advisory and protected shared admission is authoritative only after verified activation
 
-#### Scenario: A superseded command name is used
-- **WHEN** an operator invokes a command name this change supersedes
-- **THEN** it still runs and its output names the command that replaces it
+#### Scenario: Operator encounters an untrusted scaffold
+- **WHEN** help describes setup or connection for a scaffold with its own trust step
+- **THEN** it names the user's provider action and does not imply Goalrail can pre-approve trust
 
-#### Scenario: Help would advertise the hook entry point
-- **WHEN** help text would list the scaffold-invoked hook entry point as an
-  operator command
-- **THEN** that violates this requirement, because the hook is never invoked by
-  a person
+#### Scenario: Superseded command name is used
+- **WHEN** an operator invokes a command retained for migration compatibility
+- **THEN** it still runs within the declared window and its output names the current command and changed semantics
+
+#### Scenario: Help would advertise a hook entry point
+- **WHEN** generated help would list a scaffold- or Git-invoked internal hook as an operator command
+- **THEN** that violates this requirement
 
 ### Requirement: Each Gr command exposes built-in flag guidance
 **Intent IDs:** OUT-1, OUT-2
@@ -75,4 +55,3 @@ nor of the background attachment commands.
 #### Scenario: Existing machine-readable command succeeds
 - **WHEN** an operator invokes a supported command with valid non-help input
 - **THEN** its existing JSON result and execution semantics remain unchanged
-

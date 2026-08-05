@@ -8,14 +8,17 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/heurema/goalrail/internal/boundedio"
 )
 
 // Scaffold is one supported agent environment Goalrail can attach to.
 type Scaffold string
 
 const (
-	ScaffoldCodex      Scaffold = "codex"
-	ScaffoldClaudeCode Scaffold = "claude-code"
+	ScaffoldCodex         Scaffold = "codex"
+	ScaffoldClaudeCode    Scaffold = "claude-code"
+	maxPreviewConfigBytes          = 1 << 20
 )
 
 // SupportedScaffolds is the fixed set this version can connect to.
@@ -48,6 +51,16 @@ type ConnectionPlan struct {
 	// differs from the one being registered. Reported detail rather than a
 	// promoted contract: it says what a repair replaces.
 	RegisteredExecutable string `json:"registered_executable,omitempty"`
+}
+
+// ConnectionPreview is the exact before/after configuration image for a
+// connection plan. Producing it is read-only; setup planning retains only the
+// digests, never these potentially owner-authored bytes.
+type ConnectionPreview struct {
+	ConfigPath   string
+	BeforeExists bool
+	Before       []byte
+	After        []byte
 }
 
 // marker lines bracket everything a connection adds, so disconnection can
@@ -149,6 +162,69 @@ func PlanRegistration(target Target, executable string) (ConnectionPlan, error) 
 	}, nil
 }
 
+// PreviewConnection renders the exact configuration bytes Connect would
+// produce without creating directories, files, trust records, or other state.
+func PreviewConnection(plan ConnectionPlan) (ConnectionPreview, error) {
+	before, exists, err := readPreviewInput(plan.ConfigPath)
+	if err != nil {
+		return ConnectionPreview{}, err
+	}
+	var after []byte
+	switch plan.Scaffold {
+	case ScaffoldCodex:
+		content := string(before)
+		for {
+			remaining, removed, stripErr := stripFirstManagedBlock(content)
+			if stripErr != nil {
+				return ConnectionPreview{}, stripErr
+			}
+			content = remaining
+			if !removed {
+				break
+			}
+		}
+		after = []byte(content + codexManagedBlock(plan.Executable))
+	case ScaffoldClaudeCode:
+		settings, decodeErr := decodeJSONObject(before)
+		if decodeErr != nil {
+			return ConnectionPreview{}, decodeErr
+		}
+		reconcileClaudeCodeSettings(settings, plan)
+		encoded, encodeErr := json.MarshalIndent(settings, "", "  ")
+		if encodeErr != nil {
+			return ConnectionPreview{}, encodeErr
+		}
+		after = append(encoded, '\n')
+	default:
+		return ConnectionPreview{}, fmt.Errorf("unsupported scaffold %q", plan.Scaffold)
+	}
+	if len(after) > maxPreviewConfigBytes {
+		return ConnectionPreview{}, fmt.Errorf("scaffold configuration would exceed %d bytes", maxPreviewConfigBytes)
+	}
+	return ConnectionPreview{
+		ConfigPath: plan.ConfigPath, BeforeExists: exists,
+		Before: append([]byte(nil), before...), After: after,
+	}, nil
+}
+
+func readPreviewInput(configPath string) ([]byte, bool, error) {
+	info, err := os.Lstat(configPath)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+	if !info.Mode().IsRegular() {
+		return nil, false, fmt.Errorf("scaffold configuration is not a regular file")
+	}
+	raw, err := boundedio.ReadRegularFile(configPath, "scaffold configuration", maxPreviewConfigBytes)
+	if err != nil {
+		return nil, false, err
+	}
+	return raw, true, nil
+}
+
 // supersededPresent returns the events this arrangement no longer writes that
 // still carry a handler of ours.
 func supersededPresent(scaffold Scaffold, configPath string) ([]string, error) {
@@ -200,7 +276,7 @@ func staleExecutable(scaffold Scaffold, configPath, executable string) (string, 
 func registeredExecutables(scaffold Scaffold, configPath string) ([]string, error) {
 	switch scaffold {
 	case ScaffoldCodex:
-		raw, err := os.ReadFile(configPath)
+		raw, err := readConfigRaw(configPath)
 		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) {
 				return nil, nil
@@ -408,7 +484,7 @@ func unregister(target Target) (bool, error) {
 }
 
 func isConnected(scaffold Scaffold, configPath string) (bool, error) {
-	raw, err := os.ReadFile(configPath)
+	raw, err := readConfigRaw(configPath)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return false, nil
@@ -485,8 +561,12 @@ func connectCodex(plan ConnectionPlan) error {
 			break
 		}
 	}
-	command := managedCommand(plan.Executable)
-	block := strings.Join([]string{
+	return appendToFile(plan.ConfigPath, codexManagedBlock(plan.Executable))
+}
+
+func codexManagedBlock(executable string) string {
+	command := managedCommand(executable)
+	return strings.Join([]string{
 		"",
 		blockBegin,
 		"[[hooks.SessionStart]]",
@@ -503,7 +583,6 @@ func connectCodex(plan ConnectionPlan) error {
 		blockEnd,
 		"",
 	}, "\n")
-	return appendToFile(plan.ConfigPath, block)
 }
 
 // openingSessionMatcher names the only session-start occurrence that opens a
@@ -534,6 +613,11 @@ func connectClaudeCode(plan ConnectionPlan) error {
 	if err != nil {
 		return err
 	}
+	reconcileClaudeCodeSettings(settings, plan)
+	return writeJSONObject(plan.ConfigPath, settings)
+}
+
+func reconcileClaudeCodeSettings(settings map[string]any, plan ConnectionPlan) {
 	hooks, _ := settings["hooks"].(map[string]any)
 	if hooks == nil {
 		hooks = map[string]any{}
@@ -596,7 +680,6 @@ func connectClaudeCode(plan ConnectionPlan) error {
 	}
 
 	settings["hooks"] = hooks
-	return writeJSONObject(plan.ConfigPath, settings)
 }
 
 // claudeCodeSessionStartIsScoped reports whether our session-start handler is
@@ -753,7 +836,7 @@ func removeClaudeCodeHooks(scaffold Scaffold, configPath string) (bool, error) {
 }
 
 func removeManagedBlock(configPath string) (bool, error) {
-	raw, err := os.ReadFile(configPath)
+	raw, err := readConfigRaw(configPath)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return false, nil
@@ -761,23 +844,10 @@ func removeManagedBlock(configPath string) (bool, error) {
 		return false, err
 	}
 	content := string(raw)
-	begin := strings.Index(content, blockBegin)
-	if begin < 0 {
-		return false, nil
+	remaining, removed, err := stripFirstManagedBlock(content)
+	if err != nil || !removed {
+		return false, err
 	}
-	end := strings.Index(content[begin:], blockEnd)
-	if end < 0 {
-		return false, errors.New("managed block is not terminated; refusing to guess its extent")
-	}
-	tail := begin + end + len(blockEnd)
-	for tail < len(content) && content[tail] == '\n' {
-		tail++
-	}
-	trimmed := strings.TrimRight(content[:begin], "\n")
-	if trimmed != "" {
-		trimmed += "\n"
-	}
-	remaining := trimmed + content[tail:]
 	if strings.TrimSpace(remaining) == "" {
 		// Connection created this file for its own block; leaving an empty
 		// file and directory behind is residue.
@@ -791,13 +861,21 @@ func removeManagedBlock(configPath string) (bool, error) {
 }
 
 func readJSONObject(path string) (map[string]any, error) {
-	raw, err := os.ReadFile(path)
+	raw, err := readConfigRaw(path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return map[string]any{}, nil
 		}
 		return nil, err
 	}
+	return decodeJSONObject(raw)
+}
+
+func readConfigRaw(path string) ([]byte, error) {
+	return boundedio.ReadRegularFile(path, "scaffold configuration", maxPreviewConfigBytes)
+}
+
+func decodeJSONObject(raw []byte) (map[string]any, error) {
 	if len(strings.TrimSpace(string(raw))) == 0 {
 		return map[string]any{}, nil
 	}
@@ -806,6 +884,26 @@ func readJSONObject(path string) (map[string]any, error) {
 		return nil, fmt.Errorf("scaffold settings are malformed: %w", err)
 	}
 	return settings, nil
+}
+
+func stripFirstManagedBlock(content string) (string, bool, error) {
+	begin := strings.Index(content, blockBegin)
+	if begin < 0 {
+		return content, false, nil
+	}
+	end := strings.Index(content[begin:], blockEnd)
+	if end < 0 {
+		return "", false, errors.New("managed block is not terminated; refusing to guess its extent")
+	}
+	tail := begin + end + len(blockEnd)
+	for tail < len(content) && content[tail] == '\n' {
+		tail++
+	}
+	trimmed := strings.TrimRight(content[:begin], "\n")
+	if trimmed != "" {
+		trimmed += "\n"
+	}
+	return trimmed + content[tail:], true, nil
 }
 
 func writeJSONObject(path string, settings map[string]any) error {

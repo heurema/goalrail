@@ -295,28 +295,25 @@ scaffold.
 - **THEN** that modification is refused
 
 ### Requirement: Attachment acts only in initialized directories
-**Intent IDs:** OUT-2, SIG-2
+**Intent IDs:** OUT-1, OUT-2, OUT-10, SIG-1, SIG-2, SIG-12
 
-The first act of every hook invocation SHALL be to determine whether the
-session's directory is a Goalrail-initialized repository. Everywhere else the
-hook MUST exit immediately, reading nothing beyond the initialization check,
-writing nothing, and retaining no observation of the session. In particular,
-the scaffold's event payload MUST NOT be read before the check passes: a
-payload can carry prompts, transcript paths, and authorization fields, and
-reading one in an unconnected directory observes the session regardless of
-what happens afterwards.
+The first act of every persistent hook invocation SHALL be to resolve the session's Git worktree root and inspect only the canonical Goalrail project declaration path. In a repository with no declaration claim, the hook MUST exit immediately, reading no event payload, writing nothing, and retaining no observation. A valid declaration SHALL make ambient behavior eligible in every clone and linked worktree, independent of any legacy marker; local attachment health remains a separate fact.
 
-Observing sessions outside connected directories is prohibited, not merely
-avoided: a persistent hook fires for every session of the user, and acting
-outside initialized directories would monitor unrelated work.
+If the reserved declaration path exists but is invalid, the hook MUST fail closed before reading the event payload or retaining session data. It MAY emit one fixed bounded diagnostic directing the supported agent to `gr doctor`, but MUST NOT infer unmanaged status or inspect prompt-, transcript-, credential-, or authorization-bearing payload fields.
 
-#### Scenario: Session in an unconnected directory
-- **WHEN** a session starts or stops in a directory that is not Goalrail-initialized
-- **THEN** the hook exits immediately with zero writes and zero retained observations
+Observing sessions outside declared projects remains prohibited. A persistent user-scope hook can fire for every session, so declaration discovery MUST precede payload parsing and MUST NOT follow a symlink or path outside the resolved worktree.
 
-#### Scenario: Session in a connected directory
-- **WHEN** a session starts in a Goalrail-initialized directory
-- **THEN** the ambient behaviour of this capability applies
+#### Scenario: Session in an unmanaged directory
+- **WHEN** a session starts or stops in a repository with no Goalrail declaration claim
+- **THEN** the hook exits immediately with zero payload reads, writes, and retained observations
+
+#### Scenario: Session in a managed clone without a legacy marker
+- **WHEN** a session starts in a clone carrying a valid committed declaration and no checkout-local marker
+- **THEN** the ambient behavior of this capability applies subject to local attachment health
+
+#### Scenario: Declaration is invalid
+- **WHEN** the reserved declaration path exists but cannot be safely validated
+- **THEN** the hook reads no event payload, retains nothing, and emits at most the fixed diagnosis direction
 
 ### Requirement: Session start announces the channel and clears stale questions
 **Intent IDs:** OUT-3, SIG-3
@@ -456,91 +453,54 @@ wrapper certifies a run, the background layer must first do no harm.
 - **THEN** its promoted fail-closed behaviour applies exactly as before
 
 ### Requirement: Attachment health is reportable and trust is never forged
-**Intent IDs:** OUT-2, OUT-3, SIG-2, SIG-3
+**Intent IDs:** OUT-2, OUT-3, OUT-4, OUT-10, SIG-2, SIG-3, SIG-12
 
-A registered hook does not run until the scaffold's own trust step has been
-completed by the user, where the scaffold has one, so registration alone does not
-make an attachment work. Goalrail SHALL therefore report attachment health on
-demand, distinguishing at least: the scaffold is not connected; this repository is
-not initialized; the hooks are registered but not yet trusted; the attachment is
-working. Each state that is not working SHALL name the next action.
+A registered hook does not run until the scaffold's own trust step has been completed where the scaffold has one. Goalrail SHALL report attachment health on demand, distinguishing at least: repository unmanaged; project declaration invalid; managed project not locally connected; hooks registered but trust pending or unverifiable; executable missing; configuration unreadable; and attachment locally working. Project identity SHALL come from the committed declaration and MUST NOT depend on the attachment verdict.
 
-Health SHALL be judged in the scope where that scaffold's registration belongs.
-Reporting a repository-scope scaffold as disconnected because user-level
-configuration holds nothing would be a confident wrong answer. Where a
-registration for such a scaffold survives at user scope from the earlier
-arrangement, the report SHALL name it and the consented command that removes it,
-and MUST NOT modify it.
+Health SHALL be judged in the scope where each scaffold's registration belongs. A surviving registration in a superseded scope SHALL be named with the consented removal action and MUST NOT be modified by diagnosis. Goalrail MUST NOT write, compute, reproduce, pre-approve, or simulate scaffold trust records. Reporting an observed trust state is permitted; absence of verifiable trust freshness SHALL remain explicit.
 
-Goalrail MUST NOT write, compute, or reproduce the scaffold's hook-trust
-records, and MUST NOT automate, pre-approve, or simulate the user's approval by
-any means. Trust is a standing consent to run a command in the user's sessions;
-it belongs to the user, granted through the scaffold's own surface. That this is
-technically possible, and is practised by other integrations, does not make it
-permissible here: it would depend on private implementation details and would
-convert an explicit consent into an assumed one.
+Health SHALL verify every required registered event, the exact durable executable, safe configuration parsing, and the current Goalrail-owned handler identity. Where no scaffold is named, every supported scaffold SHALL be reported. Local attachment working MUST NOT be described as full project enforcement; shared admission remains a separate diagnosis layer.
 
-Reporting trust state is observation and is permitted. Reading is not writing.
+#### Scenario: Managed project is not connected locally
+- **WHEN** attachment health runs in a valid declared project with no registration for the selected scaffold
+- **THEN** it reports managed identity, local disconnection, and the exact consented setup action
 
-A report SHALL NOT claim more than it verified. Where the scaffold records
-trust against a form Goalrail may not reproduce, the report SHALL say that a
-record exists without claiming it still matches the current definition, and
-SHALL name that gap. Where a scaffold's trust behaviour has not been observed
-at all, the report SHALL say so rather than assert either answer, and where the
-provider documents that no approval step exists, the report SHALL distinguish
-that documented state from an observed one.
+#### Scenario: Repository is unmanaged
+- **WHEN** attachment health runs where no declaration claim exists
+- **THEN** it reports unmanaged and does not treat the directory as a participant
 
-Health SHALL be reported against everything a working attachment requires, not
-a proxy for it: every registered event, not one; the registered executable
-still present and runnable, since a registration pointing at a moved binary
-satisfies every configuration check and still cannot run; and a scaffold
-configuration that cannot be read or parsed reported as its own failure with
-its own action, because recommending connection would repeat the same failure.
-
-Where a health query does not name a scaffold, Goalrail SHALL report every
-supported scaffold rather than assume one. A confident diagnosis about a
-scaffold the user never chose is worse than no answer.
+#### Scenario: Declaration is invalid
+- **WHEN** the reserved declaration path is present but invalid
+- **THEN** attachment health reports declared-invalid and does not recommend creating an unrelated local marker
 
 #### Scenario: Attachment is not yet trusted
-- **WHEN** the user asks for attachment health after connecting but before trusting the hooks
-- **THEN** the report says the hooks are registered but not trusted, and names the next action
+- **WHEN** hooks are registered but the scaffold's required trust step is incomplete or unverified
+- **THEN** the report names the exact user action or uncertainty without writing a trust record
 
-#### Scenario: Repository is not initialized
-- **WHEN** the user asks for attachment health in a directory Goalrail was never initialized in
-- **THEN** the report says so and names the next action, without treating the directory as participating
+#### Scenario: Health is judged in the scaffold scope
+- **WHEN** a scaffold's registration belongs inside the repository or at user scope
+- **THEN** health reads that declared scope and does not infer state from another scope
 
-#### Scenario: Health is judged in the scope the scaffold uses
-- **WHEN** the user asks for attachment health for a scaffold whose registration belongs inside the repository
-- **THEN** the report reads that scope, and does not call the attachment absent because user-level configuration holds nothing
+#### Scenario: Only part of registration survives
+- **WHEN** one required event is missing while another remains
+- **THEN** the attachment is not locally working and the missing event is named
 
-#### Scenario: A registration survives in the superseded scope
-- **WHEN** attachment health finds a registration for a repository-scope scaffold at user scope
-- **THEN** the report names it and the consented command that removes it, and changes nothing
-
-#### Scenario: Only part of the registration survives
-- **WHEN** one of the registered events is removed while the rest of the registration remains
-- **THEN** the attachment is not reported as connected or working, because the missing event silently removes either the announcement or the retention of questions
-
-#### Scenario: The registered executable is gone
-- **WHEN** the binary a registration points at has been moved or removed
-- **THEN** the attachment is not reported as working, and the report names that cause
+#### Scenario: Registered executable is gone
+- **WHEN** the configured Goalrail executable is missing or not runnable
+- **THEN** health reports the exact failure and routes through consented setup planning
 
 #### Scenario: Scaffold configuration cannot be read
-- **WHEN** the scaffold configuration is unreadable or malformed
-- **THEN** the report names that as the failure with its own next action, rather than reporting an ordinary disconnected state
+- **WHEN** scaffold configuration is unreadable, unsafe, or malformed
+- **THEN** health names that failure rather than reporting ordinary disconnection
 
 #### Scenario: No scaffold is named
 - **WHEN** a health query names no scaffold
-- **THEN** every supported scaffold is reported, rather than one being assumed
+- **THEN** every supported scaffold is reported without assuming one
 
-#### Scenario: Trust freshness cannot be established
-- **WHEN** a trust record exists but Goalrail cannot confirm it still matches the current hook definition
-- **THEN** the report states that a record exists, names the unverified part, and does not claim the definition is trusted as it now stands
-
-#### Scenario: Attachment is working
-- **WHEN** the scaffold is connected in the scope it uses, the repository initialized, and the hooks trusted where a trust step applies
-- **THEN** the report says the attachment is working and asks nothing further of the user
+#### Scenario: Attachment is locally working
+- **WHEN** the project declaration is valid, every required event points to the current durable executable, configuration is readable, and trust verifies where required
+- **THEN** health reports the attachment locally working and makes no claim about shared admission
 
 #### Scenario: Trust would be written by Goalrail
-- **WHEN** any Goalrail path would write, compute, or reproduce a scaffold trust record, or otherwise approve hooks on the user's behalf
-- **THEN** that is prohibited, regardless of technical feasibility
+- **WHEN** any Goalrail path would write, compute, reproduce, or otherwise approve scaffold trust on the user's behalf
+- **THEN** that action is prohibited regardless of setup authorization

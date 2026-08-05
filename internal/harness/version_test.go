@@ -5,18 +5,9 @@ import (
 	"testing"
 )
 
-// TestVersionIsReportedExactlyAsTheBuildCarriesIt pins the whole resolution rule
-// against the shapes the toolchain actually produces, each of them observed by
-// building this repository in a scratch clone rather than guessed:
-//
-//   - a clean checkout exactly at tag v0.1.0 stamps `v0.1.0`;
-//   - one commit later, the next patch version as a pseudo-version;
-//   - with no tags at all, a v0.0.0 pseudo-version;
-//   - a modified tree adds `+dirty` to whichever shape applies;
-//   - a build with version control stamping off stamps `(devel)`.
-//
-// The reader is injected because a test binary reports `(devel)` in every Git
-// state, so none of these shapes can be observed from inside a test.
+// TestVersionIsReportedExactlyAsTheBuildCarriesIt pins the fallback used by
+// go-install and development builds. Tagged release builds use the separately
+// tested verifier-bound linker stamp.
 func TestVersionIsReportedExactlyAsTheBuildCarriesIt(t *testing.T) {
 	for _, testCase := range []struct {
 		name    string
@@ -30,11 +21,17 @@ func TestVersionIsReportedExactlyAsTheBuildCarriesIt(t *testing.T) {
 		{"with no version control behind it", "(devel)"},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
-			resolved := resolveVersion(buildInfo(testCase.carried))
+			resolved := resolveVersion("", buildInfo(testCase.carried))
 			if resolved != testCase.carried {
 				t.Errorf("resolved %q from a build carrying %q", resolved, testCase.carried)
 			}
 		})
+	}
+}
+
+func TestReleaseLinkerStampTakesPrecedence(t *testing.T) {
+	if resolved := resolveVersion("v0.2.0", buildInfo("(devel)")); resolved != "v0.2.0" {
+		t.Fatalf("resolved %q, want release linker stamp", resolved)
 	}
 }
 
@@ -43,17 +40,17 @@ func TestVersionIsReportedExactlyAsTheBuildCarriesIt(t *testing.T) {
 // number nobody stamped reads as a claim; `unknown` is the only honest answer.
 func TestVersionSaysUnknownWhenTheBuildCarriesNone(t *testing.T) {
 	t.Run("no build information at all", func(t *testing.T) {
-		if resolved := resolveVersion(func() (*debug.BuildInfo, bool) { return nil, false }); resolved != unknownVersion {
+		if resolved := resolveVersion("", func() (*debug.BuildInfo, bool) { return nil, false }); resolved != unknownVersion {
 			t.Errorf("resolved %q with no build information", resolved)
 		}
 	})
 	t.Run("build information carrying an empty version", func(t *testing.T) {
-		if resolved := resolveVersion(buildInfo("")); resolved != unknownVersion {
+		if resolved := resolveVersion("", buildInfo("")); resolved != unknownVersion {
 			t.Errorf("resolved %q from a build carrying no version string", resolved)
 		}
 	})
 	t.Run("a reader that reports success with nothing behind it", func(t *testing.T) {
-		if resolved := resolveVersion(func() (*debug.BuildInfo, bool) { return nil, true }); resolved != unknownVersion {
+		if resolved := resolveVersion("", func() (*debug.BuildInfo, bool) { return nil, true }); resolved != unknownVersion {
 			t.Errorf("resolved %q from a nil build information", resolved)
 		}
 	})
