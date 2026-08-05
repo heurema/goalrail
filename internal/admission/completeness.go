@@ -17,7 +17,10 @@ type Completeness struct {
 	ExpiredExceptions []domain.SHA256Digest
 }
 
-func EvaluateCompleteness(graph WorkUnitGraph, evaluatedAt time.Time) (Completeness, error) {
+// EvaluateCompleteness resolves every required relation through the ephemeral
+// effective view: committed relations, semantic projections of the exact
+// committed artifacts, and authenticated same-invocation provider candidates.
+func EvaluateCompleteness(graph WorkUnitGraph, evaluatedAt time.Time, view EffectiveView) (Completeness, error) {
 	if evaluatedAt.IsZero() {
 		return Completeness{}, fmt.Errorf("completeness evaluation time is required")
 	}
@@ -62,10 +65,11 @@ func EvaluateCompleteness(graph WorkUnitGraph, evaluatedAt time.Time) (Completen
 	}
 	var admissionMissing, closedMissing []domain.LineageRelation
 	for _, requirement := range graph.Unit.RequiredRelations {
-		if requirement.Relation != domain.LineageClosure && (!present[requirement.Relation] || unavailable[requirement.Relation]) {
+		effective := view.present(requirement.Relation, present[requirement.Relation], unavailable[requirement.Relation])
+		if requirement.Relation != domain.LineageClosure && !effective {
 			admissionMissing = append(admissionMissing, requirement.Relation)
 		}
-		if !present[requirement.Relation] || unavailable[requirement.Relation] {
+		if !effective {
 			closedMissing = append(closedMissing, requirement.Relation)
 		}
 	}
@@ -85,6 +89,9 @@ func EvaluateCompleteness(graph WorkUnitGraph, evaluatedAt time.Time) (Completen
 		}
 	}
 	for _, relation := range result.Unavailable {
+		if view.Satisfied(relation) {
+			continue
+		}
 		if requiredRelation(graph.Unit.RequiredRelations, relation) {
 			blockedClosed = true
 			if relation != domain.LineageClosure {

@@ -83,7 +83,7 @@ jobs:
           test -x "${RUNNER_TEMP}/goalrail-bin/gr"
           "${RUNNER_TEMP}/goalrail-bin/gr" version \
             | grep --fixed-strings --quiet "\"version\":\"${GOALRAIL_VERSION}\""
-      - name: Collect bounded provider evidence and verify lineage
+      - name: Observe the provider and verify lineage in one invocation
         shell: bash
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -95,12 +95,10 @@ jobs:
           gr="${RUNNER_TEMP}/goalrail-bin/gr"
           base="${{ github.event.pull_request.base.sha }}"
           head="${{ github.event.pull_request.head.sha }}"
-          "${gr}" github-collect \
+          "${gr}" github-verify \
             --repo . --base "${base}" --head "${head}" \
             --event-name "${GOALRAIL_EVENT_NAME}" \
-            --event "${GITHUB_EVENT_PATH}" --output "${packet}"
-          "${gr}" verify-lineage --repo . --base "${base}" --head "${head}" \
-            --packet "${packet}" --json
+            --event "${GITHUB_EVENT_PATH}" --packet-out "${packet}" --json
 `, CheckoutActionCommit, pin.ArchiveURL, pin.ArchiveName, digest, pin.Version)
 	return []byte(workflow), nil
 }

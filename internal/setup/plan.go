@@ -366,7 +366,11 @@ func (p *planner) inspectExecutableDestination(path string, manifest releasebund
 		p.addIssue("EXECUTABLE_DESTINATION_UNREADABLE", err.Error())
 		return false
 	}
-	if actual == desired && info.Mode().Perm() == fs.FileMode(expectedMode) {
+	if actual != desired {
+		p.addIssue("EXECUTABLE_DESTINATION_CONFLICT", path+" contains different executable bytes that cannot be recovered")
+		return false
+	}
+	if info.Mode().Perm() == fs.FileMode(expectedMode) {
 		return true
 	}
 	p.addMutation("select-executable", domain.SetupMutationSelectExecutable, domain.SetupScopeUserLocal, path, digestPointer(actual), desired)

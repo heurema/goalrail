@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/heurema/goalrail/internal/admission"
 	"github.com/heurema/goalrail/internal/domain"
 )
 
@@ -167,33 +168,42 @@ type CollectRequest struct {
 	Reader Reader
 }
 
-func Collect(ctx context.Context, request CollectRequest) (domain.CanonicalArtifact, error) {
+// Collection carries both products of one authenticated observation: the
+// canonical audit packet, and the in-memory candidates that alone can complete
+// a provider-owned relation. The candidates are deliberately not recoverable
+// from the packet.
+type Collection struct {
+	Artifact   domain.CanonicalArtifact
+	Candidates []admission.ProviderCandidate
+}
+
+func Collect(ctx context.Context, request CollectRequest) (Collection, error) {
 	if request.Reader == nil {
-		return domain.CanonicalArtifact{}, errors.New("GitHub admission reader is required")
+		return Collection{}, errors.New("GitHub admission reader is required")
 	}
 	if request.Seed.BaseRevision != request.Event.BaseSHA || request.Seed.HeadRevision != request.Event.HeadSHA {
-		return domain.CanonicalArtifact{}, ErrRangeMismatch
+		return Collection{}, ErrRangeMismatch
 	}
 	snapshot, err := request.Reader.Read(ctx, request.Event.Repository, request.Event.Number)
 	if err != nil {
-		return domain.CanonicalArtifact{}, err
+		return Collection{}, err
 	}
 	if snapshot.PullRequest.Number != request.Event.Number || snapshot.PullRequest.BaseSHA != request.Event.BaseSHA || snapshot.PullRequest.HeadSHA != request.Event.HeadSHA {
-		return domain.CanonicalArtifact{}, ErrRangeMismatch
+		return Collection{}, ErrRangeMismatch
 	}
 	if !snapshot.AuthorityAvailable {
-		return domain.CanonicalArtifact{}, ErrAuthorityUnavailable
+		return Collection{}, ErrAuthorityUnavailable
 	}
 	if !snapshot.Authenticated || snapshot.ObservedAt.IsZero() {
-		return domain.CanonicalArtifact{}, ErrUntrustedObservation
+		return Collection{}, ErrUntrustedObservation
 	}
 	if snapshot.ObservedAt.Before(snapshot.PullRequest.UpdatedAt) {
-		return domain.CanonicalArtifact{}, errors.New("GitHub observation time predates the pull-request state")
+		return Collection{}, errors.New("GitHub observation time predates the pull-request state")
 	}
 
-	references, err := providerReferences(request.Event.Repository, snapshot)
+	references, decisions, err := providerReferences(request.Event.Repository, snapshot)
 	if err != nil {
-		return domain.CanonicalArtifact{}, err
+		return Collection{}, err
 	}
 	packet := request.Seed
 	evaluationTime := snapshot.ObservedAt.UTC()
@@ -206,14 +216,90 @@ func Collect(ctx context.Context, request CollectRequest) (domain.CanonicalArtif
 			ObservedAt: evaluationTime, Authenticated: true,
 		})
 	}
+	if len(references) > 0 {
+		// The declared time authority needs its own authenticated provenance
+		// entry; without it the packet names an evaluation time that nothing in
+		// the packet vouches for.
+		packet.Provenance = append(packet.Provenance, domain.AdmissionProviderProvenance{
+			AdapterID: AdapterID, ProviderRef: packet.TimeAuthorityRef, EvidenceDigest: references[0].Digest,
+			ObservedAt: evaluationTime, Authenticated: true,
+		})
+	}
 	artifact, err := domain.FreezeAdmissionPacket(packet)
 	if err != nil {
-		return domain.CanonicalArtifact{}, fmt.Errorf("freeze GitHub admission packet: %w", err)
+		return Collection{}, fmt.Errorf("freeze GitHub admission packet: %w", err)
 	}
 	if domain.ContainsSecretShapedContent(string(artifact.CanonicalJSON())) {
-		return domain.CanonicalArtifact{}, errors.New("GitHub packet contains secret-shaped content")
+		return Collection{}, errors.New("GitHub packet contains secret-shaped content")
 	}
-	return artifact, nil
+	return Collection{
+		Artifact:   artifact,
+		Candidates: providerCandidates(request.Event, snapshot, references, decisions, evaluationTime),
+	}, nil
+}
+
+// providerCandidates converts the same authenticated observation into bounded
+// in-memory candidates. Every candidate names the exact frozen range and the
+// observation time, so a candidate from another range or a later state cannot
+// be reused.
+func providerCandidates(
+	event WorkflowEvent,
+	snapshot Snapshot,
+	references []domain.ContentAddressedEvidenceReference,
+	decisions []indexedDecision,
+	observedAt time.Time,
+) []admission.ProviderCandidate {
+	relations := map[string]domain.LineageRelation{
+		"pull_request":   domain.LineagePullRequest,
+		"review_index":   domain.LineageReviewIndex,
+		"check_set":      domain.LineageCheckSet,
+		"owner_decision": domain.LineageOwnerDecision,
+		"closure":        domain.LineageClosure,
+	}
+	decision, hasDecision := selectOwnerDecision(decisions)
+	candidates := make([]admission.ProviderCandidate, 0, len(references))
+	for _, reference := range references {
+		relation, known := relations[reference.ArtifactKind]
+		if !known {
+			continue
+		}
+		candidate := admission.ProviderCandidate{
+			Relation: relation, Identity: reference.Identity, Digest: reference.Digest,
+			AdapterID: AdapterID, ProviderRef: reference.SourceRef,
+			BaseRevision: event.BaseSHA, HeadRevision: event.HeadSHA,
+			ObservedAt: observedAt, Authenticated: snapshot.Authenticated,
+		}
+		if relation == domain.LineageOwnerDecision {
+			if !hasDecision {
+				continue
+			}
+			candidate.ActorRef = decision.ActorRef
+			candidate.AuthorityRef = decision.Authority
+			candidate.Outcome = domain.OwnerDecisionOutcome(decision.Outcome)
+		}
+		candidates = append(candidates, candidate)
+	}
+	return candidates
+}
+
+// selectOwnerDecision collapses the authorized current-head decisions into one
+// candidate for the single-valued owner relation. A rejection by any authorized
+// owner dominates every approval; without that rule, one extra approval could
+// erase a recorded objection.
+func selectOwnerDecision(decisions []indexedDecision) (indexedDecision, bool) {
+	sorted := append([]indexedDecision(nil), decisions...)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].ActorRef < sorted[j].ActorRef })
+	for _, decision := range sorted {
+		if decision.Outcome == "reject" {
+			return decision, true
+		}
+	}
+	for _, decision := range sorted {
+		if decision.Outcome == "allow" {
+			return decision, true
+		}
+	}
+	return indexedDecision{}, false
 }
 
 type pullRequestEvidence struct {
@@ -288,7 +374,7 @@ type closureEvidence struct {
 	ObservedAt     *time.Time `json:"observed_at"`
 }
 
-func providerReferences(repository Repository, snapshot Snapshot) ([]domain.ContentAddressedEvidenceReference, error) {
+func providerReferences(repository Repository, snapshot Snapshot) ([]domain.ContentAddressedEvidenceReference, []indexedDecision, error) {
 	repo := repository.String()
 	pr := snapshot.PullRequest
 	prEvidence := pullRequestEvidence{
@@ -298,7 +384,7 @@ func providerReferences(repository Repository, snapshot Snapshot) ([]domain.Cont
 		MergedAt: utcPointer(pr.MergedAt), MergeCommitSHA: pr.MergeCommitSHA,
 	}
 	if !domain.IsEvidenceReference(prEvidence.AuthorRef) || pr.UpdatedAt.IsZero() {
-		return nil, errors.New("GitHub pull request contains an invalid actor or timestamp")
+		return nil, nil, errors.New("GitHub pull request contains an invalid actor or timestamp")
 	}
 	refs := []domain.ContentAddressedEvidenceReference{
 		reference("pull_request", fmt.Sprintf("github:repos/%s/pulls/%d", repo, pr.Number), prEvidence),
@@ -306,12 +392,12 @@ func providerReferences(repository Repository, snapshot Snapshot) ([]domain.Cont
 
 	reviewEvidence, decisions, err := buildReviewIndex(repo, snapshot)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	refs = append(refs, reference("review_index", fmt.Sprintf("github:repos/%s/pulls/%d/review-index", repo, pr.Number), reviewEvidence))
 	checks, err := buildCheckSet(repo, snapshot)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	refs = append(refs, reference("check_set", fmt.Sprintf("github:repos/%s/commits/%s/checks", repo, pr.HeadSHA), checks))
 	if len(decisions) > 0 {
@@ -333,9 +419,9 @@ func providerReferences(repository Repository, snapshot Snapshot) ([]domain.Cont
 		refs = append(refs, reference("closure", fmt.Sprintf("github:repos/%s/pulls/%d/closure", repo, pr.Number), closure))
 	}
 	if len(refs) > maxProviderRefs {
-		return nil, fmt.Errorf("GitHub evidence exceeds %d references", maxProviderRefs)
+		return nil, nil, fmt.Errorf("GitHub evidence exceeds %d references", maxProviderRefs)
 	}
-	return refs, nil
+	return refs, decisions, nil
 }
 
 func buildReviewIndex(repository string, snapshot Snapshot) (reviewIndexEvidence, []indexedDecision, error) {

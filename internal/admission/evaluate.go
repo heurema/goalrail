@@ -49,11 +49,19 @@ type FrozenRange struct {
 	Changes               []ChangedPath
 	Commits               []string
 	Graph                 WorkUnitGraph
+	// Projections are bounded semantic parses of the exact committed artifacts
+	// whose state affects admission. They are produced by the collector at the
+	// evaluated revision and never serialized with the range.
+	Projections []SemanticProjection `json:"-"`
 }
 
 type Input struct {
 	Range  FrozenRange
 	Packet domain.AdmissionPacket
+	// Candidates are same-invocation authenticated provider observations. A
+	// packet read from disk always arrives with none, which is what makes a
+	// serialized authority claim non-authoritative.
+	Candidates []ProviderCandidate `json:"-"`
 }
 
 type PathDecision struct {
@@ -122,9 +130,6 @@ func Verify(input Input) (domain.AdmissionResult, error) {
 		}
 		return denyMany(result, classification, reason, refs), nil
 	}
-	if ownerDecisionPresent, ownerDecisionAllowed := ownerDecisionAuthorized(input.Range.Graph, *policy); ownerDecisionPresent && !ownerDecisionAllowed {
-		return deny(result, domain.AdmissionInvalid, domain.ReasonOwnerDecisionMissing, "lineage:owner_decision"), nil
-	}
 	if reason, refs := verifyPacketEvidence(input.Range.Graph, packet); reason != "" {
 		classification := domain.AdmissionInvalid
 		if reason == domain.ReasonMaterialPathUnbound || reason == domain.ReasonTrustedTimeMissing {
@@ -144,11 +149,25 @@ func Verify(input Input) (domain.AdmissionResult, error) {
 		return denyMany(result, domain.AdmissionMissing, domain.ReasonGeneratedEvidenceMissing, refs), nil
 	}
 
+	// Semantic projections and provider candidates are composed last, with the
+	// owner boundary last inside that step. No later evidence repairs an
+	// earlier structural, governance, or graph-binding failure.
+	view, reason, refs := buildEffectiveView(input, *policy)
+	if reason != "" {
+		classification := domain.AdmissionInvalid
+		if reason == domain.ReasonTrustedTimeMissing {
+			classification = domain.AdmissionMissing
+		} else if reason == domain.ReasonLineageConflict {
+			classification = domain.AdmissionAmbiguous
+		}
+		return denyMany(result, classification, reason, refs), nil
+	}
+
 	evaluatedAt := input.Range.Graph.Unit.CreatedAt.UTC()
 	if packet.EvaluationTime != nil {
 		evaluatedAt = packet.EvaluationTime.UTC()
 	}
-	completeness, err := EvaluateCompleteness(input.Range.Graph, evaluatedAt)
+	completeness, err := EvaluateCompleteness(input.Range.Graph, evaluatedAt, view)
 	if err != nil {
 		return deny(result, domain.AdmissionInvalid, domain.ReasonPacketInvalid, "lineage:exception"), nil
 	}
@@ -163,7 +182,7 @@ func Verify(input Input) (domain.AdmissionResult, error) {
 
 	exceptionClass, exceptionAllowed, exceptionObserved := authorizedException(input.Range.Graph, *policy, result.MaterialPaths, evaluatedAt)
 	if exceptionAllowed {
-		if !hasRelation(input.Range.Graph, domain.LineageOwnerDecision) {
+		if !view.Satisfied(domain.LineageOwnerDecision) {
 			return deny(result, domain.AdmissionMissing, domain.ReasonOwnerDecisionMissing, "lineage:owner_decision"), nil
 		}
 		if !exceptionMayBypass(completeness.Missing) {
@@ -299,6 +318,9 @@ func ruleMatches(rule domain.PolicyPathRule, path string, kind domain.ChangeKind
 	case domain.PathMatcherExact:
 		return path == rule.Matcher.Path
 	case domain.PathMatcherPrefix:
+		if rule.Matcher.Path == "." {
+			return true
+		}
 		return path == rule.Matcher.Path || strings.HasPrefix(path, strings.TrimSuffix(rule.Matcher.Path, "/")+"/")
 	default:
 		return false
@@ -311,12 +333,18 @@ func resolveAuthority(frozen FrozenRange) (*domain.ProjectDeclaration, domain.SH
 	}
 	if frozen.BaseDeclaration == nil {
 		if frozen.BaseGovernanceInvalid {
-			return nil, "", nil, "", false, domain.ReasonPolicyConflict
+			return nil, "", nil, "", false, domain.ReasonDeclarationInvalid
 		}
+		// Only an explicit no-base-declaration range may let complete head
+		// governance establish the project identity.
 		return frozen.HeadDeclaration, frozen.HeadDeclarationDigest, frozen.HeadPolicy, frozen.HeadPolicyDigest, true, ""
 	}
 	if frozen.BaseGovernanceInvalid || frozen.BasePolicy == nil || !validGovernance(*frozen.BaseDeclaration, frozen.BaseDeclarationDigest, *frozen.BasePolicy, frozen.BasePolicyDigest) {
-		return nil, "", nil, "", false, domain.ReasonPolicyConflict
+		return nil, "", nil, "", false, domain.ReasonDeclarationInvalid
+	}
+	// A head commit cannot mint a new project identity for its own range.
+	if frozen.HeadDeclaration.ProjectID != frozen.BaseDeclaration.ProjectID {
+		return nil, "", nil, "", false, domain.ReasonDeclarationInvalid
 	}
 	return frozen.BaseDeclaration, frozen.BaseDeclarationDigest, frozen.BasePolicy, frozen.BasePolicyDigest, false, ""
 }
@@ -382,6 +410,9 @@ func hasRequiredSpine(requirements []domain.LineageRequirement) bool {
 }
 
 func verifyPacketEvidence(graph WorkUnitGraph, packet domain.AdmissionPacket) (domain.AdmissionReasonCode, []string) {
+	if len(packet.Provenance) > 0 && !hasBoundedEvaluationTime(packet) {
+		return domain.ReasonTrustedTimeMissing, []string{"packet:evaluation-time"}
+	}
 	if hasRelation(graph, domain.LineageException) && !hasTrustedEvaluationTime(packet) {
 		return domain.ReasonTrustedTimeMissing, []string{"packet:evaluation-time"}
 	}
@@ -419,7 +450,7 @@ func verifyPacketEvidence(graph WorkUnitGraph, packet domain.AdmissionPacket) (d
 }
 
 func hasTrustedEvaluationTime(packet domain.AdmissionPacket) bool {
-	if packet.EvaluationTime == nil || packet.TimeAuthorityRef == "" {
+	if !hasBoundedEvaluationTime(packet) {
 		return false
 	}
 	for _, item := range packet.Provenance {
@@ -428,6 +459,12 @@ func hasTrustedEvaluationTime(packet domain.AdmissionPacket) bool {
 		}
 	}
 	return false
+}
+
+func hasBoundedEvaluationTime(packet domain.AdmissionPacket) bool {
+	return packet.EvaluationTime != nil &&
+		!packet.EvaluationTime.IsZero() &&
+		domain.IsEvidenceReference(packet.TimeAuthorityRef)
 }
 
 func trustedWithoutPacket(reference domain.ContentAddressedEvidenceReference, packet domain.AdmissionPacket) bool {
@@ -491,23 +528,6 @@ func authorizedException(graph WorkUnitGraph, policy domain.ProjectPolicy, mater
 		}
 	}
 	return "", false, observed
-}
-
-func ownerDecisionAuthorized(graph WorkUnitGraph, policy domain.ProjectPolicy) (bool, bool) {
-	if !policy.OwnerDecision.Required {
-		return false, true
-	}
-	present := false
-	for _, event := range graph.Events {
-		if event.Relation != domain.LineageOwnerDecision {
-			continue
-		}
-		present = true
-		if contains(policy.OwnerDecision.AuthorityRefs, event.ActorRef) && len(event.Targets) == 1 {
-			return true, true
-		}
-	}
-	return present, false
 }
 
 func exceptionMayBypass(missing []domain.LineageRelation) bool {

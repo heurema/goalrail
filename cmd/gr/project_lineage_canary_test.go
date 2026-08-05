@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -16,10 +17,12 @@ import (
 	"time"
 
 	openspecadapter "github.com/heurema/goalrail/internal/adapters/openspec"
+	"github.com/heurema/goalrail/internal/admission"
 	"github.com/heurema/goalrail/internal/admissiongit"
 	"github.com/heurema/goalrail/internal/ambient"
 	projectdoctor "github.com/heurema/goalrail/internal/doctor"
 	"github.com/heurema/goalrail/internal/domain"
+	"github.com/heurema/goalrail/internal/githubadmission"
 	"github.com/heurema/goalrail/internal/harness"
 	lineagestore "github.com/heurema/goalrail/internal/lineage"
 	"github.com/heurema/goalrail/internal/localrun"
@@ -266,7 +269,17 @@ func TestProjectLineageAdmissionScratchCanary(t *testing.T) {
 	if !bytes.Equal(localValid, sharedValid) {
 		t.Fatalf("local/shared canonical verdicts differ\nlocal:  %s\nshared: %s", localValid, sharedValid)
 	}
-	assertCanaryAdmission(t, localValid, domain.AdmissionValid, domain.AdmissionAllow, "")
+	// Committed lineage alone is advisory: the owner boundary needs a live
+	// authenticated observation that no repository content can forge.
+	assertCanaryAdmission(t, localValid, domain.AdmissionMissing, domain.AdmissionDeny, domain.ReasonOwnerDecisionMissing)
+
+	providerObservedAt := canaryTime().Add(10 * time.Minute)
+	localProvider := verifyCanaryRangeWithProvider(t, cloneOne, base, validHead, providerObservedAt)
+	sharedProvider := verifyCanaryRangeWithProvider(t, sharedClone, base, validHead, providerObservedAt)
+	if !bytes.Equal(localProvider, sharedProvider) {
+		t.Fatalf("local/shared provider verdicts differ\nlocal:  %s\nshared: %s", localProvider, sharedProvider)
+	}
+	assertCanaryAdmission(t, localProvider, domain.AdmissionValid, domain.AdmissionAllow, "")
 
 	evaluationTime := canaryTime().Add(30 * time.Minute)
 	exceptionRaw, err := json.Marshal(map[string]any{
@@ -299,7 +312,10 @@ func TestProjectLineageAdmissionScratchCanary(t *testing.T) {
 	if !bytes.Equal(localException, sharedException) {
 		t.Fatalf("local/shared exception verdicts differ\nlocal:  %s\nshared: %s", localException, sharedException)
 	}
-	assertCanaryAdmission(t, localException, domain.AdmissionBreakGlass, domain.AdmissionAllow, domain.ReasonExceptionApplied)
+	assertCanaryAdmission(t, localException, domain.AdmissionMissing, domain.AdmissionDeny, domain.ReasonOwnerDecisionMissing)
+
+	providerException := verifyCanaryRangeWithProvider(t, cloneOne, base, exceptionHead, evaluationTime)
+	assertCanaryAdmission(t, providerException, domain.AdmissionBreakGlass, domain.AdmissionAllow, domain.ReasonExceptionApplied)
 
 	legacy := scratchRepository(t)
 	installCanaryLegacyV018(t, legacy)
@@ -502,12 +518,91 @@ func verifyCanaryRange(
 		t.Fatal(err)
 	}
 	var stdout, stderr bytes.Buffer
-	if err := runVerifyLineage(context.Background(), []string{
+	err = runVerifyLineage(context.Background(), []string{
 		"--repo", repository, "--base", base, "--head", head, "--packet", packetPath, "--json",
-	}, &stdout, &stderr); err != nil {
+	}, &stdout, &stderr)
+	// A denied verdict is a canonical result, not a command failure. The
+	// advisory packet path denies by contract whenever an owner-gated relation
+	// needs a live provider observation.
+	if err != nil && exitCodeOf(err) != admission.ExitDenied {
 		t.Fatalf("verify lineage: %v\nstdout: %s\nstderr: %s", err, stdout.String(), stderr.String())
 	}
 	return stdout.Bytes()
+}
+
+func exitCodeOf(err error) int {
+	var coded interface{ ExitCode() int }
+	if errors.As(err, &coded) {
+		return coded.ExitCode()
+	}
+	return -1
+}
+
+// verifyCanaryRangeWithProvider is the authoritative path: one invocation
+// observes the provider through the registered adapter and verifies the frozen
+// range with those in-memory candidates.
+func verifyCanaryRangeWithProvider(
+	t *testing.T,
+	repository, base, head string,
+	observedAt time.Time,
+) []byte {
+	t.Helper()
+	seed, err := admissiongit.CollectPacketSeed(context.Background(), repository, base, head)
+	if err != nil {
+		t.Fatal(err)
+	}
+	event := githubadmission.WorkflowEvent{
+		Name: "pull_request", Action: "opened",
+		Repository: githubadmission.Repository{Owner: "heurema", Name: "goalrail"},
+		Number:     1, BaseSHA: base, HeadSHA: head,
+	}
+	collection, err := githubadmission.Collect(context.Background(), githubadmission.CollectRequest{
+		Seed: seed, Event: event, Reader: canaryProviderReader{observedAt: observedAt, base: base, head: head},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	packet, err := domain.DecodeAdmissionPacket(bytes.NewReader(collection.Artifact.CanonicalJSON()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	frozen, err := admissiongit.CollectFrozenRange(context.Background(), repository, base, head, packet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := admission.Verify(admission.Input{Range: frozen, Packet: packet, Candidates: collection.Candidates})
+	if err != nil {
+		t.Fatal(err)
+	}
+	canonical, _, err := admission.CanonicalResult(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return canonical
+}
+
+// canaryProviderReader stands in for the authenticated GitHub API read. It
+// returns only bounded identities, exactly as the real reader must.
+type canaryProviderReader struct {
+	observedAt time.Time
+	base, head string
+}
+
+func (reader canaryProviderReader) Read(context.Context, githubadmission.Repository, int64) (githubadmission.Snapshot, error) {
+	return githubadmission.Snapshot{
+		PullRequest: githubadmission.PullRequest{
+			Number: 1, BaseSHA: reader.base, HeadSHA: reader.head, State: "open",
+			Author: "contributor", UpdatedAt: reader.observedAt.Add(-time.Minute),
+		},
+		Reviews: []githubadmission.Review{{
+			ID: 1, Actor: "owner", State: "APPROVED", CommitSHA: reader.head,
+			SubmittedAt: reader.observedAt.Add(-time.Minute),
+		}},
+		Checks:           []githubadmission.Check{{ID: 1, Name: "build", Status: "completed", Conclusion: "success", AppSlug: "github-actions"}},
+		AuthorizedActors: map[string]string{"owner": "role:repository-owner"},
+
+		AuthorityAvailable: true, ObservedAt: reader.observedAt, Authenticated: true,
+	}, nil
 }
 
 func assertCanaryAdmission(

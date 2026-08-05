@@ -176,6 +176,13 @@ change the aggregate verdict.
 | 3 | Canonical admission result has outcome `deny` |
 | 2 | Usage, packet collection, Git-range freezing, verification, or output failed; no admission conclusion may be inferred |
 
+`gr verify-lineage` reads a packet at rest. A serialized packet cannot carry an
+authenticated provider observation, so this path is advisory for every
+provider-owned relation and returns `OWNER_DECISION_MISSING` where a live
+approval is required. The authoritative shared path observes the provider and
+verifies the frozen range inside one trusted invocation; the packet it emits is
+audit evidence, never the authority.
+
 Other public commands currently use conventional success/error exits and must
 not be treated as stable admission categories.
 

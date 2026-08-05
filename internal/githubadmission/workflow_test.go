@@ -19,7 +19,7 @@ func TestWorkflowIsPinnedMinimalPermissionAndPreparedOnly(t *testing.T) {
 	}
 	for _, required := range [][]byte{
 		[]byte("actions/checkout@" + CheckoutActionCommit), []byte("contents: read"), []byte("pull-requests: read"),
-		[]byte("checks: read"), []byte("sha256sum --check --strict"), []byte("github-collect"), []byte("verify-lineage"),
+		[]byte("checks: read"), []byte("sha256sum --check --strict"), []byte("github-verify"),
 		[]byte("pull_request_review:"), []byte("trap 'rm -f"), []byte("GOALRAIL_VERSION: 'v0.2.0'"),
 		[]byte(`grep --fixed-strings --quiet "\"version\":\"${GOALRAIL_VERSION}\""`),
 	} {
@@ -27,7 +27,10 @@ func TestWorkflowIsPinnedMinimalPermissionAndPreparedOnly(t *testing.T) {
 			t.Fatalf("workflow omitted %q\n%s", required, raw)
 		}
 	}
+	// The prepared workflow must observe and verify in one invocation: a
+	// separate collect step would make the packet the authority.
 	for _, forbidden := range [][]byte{
+		[]byte("github-collect"), []byte("verify-lineage --repo"),
 		[]byte("contents: write"), []byte("pull-requests: write"), []byte("checks: write"),
 		[]byte("issues: write"), []byte("branches/"), []byte("rulesets"), []byte("gh pr comment"),
 	} {
