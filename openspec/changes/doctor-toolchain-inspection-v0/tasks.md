@@ -33,6 +33,6 @@
 
 ## 6. Close the loop
 
-- [ ] 6.1 Re-run `openspec validate --changes doctor-toolchain-inspection-v0`
-- [ ] 6.2 Run `gr review --full` on the branch and disposition every finding before opening a pull request
-- [ ] 6.3 Report the branch state to the owner and stop; committing, pushing, and opening a pull request remain separate owner decisions
+- [x] 6.1 Re-run `openspec validate --changes doctor-toolchain-inspection-v0`
+- [x] 6.2 Run `gr review --full` on the branch and disposition every finding before opening a pull request — four rounds, seven findings, all accepted and dispositioned in `evidence/review-round-*.md`
+- [x] 6.3 Report the branch state to the owner and stop; committing, pushing, and opening a pull request remain separate owner decisions

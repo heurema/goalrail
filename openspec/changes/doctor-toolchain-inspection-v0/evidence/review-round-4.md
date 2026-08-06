@@ -22,7 +22,7 @@ the review evidence committed with it, which asserted an absence and a count
 without the record that substantiates them — the repository own rule that a
 claim of absence ships with its check.
 
-The record is now : the invocation, its non-zero exit,
+The record is now `review-round-3-stall.md`: the invocation, its non-zero exit,
 zero bytes of output, the reviewer transcript ending at the integration call
 that never returned, and the receipt listing that shows one receipt where two
 completed attempts would have left two.
