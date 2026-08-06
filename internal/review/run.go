@@ -5,9 +5,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -55,6 +57,30 @@ const (
 // happens to exist. A deadline holds for every reviewer and cannot drift with
 // an interface.
 const DefaultDeadline = 20 * time.Minute
+
+// DefaultProgressBound bounds silence rather than total time.
+//
+// A deadline bounds what a review costs; it does not bound what it wastes. A
+// reviewer that stops entirely pays the whole deadline and returns nothing,
+// and from outside the process it looks exactly like one still thinking. Two
+// full passes on one branch were measured that way — 25 minutes, then 50 —
+// each recording no reviewer activity whatever for the remainder after a single
+// blocking call to a machine-configured integration. Doubling the deadline
+// diagnosed nothing, which is the point: the failure is silence, so silence is
+// what has to be measured.
+//
+// Five minutes is deliberately far above any healthy quiet period observed. In
+// the same sessions, a working reviewer emitted something every few seconds and
+// the largest gap between its actions was 16 seconds. The margin is generous
+// because the cost of the two errors is not symmetric: stopping a working
+// reviewer wastes one round, while failing to stop a stopped one wastes the
+// whole budget and returns nothing. The caller can name a different bound.
+const DefaultProgressBound = 5 * time.Minute
+
+// ErrReviewerStalled reports a reviewer that produced nothing for longer than
+// the progress bound and was stopped. It is not a deadline overrun and not a
+// review: a stalled reviewer reviewed nothing, and no receipt describes it.
+var ErrReviewerStalled = errors.New("the reviewer stopped producing output")
 
 // defaultModels is the model each reviewer runs on when the caller names none.
 //
@@ -118,6 +144,17 @@ type Input struct {
 
 	// Deadline bounds the review. Zero means DefaultDeadline.
 	Deadline time.Duration
+
+	// ProgressBound stops a reviewer that produces nothing for this long. Zero
+	// means DefaultProgressBound, reduced where a short deadline would leave it
+	// no room to fire.
+	ProgressBound time.Duration
+
+	// WithoutIntegrations names provider integrations to remove from the
+	// reviewer's session. Goalrail renders each name into the provider's own
+	// removal syntax and knows none of them: which integration is hostile is the
+	// caller's knowledge of their own machine.
+	WithoutIntegrations []string
 
 	// Model is the reviewer's model. Empty means DefaultModel where the provider
 	// accepts one on the command line, and the vendor's own default otherwise.
@@ -234,6 +271,33 @@ func Run(ctx context.Context, input Input) (Result, error) {
 			deadline = FullDeadline
 		}
 	}
+	progressBound, err := resolveProgressBound(input.ProgressBound, deadline)
+	if err != nil {
+		return Result{}, err
+	}
+	// Isolation is refused before anything is spent, and for every provider this
+	// review could invoke rather than only the first. A refute round is a second
+	// paid invocation; discovering there that its provider cannot express the
+	// removal would refuse after the reviewer had already been paid for.
+	if len(input.WithoutIntegrations) > 0 {
+		if err := validateIntegrations(input.WithoutIntegrations); err != nil {
+			return Result{}, err
+		}
+		providers := []ambient.Scaffold{input.Selection.Reviewer}
+		if input.Refute {
+			if refuterSelection, refuteErr := SelectReviewer(input.Selection.Reviewer, ambient.SupportedScaffolds(), nil); refuteErr == nil {
+				providers = append(providers, refuterSelection.Reviewer)
+			}
+		}
+		for _, provider := range providers {
+			if !supportsIntegrationRemoval(provider) {
+				return Result{}, fmt.Errorf(
+					"the %s reviewer's interface removes either all integrations or none, so it cannot remove one by name; "+
+						"run without isolation, or with a reviewer whose interface can express it", provider)
+			}
+		}
+	}
+
 	// Canonical rendering is review work too. Start the advertised deadline
 	// before it and pass the bound into Git, so a large diff cannot spend past
 	// the caller's limit before the gate or reviewer even starts.
@@ -304,7 +368,11 @@ func Run(ctx context.Context, input Input) (Result, error) {
 		invokeInstructions = append(append(append([]byte{}, instructions...),
 			[]byte("\n\n--- DIFF UNDER REVIEW ---\n")...), reviewedDiff...)
 	}
-	report, err := invoke(bounded, input.Selection.Reviewer, input.RepositoryRoot, rangeSpec, effort, modelFor(input.Selection.Reviewer), invokeInstructions)
+	report, err := invoke(bounded, invocation{
+		reviewer: input.Selection.Reviewer, repositoryRoot: input.RepositoryRoot, baseRef: rangeSpec,
+		effort: effort, model: modelFor(input.Selection.Reviewer), instructions: invokeInstructions,
+		without: input.WithoutIntegrations, progressBound: progressBound,
+	})
 	if err != nil {
 		// No receipt: one describing a review that did not happen is worse than
 		// none, because it reads as done.
@@ -339,7 +407,11 @@ func Run(ctx context.Context, input Input) (Result, error) {
 			[]byte("\n\n--- REPORT UNDER CHALLENGE ---\n")...), []byte(report)...),
 			[]byte("\n\n--- DIFF UNDER REVIEW ---\n")...)
 		refutePrompt = append(refutePrompt, reviewedDiff...)
-		refutation, refuteErr = invoke(bounded, refuterSelection.Reviewer, input.RepositoryRoot, rangeSpec, effort, modelFor(refuterSelection.Reviewer), refutePrompt)
+		refutation, refuteErr = invoke(bounded, invocation{
+			reviewer: refuterSelection.Reviewer, repositoryRoot: input.RepositoryRoot, baseRef: rangeSpec,
+			effort: effort, model: modelFor(refuterSelection.Reviewer), instructions: refutePrompt,
+			without: input.WithoutIntegrations, progressBound: progressBound,
+		})
 		if refuteErr != nil {
 			return Result{InstructionsMaterialized: materialized}, refuteErr
 		}
@@ -499,7 +571,7 @@ func refutationDigest(refutation string) string {
 // anything: the first live run of this feature failed on an argument
 // combination its vendor documents as legal, and a construction nobody can
 // inspect is one that breaks the same way twice.
-func reviewCommand(reviewer ambient.Scaffold, baseRef, effort, model string, instructions []byte) (name string, arguments []string, stdin string, err error) {
+func reviewCommand(reviewer ambient.Scaffold, baseRef, effort, model string, instructions []byte, without []string) (name string, arguments []string, stdin string, err error) {
 	switch reviewer {
 	case ambient.ScaffoldCodex:
 		// `-` reads the instructions from stdin. No scope flag: it cannot be
@@ -520,6 +592,13 @@ func reviewCommand(reviewer ambient.Scaffold, baseRef, effort, model string, ins
 			// Accepted here as well: the claim that it was not is what let this
 			// asymmetry survive its own review.
 			codexArguments = append(codexArguments, "-c", "model="+model)
+		}
+		// The caller names an integration; this renders it into the provider's
+		// own documented syntax and adds nothing else. A name is all that
+		// crosses the boundary, so nothing a caller supplies can reach the
+		// sandbox, the model, the effort or the recorded identity below.
+		for _, integration := range without {
+			codexArguments = append(codexArguments, "-c", "mcp_servers."+integration+".enabled=false")
 		}
 		return "codex", append(codexArguments,
 			// A reviewer that can edit the work is no longer reviewing it, and
@@ -544,6 +623,13 @@ func reviewCommand(reviewer ambient.Scaffold, baseRef, effort, model string, ins
 		// `git diff --output=<path>` through the per-subcommand rule — and a
 		// race against git's flag surface is one this boundary keeps losing.
 		// The diff travels in the prompt instead; reading files stays allowed.
+		if len(without) > 0 {
+			// Its interface offers all-or-nothing, so honouring "remove this one"
+			// would mean removing more than was asked. Refusing says so; doing
+			// nothing would read as isolation that happened.
+			return "", nil, "", fmt.Errorf(
+				"the claude-code reviewer's interface removes either all integrations or none, so it cannot remove one by name")
+		}
 		claudeArguments := []string{
 			"-p", "--output-format", "text",
 			"--effort", effort,
@@ -566,14 +652,35 @@ func reviewCommand(reviewer ambient.Scaffold, baseRef, effort, model string, ins
 // so every flag is a surface that can drift under it; a vendor's refusal is
 // surfaced to the caller unchanged rather than translated, because a wrapper
 // that smooths over a changed interface converts a loud break into a quiet one.
-func invoke(ctx context.Context, reviewer ambient.Scaffold, repositoryRoot, baseRef, effort, model string, instructions []byte) (string, error) {
-	name, arguments, stdin, err := reviewCommand(reviewer, baseRef, effort, model, instructions)
+// invocation is one reviewer run. It is a struct because the argument list had
+// outgrown the point where positional strings stay readable, and two of them are
+// now boundaries rather than settings.
+type invocation struct {
+	reviewer       ambient.Scaffold
+	repositoryRoot string
+	baseRef        string
+	effort         string
+	model          string
+	instructions   []byte
+	without        []string
+	progressBound  time.Duration
+}
+
+func invoke(ctx context.Context, inv invocation) (string, error) {
+	reviewer := inv.reviewer
+	name, arguments, stdin, err := reviewCommand(reviewer, inv.baseRef, inv.effort, inv.model, inv.instructions, inv.without)
 	if err != nil {
 		return "", err
 	}
-	command := exec.CommandContext(ctx, name, arguments...)
+	// A second cancel sits under the deadline so a stalled reviewer is killed by
+	// the same machinery, and the two causes stay distinguishable afterwards:
+	// the parent context still reports the deadline, and only the watchdog sets
+	// the stall flag.
+	runCtx, stopForStall := context.WithCancel(ctx)
+	defer stopForStall()
+	command := exec.CommandContext(runCtx, name, arguments...)
 	command.Stdin = strings.NewReader(stdin)
-	command.Dir = repositoryRoot
+	command.Dir = inv.repositoryRoot
 
 	// A deadline that only kills the direct child is not a deadline. The
 	// reviewers are wrappers — `codex` is a Node process that launches a native
@@ -608,9 +715,35 @@ func invoke(ctx context.Context, reviewer ambient.Scaffold, repositoryRoot, base
 	// first real field review. Diagnostics keep a tail; they never fail a run.
 	stdout := &boundedBuffer{limit: receiptBound}
 	stderr := &tailBuffer{limit: 64 * 1024}
-	command.Stdout = stdout
-	command.Stderr = stderr
-	if err := command.Run(); err != nil {
+	// Arrival time is the liveness signal. Content is never inspected for it:
+	// what a reviewer says is the reader's business, and whether it is saying
+	// anything at all is the only thing observable from out here.
+	activity := &atomic.Int64{}
+	activity.Store(time.Now().UnixNano())
+	command.Stdout = &activityWriter{inner: stdout, last: activity}
+	command.Stderr = &activityWriter{inner: stderr, last: activity}
+
+	if err := command.Start(); err != nil {
+		return "", fmt.Errorf("the %s reviewer did not start: %w", reviewer, err)
+	}
+	stalled := watchProgress(runCtx, activity, inv.progressBound, stopForStall)
+	waitErr := command.Wait()
+	stopForStall()
+
+	if waitErr != nil {
+		if stalled.Load() {
+			// The tail travels with the stall for the same reason it travels
+			// with a timeout, and more urgently: reconstructing what a stopped
+			// reviewer last did otherwise means reading provider session files,
+			// which is exactly the work this saves.
+			progress := labelledStreams(stdout.String(), stderr.String())
+			if progress == "" {
+				progress = "(it emitted no output at all)"
+			}
+			return "", fmt.Errorf("%w: the %s reviewer produced nothing for %s and was stopped; what it had produced:\n%s",
+				ErrReviewerStalled, reviewer, inv.progressBound, bounded_(progress))
+		}
+		err := waitErr
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			// What the reviewer had produced travels with the timeout. A bare
 			// "did not finish" cannot distinguish working-but-slow from stuck,
@@ -651,6 +784,120 @@ func invoke(ctx context.Context, reviewer ambient.Scaffold, repositoryRoot, base
 		return "", fmt.Errorf("the %s reviewer produced no report", reviewer)
 	}
 	return report, nil
+}
+
+// watchProgress stops a reviewer that has gone silent, and reports which cause
+// fired. It watches arrival times rather than content: a reviewer streaming
+// anything at all is working, and one streaming nothing cannot be told apart
+// from a stopped one by any signal available outside its process.
+func watchProgress(ctx context.Context, activity *atomic.Int64, bound time.Duration, stop func()) *atomic.Bool {
+	stalled := &atomic.Bool{}
+	// A tenth of the bound is often enough to be prompt and rare enough to cost
+	// nothing, clamped so a very small or very large bound stays sane.
+	interval := bound / 10
+	if interval < 100*time.Millisecond {
+		interval = 100 * time.Millisecond
+	}
+	if interval > 10*time.Second {
+		interval = 10 * time.Second
+	}
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if time.Since(time.Unix(0, activity.Load())) < bound {
+					continue
+				}
+				// Order matters: the flag is set before the kill, so the wait
+				// that the kill releases always sees the cause already recorded.
+				stalled.Store(true)
+				stop()
+				return
+			}
+		}
+	}()
+	return stalled
+}
+
+// activityWriter records when output last arrived and passes the bytes on
+// unchanged. It never inspects, buffers, or delays them: a liveness probe that
+// can alter what it observes is a second failure mode.
+type activityWriter struct {
+	inner io.Writer
+	last  *atomic.Int64
+}
+
+func (w *activityWriter) Write(p []byte) (int, error) {
+	w.last.Store(time.Now().UnixNano())
+	return w.inner.Write(p)
+}
+
+// resolveProgressBound settles the silence bound against the deadline it sits
+// under.
+//
+// A caller's explicit bound at or past the deadline can never fire, so it is
+// refused rather than accepted as a bound that does nothing. A defaulted bound
+// is fitted instead of refused: a caller who shortens the deadline is not asking
+// about silence at all, and refusing their review over a default they never
+// named would be this command inventing a policy.
+func resolveProgressBound(requested, deadline time.Duration) (time.Duration, error) {
+	if requested > 0 {
+		if requested >= deadline {
+			return 0, fmt.Errorf(
+				"the progress bound (%s) must be shorter than the review deadline (%s), or it can never fire",
+				requested, deadline)
+		}
+		return requested, nil
+	}
+	if DefaultProgressBound < deadline {
+		return DefaultProgressBound, nil
+	}
+	return deadline / 2, nil
+}
+
+// validateIntegrations checks the only caller input that reaches a reviewer's
+// invocation.
+//
+// Bounded identifiers, refused before anything is spent. The rendering around
+// them is fixed, so this is not a filter protecting a boundary — it is what
+// keeps a name a name, and it fails loudly rather than passing something
+// structural into an argument list.
+func validateIntegrations(names []string) error {
+	const maxIntegrationName = 64
+	for _, name := range names {
+		if name == "" {
+			return fmt.Errorf("an integration to remove must be named; an empty name removes nothing")
+		}
+		if len(name) > maxIntegrationName {
+			return fmt.Errorf("the integration name %q exceeds %d characters", bounded_(name), maxIntegrationName)
+		}
+		for index, character := range name {
+			switch {
+			case character >= 'a' && character <= 'z',
+				character >= 'A' && character <= 'Z',
+				character >= '0' && character <= '9':
+			case character == '-' || character == '_' || character == '.':
+				if index == 0 {
+					return fmt.Errorf("the integration name %q must start with a letter or digit", bounded_(name))
+				}
+			default:
+				return fmt.Errorf(
+					"the integration name %q may contain only letters, digits, and the separators - _ .", bounded_(name))
+			}
+		}
+	}
+	return nil
+}
+
+// supportsIntegrationRemoval reports whether a provider's own interface can
+// remove one named integration. It is a statement about vendor interfaces, not
+// about any integration: Goalrail still knows none of them by name.
+func supportsIntegrationRemoval(reviewer ambient.Scaffold) bool {
+	return reviewer == ambient.ScaffoldCodex
 }
 
 // boundedBuffer collects up to limit bytes and refuses the rest, so a flooding
