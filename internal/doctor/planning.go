@@ -224,10 +224,10 @@ func observeComponent(installed *installedBundle, reason, kind, declared, requir
 		component.Detail = reason
 		return component
 	}
-	named, found := componentNamed(installed.manifest, declared)
-	if !found {
+	named, reason := componentFor(installed.manifest, declared)
+	if reason != "" {
 		component.State = ComponentMissing
-		component.Detail = "the installed bundle carries no " + kind + " component with this declared identity"
+		component.Detail = reason
 		return component
 	}
 	identity, found := binaryIdentityFor(installed.manifest, named.ID)
@@ -293,13 +293,41 @@ func binaryIdentityFor(manifest releasebundle.SetupBundleManifest, declared stri
 	return releasebundle.BinaryIdentity{}, false
 }
 
-func componentNamed(manifest releasebundle.SetupBundleManifest, declared string) (releasebundle.ManifestComponent, bool) {
+// componentFor resolves a declared component against the manifest. The empty
+// reason means it was found.
+//
+// An exact identifier wins outright, and a name is consulted only when no
+// identifier matches. The bundle contract requires component identifiers to be
+// unique and sorted but says nothing about names, so an accepted manifest may
+// carry two components sharing one name — and a scan that took the first match
+// in either field would resolve the declared runtime to whichever component
+// sorted earlier, then report the entrypoint of something else. An independent
+// review found exactly that after this lookup was shared between the runtime
+// and the compiler; the runtime had previously matched an identifier alone.
+//
+// A name that matches more than one component is ambiguous rather than
+// resolvable, and saying so is the only honest answer available.
+func componentFor(manifest releasebundle.SetupBundleManifest, declared string) (releasebundle.ManifestComponent, string) {
 	for _, component := range manifest.Components {
-		if component.Name == declared || component.ID == declared {
-			return component, true
+		if component.ID == declared {
+			return component, ""
 		}
 	}
-	return releasebundle.ManifestComponent{}, false
+	var selected releasebundle.ManifestComponent
+	matches := 0
+	for _, component := range manifest.Components {
+		if component.Name == declared {
+			selected, matches = component, matches+1
+		}
+	}
+	switch matches {
+	case 1:
+		return selected, ""
+	case 0:
+		return releasebundle.ManifestComponent{}, "the installed bundle carries no component with this declared identity"
+	default:
+		return releasebundle.ManifestComponent{}, "the installed bundle carries more than one component under this declared name"
+	}
 }
 
 // normalizeDigest accepts both spellings the bundle contracts use — a bare

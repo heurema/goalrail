@@ -306,6 +306,44 @@ func TestDisagreeingManifestVersionsAreNotReady(t *testing.T) {
 	}
 }
 
+// Component identifiers are unique in an accepted manifest; names are not. A
+// lookup that took the first match in either field would resolve the declared
+// runtime to whichever component sorted earlier and then verify something
+// else's entrypoint.
+func TestExactComponentIdentifierWinsOverAName(t *testing.T) {
+	home := installBundle(t, installedVersion, func(root string) {
+		mutateManifest(t, root, func(m *releasebundle.SetupBundleManifest) {
+			m.Components[1].Name = "node" // the goalrail component, which sorts first
+		})
+	})
+
+	observation := defaultPlanningObserver{home: home, version: installedVersion}.
+		ObservePlanning(context.Background(), canonProfile("node"))
+
+	if observation.Runtime.State != ComponentReady {
+		t.Fatalf("a colliding component name displaced the exact runtime identifier: %#v", observation.Runtime)
+	}
+	if !strings.HasSuffix(observation.Runtime.Path, filepath.FromSlash(runtimeEntry)) {
+		t.Fatalf("the runtime was verified at %q, not at its own entrypoint", observation.Runtime.Path)
+	}
+}
+
+// A declared name that two components answer to resolves to neither.
+func TestAmbiguousComponentNameResolvesToNothing(t *testing.T) {
+	home := installBundle(t, installedVersion, func(root string) {
+		mutateManifest(t, root, func(m *releasebundle.SetupBundleManifest) {
+			m.Components[1].Name = "@fission-ai/openspec" // alongside the real compiler component
+		})
+	})
+
+	observation := defaultPlanningObserver{home: home, version: installedVersion}.
+		ObservePlanning(context.Background(), canonProfile("node"))
+
+	if observation.Compiler.State != ComponentMissing || !strings.Contains(observation.Compiler.Detail, "more than one") {
+		t.Fatalf("an ambiguous declared name was resolved anyway: %#v", observation.Compiler)
+	}
+}
+
 // The prohibition is a property of this package, not of one function. Keeping it
 // as an assertion means a returning execution fails a test rather than depending
 // on a reviewer noticing it.
