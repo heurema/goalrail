@@ -280,7 +280,7 @@ func TestRunRefusesADetachedHead(t *testing.T) {
 // --base and a custom prompt, and refuses them together. Reading its help was
 // not enough, so the shape is pinned rather than trusted.
 func TestCodexInvocationNeverCombinesAScopeFlagWithInstructions(t *testing.T) {
-	name, arguments, stdin, err := reviewCommand(ambient.ScaffoldCodex, "main...HEAD", DefaultEffort, DefaultModel(ambient.ScaffoldClaudeCode), []byte("look for X"))
+	name, arguments, stdin, err := reviewCommand(ambient.ScaffoldCodex, "main...HEAD", DefaultEffort, DefaultModel(ambient.ScaffoldClaudeCode), []byte("look for X"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -306,7 +306,7 @@ func TestCodexInvocationNeverCombinesAScopeFlagWithInstructions(t *testing.T) {
 
 // A reviewer that can edit is no longer reviewing.
 func TestClaudeInvocationCarriesNoEditingTool(t *testing.T) {
-	_, arguments, stdin, err := reviewCommand(ambient.ScaffoldClaudeCode, "main...HEAD", DefaultEffort, DefaultModel(ambient.ScaffoldClaudeCode), []byte("look for X"))
+	_, arguments, stdin, err := reviewCommand(ambient.ScaffoldClaudeCode, "main...HEAD", DefaultEffort, DefaultModel(ambient.ScaffoldClaudeCode), []byte("look for X"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -331,7 +331,7 @@ func TestClaudeInvocationCarriesNoEditingTool(t *testing.T) {
 }
 
 func TestUnknownReviewerHasNoInvocation(t *testing.T) {
-	if _, _, _, err := reviewCommand(ambient.Scaffold("something-else"), "main...HEAD", DefaultEffort, DefaultModel(ambient.ScaffoldClaudeCode), nil); err == nil {
+	if _, _, _, err := reviewCommand(ambient.Scaffold("something-else"), "main...HEAD", DefaultEffort, DefaultModel(ambient.ScaffoldClaudeCode), nil, nil); err == nil {
 		t.Fatal("an unknown reviewer produced an invocation")
 	}
 }
@@ -366,7 +366,10 @@ func allowedTools(arguments []string) []string {
 func TestTheDeadlineBoundsAReviewerThatOutlivesItsChild(t *testing.T) {
 	root := branchWithWork(t)
 	stateRoot := t.TempDir()
-	stubReviewer(t, "codex", `cat >/dev/null; sleep 600 & sleep 600`)
+	// It keeps talking while it runs, so the progress bound leaves it alone and
+	// the deadline is what this test measures. The backgrounded loop is the
+	// grandchild holding the same pipes, which is the shape being bounded.
+	stubReviewer(t, "codex", `cat >/dev/null; (while :; do echo tick; sleep 0.2; done) & while :; do echo tick; sleep 0.2; done`)
 
 	started := time.Now()
 	_, err := Run(context.Background(), Input{
@@ -819,8 +822,9 @@ func TestAFullPassCarriesTheLongerDeadlineAndTheCallerStillWins(t *testing.T) {
 	if FullDeadline <= DefaultDeadline {
 		t.Fatalf("a full pass is bounded no better than a loop round: %s vs %s", FullDeadline, DefaultDeadline)
 	}
-	// The caller's bound wins: a deliberately short one still refuses.
-	stubReviewer(t, "codex", `cat >/dev/null; sleep 600 & sleep 600`)
+	// The caller's bound wins: a deliberately short one still refuses. It keeps
+	// speaking so the deadline is what stops it rather than the progress bound.
+	stubReviewer(t, "codex", `cat >/dev/null; while :; do echo tick; sleep 0.2; done`)
 	_, err := Run(context.Background(), Input{
 		RepositoryRoot: root, StateRoot: t.TempDir(), BaseRef: "main",
 		Selection: selection, Full: true, Deadline: 2 * time.Second,
@@ -834,7 +838,7 @@ func TestAFullPassCarriesTheLongerDeadlineAndTheCallerStillWins(t *testing.T) {
 // tell working-but-slow from stuck, and the next decision has no evidence.
 func TestATimeoutCarriesWhatTheReviewerHadProduced(t *testing.T) {
 	root := branchWithWork(t)
-	stubReviewer(t, "codex", `cat >/dev/null; echo "PROGRESS-MARKER: reading files" >&2; sleep 600`)
+	stubReviewer(t, "codex", `cat >/dev/null; echo "PROGRESS-MARKER: reading files" >&2; while :; do sleep 0.2; echo . >&2; done`)
 
 	_, err := Run(context.Background(), Input{
 		RepositoryRoot: root, StateRoot: t.TempDir(), BaseRef: "main",
@@ -901,23 +905,28 @@ func TestTheDeadlineCoversTheGate(t *testing.T) {
 
 // Silence is observed, never diagnosed: a reviewer may buffer everything until
 // it finishes, so no output proves no output — not that anything stopped.
-func TestASilentTimeoutStatesTheObservationNotACause(t *testing.T) {
+//
+// A reviewer silent from the start now meets the progress bound first, which is
+// the whole point of that bound; what must survive is that the report still
+// states the observation and invents no cause for it.
+func TestASilentReviewerStatesTheObservationNotACause(t *testing.T) {
 	root := branchWithWork(t)
 	stubReviewer(t, "codex", `cat >/dev/null; sleep 600`)
 	_, err := Run(context.Background(), Input{
 		RepositoryRoot: root, StateRoot: t.TempDir(), BaseRef: "main",
-		Selection: Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
-		Deadline:  2 * time.Second,
+		Selection:     Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
+		Deadline:      10 * time.Second,
+		ProgressBound: 2 * time.Second,
 	})
 	if err == nil {
-		t.Fatal("expected a deadline failure")
+		t.Fatal("expected a stalled reviewer")
 	}
 	for _, invented := range []string{"hang", "hung", "stuck"} {
 		if strings.Contains(strings.ToLower(err.Error()), invented) {
 			t.Fatalf("silence was diagnosed rather than reported: %v", err)
 		}
 	}
-	if !strings.Contains(err.Error(), "no output before the deadline") {
+	if !strings.Contains(err.Error(), "no output at all") {
 		t.Fatalf("the observation itself was lost: %v", err)
 	}
 }
@@ -1022,7 +1031,7 @@ sleep 600`)
 // read-only boundary here lost to `git *` and then to `git diff --output=`
 // before it was made structural.
 func TestTheCodexReviewerIsInvokedWithoutWritePermission(t *testing.T) {
-	_, arguments, _, err := reviewCommand(ambient.ScaffoldCodex, "main...HEAD", DefaultEffort, DefaultModel(ambient.ScaffoldClaudeCode), []byte("x"))
+	_, arguments, _, err := reviewCommand(ambient.ScaffoldCodex, "main...HEAD", DefaultEffort, DefaultModel(ambient.ScaffoldClaudeCode), []byte("x"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1080,7 +1089,7 @@ func TestTheClaudeReviewerIsGivenAModel(t *testing.T) {
 	if model == "" {
 		t.Fatal("the Claude reviewer has no stated model, so it inherits the session's")
 	}
-	_, arguments, _, err := reviewCommand(ambient.ScaffoldClaudeCode, "main...HEAD", DefaultEffort, model, []byte("x"))
+	_, arguments, _, err := reviewCommand(ambient.ScaffoldClaudeCode, "main...HEAD", DefaultEffort, model, []byte("x"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1089,7 +1098,7 @@ func TestTheClaudeReviewerIsGivenAModel(t *testing.T) {
 	}
 
 	// An empty model means the vendor's own default, not an empty flag value.
-	_, bare, _, err := reviewCommand(ambient.ScaffoldClaudeCode, "main...HEAD", DefaultEffort, "", []byte("x"))
+	_, bare, _, err := reviewCommand(ambient.ScaffoldClaudeCode, "main...HEAD", DefaultEffort, "", []byte("x"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1105,7 +1114,7 @@ func TestTheClaudeReviewerIsGivenAModel(t *testing.T) {
 // model=` is accepted — and that false claim is what let the asymmetry survive
 // its own review.
 func TestACallerNamedModelReachesCodexToo(t *testing.T) {
-	_, arguments, _, err := reviewCommand(ambient.ScaffoldCodex, "main...HEAD", DefaultEffort, "gpt-5.6-sol", []byte("x"))
+	_, arguments, _, err := reviewCommand(ambient.ScaffoldCodex, "main...HEAD", DefaultEffort, "gpt-5.6-sol", []byte("x"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1119,7 +1128,7 @@ func TestACallerNamedModelReachesCodexToo(t *testing.T) {
 	if DefaultModel(ambient.ScaffoldCodex) != "" {
 		t.Fatal("Codex was given a hardcoded default model")
 	}
-	_, bare, _, err := reviewCommand(ambient.ScaffoldCodex, "main...HEAD", DefaultEffort, "", []byte("x"))
+	_, bare, _, err := reviewCommand(ambient.ScaffoldCodex, "main...HEAD", DefaultEffort, "", []byte("x"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -55,6 +55,9 @@ func runReview(ctx context.Context, args []string, stdout, stderr io.Writer) err
 	model := set.String("model", "", "reviewer model; passed to whichever provider reviews (default: opus for claude-code, the vendor's own for codex, or $"+reviewModelEnvironment+")")
 	effort := set.String("effort", "", "reviewer reasoning effort (default "+review.DefaultEffort+", "+review.FullEffort+" with --full, or $"+reviewEffortEnvironment+")")
 	deadline := set.Duration("deadline", 0, "bound on the whole review (default "+review.DefaultDeadline.String()+", "+review.FullDeadline.String()+" with --full)")
+	progressBound := set.Duration("progress-bound", 0, "stop a reviewer that produces nothing for this long (default "+review.DefaultProgressBound.String()+"); a stalled reviewer is not a completed review")
+	var without integrationNames
+	set.Var(&without, "without", "remove one named provider integration from the reviewer's session; repeatable, off by default")
 	if err := set.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
@@ -70,6 +73,11 @@ func runReview(ctx context.Context, args []string, stdout, stderr io.Writer) err
 	// opposite of what the caller asked for.
 	if isSet(set, "deadline") && *deadline <= 0 {
 		return fmt.Errorf("--deadline must be positive; %s asks for no time at all", *deadline)
+	}
+	// Same rule, same reason: an explicit non-positive bound is a malformed
+	// value rather than a request for the default.
+	if isSet(set, "progress-bound") && *progressBound <= 0 {
+		return fmt.Errorf("--progress-bound must be positive; %s asks for no patience at all", *progressBound)
 	}
 	if isSet(set, "base") && strings.TrimSpace(*base) == "" {
 		return fmt.Errorf("--base must name a non-empty Git ref")
@@ -133,11 +141,17 @@ func runReview(ctx context.Context, args []string, stdout, stderr io.Writer) err
 		Effort:         chosenEffort,
 		Model:          chosenModel,
 		Deadline:       *deadline,
-		Author:         authoring,
-		Selection:      selection,
-		Full:           *full,
-		Refute:         *refute,
-		Gate:           configured,
+		ProgressBound:  *progressBound,
+
+		// Which integration is hostile is the caller's knowledge of their own
+		// machine; Goalrail passes the name through to the provider's own
+		// removal syntax and knows none of them.
+		WithoutIntegrations: without,
+		Author:              authoring,
+		Selection:           selection,
+		Full:                *full,
+		Refute:              *refute,
+		Gate:                configured,
 	})
 	if err != nil {
 		// The instructions file may have been materialized before the refusal.
@@ -283,4 +297,17 @@ func isSet(set *flag.FlagSet, name string) bool {
 		}
 	})
 	return found
+}
+
+// integrationNames collects a repeatable --without. A repeatable flag rather
+// than one comma-separated value: a separator would have to be excluded from
+// every name, and a name is the caller's, not this command's, to constrain
+// beyond what the invocation requires.
+type integrationNames []string
+
+func (names *integrationNames) String() string { return strings.Join(*names, ",") }
+
+func (names *integrationNames) Set(value string) error {
+	*names = append(*names, value)
+	return nil
 }
