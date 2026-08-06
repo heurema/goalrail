@@ -2,13 +2,17 @@ package doctor
 
 import (
 	"context"
-	"os/exec"
+	"encoding/json"
+	"fmt"
+	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
-	"time"
 
+	"github.com/heurema/goalrail/internal/boundedio"
 	"github.com/heurema/goalrail/internal/domain"
 	"github.com/heurema/goalrail/internal/harness"
+	"github.com/heurema/goalrail/internal/releasebundle"
 )
 
 type ComponentState string
@@ -21,6 +25,15 @@ const (
 	ComponentInvalid             ComponentState = "invalid"
 	ComponentNotRequired         ComponentState = "not_required"
 )
+
+// maxInstalledManifest bounds the installed bundle manifest. It describes a
+// bundle rather than containing one, so a file beyond this size is not a
+// manifest this reader should try to understand.
+const maxInstalledManifest = 4 << 20
+
+// maxInstalledComponentFile bounds one inspected component file. The private
+// runtime is the largest thing the bundle carries and is well inside this.
+const maxInstalledComponentFile = int64(512 << 20)
 
 type ComponentReadiness struct {
 	Kind              string              `json:"kind"`
@@ -49,113 +62,236 @@ func (function PlanningObserverFunc) ObservePlanning(ctx context.Context, profil
 	return function(ctx, profile)
 }
 
-type defaultPlanningObserver struct{}
+// defaultPlanningObserver answers whether the declared planning toolchain is
+// available and compatible by inspecting the bundle authorized setup installed.
+//
+// It runs nothing. A promoted requirement forbids initialization, update, and
+// diagnosis from executing the runtime, a package runner, or the stock planning
+// CLI, and asking a program for its version is executing it. Reading the
+// installed manifest answers availability, version, and integrity at once, and
+// answers them about the installation the declared profile pins rather than
+// about whatever the executable lookup path happens to reach first.
+//
+// It also takes no path from repository content. The profile states which
+// components are required and at which versions; the manifest states where they
+// live. A profile value is therefore matched against component identity and
+// never resolved, so a repository that writes a path where a program name
+// belongs selects nothing at all.
+type defaultPlanningObserver struct {
+	// home is where authorized setup installs. An empty value resolves no
+	// bundle rather than falling back to another root.
+	home string
 
-func (defaultPlanningObserver) ObservePlanning(ctx context.Context, profile domain.SetupProfile) PlanningObservation {
+	// version is this binary's own identity, which names the bundle it was
+	// installed from. It is a field rather than a direct read of the package
+	// variable for the reason the version resolver already documents: a test
+	// binary reports the development marker in every state, so no test could
+	// otherwise exercise the released shapes this observer is written for.
+	version string
+}
+
+func (observer defaultPlanningObserver) ObservePlanning(_ context.Context, profile domain.SetupProfile) PlanningObservation {
 	observation := PlanningObservation{
 		Bundle: ComponentReadiness{
 			Kind: "goalrail_bundle", ID: "goalrail", RequiredVersion: profile.CompatibleGoalrailBundle,
-			ObservedVersion: harness.Version,
+			ObservedVersion: observer.version,
 		},
 	}
-	if compatibleGoalrailBundle(harness.Version, profile.CompatibleGoalrailBundle) {
+	if compatibleGoalrailBundle(observer.version, profile.CompatibleGoalrailBundle) {
 		observation.Bundle.State = ComponentReady
-	} else if strings.TrimSpace(harness.Version) == "" || harness.Version == "unknown" || harness.Version == "(devel)" {
+	} else if strings.TrimSpace(observer.version) == "" || observer.version == "unknown" || observer.version == "(devel)" {
 		observation.Bundle.State = ComponentUnverifiedIntegrity
 		observation.Bundle.Detail = "this development binary has no release identity compatible with the declared setup bundle"
 	} else {
 		observation.Bundle.State = ComponentIncompatible
 		observation.Bundle.Detail = "the running Goalrail release is outside the declared compatible bundle range"
 	}
-	observation.Runtime = observeExecutable(ctx, "runtime", profile.Planning.Runtime, profile.Planning.RuntimeVersion)
-	compilerExecutable := profile.Planning.Adapter.ID
-	if compilerExecutable == "" {
-		compilerExecutable = executableName(profile.Planning.Compiler)
-	}
-	observation.Compiler = observeExecutable(ctx, "compiler", compilerExecutable, profile.Planning.CompilerVersion)
-	observation.Compiler.ID = profile.Planning.Compiler
+
+	installed, reason := loadInstalledBundle(observer.home, observer.version)
+	observation.Runtime = observeRuntime(installed, reason, profile)
+	observation.Compiler = observeCompiler(installed, reason, profile)
 	return observation
 }
 
-func observeExecutable(ctx context.Context, kind, executable, requiredVersion string) ComponentReadiness {
-	component := ComponentReadiness{Kind: kind, ID: executable, RequiredVersion: requiredVersion}
-	if strings.TrimSpace(executable) == "" {
+// installedBundle is the record authorized setup left behind: where it
+// installed, and what it installed there.
+type installedBundle struct {
+	root     string
+	manifest releasebundle.SetupBundleManifest
+}
+
+// loadInstalledBundle resolves and reads the bundle this binary was installed
+// from. The empty result carries the reason, which becomes the component detail
+// so a report never says only that something is missing.
+//
+// The location is derived rather than recorded because a release refuses to
+// publish an artifact whose stamped version is not its tag, so a binary that
+// came from a bundle reports exactly that bundle's release version. That leaves
+// no need for a pointer file, and the alternatives are closed: the stable
+// executable is a byte copy that carries no link back, and enumerating sibling
+// bundle directories would have to guess which one installed this process.
+func loadInstalledBundle(home, version string) (*installedBundle, string) {
+	if strings.TrimSpace(home) == "" {
+		return nil, "no home directory was resolved, so no installed Goalrail bundle could be located"
+	}
+	if !harness.IsReleaseVersion(version) {
+		return nil, fmt.Sprintf("this build reports %q, which is not a release version, so it corresponds to no installed Goalrail bundle", version)
+	}
+	platform := releasebundle.Platform{OS: runtime.GOOS, Arch: runtime.GOARCH}
+	root := filepath.Join(home, ".local", "share", "goalrail", "bundles", version, platform.Key())
+	raw, err := boundedio.ReadRegularFile(
+		filepath.Join(root, releasebundle.BundleManifestPath), "installed bundle manifest", maxInstalledManifest)
+	if err != nil {
+		return nil, "the installed bundle manifest could not be read; run the exact Goalrail setup plan"
+	}
+	var manifest releasebundle.SetupBundleManifest
+	if err := json.Unmarshal(raw, &manifest); err != nil {
+		return nil, "the installed bundle manifest is not valid JSON"
+	}
+	switch {
+	case manifest.Schema != releasebundle.SetupManifestSchemaV1:
+		return nil, "the installed bundle manifest carries an unsupported schema"
+	case manifest.ReleaseVersion != version:
+		return nil, "the installed bundle manifest names a different release than this binary"
+	case manifest.Platform != platform:
+		return nil, "the installed bundle manifest names a different platform than this binary"
+	}
+	return &installedBundle{root: root, manifest: manifest}, ""
+}
+
+// observeRuntime reports the declared runtime by matching it against the
+// installed bundle's component identity, then verifying the exact file that
+// component's binary identity names.
+func observeRuntime(installed *installedBundle, reason string, profile domain.SetupProfile) ComponentReadiness {
+	component := ComponentReadiness{
+		Kind: "runtime", ID: profile.Planning.Runtime, RequiredVersion: profile.Planning.RuntimeVersion,
+	}
+	if strings.TrimSpace(profile.Planning.Runtime) == "" {
 		component.State = ComponentNotRequired
 		return component
 	}
-	path, err := exec.LookPath(executable)
+	if installed == nil {
+		component.State = ComponentMissing
+		component.Detail = reason
+		return component
+	}
+	identity, found := binaryIdentityFor(installed.manifest, profile.Planning.Runtime)
+	if !found {
+		component.State = ComponentMissing
+		component.Detail = "the installed bundle carries no runtime component with this declared identity"
+		return component
+	}
+	component.ObservedVersion = identity.Version
+	component.RequiredIntegrity = domain.SHA256Digest(normalizeDigest(identity.SHA256))
+	return verifyInstalledFile(component, installed.root, identity.Path, identity.SHA256, profile.Planning.RuntimeVersion)
+}
+
+// observeCompiler reports the declared compiler the same way. Its component is
+// named rather than binary-identified, because the planning compiler is a
+// package rather than an executable, so the verified file is the one the
+// manifest records for it.
+func observeCompiler(installed *installedBundle, reason string, profile domain.SetupProfile) ComponentReadiness {
+	component := ComponentReadiness{
+		Kind: "compiler", ID: profile.Planning.Compiler, RequiredVersion: profile.Planning.CompilerVersion,
+	}
+	if strings.TrimSpace(profile.Planning.Compiler) == "" {
+		component.State = ComponentNotRequired
+		return component
+	}
+	if installed == nil {
+		component.State = ComponentMissing
+		component.Detail = reason
+		return component
+	}
+	named, found := componentNamed(installed.manifest, profile.Planning.Compiler)
+	if !found {
+		component.State = ComponentMissing
+		component.Detail = "the installed bundle carries no compiler component with this declared identity"
+		return component
+	}
+	component.ObservedVersion = named.Version
+	file, found := entrypointFor(installed.manifest, named.ID)
+	if !found {
+		component.State = ComponentMissing
+		component.Detail = "the installed bundle records no file for this compiler component"
+		return component
+	}
+	component.RequiredIntegrity = domain.SHA256Digest(normalizeDigest(file.SHA256))
+	return verifyInstalledFile(component, installed.root, file.Path, file.SHA256, profile.Planning.CompilerVersion)
+}
+
+// verifyInstalledFile settles a component's state from the bytes on disk.
+//
+// The version comparison comes first because an installation of the wrong
+// version is incompatible whether or not its bytes are intact, and reporting a
+// digest mismatch there would name the wrong problem.
+func verifyInstalledFile(component ComponentReadiness, root, relative, expected, required string) ComponentReadiness {
+	component.Path = filepath.Join(root, filepath.FromSlash(relative))
+	if component.ObservedVersion != strings.TrimPrefix(required, "v") &&
+		component.ObservedVersion != required {
+		component.State = ComponentIncompatible
+		component.Detail = "the installed component's version differs from the exact declared version"
+		return component
+	}
+	observed, _, err := boundedio.DigestRegularFile(component.Path, "installed component", maxInstalledComponentFile)
 	if err != nil {
 		component.State = ComponentMissing
-		component.Detail = executable + " is not available on PATH"
+		component.Detail = "the file the installed manifest records for this component could not be read"
 		return component
 	}
-	component.Path = path
-	commandContext, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
-	command := exec.CommandContext(commandContext, path, "--version")
-	output := &boundedVersionOutput{limit: 8 << 10}
-	command.Stdout, command.Stderr = output, output
-	if err := command.Run(); err != nil {
-		component.State = ComponentInvalid
-		component.Detail = "version inspection failed"
-		return component
-	}
-	component.ObservedVersion = extractVersion(output.String())
-	if component.ObservedVersion == "" {
-		component.State = ComponentInvalid
-		component.Detail = "version output did not contain a bounded semantic version"
-		return component
-	}
-	if component.ObservedVersion != strings.TrimPrefix(requiredVersion, "v") {
-		component.State = ComponentIncompatible
-		component.Detail = "observed version differs from the exact declared version"
+	if observed != normalizeDigest(expected) {
+		component.State = ComponentUnverifiedIntegrity
+		component.Detail = "the installed component's bytes do not match the digest its manifest records"
 		return component
 	}
 	component.State = ComponentReady
 	return component
 }
 
-type boundedVersionOutput struct {
-	value strings.Builder
-	limit int
-}
-
-func (output *boundedVersionOutput) Write(payload []byte) (int, error) {
-	original := len(payload)
-	remaining := output.limit - output.value.Len()
-	if remaining > 0 {
-		if len(payload) > remaining {
-			payload = payload[:remaining]
+// binaryIdentityFor finds the manifest's binary identity for a declared
+// component. The declared value is matched against component identity and is
+// never joined onto a path: the path comes from the manifest.
+func binaryIdentityFor(manifest releasebundle.SetupBundleManifest, declared string) (releasebundle.BinaryIdentity, bool) {
+	for _, identity := range manifest.BinaryIdentities {
+		if identity.ComponentID == declared {
+			return identity, true
 		}
-		_, _ = output.value.Write(payload)
 	}
-	return original, nil
+	return releasebundle.BinaryIdentity{}, false
 }
 
-func (output *boundedVersionOutput) String() string { return output.value.String() }
+func componentNamed(manifest releasebundle.SetupBundleManifest, declared string) (releasebundle.ManifestComponent, bool) {
+	for _, component := range manifest.Components {
+		if component.Name == declared || component.ID == declared {
+			return component, true
+		}
+	}
+	return releasebundle.ManifestComponent{}, false
+}
 
-func extractVersion(raw string) string {
-	for _, field := range strings.Fields(raw) {
-		candidate := strings.Trim(strings.TrimPrefix(field, "v"), " ,;()[]")
-		parts := strings.Split(candidate, ".")
-		if len(parts) < 3 {
+// entrypointFor selects one file to verify for a component that has no binary
+// identity. The bundle's whole tree was verified against this manifest when it
+// was installed and that walk is not repeated here; this states which single
+// record the diagnosis stands behind.
+func entrypointFor(manifest releasebundle.SetupBundleManifest, componentID string) (releasebundle.ManifestFile, bool) {
+	var selected releasebundle.ManifestFile
+	found := false
+	for _, file := range manifest.Files {
+		if file.ComponentID != componentID {
 			continue
 		}
-		valid := true
-		for index, part := range parts[:3] {
-			if index == 2 {
-				part, _, _ = strings.Cut(part, "-")
-				part, _, _ = strings.Cut(part, "+")
-			}
-			if _, err := strconv.Atoi(part); err != nil {
-				valid = false
-			}
-		}
-		if valid {
-			return strings.Join(parts[:3], ".")
+		if !found || file.Path < selected.Path {
+			selected, found = file, true
 		}
 	}
-	return ""
+	return selected, found
+}
+
+// normalizeDigest accepts both spellings the bundle contracts use — a bare
+// lowercase hex sum and one prefixed with its algorithm — so a comparison never
+// fails on notation.
+func normalizeDigest(value string) string {
+	return strings.TrimPrefix(strings.TrimSpace(value), "sha256:")
 }
 
 func compatibleGoalrailBundle(version, constraint string) bool {
@@ -170,12 +306,4 @@ func compatibleGoalrailBundle(version, constraint string) bool {
 	major, majorErr := strconv.Atoi(parts[0])
 	minor, minorErr := strconv.Atoi(parts[1])
 	return majorErr == nil && minorErr == nil && major == 0 && minor == 2
-}
-
-func executableName(packageName string) string {
-	packageName = strings.TrimSpace(packageName)
-	if slash := strings.LastIndex(packageName, "/"); slash >= 0 {
-		packageName = packageName[slash+1:]
-	}
-	return strings.TrimPrefix(packageName, "@")
 }

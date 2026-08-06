@@ -4,6 +4,8 @@
 package boundedio
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
@@ -62,4 +64,52 @@ func ReadRegularFileWithInfo(path string, label string, limit int) ([]byte, os.F
 		return nil, nil, fmt.Errorf("%s changed while it was read", label)
 	}
 	return raw, after, nil
+}
+
+// DigestRegularFile reports an artifact's SHA-256 and size under the same
+// descriptor discipline, without holding its bytes in memory.
+//
+// An installed runtime is large enough that reading it whole to hash it would
+// trade a bounded question for an unbounded allocation, so the content streams
+// and only the digest is retained. Everything else is deliberately identical to
+// ReadRegularFile: the regular-file check, the symlink and FIFO refusals, and
+// the identity comparison all apply to the descriptor that produced the digest.
+func DigestRegularFile(path string, label string, limit int64) (string, int64, error) {
+	if limit <= 0 {
+		return "", 0, fmt.Errorf("digest %s: size bound must be positive", label)
+	}
+	file, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return "", 0, fmt.Errorf("open %s: %w", label, err)
+	}
+	defer file.Close()
+
+	before, err := file.Stat()
+	if err != nil {
+		return "", 0, fmt.Errorf("stat %s: %w", label, err)
+	}
+	if !before.Mode().IsRegular() {
+		return "", 0, fmt.Errorf("%s is not a regular file", label)
+	}
+	if before.Size() > limit {
+		return "", 0, fmt.Errorf("%s exceeds %d bytes", label, limit)
+	}
+
+	sum := sha256.New()
+	written, err := io.Copy(sum, io.LimitReader(file, limit+1))
+	if err != nil {
+		return "", 0, fmt.Errorf("read %s: %w", label, err)
+	}
+	if written > limit {
+		return "", 0, fmt.Errorf("%s exceeds %d bytes", label, limit)
+	}
+	after, err := file.Stat()
+	if err != nil {
+		return "", 0, fmt.Errorf("stat %s after read: %w", label, err)
+	}
+	if !os.SameFile(before, after) || before.Mode() != after.Mode() ||
+		before.Size() != after.Size() || !before.ModTime().Equal(after.ModTime()) {
+		return "", 0, fmt.Errorf("%s changed while it was read", label)
+	}
+	return hex.EncodeToString(sum.Sum(nil)), written, nil
 }
