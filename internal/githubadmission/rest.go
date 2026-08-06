@@ -206,10 +206,11 @@ func (reader *RESTReader) Read(ctx context.Context, repository Repository, numbe
 		if permission.User.Login != "" && permission.User.Login != actor {
 			return Snapshot{}, errors.New("GitHub permission response names a different actor")
 		}
-		switch strings.ToLower(permission.Permission) {
-		case "admin", "maintain":
-			snapshot.AuthorizedActors[actor] = "github-permission:" + strings.ToLower(permission.Permission)
-		case "write", "triage", "read", "none":
+		granted := strings.ToLower(permission.Permission)
+		switch {
+		case authorizes(granted):
+			snapshot.AuthorizedActors[actor] = "github-permission:" + granted
+		case granted == "write" || granted == "triage" || granted == "read" || granted == "none":
 		default:
 			return Snapshot{}, ErrAuthorityUnavailable
 		}
@@ -272,4 +273,23 @@ func later(left, right time.Time) time.Time {
 		return right
 	}
 	return left
+}
+
+// authorizingPermissions names the provider permissions this adapter treats as
+// owner authority.
+//
+// One list, because the vocabulary has two consumers: this reader, which emits
+// the authority reference, and the committed policy, which must permit it. They
+// drifted apart once already — the reader reported a permission while the
+// default policy permitted only a role — and shared admission denied every
+// approved review without anything failing.
+func authorizingPermissions() []string { return []string{"admin", "maintain"} }
+
+func authorizes(permission string) bool {
+	for _, authorizing := range authorizingPermissions() {
+		if permission == authorizing {
+			return true
+		}
+	}
+	return false
 }

@@ -159,6 +159,15 @@ func readIntentArtifact(ctx context.Context, repository, revision, intentPath st
 	contextPath := path.Join(path.Dir(intentPath), "context.md")
 	contextRaw, err := readGitObject(ctx, repository, revision, contextPath, openspecadapter.MaxPairArtifactBytes)
 	if errors.Is(err, errGitObjectMissing) {
+		// An intent that names its context pack is only readable as a pair. The
+		// single-artifact reader ignores that declaration and would accept the
+		// document as a legacy snapshot, so deleting the required context at
+		// head would satisfy confirmed intent — admission passing precisely
+		// because evidence was removed.
+		if declaresContextPack(raw) {
+			return domain.IntentSnapshot{}, fmt.Errorf(
+				"the intent at %s names a context pack, but %s is absent at this revision", intentPath, contextPath)
+		}
 		return openspecadapter.ReadIntent(bytes.NewReader(raw))
 	}
 	if err != nil {
@@ -169,6 +178,31 @@ func readIntentArtifact(ctx context.Context, repository, revision, intentPath st
 		return domain.IntentSnapshot{}, err
 	}
 	return conformed.Intent, nil
+}
+
+// declaresContextPack reports whether an intent artifact names a context pack
+// in its own preamble.
+//
+// Read from the exact bytes rather than from the parsed snapshot: the
+// single-artifact reader drops the declaration, so asking the parse whether a
+// pack was declared always answers no — which is the gap this closes. Only the
+// preamble is inspected, so a mention inside the body cannot make an intent
+// unreadable.
+func declaresContextPack(raw []byte) bool {
+	const marker = "- **Context Pack:**"
+	for _, line := range strings.Split(string(raw), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "## ") {
+			return false
+		}
+		if !strings.HasPrefix(trimmed, marker) {
+			continue
+		}
+		value := strings.TrimSpace(strings.TrimPrefix(trimmed, marker))
+		value = strings.TrimSpace(strings.Trim(value, "*`"))
+		return value != "" && !strings.EqualFold(value, "pending")
+	}
+	return false
 }
 
 func projectTerminalReceipt(replica []byte, target domain.ContentAddressedEvidenceReference) admission.SemanticProjection {

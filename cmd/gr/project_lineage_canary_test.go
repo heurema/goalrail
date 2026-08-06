@@ -598,8 +598,12 @@ func (reader canaryProviderReader) Read(context.Context, githubadmission.Reposit
 			ID: 1, Actor: "owner", State: "APPROVED", CommitSHA: reader.head,
 			SubmittedAt: reader.observedAt.Add(-time.Minute),
 		}},
-		Checks:           []githubadmission.Check{{ID: 1, Name: "build", Status: "completed", Conclusion: "success", AppSlug: "github-actions"}},
-		AuthorizedActors: map[string]string{"owner": "role:repository-owner"},
+		Checks: []githubadmission.Check{{ID: 1, Name: "build", Status: "completed", Conclusion: "success", AppSlug: "github-actions"}},
+		// The shape the real reader produces, not a role invented by the test.
+		// Stubbing role:repository-owner here hid a seam: the adapter reports a
+		// provider permission, and a policy that permits only a role can never
+		// authorize a real approval.
+		AuthorizedActors: map[string]string{"owner": "github-permission:admin"},
 
 		AuthorityAvailable: true, ObservedAt: reader.observedAt, Authenticated: true,
 	}, nil

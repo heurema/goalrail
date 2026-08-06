@@ -73,6 +73,19 @@ func EvaluateCompleteness(graph WorkUnitGraph, evaluatedAt time.Time, view Effec
 			closedMissing = append(closedMissing, requirement.Relation)
 		}
 	}
+	// A relation an authenticated candidate satisfies is not unavailable, and
+	// leaving it in the reported set denies on it later: Verify refuses whenever
+	// that slice is non-empty, so live evidence could never repair an explicitly
+	// unavailable relation.
+	if len(result.Unavailable) > 0 {
+		retained := make([]domain.LineageRelation, 0, len(result.Unavailable))
+		for _, relation := range result.Unavailable {
+			if !view.Satisfied(relation) {
+				retained = append(retained, relation)
+			}
+		}
+		result.Unavailable = retained
+	}
 	sortRelations(admissionMissing)
 	sortRelations(closedMissing)
 	sortRelations(result.Ambiguous)
@@ -89,9 +102,6 @@ func EvaluateCompleteness(graph WorkUnitGraph, evaluatedAt time.Time, view Effec
 		}
 	}
 	for _, relation := range result.Unavailable {
-		if view.Satisfied(relation) {
-			continue
-		}
 		if requiredRelation(graph.Unit.RequiredRelations, relation) {
 			blockedClosed = true
 			if relation != domain.LineageClosure {

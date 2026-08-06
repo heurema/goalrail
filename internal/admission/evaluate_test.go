@@ -1282,3 +1282,29 @@ func testReference(kind, identity, source, adapter string) domain.ContentAddress
 func testDigest(value string) domain.SHA256Digest {
 	return domain.DigestCanonicalJSON([]byte(value))
 }
+
+// An explicitly unavailable relation that a current authenticated observation
+// satisfies is not unavailable any more. Reporting it as such denied the range
+// on evidence the effective view had already accepted.
+func TestALiveCandidateRepairsAnExplicitlyUnavailableRelation(t *testing.T) {
+	input := validInput(t)
+	input.Range.Graph.Unavailable = []domain.LineageRelation{domain.LineageCheckSet}
+
+	result, err := Verify(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Classification != domain.AdmissionValid || result.Outcome != domain.AdmissionAllow {
+		t.Fatalf("a satisfied relation still denied as unavailable: %+v", result)
+	}
+
+	// Without the candidate it stays unavailable and still denies.
+	input.Candidates = withoutCandidate(input.Candidates, domain.LineageCheckSet)
+	result, err = Verify(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Classification != domain.AdmissionMissing {
+		t.Fatalf("an unsatisfied unavailable relation stopped denying: %+v", result)
+	}
+}

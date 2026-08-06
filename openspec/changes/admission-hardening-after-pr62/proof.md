@@ -76,6 +76,24 @@ candidates with the owner decision last) are evaluated after structural,
 governance, and graph-binding validation, and no later evidence repairs an
 earlier failure.
 
+## Pre-PR review findings and their disposition
+
+One full pre-PR review ran on 2026-08-06 against `675a0166`, reviewer `codex`,
+mode `cross`, effort `high`, 620 seconds, receipt
+`32c82bc2…-675a0166…-5ef7f040-3c2ea7277f00.json`. It was the first review this
+branch received: two earlier attempts blocked on a provider defect and returned
+nothing. All three findings are accepted.
+
+| Finding | Claim | Disposition | Fix and check |
+|---|---|---|---|
+| P1 | The adapter reports `github-permission:*` while the canon default policy permits only `role:repository-owner`, so real shared admission denies every approved review; the canary hid the seam by supplying the role directly | Accepted — it made the whole prepared path unusable in production while every test passed | The default policy now permits the permissions the adapter reports, the two consumers share one `authorizingPermissions` list, the canary uses the shape the real reader produces, and `TestTheDefaultPolicyPermitsEveryAuthorityThisAdapterReports` fails if they drift again |
+| P1 | With a context pack declared but `context.md` absent at head, the intent fallback accepted the document as a legacy snapshot, so deleting required context evidence satisfied confirmed intent | Accepted — admission passing *because* evidence was removed is the exact inversion this change exists to prevent. It was recorded as a documented limitation in an earlier draft of this proof; the reviewer was right that it is a hole, and the note has been removed | `readIntentArtifact` refuses when the artifact names a pack whose context is absent; `declaresContextPack` reads the preamble only; covered by `TestAnIntentNamingItsContextPackNeedsThatContext` and `TestAContextPackDeclarationIsReadFromThePreambleOnly` |
+| P2 | A relation marked `provider_unavailable` and satisfied by a current candidate stayed in the unavailable set, and `Verify` denies on a non-empty one, so live evidence could not repair it | Accepted — the effective view accepted the relation while the result still denied on it | Satisfied relations are removed from the reported unavailable set, the now-redundant guard below it is gone, and `TestALiveCandidateRepairsAnExplicitlyUnavailableRelation` covers both directions |
+
+Verification after the fixes: `go test ./...`, `go vet ./...`, `gofmt -l internal cmd`
+empty, `validate admission-hardening-after-pr62 --strict` valid, `git diff --check`
+clean.
+
 ## Untested scope and remaining risks
 
 - No real GitHub API call, workflow activation, required-check or ruleset
@@ -84,8 +102,5 @@ earlier failure.
 - The prepared workflow's new `github-verify` invocation has not been executed
   on a real runner; only its rendered text and the underlying command path are
   covered by tests.
-- `readIntentArtifact` falls back to single-artifact intent parsing when the
-  change directory has no `context.md` at the evaluated revision. A change whose
-  schema requires a context pack but whose `context.md` was deleted at head
-  therefore projects from the intent alone; the pair contract is still enforced
-  wherever `context.md` exists.
+- The pre-PR review of this change ran once; its three findings are fixed above
+  but the fixes themselves have not been reviewed.

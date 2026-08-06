@@ -314,8 +314,9 @@ func hasProjection(projections []admission.SemanticProjection, relation domain.L
 // artifacts, so a projection test changes what the bytes mean without changing
 // how they are bound.
 type fixtureOptions struct {
-	IntentStatus  string
-	ReceiptStatus localrun.RunState
+	IntentStatus          string
+	ReceiptStatus         localrun.RunState
+	IntentDeclaresContext bool
 }
 
 func admissionRepository(t *testing.T) (string, string, string, domain.AdmissionPacket) {
@@ -348,7 +349,7 @@ func admissionRepositoryWith(t *testing.T, options fixtureOptions) (string, stri
 	writeTestBytes(t, repository, domain.DefaultProjectBootstrapPath, bootstrap, 0o644)
 	writeTestBytes(t, repository, domain.DefaultProjectSetupProfilePath, setup, 0o644)
 	writeTestBytes(t, repository, domain.ProjectDeclarationPath, baseDeclarationArtifact.CanonicalJSON(), 0o644)
-	writeTestBytes(t, repository, "openspec/changes/git-fixture/intent.md", testIntentArtifact("git-fixture", options.IntentStatus), 0o644)
+	writeTestBytes(t, repository, "openspec/changes/git-fixture/intent.md", testIntentArtifactWithContext("git-fixture", options.IntentStatus, options.IntentDeclaresContext), 0o644)
 	writeTestBytes(t, repository, "openspec/changes/git-fixture/tasks.md", []byte("- [x] bounded change\n"), 0o644)
 	runTestGit(t, repository, "add", "-A")
 	runTestGit(t, repository, "commit", "-qm", "initialize governance")
@@ -375,7 +376,7 @@ func admissionRepositoryWith(t *testing.T, options fixtureOptions) (string, stri
 	writeTestBytes(t, repository, domain.DefaultProjectPolicyPath, headPolicyArtifact.CanonicalJSON(), 0o644)
 	writeTestBytes(t, repository, domain.ProjectDeclarationPath, headDeclarationArtifact.CanonicalJSON(), 0o644)
 
-	intentRaw := testIntentArtifact("git-fixture", options.IntentStatus)
+	intentRaw := testIntentArtifactWithContext("git-fixture", options.IntentStatus, options.IntentDeclaresContext)
 	writeTestBytes(t, repository, "openspec/changes/git-fixture/intent.md", intentRaw, 0o644)
 	writeTestBytes(t, repository, "openspec/changes/git-fixture/tasks.md", []byte("- [x] bounded change\n"), 0o644)
 	changeDigest, err := lineage.DigestChangeSnapshot(filepath.Join(repository, "openspec", "changes", "git-fixture"))
@@ -548,6 +549,14 @@ func testSetupProfile(t *testing.T, project domain.ProjectID) []byte {
 // placeholder heading is no longer enough: the collector must be able to reach
 // a confirmed snapshot from these bytes.
 func testIntentArtifact(id, status string) []byte {
+	return testIntentArtifactWithContext(id, status, false)
+}
+
+func testIntentArtifactWithContext(id, status string, declaresContext bool) []byte {
+	contextDeclaration := ""
+	if declaresContext {
+		contextDeclaration = "\n- **Context Pack:** " + id + " version 1"
+	}
 	confirmation := "- **Confirmed by:** pending\n- **Confirmed at:** pending\n- **Verification action:** pending"
 	if status == "confirmed" {
 		confirmation = "- **Confirmed by:** owner\n- **Confirmed at:** 2026-08-05\n- **Verification action:** owner-reviewed-three-groups"
@@ -555,7 +564,7 @@ func testIntentArtifact(id, status string) []byte {
 	return []byte(`# Intent Snapshot
 
 - **Intent ID:** ` + id + `
-- **Version:** 1
+- **Version:** 1` + contextDeclaration + `
 - **Status:** ` + status + `
 - **Owner:** owner
 
@@ -784,5 +793,50 @@ func TestPortableReplicaAcceptsKnownCanonicalArtifact(t *testing.T) {
 	}
 	if err := validatePortableReplica(artifact.CanonicalJSON()); err != nil {
 		t.Fatalf("known canonical artifact was rejected: %v", err)
+	}
+}
+
+// An intent that names its context pack is only readable as a pair. Deleting
+// the context at head must not turn it into a readable legacy snapshot, or
+// admission would pass because required evidence was removed.
+func TestAnIntentNamingItsContextPackNeedsThatContext(t *testing.T) {
+	repository, base, head, packet := admissionRepositoryWith(t, fixtureOptions{
+		IntentStatus: "confirmed", ReceiptStatus: localrun.StatePassed, IntentDeclaresContext: true,
+	})
+	frozen, err := CollectFrozenRange(context.Background(), repository, base, head, packet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasProjection(frozen.Projections, domain.LineageConfirmedIntent, admission.ProjectionStateInvalid, false) {
+		t.Fatalf("an intent missing its declared context still projected: %+v", frozen.Projections)
+	}
+	result, err := admission.Verify(admission.Input{
+		Range: frozen, Packet: packet,
+		Candidates: testCandidates(base, head, packet.EvaluationTime.UTC()),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Classification != domain.AdmissionMissing || result.Reasons[0].Code != domain.ReasonIntentUnconfirmed {
+		t.Fatalf("intent without its declared context = %+v", result)
+	}
+}
+
+func TestAContextPackDeclarationIsReadFromThePreambleOnly(t *testing.T) {
+	for _, fixture := range []struct {
+		name     string
+		raw      string
+		declares bool
+	}{
+		{name: "declared", raw: "# Intent\n- **Context Pack:** pack-1 version 1\n\n## Body\n", declares: true},
+		{name: "pending", raw: "# Intent\n- **Context Pack:** pending\n\n## Body\n"},
+		{name: "absent", raw: "# Intent\n- **Version:** 1\n\n## Body\n"},
+		{name: "mentioned in the body only", raw: "# Intent\n- **Version:** 1\n\n## Body\n- **Context Pack:** pack-1 version 1\n"},
+	} {
+		t.Run(fixture.name, func(t *testing.T) {
+			if got := declaresContextPack([]byte(fixture.raw)); got != fixture.declares {
+				t.Fatalf("declaresContextPack = %v, want %v", got, fixture.declares)
+			}
+		})
 	}
 }
