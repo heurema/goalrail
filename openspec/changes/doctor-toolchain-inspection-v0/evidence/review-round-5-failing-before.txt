@@ -1,0 +1,6 @@
+--- FAIL: TestClearedExecutableBitIsNotReady (0.01s)
+--- FAIL: TestSymlinkedBundleRootIsNotFollowed (0.01s)
+--- FAIL: TestReportedIntegrityKeepsItsCanonicalForm (0.00s)
+FAIL
+FAIL	github.com/heurema/goalrail/internal/doctor	0.449s
+FAIL

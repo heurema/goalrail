@@ -344,6 +344,58 @@ func TestAmbiguousComponentNameResolvesToNothing(t *testing.T) {
 	}
 }
 
+// Bytes intact and the executable bit gone is not a ready runtime by any
+// reading a user would recognise, and nothing here runs it to find out.
+func TestClearedExecutableBitIsNotReady(t *testing.T) {
+	home := installBundle(t, installedVersion, func(root string) {
+		if err := os.Chmod(filepath.Join(root, filepath.FromSlash(runtimeEntry)), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	observation := defaultPlanningObserver{home: home, version: installedVersion}.
+		ObservePlanning(context.Background(), canonProfile("node"))
+
+	if observation.Runtime.State == ComponentReady {
+		t.Fatalf("a non-executable runtime was reported ready: %#v", observation.Runtime)
+	}
+}
+
+// A confined root established around a link is confined to the link target. The
+// ancestors are therefore descended from the home directory rather than
+// resolved in one step.
+func TestSymlinkedBundleRootIsNotFollowed(t *testing.T) {
+	planted := installBundle(t, installedVersion, nil)
+	home := t.TempDir()
+	bundles := filepath.Join(home, ".local", "share", "goalrail", "bundles")
+	if err := os.MkdirAll(bundles, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(planted, ".local", "share", "goalrail", "bundles", installedVersion),
+		filepath.Join(bundles, installedVersion)); err != nil {
+		t.Fatal(err)
+	}
+
+	if installed, reason := loadInstalledBundle(home, installedVersion); installed != nil || reason == "" {
+		t.Fatalf("a symlinked bundle ancestor was followed (%v)", installed)
+	}
+}
+
+// The report carries one spelling of a digest. A bare sum would fail the
+// domain's own digest contract while sitting beside fields that satisfy it.
+func TestReportedIntegrityKeepsItsCanonicalForm(t *testing.T) {
+	home := installBundle(t, installedVersion, nil)
+
+	observation := defaultPlanningObserver{home: home, version: installedVersion}.
+		ObservePlanning(context.Background(), canonProfile("node"))
+
+	for _, component := range []ComponentReadiness{observation.Runtime, observation.Compiler} {
+		if !domain.IsSHA256Digest(component.RequiredIntegrity) {
+			t.Fatalf("%s reported %q, which is not a canonical digest", component.Kind, component.RequiredIntegrity)
+		}
+	}
+}
+
 // The prohibition is a property of this package, not of one function. Keeping it
 // as an assertion means a returning execution fails a test rather than depending
 // on a reviewer noticing it.
@@ -427,8 +479,11 @@ func installBundle(t *testing.T, version string, mutate func(root string)) strin
 		compilerOther: "installed-openspec-licence",
 		compilerEntry: "installed-openspec-entrypoint",
 	}
+	modes := map[string]os.FileMode{
+		goalrailEntry: 0o755, runtimeEntry: 0o755, compilerEntry: 0o755, compilerOther: 0o644,
+	}
 	for relative, body := range contents {
-		writeFile(t, filepath.Join(root, filepath.FromSlash(relative)), body)
+		writeFileMode(t, filepath.Join(root, filepath.FromSlash(relative)), body, modes[relative])
 	}
 
 	file := func(relative, component, mode string) releasebundle.ManifestFile {
@@ -516,10 +571,20 @@ func digestOf(content string) string {
 
 func writeFile(t *testing.T, path, content string) {
 	t.Helper()
+	writeFileMode(t, path, content, 0o644)
+}
+
+// writeFileMode lays a file down at the mode the manifest declares for it,
+// because readiness now compares the mode as well as the bytes.
+func writeFileMode(t *testing.T, path, content string, mode os.FileMode) {
+	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(content), mode); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path, mode); err != nil {
 		t.Fatal(err)
 	}
 }

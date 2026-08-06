@@ -80,13 +80,17 @@ release builder already emits a binary identity per component, and the bundle
 contract requires each identity to bind an exact manifest file, so the reader
 never has to choose.
 
-**D3a — Every bundle file is opened through a confined root.** `O_NOFOLLOW`
-refuses a substituted symbolic link at the final pathname component only, so a
-parent directory replaced by a link to an external tree is followed before any
-per-file protection applies, and a component would be verified against bytes
-outside the bundle. The root is opened once and every read goes through it, so
-no path segment can leave it. This too was an independent review finding with a
-regression of its own.
+**D3a — Every bundle file is opened through a root descended from the home
+directory.** `O_NOFOLLOW` refuses a substituted symbolic link at the final
+pathname component only, so a parent directory replaced by a link to an external
+tree is followed before any per-file protection applies, and a component would
+be verified against bytes outside the bundle. The root is opened once and every
+read goes through it, so no path segment can leave it. Establishing that root by opening the bundle
+path outright would not confine its ancestors — the path resolves the ordinary
+way first, so a bundle directory replaced by a link becomes the root, and the
+confinement then holds around the wrong tree. The root is therefore descended
+from the home directory. Both halves were independent review findings, each
+with a regression of its own.
 
 **D3b — A manifest that contradicts itself is invalid, not stale.** The manifest
 states a component's version twice: on the component and on the entrypoint that
@@ -98,6 +102,13 @@ rather than resolved by preferring either field. A second independent review
 round found this on the compiler, and the runtime path carried the same shape
 without appearing in that round's diff, so the check and its regression cover
 both.
+
+**D3c — The recorded mode is verified with the bytes.** The manifest records a
+mode per file, and only that says whether an entrypoint can still be run. A
+runtime whose bytes are intact and whose executable bit was cleared fails to
+execute while its digest still matches, and nothing here runs it to find out,
+so the mode is compared too. Reported as an unverified integrity identity: the
+installation no longer matches its own record.
 
 **D4 — The setup profile keeps declaring, and stops locating.**
 It continues to name the required components and their exact versions, which is
@@ -119,7 +130,7 @@ what is required, the installation says where it is.
 | Running binary's version string | Build stamp of the executing process; trusted as its own identity | A release version equal to a bundle directory name | A pseudo-version, a modified-tree marker, the toolchain development marker, unknown, or empty — each resolves no bundle | Fixed for the process lifetime; cannot change during a run | Unit test over the resolver: each non-release form yields no bundle root and a not-ready component, never a lookup elsewhere |
 | Home directory | Process environment, as the diagnosis already resolves it for attachment | An absolute existing directory | Absent or unresolvable — components report not ready rather than falling back to another root | Read once per diagnosis | Existing diagnosis input plumbing; test with a temporary home |
 | Installed bundle manifest JSON | Written by authorized setup into the bundle root and verified there at install time (CTX-6); trusted only after the bundle contract's own decoder accepts it | Whatever `releasebundle.DecodeSetupBundleManifest` accepts: canonical encoding, pinned schema, safe relative paths, digest shapes, sorted unique records, and every binary identity binding an exact file | Absent, unreadable, oversized, not a regular file, non-canonical, malformed, unknown schema, a path that leaves the bundle, or naming a different release or platform — all yield not ready with a stated reason, never a partial read | Re-read on every diagnosis; a manifest replaced between reads only affects the next run, and no decision spans two reads | Table-driven test per refused state, including an edited path that escapes the bundle; one positive fixture bundle built to the full contract |
-| Runtime executable bytes | Inside the bundle root, path taken from the manifest's binary identity for the declared component | A regular file whose SHA-256 matches the manifest record | Absent, non-regular, digest mismatch, reachable only outside the confined root, or exceeding the existing bundle-file bound | Hashed from the same opened descriptor whose type was checked, so a substitution between check and read cannot redirect the read; opened through the confined root, so no path segment — final or parent — can leave the bundle | Test that a modified byte yields unverified integrity and that a symlinked parent directory is refused rather than followed |
+| Runtime executable bytes | Inside the bundle root, path taken from the manifest's binary identity for the declared component | A regular file whose SHA-256 and permission bits match the manifest record | Absent, non-regular, digest mismatch, mode mismatch, reachable only outside the confined root, or exceeding the existing bundle-file bound | Hashed from the same opened descriptor whose type was checked, so a substitution between check and read cannot redirect the read; opened through the confined root, so no path segment — final or parent — can leave the bundle | Test that a modified byte and a cleared executable bit each yield unverified integrity, and that a symlinked parent directory and a symlinked bundle root are refused rather than followed |
 | Compiler entrypoint bytes | Same bundle root, path taken from the manifest's binary identity for the declared component | As above | As above | As above | As above, plus a test that replacing the entrypoint is caught while an earlier-sorting file of the same package stays intact |
 | Declared setup profile | Repository content already read by the diagnosis; trusted for declaration, never for location | Component identifiers and exact versions | A value used as a path, a lookup name, or any filesystem input — refused by construction, since no code path passes it to a resolver or an open | Repository content can change between runs; each run reads it afresh | Test that a profile whose runtime value is a path to an executable inside the worktree causes no execution and no read of that path |
 | Platform of the running process | Compile-time `GOOS`/`GOARCH` of the executing binary | The `<os>_<arch>` key authorized setup used | No refusal case: a bundle installed for another platform simply does not exist at the derived path | Fixed at build time | Covered by the resolver test's path construction assertion |

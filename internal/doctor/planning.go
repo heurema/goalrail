@@ -155,8 +155,20 @@ func loadInstalledBundle(home, version string) (*installedBundle, string) {
 		return nil, fmt.Sprintf("this build reports %q, which is not a release version, so it corresponds to no installed Goalrail bundle", version)
 	}
 	platform := releasebundle.Platform{OS: runtime.GOOS, Arch: runtime.GOARCH}
-	path := filepath.Join(home, ".local", "share", "goalrail", "bundles", version, platform.Key())
-	root, err := os.OpenRoot(path)
+	relative := strings.Join([]string{".local", "share", "goalrail", "bundles", version, platform.Key()}, "/")
+	path := filepath.Join(home, filepath.FromSlash(relative))
+	// Descending from the home directory rather than opening the bundle path
+	// outright is what confines the ancestors. Opening the bundle path directly
+	// resolves it the ordinary way first, so a bundle directory — or any
+	// directory above it — replaced by a link to an external tree would become
+	// the confined root itself, and every later read would be confined to
+	// somewhere else entirely.
+	homeRoot, err := os.OpenRoot(home)
+	if err != nil {
+		return nil, "no installed Goalrail bundle corresponds to this binary; run the exact Goalrail setup plan"
+	}
+	defer homeRoot.Close()
+	root, err := homeRoot.OpenRoot(relative)
 	if err != nil {
 		return nil, "no installed Goalrail bundle corresponds to this binary; run the exact Goalrail setup plan"
 	}
@@ -242,8 +254,17 @@ func observeComponent(installed *installedBundle, reason, kind, declared, requir
 		return component
 	}
 	component.ObservedVersion = named.Version
-	component.RequiredIntegrity = domain.SHA256Digest(normalizeDigest(identity.SHA256))
-	return verifyInstalledFile(component, installed, identity.Path, identity.SHA256, required)
+	// The manifest's own spelling is kept, prefix included: this field sits
+	// beside other digest fields in one report, and a bare sum would fail the
+	// domain's digest contract while looking like every other one.
+	component.RequiredIntegrity = domain.SHA256Digest(identity.SHA256)
+	record, found := fileRecordFor(installed.manifest, identity.Path)
+	if !found {
+		component.State = ComponentInvalid
+		component.Detail = "the installed bundle manifest records no file for this component entrypoint"
+		return component
+	}
+	return verifyInstalledFile(component, installed, record, required)
 }
 
 // verifyInstalledFile settles a component's state from the bytes on disk.
@@ -251,28 +272,43 @@ func observeComponent(installed *installedBundle, reason, kind, declared, requir
 // The version comparison comes first because an installation of the wrong
 // version is incompatible whether or not its bytes are intact, and reporting a
 // digest mismatch there would name the wrong problem.
-func verifyInstalledFile(component ComponentReadiness, installed *installedBundle, relative, expected, required string) ComponentReadiness {
-	component.Path = filepath.Join(installed.path, filepath.FromSlash(relative))
+func verifyInstalledFile(component ComponentReadiness, installed *installedBundle, record releasebundle.ManifestFile, required string) ComponentReadiness {
+	component.Path = filepath.Join(installed.path, filepath.FromSlash(record.Path))
 	if component.ObservedVersion != strings.TrimPrefix(required, "v") &&
 		component.ObservedVersion != required {
 		component.State = ComponentIncompatible
 		component.Detail = "the installed component's version differs from the exact declared version"
 		return component
 	}
-	file, err := installed.root.OpenFile(relative, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	file, err := installed.root.OpenFile(record.Path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		component.State = ComponentMissing
 		component.Detail = "the file the installed manifest records for this component could not be read inside the bundle"
 		return component
 	}
 	defer file.Close()
+	// The manifest records a mode as well as a digest, and only one of them
+	// says whether the file can still be run. A runtime whose bytes are intact
+	// but whose executable bit was cleared is not ready by any reading a user
+	// would recognise, and nothing here executes it to find out.
+	info, err := file.Stat()
+	if err != nil {
+		component.State = ComponentMissing
+		component.Detail = "the file the installed manifest records for this component could not be read"
+		return component
+	}
+	if observedMode := fmt.Sprintf("%04o", info.Mode().Perm()); observedMode != record.Mode {
+		component.State = ComponentUnverifiedIntegrity
+		component.Detail = "the installed component's mode is " + observedMode + ", not the " + record.Mode + " its manifest records"
+		return component
+	}
 	observed, _, err := boundedio.DigestOpenFile(file, "installed component", maxInstalledComponentFile)
 	if err != nil {
 		component.State = ComponentMissing
 		component.Detail = "the file the installed manifest records for this component could not be read"
 		return component
 	}
-	if observed != normalizeDigest(expected) {
+	if observed != normalizeDigest(record.SHA256) {
 		component.State = ComponentUnverifiedIntegrity
 		component.Detail = "the installed component's bytes do not match the digest its manifest records"
 		return component
@@ -328,6 +364,18 @@ func componentFor(manifest releasebundle.SetupBundleManifest, declared string) (
 	default:
 		return releasebundle.ManifestComponent{}, "the installed bundle carries more than one component under this declared name"
 	}
+}
+
+// fileRecordFor returns the manifest's record for one installed path. The bundle
+// contract requires every binary identity to bind an exact file, so the absence
+// of one is the manifest contradicting itself rather than an ordinary miss.
+func fileRecordFor(manifest releasebundle.SetupBundleManifest, path string) (releasebundle.ManifestFile, bool) {
+	for _, file := range manifest.Files {
+		if file.Path == path {
+			return file, true
+		}
+	}
+	return releasebundle.ManifestFile{}, false
 }
 
 // normalizeDigest accepts both spellings the bundle contracts use — a bare
