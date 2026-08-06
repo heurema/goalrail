@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	openspecadapter "github.com/heurema/goalrail/internal/adapters/openspec"
 	"github.com/heurema/goalrail/internal/admission"
 	"github.com/heurema/goalrail/internal/domain"
 	"github.com/heurema/goalrail/internal/lineage"
@@ -317,6 +318,10 @@ type fixtureOptions struct {
 	IntentStatus          string
 	ReceiptStatus         localrun.RunState
 	IntentDeclaresContext bool
+	// ChangeSchema, when set, writes the change's own .openspec.yaml so the
+	// schema-aware context requirement applies exactly as it does for a real
+	// planning change.
+	ChangeSchema string
 }
 
 func admissionRepository(t *testing.T) (string, string, string, domain.AdmissionPacket) {
@@ -351,6 +356,10 @@ func admissionRepositoryWith(t *testing.T, options fixtureOptions) (string, stri
 	writeTestBytes(t, repository, domain.ProjectDeclarationPath, baseDeclarationArtifact.CanonicalJSON(), 0o644)
 	writeTestBytes(t, repository, "openspec/changes/git-fixture/intent.md", testIntentArtifactWithContext("git-fixture", options.IntentStatus, options.IntentDeclaresContext), 0o644)
 	writeTestBytes(t, repository, "openspec/changes/git-fixture/tasks.md", []byte("- [x] bounded change\n"), 0o644)
+	if options.ChangeSchema != "" {
+		writeTestBytes(t, repository, "openspec/changes/git-fixture/.openspec.yaml",
+			[]byte("schema: "+options.ChangeSchema+"\n"), 0o644)
+	}
 	runTestGit(t, repository, "add", "-A")
 	runTestGit(t, repository, "commit", "-qm", "initialize governance")
 	base := strings.TrimSpace(runTestGit(t, repository, "rev-parse", "HEAD"))
@@ -799,26 +808,56 @@ func TestPortableReplicaAcceptsKnownCanonicalArtifact(t *testing.T) {
 // An intent that names its context pack is only readable as a pair. Deleting
 // the context at head must not turn it into a readable legacy snapshot, or
 // admission would pass because required evidence was removed.
-func TestAnIntentNamingItsContextPackNeedsThatContext(t *testing.T) {
+func TestAChangeRequiringContextCannotProjectWithoutIt(t *testing.T) {
+	// Both shapes of the same bypass: the declaration still present, and the
+	// declaration deleted along with the context. The requirement comes from the
+	// change's schema, so removing the row cannot remove the requirement.
+	for _, fixture := range []struct {
+		name     string
+		declares bool
+	}{
+		{name: "declaration retained", declares: true},
+		{name: "declaration deleted with the context", declares: false},
+	} {
+		t.Run(fixture.name, func(t *testing.T) {
+			repository, base, head, packet := admissionRepositoryWith(t, fixtureOptions{
+				IntentStatus: "confirmed", ReceiptStatus: localrun.StatePassed,
+				IntentDeclaresContext: fixture.declares,
+				ChangeSchema:          openspecadapter.GoalrailIntentSchema,
+			})
+			frozen, err := CollectFrozenRange(context.Background(), repository, base, head, packet)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !hasProjection(frozen.Projections, domain.LineageConfirmedIntent, admission.ProjectionStateInvalid, false) {
+				t.Fatalf("an intent whose change requires context still projected: %+v", frozen.Projections)
+			}
+			result, err := admission.Verify(admission.Input{
+				Range: frozen, Packet: packet,
+				Candidates: testCandidates(base, head, packet.EvaluationTime.UTC()),
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if result.Classification != domain.AdmissionMissing || result.Reasons[0].Code != domain.ReasonIntentUnconfirmed {
+				t.Fatalf("intent without its required context = %+v", result)
+			}
+		})
+	}
+}
+
+// A change that is not on the planning schema keeps the legacy single-artifact
+// reading; the requirement is the schema's, not this path's invention.
+func TestAChangeWithoutThePlanningSchemaStillProjects(t *testing.T) {
 	repository, base, head, packet := admissionRepositoryWith(t, fixtureOptions{
-		IntentStatus: "confirmed", ReceiptStatus: localrun.StatePassed, IntentDeclaresContext: true,
+		IntentStatus: "confirmed", ReceiptStatus: localrun.StatePassed,
 	})
 	frozen, err := CollectFrozenRange(context.Background(), repository, base, head, packet)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !hasProjection(frozen.Projections, domain.LineageConfirmedIntent, admission.ProjectionStateInvalid, false) {
-		t.Fatalf("an intent missing its declared context still projected: %+v", frozen.Projections)
-	}
-	result, err := admission.Verify(admission.Input{
-		Range: frozen, Packet: packet,
-		Candidates: testCandidates(base, head, packet.EvaluationTime.UTC()),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result.Classification != domain.AdmissionMissing || result.Reasons[0].Code != domain.ReasonIntentUnconfirmed {
-		t.Fatalf("intent without its declared context = %+v", result)
+	if !hasProjection(frozen.Projections, domain.LineageConfirmedIntent, admission.ProjectionStateConfirmed, true) {
+		t.Fatalf("a schema-free change stopped projecting: %+v", frozen.Projections)
 	}
 }
 

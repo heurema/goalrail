@@ -22,11 +22,12 @@ import (
 )
 
 const (
-	maxGitOutput      = 16 << 20
-	maxGitPathList    = 4 << 20
-	maxFrozenPaths    = domain.MaxAdmissionPaths
-	maxReplicaBytes   = 1 << 20
-	maxBootstrapBytes = 64 << 10
+	maxGitOutput           = 16 << 20
+	maxGitPathList         = 4 << 20
+	maxFrozenPaths         = domain.MaxAdmissionPaths
+	maxReplicaBytes        = 1 << 20
+	maxBootstrapBytes      = 64 << 10
+	maxChangeMetadataBytes = 8 << 10
 )
 
 var errGitObjectMissing = errors.New("Git object path is missing")
@@ -156,17 +157,26 @@ func projectIntent(ctx context.Context, repository, revision string, target doma
 // contract. A change that carries a context pack is only readable as a pair, so
 // the projection uses the same pair conformance the lineage anchor did.
 func readIntentArtifact(ctx context.Context, repository, revision, intentPath string, raw []byte) (domain.IntentSnapshot, error) {
-	contextPath := path.Join(path.Dir(intentPath), "context.md")
+	changeDir := path.Dir(intentPath)
+	contextPath := path.Join(changeDir, "context.md")
 	contextRaw, err := readGitObject(ctx, repository, revision, contextPath, openspecadapter.MaxPairArtifactBytes)
 	if errors.Is(err, errGitObjectMissing) {
-		// An intent that names its context pack is only readable as a pair. The
-		// single-artifact reader ignores that declaration and would accept the
-		// document as a legacy snapshot, so deleting the required context at
+		// An intent whose change requires context is only readable as a pair.
+		// The single-artifact reader ignores the requirement and would accept
+		// the document as a legacy snapshot, so deleting the required context at
 		// head would satisfy confirmed intent — admission passing precisely
 		// because evidence was removed.
-		if declaresContextPack(raw) {
+		//
+		// The requirement comes from the change's own schema, not from a line in
+		// the intent: deleting the declaration row along with the context would
+		// otherwise remove the evidence and the reason to expect it in one move.
+		required, requirementErr := contextRequired(ctx, repository, revision, changeDir, raw)
+		if requirementErr != nil {
+			return domain.IntentSnapshot{}, requirementErr
+		}
+		if required {
 			return domain.IntentSnapshot{}, fmt.Errorf(
-				"the intent at %s names a context pack, but %s is absent at this revision", intentPath, contextPath)
+				"the change at %s requires a context pack, but %s is absent at this revision", changeDir, contextPath)
 		}
 		return openspecadapter.ReadIntent(bytes.NewReader(raw))
 	}
@@ -180,6 +190,53 @@ func readIntentArtifact(ctx context.Context, repository, revision, intentPath st
 	return conformed.Intent, nil
 }
 
+// contextRequired applies the planning adapter's own schema-aware rule to the
+// immutable revision: a live change on the project schema always requires its
+// context, and an archived one requires it when its intent still names a pack.
+//
+// Read from Git rather than from the checkout, like everything else on this
+// path, and mirroring the adapter rather than inventing a second rule.
+func contextRequired(ctx context.Context, repository, revision, changeDir string, intentRaw []byte) (bool, error) {
+	schemaRaw, err := readGitObject(ctx, repository, revision, path.Join(changeDir, ".openspec.yaml"), maxChangeMetadataBytes)
+	if errors.Is(err, errGitObjectMissing) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if changeSchema(schemaRaw) != openspecadapter.GoalrailIntentSchema {
+		return false, nil
+	}
+	if !archivedChangeDir(changeDir) {
+		return true, nil
+	}
+	return declaresContextPack(intentRaw), nil
+}
+
+// changeSchema reads the one scalar this path needs from the change metadata.
+func changeSchema(raw []byte) string {
+	for _, line := range strings.Split(string(raw), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		key, value, found := strings.Cut(trimmed, ":")
+		if !found || strings.TrimSpace(key) != "schema" {
+			continue
+		}
+		value = strings.TrimSpace(value)
+		if index := strings.IndexAny(value, "#"); index >= 0 {
+			value = strings.TrimSpace(value[:index])
+		}
+		return strings.Trim(value, "'\"")
+	}
+	return ""
+}
+
+func archivedChangeDir(changeDir string) bool {
+	return path.Base(path.Dir(changeDir)) == "archive"
+}
+
 // declaresContextPack reports whether an intent artifact names a context pack
 // in its own preamble.
 //
@@ -189,16 +246,19 @@ func readIntentArtifact(ctx context.Context, repository, revision, intentPath st
 // preamble is inspected, so a mention inside the body cannot make an intent
 // unreadable.
 func declaresContextPack(raw []byte) bool {
-	const marker = "- **Context Pack:**"
+	const marker = "- **context pack:**"
 	for _, line := range strings.Split(string(raw), "\n") {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "## ") {
 			return false
 		}
-		if !strings.HasPrefix(trimmed, marker) {
+		// Case-insensitive, because the metadata reader that decides the same
+		// question elsewhere folds case and a spelling difference must not
+		// change whether evidence is required.
+		if !strings.HasPrefix(strings.ToLower(trimmed), marker) {
 			continue
 		}
-		value := strings.TrimSpace(strings.TrimPrefix(trimmed, marker))
+		value := strings.TrimSpace(trimmed[len(marker):])
 		value = strings.TrimSpace(strings.Trim(value, "*`"))
 		return value != "" && !strings.EqualFold(value, "pending")
 	}

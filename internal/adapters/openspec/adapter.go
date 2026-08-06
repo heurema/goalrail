@@ -26,7 +26,13 @@ var (
 	ErrContextRequired    = errors.New("OpenSpec context is required")
 )
 
-const goalrailIntentSchema = "goalrail-intent"
+// GoalrailIntentSchema names the project-local planning schema. It is exported
+// because a second reader — the immutable Git projection used by admission —
+// must apply the same schema-aware context requirement this adapter does, and a
+// second copy of the identifier is a second thing to drift.
+const GoalrailIntentSchema = "goalrail-intent"
+
+const goalrailIntentSchema = GoalrailIntentSchema
 
 type CompiledChange struct {
 	Intent   domain.IntentSnapshot

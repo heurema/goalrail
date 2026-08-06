@@ -2,7 +2,7 @@
 
 - **Change:** `admission-hardening-after-pr62`
 - **Reviewed merge:** `6a896355958874a4989eec131c6cc20a24921995`
-- **Status:** implementation complete; stopped at the owner gate before staging, commit, push, PR, activation, release, or installation
+- **Status:** implementation complete and reviewed twice; committed and pushed for a pull request under the owner's explicit instruction. Activation, release, installation, and merge remain separate gates
 
 | Finding | Review discussion | Owning package | Focused test | Expected stable result | Merge-commit result | Remediation result | Implementation reference |
 |---|---|---|---|---|---|---|---|
@@ -78,7 +78,7 @@ earlier failure.
 
 ## Pre-PR review findings and their disposition
 
-One full pre-PR review ran on 2026-08-06 against `675a0166`, reviewer `codex`,
+Two full pre-PR reviews ran on 2026-08-06, the first against `675a0166`, reviewer `codex`,
 mode `cross`, effort `high`, 620 seconds, receipt
 `32c82bc2…-675a0166…-5ef7f040-3c2ea7277f00.json`. It was the first review this
 branch received: two earlier attempts blocked on a provider defect and returned
@@ -88,6 +88,8 @@ nothing. All three findings are accepted.
 |---|---|---|---|
 | P1 | The adapter reports `github-permission:*` while the canon default policy permits only `role:repository-owner`, so real shared admission denies every approved review; the canary hid the seam by supplying the role directly | Accepted — it made the whole prepared path unusable in production while every test passed | The default policy now permits the permissions the adapter reports, the two consumers share one `authorizingPermissions` list, the canary uses the shape the real reader produces, and `TestTheDefaultPolicyPermitsEveryAuthorityThisAdapterReports` fails if they drift again |
 | P1 | With a context pack declared but `context.md` absent at head, the intent fallback accepted the document as a legacy snapshot, so deleting required context evidence satisfied confirmed intent | Accepted — admission passing *because* evidence was removed is the exact inversion this change exists to prevent. It was recorded as a documented limitation in an earlier draft of this proof; the reviewer was right that it is a hole, and the note has been removed | `readIntentArtifact` refuses when the artifact names a pack whose context is absent; `declaresContextPack` reads the preamble only; covered by `TestAnIntentNamingItsContextPackNeedsThatContext` and `TestAContextPackDeclarationIsReadFromThePreambleOnly` |
+| P1 (round 2) | The context requirement was enforced by matching one exact declaration spelling, so deleting `context.md` together with its declaration row — or varying its case — restored the legacy reading and projected the intent as confirmed | Accepted — the requirement belongs to the change's schema, not to a line that can be deleted alongside the evidence | `contextRequired` now reads the change's own `.openspec.yaml` from the immutable revision and applies the planning adapter's rule, with the schema identifier exported so the two readers share one constant; both bypass shapes are covered by `TestAChangeRequiringContextCannotProjectWithoutIt`, and `TestAChangeWithoutThePlanningSchemaStillProjects` keeps the legacy path |
+| P2 (round 2) | This proof claimed the `github-verify` command path was covered by tests; no test invoked it | Accepted — a coverage claim without its check is exactly what this repository's review culture exists to catch, and it was in the proof rather than the code | Entrypoint tests were added for the usage refusals, the event decoder, and the ordering property that no provider request precedes repository authority; the claim above now states precisely what remains untested |
 | P2 | A relation marked `provider_unavailable` and satisfied by a current candidate stayed in the unavailable set, and `Verify` denies on a non-empty one, so live evidence could not repair it | Accepted — the effective view accepted the relation while the result still denied on it | Satisfied relations are removed from the reported unavailable set, the now-redundant guard below it is gone, and `TestALiveCandidateRepairsAnExplicitlyUnavailableRelation` covers both directions |
 
 Verification after the fixes: `go test ./...`, `go vet ./...`, `gofmt -l internal cmd`
@@ -100,7 +102,11 @@ clean.
   change, release, installation, deployment, or Deltacue mutation was performed.
   The end-to-end provider fixtures use an in-process stub reader.
 - The prepared workflow's new `github-verify` invocation has not been executed
-  on a real runner; only its rendered text and the underlying command path are
-  covered by tests.
+  on a real runner. Through the command itself, tests cover the usage refusals,
+  the event decoder, and the ordering property that the repository's own
+  authority is established before any provider request is made. The happy path —
+  a real authenticated provider read reaching a canonical allow — is exercised
+  only through `githubadmission.Collect` and `admission.Verify` directly, not
+  through the entrypoint, and remains untested at that boundary.
 - The pre-PR review of this change ran once; its three findings are fixed above
   but the fixes themselves have not been reviewed.
