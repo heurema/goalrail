@@ -86,8 +86,14 @@ func run(
 		return runVerifyLineage(ctx, args[1:], stdout, stderr)
 	case "github-collect":
 		// Internal shared-admission adapter. It is intentionally absent from
-		// operator help and performs read-only provider collection only.
+		// operator help and performs read-only provider collection only. Its
+		// packet is audit evidence; it carries no authenticated authority.
 		return runGitHubCollect(ctx, args[1:], stdout, stderr)
+	case "github-verify":
+		// Internal authoritative shared-admission path: one invocation observes
+		// the provider and verifies the frozen range. Also absent from operator
+		// help, and read-only at the provider boundary.
+		return runGitHubVerify(ctx, args[1:], stdout, stderr)
 	case "commit-msg":
 		// Internal local early-feedback adapter. A trailer is only an index;
 		// this command never produces an admission verdict.

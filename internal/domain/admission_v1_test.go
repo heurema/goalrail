@@ -97,6 +97,31 @@ func TestAdmissionPacketCanonicalizesEveryProvenanceField(t *testing.T) {
 	}
 }
 
+func TestCTX9AdmissionPacketRejectsProvenanceWithoutEvaluationTime(t *testing.T) {
+	for _, fixture := range []struct {
+		name   string
+		mutate func(*AdmissionPacket)
+	}{
+		{name: "nil", mutate: func(packet *AdmissionPacket) {
+			packet.EvaluationTime = nil
+			packet.TimeAuthorityRef = ""
+		}},
+		{name: "zero", mutate: func(packet *AdmissionPacket) {
+			zero := time.Time{}
+			packet.EvaluationTime = &zero
+		}},
+		{name: "missing-authority", mutate: func(packet *AdmissionPacket) {
+			packet.TimeAuthorityRef = ""
+		}},
+	} {
+		t.Run(fixture.name, func(t *testing.T) {
+			packet := validAdmissionPacket()
+			fixture.mutate(&packet)
+			requireViolation(t, ValidateAdmissionPacket(packet), "admission_packet.provenance_time_required")
+		})
+	}
+}
+
 func validAdmissionPacket() AdmissionPacket {
 	evaluationTime := time.Date(2026, 8, 4, 11, 0, 0, 0, time.UTC)
 	return AdmissionPacket{

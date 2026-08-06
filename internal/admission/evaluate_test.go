@@ -17,7 +17,7 @@ import (
 
 func TestPreparedSharedVerdictDoesNotDependOnLocalHookPresence(t *testing.T) {
 	input := validInput(t)
-	input.Range.Graph.Events = withoutBypassRelations(input.Range.Graph.Events)
+	dropBypassRelations(&input)
 	if _, err := admissionlocal.ValidateCommitMessage(strings.NewReader(
 		"feat: indexed only\n\nGoalrail-Work-Unit: wu_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n",
 	)); err != nil {
@@ -115,6 +115,96 @@ func TestPolicyMatcherUsesPathKindPriorityAndDefaultMaterial(t *testing.T) {
 	}
 }
 
+func TestCTX11RepositoryRootPrefixMatchesEveryNormalizedChangeKind(t *testing.T) {
+	allKinds := []domain.ChangeKind{
+		domain.ChangeAdd,
+		domain.ChangeModify,
+		domain.ChangeRename,
+		domain.ChangeDelete,
+		domain.ChangeMode,
+		domain.ChangeSubmodule,
+	}
+	policy := testPolicy(t)
+	policy.Rules = []domain.PolicyPathRule{
+		{
+			ID: "ctx-11-root", Matcher: domain.PolicyPathMatcher{Kind: domain.PathMatcherPrefix, Path: "."},
+			ChangeKinds: allKinds, Priority: 300,
+			Classification: domain.MaterialityGenerated, RequiredEvidenceKinds: []string{"ctx_11_receipt"},
+		},
+		{
+			ID: "ctx-11-lower-priority", Matcher: domain.PolicyPathMatcher{Kind: domain.PathMatcherPrefix, Path: "internal"},
+			ChangeKinds: allKinds, Priority: 100,
+			Classification: domain.MaterialityNonMaterial,
+		},
+	}
+	changes := []ChangedPath{
+		{Path: "README.md", Kind: domain.ChangeAdd},
+		{Path: "internal/app.go", Kind: domain.ChangeModify},
+		{Path: "docs/guide.md", Kind: domain.ChangeRename},
+		{Path: "old.txt", Kind: domain.ChangeDelete},
+		{Path: "scripts/run.sh", Kind: domain.ChangeMode},
+		{Path: "vendor/library", Kind: domain.ChangeSubmodule},
+	}
+
+	evaluation := EvaluatePolicy(policy, changes)
+	if len(evaluation.Decisions) != len(changes) {
+		t.Fatalf("decisions = %d, want %d", len(evaluation.Decisions), len(changes))
+	}
+	wantKinds := make(map[string]domain.ChangeKind, len(changes))
+	for _, change := range changes {
+		wantKinds[change.Path] = change.Kind
+	}
+	for index, decision := range evaluation.Decisions {
+		if wantKind, ok := wantKinds[decision.Path]; !ok || decision.Kind != wantKind {
+			t.Fatalf("decision %d changed path identity: %+v", index, decision)
+		}
+		if !reflect.DeepEqual(decision.RuleIDs, []domain.PolicyRuleID{"ctx-11-root"}) {
+			t.Fatalf("decision %d rule IDs = %#v", index, decision.RuleIDs)
+		}
+		if decision.Classification != domain.MaterialityGenerated {
+			t.Fatalf("decision %d classification = %s", index, decision.Classification)
+		}
+		if !reflect.DeepEqual(decision.RequiredEvidenceKinds, []string{"ctx_11_receipt"}) {
+			t.Fatalf("decision %d evidence kinds = %#v", index, decision.RequiredEvidenceKinds)
+		}
+	}
+}
+
+func TestCTX11NeighborPrefixStillUsesPathBoundary(t *testing.T) {
+	allKinds := []domain.ChangeKind{
+		domain.ChangeAdd,
+		domain.ChangeModify,
+		domain.ChangeRename,
+		domain.ChangeDelete,
+		domain.ChangeMode,
+		domain.ChangeSubmodule,
+	}
+	policy := testPolicy(t)
+	policy.Rules = []domain.PolicyPathRule{
+		{
+			ID: "ctx-11-root", Matcher: domain.PolicyPathMatcher{Kind: domain.PathMatcherPrefix, Path: "."},
+			ChangeKinds: allKinds, Priority: 100,
+			Classification: domain.MaterialityMaterial,
+		},
+		{
+			ID: "ctx-11-neighbor", Matcher: domain.PolicyPathMatcher{Kind: domain.PathMatcherPrefix, Path: "internal/lib"},
+			ChangeKinds: allKinds, Priority: 300,
+			Classification: domain.MaterialityNonMaterial,
+		},
+	}
+
+	evaluation := EvaluatePolicy(policy, []ChangedPath{
+		{Path: "internal/lib/client.go", Kind: domain.ChangeModify},
+		{Path: "internal/library.go", Kind: domain.ChangeModify},
+	})
+	if got := evaluation.Decisions[0].RuleIDs; !reflect.DeepEqual(got, []domain.PolicyRuleID{"ctx-11-neighbor"}) {
+		t.Fatalf("nested neighbor rule IDs = %#v", got)
+	}
+	if got := evaluation.Decisions[1].RuleIDs; !reflect.DeepEqual(got, []domain.PolicyRuleID{"ctx-11-root"}) {
+		t.Fatalf("boundary neighbor rule IDs = %#v", got)
+	}
+}
+
 func TestPolicyMatcherReportsOnlyOverlappingEqualPriorityAsAmbiguous(t *testing.T) {
 	policy := testPolicy(t)
 	policy.Rules = []domain.PolicyPathRule{
@@ -152,6 +242,7 @@ func TestAdmissionGoldenCorpusAndEntrypointsAreByteIdentical(t *testing.T) {
 		{name: "missing", build: func(t *testing.T) Input {
 			input := validInput(t)
 			input.Range.Graph.Events = withoutRelation(input.Range.Graph.Events, domain.LineageTerminalReceipt)
+			rebuildProjections(&input)
 			return input
 		}, classification: domain.AdmissionMissing, outcome: domain.AdmissionDeny, reason: domain.ReasonReceiptMissing},
 		{name: "ambiguous", build: func(t *testing.T) Input {
@@ -215,13 +306,13 @@ func TestAdmissionGoldenCorpusAndEntrypointsAreByteIdentical(t *testing.T) {
 		{name: "expired-exception", build: func(t *testing.T) Input {
 			input := validInput(t)
 			addException(t, &input, input.Packet.EvaluationTime.Add(-2*time.Hour), input.Packet.EvaluationTime.Add(-time.Hour))
-			input.Range.Graph.Events = withoutBypassRelations(input.Range.Graph.Events)
+			dropBypassRelations(&input)
 			return input
 		}, classification: domain.AdmissionInvalid, outcome: domain.AdmissionDeny, reason: domain.ReasonExceptionExpired},
 		{name: "permitted-exception", build: func(t *testing.T) Input {
 			input := validInput(t)
 			addException(t, &input, input.Packet.EvaluationTime.Add(-time.Minute), input.Packet.EvaluationTime.Add(30*time.Minute))
-			input.Range.Graph.Events = withoutBypassRelations(input.Range.Graph.Events)
+			dropBypassRelations(&input)
 			return input
 		}, classification: domain.AdmissionBreakGlass, outcome: domain.AdmissionAllow, reason: domain.ReasonExceptionApplied},
 		{name: "out-of-scope-exception", build: func(t *testing.T) Input {
@@ -260,7 +351,7 @@ func TestAdmissionGoldenCorpusAndEntrypointsAreByteIdentical(t *testing.T) {
 		}, classification: domain.AdmissionBootstrap, outcome: domain.AdmissionAllow, reason: domain.ReasonBootstrapRange},
 		{name: "locally-bypassed", build: func(t *testing.T) Input {
 			input := validInput(t)
-			input.Range.Graph.Events = withoutBypassRelations(input.Range.Graph.Events)
+			dropBypassRelations(&input)
 			return input
 		}, classification: domain.AdmissionMissing, outcome: domain.AdmissionDeny, reason: domain.ReasonRunSessionMissing},
 	}
@@ -362,6 +453,466 @@ func TestTimeBoundExceptionRequiresAuthenticatedExplicitTime(t *testing.T) {
 	}
 }
 
+func TestCTX9ProvenanceWithoutEvaluationTimeNeverPanics(t *testing.T) {
+	evaluationTime := time.Date(2026, 8, 5, 12, 0, 0, 0, time.UTC)
+	reference := testReference("review_index", "review-index:ctx-9", "github:review-index/ctx-9", "github")
+	graph := WorkUnitGraph{Events: []domain.LineageEvent{{Targets: []domain.ContentAddressedEvidenceReference{reference}}}}
+	base := domain.AdmissionPacket{
+		EvaluationTime:   &evaluationTime,
+		TimeAuthorityRef: "provider:trusted-evaluation-time",
+		Evidence:         []domain.ContentAddressedEvidenceReference{reference},
+		Provenance: []domain.AdmissionProviderProvenance{{
+			AdapterID: "github", ProviderRef: "github:pull/ctx-9", EvidenceDigest: reference.Digest,
+			ObservedAt: evaluationTime, Authenticated: true,
+		}},
+	}
+
+	for _, fixture := range []struct {
+		name   string
+		mutate func(*domain.AdmissionPacket)
+	}{
+		{name: "nil", mutate: func(packet *domain.AdmissionPacket) {
+			packet.EvaluationTime = nil
+			packet.TimeAuthorityRef = ""
+		}},
+		{name: "zero", mutate: func(packet *domain.AdmissionPacket) {
+			zero := time.Time{}
+			packet.EvaluationTime = &zero
+		}},
+		{name: "missing-authority", mutate: func(packet *domain.AdmissionPacket) {
+			packet.TimeAuthorityRef = ""
+		}},
+	} {
+		t.Run(fixture.name, func(t *testing.T) {
+			packet := base
+			fixture.mutate(&packet)
+			reason, missing := verifyPacketEvidence(graph, packet)
+			if reason != domain.ReasonTrustedTimeMissing || !reflect.DeepEqual(missing, []string{"packet:evaluation-time"}) {
+				t.Fatalf("reason = %q, missing = %#v", reason, missing)
+			}
+		})
+	}
+}
+
+func TestCTX9FutureAndUnauthenticatedProvenanceAreUntrusted(t *testing.T) {
+	evaluationTime := time.Date(2026, 8, 5, 12, 0, 0, 0, time.UTC)
+	reference := testReference("review_index", "review-index:ctx-9", "github:review-index/ctx-9", "github")
+	graph := WorkUnitGraph{Events: []domain.LineageEvent{{Targets: []domain.ContentAddressedEvidenceReference{reference}}}}
+	base := domain.AdmissionPacket{
+		EvaluationTime:   &evaluationTime,
+		TimeAuthorityRef: "provider:trusted-evaluation-time",
+		Evidence:         []domain.ContentAddressedEvidenceReference{reference},
+		Provenance: []domain.AdmissionProviderProvenance{{
+			AdapterID: "github", ProviderRef: "github:pull/ctx-9", EvidenceDigest: reference.Digest,
+			ObservedAt: evaluationTime, Authenticated: true,
+		}},
+	}
+
+	for _, fixture := range []struct {
+		name   string
+		mutate func(*domain.AdmissionPacket)
+	}{
+		{name: "future", mutate: func(packet *domain.AdmissionPacket) {
+			packet.Provenance[0].ObservedAt = evaluationTime.Add(time.Minute)
+		}},
+		{name: "unauthenticated", mutate: func(packet *domain.AdmissionPacket) {
+			packet.Provenance[0].Authenticated = false
+		}},
+	} {
+		t.Run(fixture.name, func(t *testing.T) {
+			packet := base
+			packet.Provenance = append([]domain.AdmissionProviderProvenance(nil), base.Provenance...)
+			fixture.mutate(&packet)
+			reason, missing := verifyPacketEvidence(graph, packet)
+			if reason != domain.ReasonProvenanceUntrusted || !reflect.DeepEqual(missing, []string{reference.Identity}) {
+				t.Fatalf("reason = %q, missing = %#v", reason, missing)
+			}
+		})
+	}
+}
+
+func TestCTX9ExpiredTimeBoundEvidenceIsStale(t *testing.T) {
+	input := validInput(t)
+	addException(t, &input, input.Packet.EvaluationTime.Add(-2*time.Hour), input.Packet.EvaluationTime.Add(-time.Hour))
+	dropBypassRelations(&input)
+
+	result, err := Verify(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Classification != domain.AdmissionInvalid || result.Reasons[0].Code != domain.ReasonExceptionExpired {
+		t.Fatalf("stale time-bound result = %+v", result)
+	}
+}
+
+func TestCTX9ProviderFreeEvaluationNeedsNoTrustedTime(t *testing.T) {
+	input := validInput(t)
+	input.Packet.EvaluationTime = nil
+	input.Packet.TimeAuthorityRef = ""
+	input.Packet.Provenance = nil
+	// A provider-free evaluation has no authenticated observation at all, so it
+	// is advisory by construction: it must stay deterministic and non-valid
+	// rather than borrow authority from the work-unit creation time.
+	input.Candidates = nil
+
+	first, err := Verify(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := Verify(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Classification != domain.AdmissionMissing || first.Reasons[0].Code != domain.ReasonOwnerDecisionMissing {
+		t.Fatalf("provider-free result = %+v", first)
+	}
+	if !reflect.DeepEqual(first, second) {
+		t.Fatalf("provider-free repeated results differ: first=%+v second=%+v", first, second)
+	}
+	firstArtifact, err := domain.FreezeAdmissionResult(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondArtifact, err := domain.FreezeAdmissionResult(second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(firstArtifact.CanonicalJSON()) != string(secondArtifact.CanonicalJSON()) {
+		t.Fatalf("provider-free canonical results differ:\nfirst: %s\nsecond: %s", firstArtifact.CanonicalJSON(), secondArtifact.CanonicalJSON())
+	}
+}
+
+func TestCTX3BranchOwnerDecisionCannotAuthorizeAdmission(t *testing.T) {
+	for _, fixture := range []struct {
+		name   string
+		mutate func(*testing.T, *Input)
+	}{
+		{name: "committed-event-with-allowed-actor", mutate: func(*testing.T, *Input) {}},
+		{name: "repository-root-decision-file", mutate: func(t *testing.T, input *Input) {
+			for index := range input.Range.Graph.Events {
+				if input.Range.Graph.Events[index].Relation != domain.LineageOwnerDecision {
+					continue
+				}
+				input.Range.Graph.Events[index].Targets[0].SourceRef = "repo:root/.goalrail/owner-decision.json"
+				refreezeEvent(t, &input.Range.Graph.Events[index])
+			}
+		}},
+		{name: "serialized-authenticated-claim", mutate: func(t *testing.T, input *Input) {
+			for index := range input.Range.Graph.Events {
+				if input.Range.Graph.Events[index].Relation != domain.LineageOwnerDecision {
+					continue
+				}
+				target := input.Range.Graph.Events[index].Targets[0]
+				target.SourceRef = "github:repos/heurema/goalrail/pulls/62/owner-decision"
+				target.AdapterID = "github"
+				input.Range.Graph.Events[index].Targets[0] = target
+				refreezeEvent(t, &input.Range.Graph.Events[index])
+				input.Packet.Evidence = append(input.Packet.Evidence, target)
+				input.Packet.Provenance = append(input.Packet.Provenance, domain.AdmissionProviderProvenance{
+					AdapterID: "github", ProviderRef: target.SourceRef, EvidenceDigest: target.Digest,
+					ObservedAt: input.Packet.EvaluationTime.Add(-time.Minute), Authenticated: true,
+				})
+			}
+		}},
+	} {
+		t.Run(fixture.name, func(t *testing.T) {
+			input := validInput(t)
+			// Every provider observation except the owner decision is present,
+			// so only the forged branch authority is under test.
+			input.Candidates = withoutCandidate(input.Candidates, domain.LineageOwnerDecision)
+			fixture.mutate(t, &input)
+
+			result, err := Verify(input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if result.Classification != domain.AdmissionMissing || result.Reasons[0].Code != domain.ReasonOwnerDecisionMissing {
+				t.Fatalf("branch-authored owner decision authorized admission: %+v", result)
+			}
+			if !reflect.DeepEqual(result.MissingRefs, []string{"lineage:owner_decision"}) {
+				t.Fatalf("missing refs = %#v", result.MissingRefs)
+			}
+		})
+	}
+}
+
+func TestCTX4AuthenticatedProviderCandidatesCompleteEffectiveView(t *testing.T) {
+	complete := validInput(t)
+	result, err := Verify(complete)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Classification != domain.AdmissionValid || result.Outcome != domain.AdmissionAllow {
+		t.Fatalf("complete committed semantics plus current candidates = %+v", result)
+	}
+
+	ownerCandidate := func(input Input) ProviderCandidate {
+		for _, candidate := range input.Candidates {
+			if candidate.Relation == domain.LineageOwnerDecision {
+				return candidate
+			}
+		}
+		t.Fatal("fixture lost its owner-decision candidate")
+		return ProviderCandidate{}
+	}
+	for _, fixture := range []struct {
+		name           string
+		mutate         func(*Input)
+		classification domain.AdmissionClassification
+		reason         domain.AdmissionReasonCode
+	}{
+		{name: "packet-only", mutate: func(input *Input) { input.Candidates = nil },
+			classification: domain.AdmissionMissing, reason: domain.ReasonOwnerDecisionMissing},
+		{name: "missing-owner-decision", mutate: func(input *Input) {
+			input.Candidates = withoutCandidate(input.Candidates, domain.LineageOwnerDecision)
+		}, classification: domain.AdmissionMissing, reason: domain.ReasonOwnerDecisionMissing},
+		{name: "stale-head", mutate: func(input *Input) {
+			candidate := ownerCandidate(*input)
+			candidate.HeadRevision = strings.Repeat("c", 40)
+			input.Candidates = append(withoutCandidate(input.Candidates, domain.LineageOwnerDecision), candidate)
+		}, classification: domain.AdmissionInvalid, reason: domain.ReasonRangeMismatch},
+		{name: "unauthenticated", mutate: func(input *Input) {
+			candidate := ownerCandidate(*input)
+			candidate.Authenticated = false
+			input.Candidates = append(withoutCandidate(input.Candidates, domain.LineageOwnerDecision), candidate)
+		}, classification: domain.AdmissionInvalid, reason: domain.ReasonProvenanceUntrusted},
+		{name: "observed-after-evaluation", mutate: func(input *Input) {
+			candidate := ownerCandidate(*input)
+			candidate.ObservedAt = input.Packet.EvaluationTime.Add(time.Minute)
+			input.Candidates = append(withoutCandidate(input.Candidates, domain.LineageOwnerDecision), candidate)
+		}, classification: domain.AdmissionInvalid, reason: domain.ReasonProvenanceUntrusted},
+		{name: "conflicting-owner-decisions", mutate: func(input *Input) {
+			candidate := ownerCandidate(*input)
+			second := candidate
+			second.Outcome = domain.OwnerDecisionReject
+			input.Candidates = append(input.Candidates, second)
+		}, classification: domain.AdmissionAmbiguous, reason: domain.ReasonLineageConflict},
+		{name: "rejected-owner-decision", mutate: func(input *Input) {
+			candidate := ownerCandidate(*input)
+			candidate.Outcome = domain.OwnerDecisionReject
+			input.Candidates = append(withoutCandidate(input.Candidates, domain.LineageOwnerDecision), candidate)
+		}, classification: domain.AdmissionMissing, reason: domain.ReasonOwnerDecisionMissing},
+		{name: "unauthorized-authority", mutate: func(input *Input) {
+			candidate := ownerCandidate(*input)
+			candidate.AuthorityRef = "user:stranger"
+			input.Candidates = append(withoutCandidate(input.Candidates, domain.LineageOwnerDecision), candidate)
+		}, classification: domain.AdmissionMissing, reason: domain.ReasonOwnerDecisionMissing},
+		{name: "unsupported-outcome", mutate: func(input *Input) {
+			candidate := ownerCandidate(*input)
+			candidate.Outcome = "merge"
+			input.Candidates = append(withoutCandidate(input.Candidates, domain.LineageOwnerDecision), candidate)
+		}, classification: domain.AdmissionInvalid, reason: domain.ReasonPacketInvalid},
+		{name: "unknown-relation", mutate: func(input *Input) {
+			candidate := ownerCandidate(*input)
+			candidate.Relation = domain.LineageConfirmedIntent
+			input.Candidates = append(input.Candidates, candidate)
+		}, classification: domain.AdmissionInvalid, reason: domain.ReasonPacketInvalid},
+	} {
+		t.Run(fixture.name, func(t *testing.T) {
+			input := validInput(t)
+			fixture.mutate(&input)
+			result, err := Verify(input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if result.Classification != fixture.classification || result.Outcome != domain.AdmissionDeny ||
+				result.Reasons[0].Code != fixture.reason {
+				t.Fatalf("result = %+v, want %s/%s", result, fixture.classification, fixture.reason)
+			}
+		})
+	}
+}
+
+func TestCTX5OnlyPassedTerminalReceiptSatisfiesLineage(t *testing.T) {
+	for _, state := range []string{
+		"failed", "blocked", "unlinked", "launch_failed", "launch_attempted_unknown",
+		"verification_incomplete", "prepared", "launch_attempted", "awaiting_verification", "invalid",
+	} {
+		t.Run(state, func(t *testing.T) {
+			input := validInput(t)
+			setProjectionState(&input, domain.LineageTerminalReceipt, state, false)
+			result, err := Verify(input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if result.Classification != domain.AdmissionMissing || result.Reasons[0].Code != domain.ReasonReceiptMissing {
+				t.Fatalf("%s receipt result = %+v", state, result)
+			}
+		})
+	}
+	t.Run("passed", func(t *testing.T) {
+		input := validInput(t)
+		result, err := Verify(input)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.Classification != domain.AdmissionValid {
+			t.Fatalf("passed receipt result = %+v", result)
+		}
+	})
+	t.Run("mismatched-digest", func(t *testing.T) {
+		input := validInput(t)
+		for index := range input.Range.Projections {
+			if input.Range.Projections[index].Relation == domain.LineageTerminalReceipt {
+				input.Range.Projections[index].Digest = testDigest("substituted-receipt")
+			}
+		}
+		result, err := Verify(input)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.Classification != domain.AdmissionInvalid || result.Reasons[0].Code != domain.ReasonPacketInvalid {
+			t.Fatalf("substituted receipt projection result = %+v", result)
+		}
+	})
+	t.Run("unknown-codec", func(t *testing.T) {
+		input := validInput(t)
+		for index := range input.Range.Projections {
+			if input.Range.Projections[index].Relation == domain.LineageTerminalReceipt {
+				input.Range.Projections[index].CodecID = "goalrail.terminal-receipt/v99"
+			}
+		}
+		result, err := Verify(input)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.Classification != domain.AdmissionInvalid || result.Reasons[0].Code != domain.ReasonPacketInvalid {
+			t.Fatalf("unknown receipt codec result = %+v", result)
+		}
+	})
+}
+
+func TestCTX7OnlyConfirmedIntentSatisfiesLineage(t *testing.T) {
+	for _, fixture := range []struct {
+		name  string
+		state string
+	}{
+		{name: "candidate", state: "candidate"},
+		{name: "malformed", state: ProjectionStateInvalid},
+	} {
+		t.Run(fixture.name, func(t *testing.T) {
+			input := validInput(t)
+			setProjectionState(&input, domain.LineageConfirmedIntent, fixture.state, false)
+			result, err := Verify(input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if result.Classification != domain.AdmissionMissing || result.Reasons[0].Code != domain.ReasonIntentUnconfirmed {
+				t.Fatalf("%s intent result = %+v", fixture.name, result)
+			}
+		})
+	}
+	t.Run("absent-projection", func(t *testing.T) {
+		input := validInput(t)
+		input.Range.Projections = withoutProjection(input.Range.Projections, domain.LineageConfirmedIntent)
+		result, err := Verify(input)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.Classification != domain.AdmissionMissing || result.Reasons[0].Code != domain.ReasonIntentUnconfirmed {
+			t.Fatalf("absent intent projection result = %+v", result)
+		}
+	})
+	t.Run("foreign-identity", func(t *testing.T) {
+		input := validInput(t)
+		for index := range input.Range.Projections {
+			if input.Range.Projections[index].Relation == domain.LineageConfirmedIntent {
+				input.Range.Projections[index].Identity = "intent:another-change"
+			}
+		}
+		result, err := Verify(input)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.Classification != domain.AdmissionInvalid || result.Reasons[0].Code != domain.ReasonPacketInvalid {
+			t.Fatalf("foreign intent projection result = %+v", result)
+		}
+	})
+}
+
+func TestCTX6NonBootstrapProjectIDChangeIsInvalid(t *testing.T) {
+	// The head is what a contributor controls, so that is where a replaced
+	// identity has to be caught: the packet still names the base authority.
+	input := validInput(t)
+	headPolicy := *input.Range.HeadPolicy
+	headPolicy.ProjectID = "prj_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	headPolicyArtifact, err := domain.FreezeProjectPolicy(headPolicy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	headDeclaration := *input.Range.HeadDeclaration
+	headDeclaration.ProjectID = headPolicy.ProjectID
+	headDeclaration.Policy.Digest = headPolicyArtifact.Digest()
+	headDeclarationArtifact, err := domain.FreezeProjectDeclaration(headDeclaration)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input.Range.HeadPolicy = &headPolicy
+	input.Range.HeadPolicyDigest = headPolicyArtifact.Digest()
+	input.Range.HeadDeclaration = &headDeclaration
+	input.Range.HeadDeclarationDigest = headDeclarationArtifact.Digest()
+
+	result, err := Verify(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Classification != domain.AdmissionInvalid || result.Reasons[0].Code != domain.ReasonDeclarationInvalid {
+		t.Fatalf("replaced project identity result = %+v", result)
+	}
+
+	// The explicit no-base-declaration range remains the one bootstrap path.
+	bootstrap := validInput(t)
+	bootstrap.Range.BaseDeclaration = nil
+	bootstrap.Range.BasePolicy = nil
+	bootstrap.Range.BaseDeclarationDigest = ""
+	bootstrap.Range.BasePolicyDigest = ""
+	bootstrapResult, err := Verify(bootstrap)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bootstrapResult.Classification != domain.AdmissionBootstrap || bootstrapResult.Outcome != domain.AdmissionAllow {
+		t.Fatalf("bootstrap range result = %+v", bootstrapResult)
+	}
+}
+
+func TestEphemeralEvidenceIsNeverSerialized(t *testing.T) {
+	if _, err := json.Marshal(testCandidates(time.Date(2026, 8, 5, 12, 0, 0, 0, time.UTC))[0]); err == nil {
+		t.Fatal("a provider candidate was serializable")
+	}
+	if _, err := json.Marshal(SemanticProjection{Kind: ProjectionKindIntent}); err == nil {
+		t.Fatal("a semantic projection was serializable")
+	}
+}
+
+func withoutCandidate(values []ProviderCandidate, relation domain.LineageRelation) []ProviderCandidate {
+	result := make([]ProviderCandidate, 0, len(values))
+	for _, candidate := range values {
+		if candidate.Relation != relation {
+			result = append(result, candidate)
+		}
+	}
+	return result
+}
+
+func withoutProjection(values []SemanticProjection, relation domain.LineageRelation) []SemanticProjection {
+	result := make([]SemanticProjection, 0, len(values))
+	for _, projection := range values {
+		if projection.Relation != relation {
+			result = append(result, projection)
+		}
+	}
+	return result
+}
+
+func setProjectionState(input *Input, relation domain.LineageRelation, state string, valid bool) {
+	for index := range input.Range.Projections {
+		if input.Range.Projections[index].Relation == relation {
+			input.Range.Projections[index].State = state
+			input.Range.Projections[index].Valid = valid
+		}
+	}
+}
+
 func TestExceptionClassesRemainVisible(t *testing.T) {
 	want := map[domain.ExceptionClass]domain.AdmissionClassification{
 		domain.ExceptionExempted:   domain.AdmissionExempted,
@@ -427,7 +978,7 @@ func validInput(t *testing.T) Input {
 		EvaluationTime: &evaluationTime, TimeAuthorityRef: "provider:trusted-evaluation-time",
 		Evidence: []domain.ContentAddressedEvidenceReference{}, Provenance: []domain.AdmissionProviderProvenance{},
 	}
-	return Input{
+	input := Input{
 		Range: FrozenRange{
 			BaseRevision: testBase, HeadRevision: testHead,
 			BaseDeclaration: &declaration, BaseDeclarationDigest: declarationArtifact.Digest(),
@@ -438,8 +989,67 @@ func validInput(t *testing.T) Input {
 			Commits: []string{testHead},
 			Graph:   WorkUnitGraph{Unit: unit, Events: events, Replicas: map[domain.SHA256Digest][]byte{}},
 		},
-		Packet: packet,
+		Packet:     packet,
+		Candidates: testCandidates(evaluationTime),
 	}
+	rebuildProjections(&input)
+	return input
+}
+
+// rebuildProjections restates what the collector would parse from the exact
+// committed artifacts behind the current events. Tests that change events must
+// call it, because a projection is bound to a committed target rather than to a
+// relation name.
+func rebuildProjections(input *Input) {
+	input.Range.Projections = testProjections(input.Range.Graph.Events)
+}
+
+func testProjections(events []domain.LineageEvent) []SemanticProjection {
+	var projections []SemanticProjection
+	for _, event := range events {
+		for _, target := range event.Targets {
+			switch event.Relation {
+			case domain.LineageConfirmedIntent:
+				projections = append(projections, SemanticProjection{
+					Relation: domain.LineageConfirmedIntent, Kind: ProjectionKindIntent,
+					Identity: target.Identity, Version: target.Version, Digest: target.Digest,
+					CodecID: IntentSnapshotCodecV1, State: ProjectionStateConfirmed, Valid: true,
+				})
+			case domain.LineageTerminalReceipt:
+				projections = append(projections, SemanticProjection{
+					Relation: domain.LineageTerminalReceipt, Kind: ProjectionKindTerminalReceipt,
+					Identity: target.Identity, Version: target.Version, Digest: target.Digest,
+					CodecID: TerminalReceiptCodecV1, State: ProjectionStatePassed, Valid: true,
+				})
+			}
+		}
+	}
+	return projections
+}
+
+// testCandidates is what a registered adapter observes inside one trusted
+// invocation. Nothing in the repository can produce it.
+func testCandidates(evaluationTime time.Time) []ProviderCandidate {
+	observedAt := evaluationTime.Add(-time.Minute)
+	candidates := []ProviderCandidate{}
+	for _, relation := range []domain.LineageRelation{
+		domain.LineagePullRequest, domain.LineageReviewIndex, domain.LineageCheckSet,
+	} {
+		candidates = append(candidates, ProviderCandidate{
+			Relation: relation, Identity: "github:fixture/" + string(relation),
+			Digest: testDigest(string(relation)), AdapterID: "github-actions",
+			ProviderRef:  "github:fixture/" + string(relation),
+			BaseRevision: testBase, HeadRevision: testHead,
+			ObservedAt: observedAt, Authenticated: true,
+		})
+	}
+	return append(candidates, ProviderCandidate{
+		Relation: domain.LineageOwnerDecision, Identity: "github:fixture/owner-decision",
+		Digest: testDigest("owner-decision"), AdapterID: "github-actions",
+		ProviderRef: "github:fixture/owner-decision", BaseRevision: testBase, HeadRevision: testHead,
+		ActorRef: "github-user:owner", AuthorityRef: "user:owner", Outcome: domain.OwnerDecisionAllow,
+		ObservedAt: observedAt, Authenticated: true,
+	})
 }
 
 func testPolicy(t *testing.T) domain.ProjectPolicy {
@@ -559,6 +1169,13 @@ func addException(t *testing.T, input *Input, issuedAt, expiresAt time.Time) {
 	})
 }
 
+// dropBypassRelations removes the relations a bypassed local flow never
+// records and restates the projections for what is left.
+func dropBypassRelations(input *Input) {
+	input.Range.Graph.Events = withoutBypassRelations(input.Range.Graph.Events)
+	rebuildProjections(input)
+}
+
 func withoutBypassRelations(events []domain.LineageEvent) []domain.LineageEvent {
 	result := append([]domain.LineageEvent(nil), events...)
 	for _, relation := range []domain.LineageRelation{
@@ -630,7 +1247,30 @@ func runSerializedEntrypoint(t *testing.T, input Input) ([]byte, int) {
 	for digest, replica := range input.Range.Graph.Replicas {
 		transported.Range.Graph.Replicas[digest] = append([]byte(nil), replica...)
 	}
+	if len(transported.Candidates) != 0 || len(transported.Range.Projections) != 0 {
+		t.Fatal("serialization carried ephemeral provider candidates or semantic projections")
+	}
+	// The shared entrypoint re-observes rather than deserializes. Reversing the
+	// order proves arrival order cannot change the verdict.
+	transported.Candidates = reversedCandidates(input.Candidates)
+	transported.Range.Projections = reversedProjections(input.Range.Projections)
 	return runPureEntrypoint(t, transported)
+}
+
+func reversedCandidates(values []ProviderCandidate) []ProviderCandidate {
+	result := make([]ProviderCandidate, 0, len(values))
+	for index := len(values) - 1; index >= 0; index-- {
+		result = append(result, values[index])
+	}
+	return result
+}
+
+func reversedProjections(values []SemanticProjection) []SemanticProjection {
+	result := make([]SemanticProjection, 0, len(values))
+	for index := len(values) - 1; index >= 0; index-- {
+		result = append(result, values[index])
+	}
+	return result
 }
 
 func testReference(kind, identity, source, adapter string) domain.ContentAddressedEvidenceReference {
@@ -641,4 +1281,30 @@ func testReference(kind, identity, source, adapter string) domain.ContentAddress
 
 func testDigest(value string) domain.SHA256Digest {
 	return domain.DigestCanonicalJSON([]byte(value))
+}
+
+// An explicitly unavailable relation that a current authenticated observation
+// satisfies is not unavailable any more. Reporting it as such denied the range
+// on evidence the effective view had already accepted.
+func TestALiveCandidateRepairsAnExplicitlyUnavailableRelation(t *testing.T) {
+	input := validInput(t)
+	input.Range.Graph.Unavailable = []domain.LineageRelation{domain.LineageCheckSet}
+
+	result, err := Verify(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Classification != domain.AdmissionValid || result.Outcome != domain.AdmissionAllow {
+		t.Fatalf("a satisfied relation still denied as unavailable: %+v", result)
+	}
+
+	// Without the candidate it stays unavailable and still denies.
+	input.Candidates = withoutCandidate(input.Candidates, domain.LineageCheckSet)
+	result, err = Verify(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Classification != domain.AdmissionMissing {
+		t.Fatalf("an unsatisfied unavailable relation stopped denying: %+v", result)
+	}
 }

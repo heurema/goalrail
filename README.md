@@ -64,7 +64,10 @@ init or migrate -> doctor -> exact setup consent -> confirmed intent/change
 - `gr lineage begin|attach|inspect` maintains and resolves the append-only work
   graph. Exact bounded evidence may be replicated by content digest.
 - `gr verify-lineage` evaluates one frozen Git range and admission packet. The
-  same canonical input has the same result locally and in a shared adapter.
+  same canonical input has the same result locally and in a shared adapter. It
+  is advisory: a packet read from disk carries no authenticated provider
+  observation, so an owner-gated relation stays missing until the shared check
+  observes the provider and verifies the range in one invocation.
 
 Run `gr help` or `gr <command> --help` for the public command surface. Internal
 hook and provider collectors are intentionally not operator commands.

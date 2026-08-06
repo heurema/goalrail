@@ -11,18 +11,23 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
+	openspecadapter "github.com/heurema/goalrail/internal/adapters/openspec"
 	"github.com/heurema/goalrail/internal/admission"
 	"github.com/heurema/goalrail/internal/domain"
 	"github.com/heurema/goalrail/internal/lineage"
+	"github.com/heurema/goalrail/internal/localrun"
 )
 
 const (
-	maxGitOutput    = 16 << 20
-	maxGitPathList  = 4 << 20
-	maxFrozenPaths  = domain.MaxAdmissionPaths
-	maxReplicaBytes = 1 << 20
+	maxGitOutput           = 16 << 20
+	maxGitPathList         = 4 << 20
+	maxFrozenPaths         = domain.MaxAdmissionPaths
+	maxReplicaBytes        = 1 << 20
+	maxBootstrapBytes      = 64 << 10
+	maxChangeMetadataBytes = 8 << 10
 )
 
 var errGitObjectMissing = errors.New("Git object path is missing")
@@ -65,15 +70,225 @@ func CollectFrozenRange(ctx context.Context, repository, base, head string, pack
 	if err != nil {
 		return admission.FrozenRange{}, fmt.Errorf("load frozen lineage graph: %w", err)
 	}
+	projections, err := collectProjections(ctx, root, head, graph)
+	if err != nil {
+		return admission.FrozenRange{}, err
+	}
 	frozen := admission.FrozenRange{
 		BaseRevision: base, HeadRevision: head,
 		BaseDeclaration: baseDeclaration, BaseDeclarationDigest: baseDeclarationDigest,
 		BasePolicy: basePolicy, BasePolicyDigest: basePolicyDigest, BaseGovernanceInvalid: baseInvalid,
 		HeadDeclaration: headDeclaration, HeadDeclarationDigest: headDeclarationDigest,
 		HeadPolicy: headPolicy, HeadPolicyDigest: headPolicyDigest, HeadGovernanceInvalid: headInvalid,
-		Changes: changes, Commits: commits, Graph: graph,
+		Changes: changes, Commits: commits, Graph: graph, Projections: projections,
 	}
 	return frozen, nil
+}
+
+// collectProjections parses the exact committed artifacts whose semantic state
+// decides admission. It binds every projection to the raw bytes behind the
+// lineage target digest, so a relation that merely exists cannot stand in for a
+// confirmed intent or a passed run.
+func collectProjections(ctx context.Context, repository, revision string, graph admission.WorkUnitGraph) ([]admission.SemanticProjection, error) {
+	var projections []admission.SemanticProjection
+	for _, event := range graph.Events {
+		switch event.Relation {
+		case domain.LineageConfirmedIntent:
+			for _, target := range event.Targets {
+				projection, err := projectIntent(ctx, repository, revision, target)
+				if err != nil {
+					return nil, err
+				}
+				projections = append(projections, projection)
+			}
+		case domain.LineageTerminalReceipt:
+			for _, target := range event.Targets {
+				projections = append(projections, projectTerminalReceipt(graph.Replicas[target.Digest], target))
+			}
+		}
+	}
+	return projections, nil
+}
+
+func projectIntent(ctx context.Context, repository, revision string, target domain.ContentAddressedEvidenceReference) (admission.SemanticProjection, error) {
+	projection := admission.SemanticProjection{
+		Relation: domain.LineageConfirmedIntent, Kind: admission.ProjectionKindIntent,
+		Identity: target.Identity, Version: target.Version, Digest: target.Digest,
+		CodecID: admission.IntentSnapshotCodecV1, State: admission.ProjectionStateInvalid,
+	}
+	if target.ArtifactKind != admission.ProjectionKindIntent || !strings.HasPrefix(target.SourceRef, "repo:root/") {
+		return projection, nil
+	}
+	relative := strings.TrimPrefix(target.SourceRef, "repo:root/")
+	raw, err := readGitObject(ctx, repository, revision, relative, openspecadapter.MaxResolvedIntentBytes)
+	if errors.Is(err, errGitObjectMissing) {
+		return projection, nil
+	}
+	if err != nil {
+		return admission.SemanticProjection{}, err
+	}
+	if domain.DigestCanonicalJSON(raw) != target.Digest {
+		return projection, nil
+	}
+	snapshot, err := readIntentArtifact(ctx, repository, revision, relative, raw)
+	if err != nil {
+		return projection, nil
+	}
+	if err := domain.ValidateIntentSnapshot(snapshot); err != nil {
+		return projection, nil
+	}
+	if "intent:"+string(snapshot.ID) != target.Identity ||
+		strconv.FormatUint(uint64(snapshot.Version), 10) != target.Version {
+		return projection, nil
+	}
+	if snapshot.Status != domain.IntentConfirmed {
+		projection.State = string(snapshot.Status)
+		return projection, nil
+	}
+	if snapshot.Confirmation == nil || len(snapshot.Ambiguities) > 0 {
+		return projection, nil
+	}
+	projection.State = admission.ProjectionStateConfirmed
+	projection.Valid = true
+	return projection, nil
+}
+
+// readIntentArtifact parses the exact intent bytes under the adapter's own
+// contract. A change that carries a context pack is only readable as a pair, so
+// the projection uses the same pair conformance the lineage anchor did.
+func readIntentArtifact(ctx context.Context, repository, revision, intentPath string, raw []byte) (domain.IntentSnapshot, error) {
+	changeDir := path.Dir(intentPath)
+	contextPath := path.Join(changeDir, "context.md")
+	contextRaw, err := readGitObject(ctx, repository, revision, contextPath, openspecadapter.MaxPairArtifactBytes)
+	if errors.Is(err, errGitObjectMissing) {
+		// An intent whose change requires context is only readable as a pair.
+		// The single-artifact reader ignores the requirement and would accept
+		// the document as a legacy snapshot, so deleting the required context at
+		// head would satisfy confirmed intent — admission passing precisely
+		// because evidence was removed.
+		//
+		// The requirement comes from the change's own schema, not from a line in
+		// the intent: deleting the declaration row along with the context would
+		// otherwise remove the evidence and the reason to expect it in one move.
+		required, requirementErr := contextRequired(ctx, repository, revision, changeDir, raw)
+		if requirementErr != nil {
+			return domain.IntentSnapshot{}, requirementErr
+		}
+		if required {
+			return domain.IntentSnapshot{}, fmt.Errorf(
+				"the change at %s requires a context pack, but %s is absent at this revision", changeDir, contextPath)
+		}
+		return openspecadapter.ReadIntent(bytes.NewReader(raw))
+	}
+	if err != nil {
+		return domain.IntentSnapshot{}, err
+	}
+	conformed, err := openspecadapter.ConformPair(contextRaw, raw, "context.md", "intent.md")
+	if err != nil {
+		return domain.IntentSnapshot{}, err
+	}
+	return conformed.Intent, nil
+}
+
+// contextRequired applies the planning adapter's own schema-aware rule to the
+// immutable revision: a live change on the project schema always requires its
+// context, and an archived one requires it when its intent still names a pack.
+//
+// Read from Git rather than from the checkout, like everything else on this
+// path, and mirroring the adapter rather than inventing a second rule.
+func contextRequired(ctx context.Context, repository, revision, changeDir string, intentRaw []byte) (bool, error) {
+	schemaRaw, err := readGitObject(ctx, repository, revision, path.Join(changeDir, ".openspec.yaml"), maxChangeMetadataBytes)
+	if errors.Is(err, errGitObjectMissing) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if changeSchema(schemaRaw) != openspecadapter.GoalrailIntentSchema {
+		return false, nil
+	}
+	if !archivedChangeDir(changeDir) {
+		return true, nil
+	}
+	return declaresContextPack(intentRaw), nil
+}
+
+// changeSchema reads the one scalar this path needs from the change metadata.
+func changeSchema(raw []byte) string {
+	for _, line := range strings.Split(string(raw), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		key, value, found := strings.Cut(trimmed, ":")
+		if !found || strings.TrimSpace(key) != "schema" {
+			continue
+		}
+		value = strings.TrimSpace(value)
+		if index := strings.IndexAny(value, "#"); index >= 0 {
+			value = strings.TrimSpace(value[:index])
+		}
+		return strings.Trim(value, "'\"")
+	}
+	return ""
+}
+
+func archivedChangeDir(changeDir string) bool {
+	return path.Base(path.Dir(changeDir)) == "archive"
+}
+
+// declaresContextPack reports whether an intent artifact names a context pack
+// in its own preamble.
+//
+// Read from the exact bytes rather than from the parsed snapshot: the
+// single-artifact reader drops the declaration, so asking the parse whether a
+// pack was declared always answers no — which is the gap this closes. Only the
+// preamble is inspected, so a mention inside the body cannot make an intent
+// unreadable.
+func declaresContextPack(raw []byte) bool {
+	const marker = "- **context pack:**"
+	for _, line := range strings.Split(string(raw), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "## ") {
+			return false
+		}
+		// Case-insensitive, because the metadata reader that decides the same
+		// question elsewhere folds case and a spelling difference must not
+		// change whether evidence is required.
+		if !strings.HasPrefix(strings.ToLower(trimmed), marker) {
+			continue
+		}
+		value := strings.TrimSpace(trimmed[len(marker):])
+		value = strings.TrimSpace(strings.Trim(value, "*`"))
+		return value != "" && !strings.EqualFold(value, "pending")
+	}
+	return false
+}
+
+func projectTerminalReceipt(replica []byte, target domain.ContentAddressedEvidenceReference) admission.SemanticProjection {
+	projection := admission.SemanticProjection{
+		Relation: domain.LineageTerminalReceipt, Kind: admission.ProjectionKindTerminalReceipt,
+		Identity: target.Identity, Version: target.Version, Digest: target.Digest,
+		CodecID: admission.TerminalReceiptCodecV1, State: admission.ProjectionStateInvalid,
+	}
+	if target.ArtifactKind != admission.ProjectionKindTerminalReceipt || len(replica) == 0 ||
+		domain.DigestCanonicalJSON(replica) != target.Digest {
+		return projection
+	}
+	receipt, err := localrun.DecodeTerminalReceipt(bytes.NewReader(replica))
+	if err != nil || receipt.Schema != localrun.TerminalReceiptSchemaV1 {
+		return projection
+	}
+	switch receipt.Status {
+	case localrun.StatePassed:
+		projection.State, projection.Valid = admission.ProjectionStatePassed, true
+	case localrun.StateFailed, localrun.StateBlocked, localrun.StateUnlinked,
+		localrun.StateLaunchFailed, localrun.StateLaunchAttemptedUnknown,
+		localrun.StateVerificationIncomplete, localrun.StatePrepared,
+		localrun.StateLaunchAttempted, localrun.StateAwaitingVerification:
+		projection.State = string(receipt.Status)
+	}
+	return projection
 }
 
 func collectCommits(ctx context.Context, repository, base, head string) ([]string, error) {
@@ -127,7 +342,57 @@ func readGovernance(ctx context.Context, repository, revision string) (*domain.P
 	if declaration.Policy.Digest != frozenPolicy.Digest() || policy.ProjectID != declaration.ProjectID {
 		return nil, "", nil, "", fmt.Errorf("project policy does not match its declaration")
 	}
+	if err := verifyDeclarationBoundArtifacts(ctx, repository, revision, declaration); err != nil {
+		return nil, "", nil, "", err
+	}
 	return &declaration, frozenDeclaration.Digest(), &policy, frozenPolicy.Digest(), nil
+}
+
+// verifyDeclarationBoundArtifacts reads every remaining artifact the
+// declaration binds. Policy alone is not the governance set: a drifted
+// bootstrap or setup profile is a governance failure, never a silent fallback
+// to unmanaged or head-defined authority.
+func verifyDeclarationBoundArtifacts(ctx context.Context, repository, revision string, declaration domain.ProjectDeclaration) error {
+	bootstrapRaw, err := readDeclaredArtifact(ctx, repository, revision, declaration.Bootstrap, domain.BootstrapSchemaV1, maxBootstrapBytes)
+	if err != nil {
+		return err
+	}
+	if len(bootstrapRaw) == 0 {
+		return fmt.Errorf("project bootstrap guide is empty")
+	}
+	setupRaw, err := readDeclaredArtifact(ctx, repository, revision, declaration.SetupProfile, domain.SetupProfileSchemaV1, domain.MaxSetupProfileBytes)
+	if err != nil {
+		return err
+	}
+	profile, err := domain.DecodeSetupProfile(bytes.NewReader(setupRaw))
+	if err != nil {
+		return fmt.Errorf("decode setup profile: %w", err)
+	}
+	frozenProfile, err := domain.FreezeSetupProfile(profile)
+	if err != nil || !bytes.Equal(setupRaw, frozenProfile.CanonicalJSON()) {
+		return fmt.Errorf("setup profile is not canonical JSON")
+	}
+	if profile.ProjectID != declaration.ProjectID {
+		return fmt.Errorf("setup profile project ID differs from the declaration")
+	}
+	return nil
+}
+
+func readDeclaredArtifact(ctx context.Context, repository, revision string, reference domain.CommittedArtifactReference, schema string, limit int) ([]byte, error) {
+	if reference.Schema != schema {
+		return nil, fmt.Errorf("declared %s artifact has schema %q", schema, reference.Schema)
+	}
+	if !validRepositoryPath(reference.Path) || len(reference.Path) > domain.MaxProjectArtifactPathBytes {
+		return nil, fmt.Errorf("declared %s artifact path is unsafe", schema)
+	}
+	raw, err := readGitObject(ctx, repository, revision, reference.Path, limit)
+	if err != nil {
+		return nil, err
+	}
+	if domain.DigestCanonicalJSON(raw) != reference.Digest {
+		return nil, fmt.Errorf("declared %s artifact digest mismatch at %s", schema, reference.Path)
+	}
+	return raw, nil
 }
 
 func collectChanges(ctx context.Context, repository, base, head string) ([]admission.ChangedPath, error) {

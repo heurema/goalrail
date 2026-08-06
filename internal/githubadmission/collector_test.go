@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/heurema/goalrail/internal/admission"
 	"github.com/heurema/goalrail/internal/domain"
 )
 
@@ -28,14 +29,14 @@ func TestCollectorCoversReviewCommentCheckAndClosureFixtures(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	packet, err := domain.DecodeAdmissionPacket(bytes.NewReader(first.CanonicalJSON()))
+	packet, err := domain.DecodeAdmissionPacket(bytes.NewReader(first.Artifact.CanonicalJSON()))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(packet.Evidence) != 4 { // PR, explicit empty review/comment index, filtered checks, owner decision.
-		t.Fatalf("open packet evidence = %d, want 4: %s", len(packet.Evidence), first.CanonicalJSON())
+		t.Fatalf("open packet evidence = %d, want 4: %s", len(packet.Evidence), first.Artifact.CanonicalJSON())
 	}
-	if ContainsProhibitedPacketContent(first.CanonicalJSON(), "old approval body", "review body", "token-value") {
+	if ContainsProhibitedPacketContent(first.Artifact.CanonicalJSON(), "old approval body", "review body", "token-value") {
 		t.Fatal("packet retained prohibited provider content")
 	}
 
@@ -47,7 +48,7 @@ func TestCollectorCoversReviewCommentCheckAndClosureFixtures(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(first.CanonicalJSON(), second.CanonicalJSON()) {
+	if !bytes.Equal(first.Artifact.CanonicalJSON(), second.Artifact.CanonicalJSON()) {
 		t.Fatal("the Goalrail check recursively changed its own packet")
 	}
 
@@ -62,7 +63,7 @@ func TestCollectorCoversReviewCommentCheckAndClosureFixtures(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	closedPacket, err := domain.DecodeAdmissionPacket(bytes.NewReader(closed.CanonicalJSON()))
+	closedPacket, err := domain.DecodeAdmissionPacket(bytes.NewReader(closed.Artifact.CanonicalJSON()))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,6 +100,106 @@ func TestCollectorRejectsChangedRangeAuthorityAndUntrustedTime(t *testing.T) {
 			})})
 			if !errors.Is(err, test.want) {
 				t.Fatalf("error = %v, want %v", err, test.want)
+			}
+		})
+	}
+}
+
+func TestCTX4CandidatesBindTheExactRangeAndAuthenticatedAuthority(t *testing.T) {
+	seed, event, snapshot := collectorFixture(t)
+	collection, err := Collect(context.Background(), CollectRequest{Seed: seed, Event: event, Reader: readerFunc(func(context.Context, Repository, int64) (Snapshot, error) {
+		return snapshot, nil
+	})})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := make(map[domain.LineageRelation]admission.ProviderCandidate, len(collection.Candidates))
+	for _, candidate := range collection.Candidates {
+		if candidate.BaseRevision != seed.BaseRevision || candidate.HeadRevision != seed.HeadRevision {
+			t.Fatalf("candidate left the frozen range: %+v", candidate)
+		}
+		if !candidate.Authenticated || candidate.ObservedAt.IsZero() || candidate.AdapterID != AdapterID {
+			t.Fatalf("candidate lost its authenticated provenance: %+v", candidate)
+		}
+		found[candidate.Relation] = candidate
+	}
+	for _, relation := range []domain.LineageRelation{
+		domain.LineagePullRequest, domain.LineageReviewIndex, domain.LineageCheckSet, domain.LineageOwnerDecision,
+	} {
+		if _, ok := found[relation]; !ok {
+			t.Fatalf("adapter omitted the %s candidate: %+v", relation, collection.Candidates)
+		}
+	}
+	decision := found[domain.LineageOwnerDecision]
+	if decision.Outcome != domain.OwnerDecisionAllow || decision.ActorRef != "github-user:owner" ||
+		decision.AuthorityRef != "github-permission:admin" {
+		t.Fatalf("owner-decision candidate = %+v", decision)
+	}
+	// A packet is audit evidence. Nothing in its bytes may reconstruct a
+	// candidate, so the audit trail cannot become an authority channel.
+	if bytes.Contains(collection.Artifact.CanonicalJSON(), []byte("candidates")) {
+		t.Fatal("packet serialized the ephemeral candidate set")
+	}
+}
+
+func TestCTX4LatestCurrentHeadReviewPerActorDecidesTheOwnerBoundary(t *testing.T) {
+	seed, event, base := collectorFixture(t)
+	for _, fixture := range []struct {
+		name        string
+		reviews     []Review
+		actors      map[string]string
+		wantOutcome domain.OwnerDecisionOutcome
+		wantPresent bool
+	}{
+		{name: "approval-at-head", reviews: base.Reviews, actors: base.AuthorizedActors,
+			wantOutcome: domain.OwnerDecisionAllow, wantPresent: true},
+		{name: "later-dismissal-shadows-approval", reviews: append(append([]Review(nil), base.Reviews...), Review{
+			ID: 3, Actor: "owner", State: "DISMISSED", CommitSHA: seed.HeadRevision,
+			SubmittedAt: base.ObservedAt.Add(-10 * time.Minute),
+		}), actors: base.AuthorizedActors},
+		{name: "later-changes-requested-shadows-approval", reviews: append(append([]Review(nil), base.Reviews...), Review{
+			ID: 4, Actor: "owner", State: "CHANGES_REQUESTED", CommitSHA: seed.HeadRevision,
+			SubmittedAt: base.ObservedAt.Add(-5 * time.Minute),
+		}), actors: base.AuthorizedActors, wantOutcome: domain.OwnerDecisionReject, wantPresent: true},
+		{name: "later-neutral-comment-shadows-approval", reviews: append(append([]Review(nil), base.Reviews...), Review{
+			ID: 5, Actor: "owner", State: "COMMENTED", CommitSHA: seed.HeadRevision,
+			SubmittedAt: base.ObservedAt.Add(-time.Minute),
+		}), actors: base.AuthorizedActors},
+		{name: "approval-only-on-a-stale-head", reviews: []Review{{
+			ID: 6, Actor: "owner", State: "APPROVED", CommitSHA: strings.Repeat("c", 40),
+			SubmittedAt: base.ObservedAt.Add(-time.Hour),
+		}}, actors: base.AuthorizedActors},
+		{name: "actor-without-authority", reviews: base.Reviews, actors: map[string]string{}},
+		{name: "rejection-dominates-a-second-approval", reviews: append(append([]Review(nil), base.Reviews...), Review{
+			ID: 7, Actor: "second", State: "CHANGES_REQUESTED", CommitSHA: seed.HeadRevision,
+			SubmittedAt: base.ObservedAt.Add(-2 * time.Minute),
+		}), actors: map[string]string{"owner": "github-permission:admin", "second": "github-permission:write"},
+			wantOutcome: domain.OwnerDecisionReject, wantPresent: true},
+	} {
+		t.Run(fixture.name, func(t *testing.T) {
+			snapshot := base
+			snapshot.Reviews = fixture.reviews
+			snapshot.AuthorizedActors = fixture.actors
+			collection, err := Collect(context.Background(), CollectRequest{Seed: seed, Event: event, Reader: readerFunc(func(context.Context, Repository, int64) (Snapshot, error) {
+				return snapshot, nil
+			})})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var decision *admission.ProviderCandidate
+			for index, candidate := range collection.Candidates {
+				if candidate.Relation == domain.LineageOwnerDecision {
+					decision = &collection.Candidates[index]
+				}
+			}
+			if !fixture.wantPresent {
+				if decision != nil {
+					t.Fatalf("owner-decision candidate survived: %+v", decision)
+				}
+				return
+			}
+			if decision == nil || decision.Outcome != fixture.wantOutcome {
+				t.Fatalf("owner-decision candidate = %+v, want outcome %s", decision, fixture.wantOutcome)
 			}
 		})
 	}
@@ -143,8 +244,8 @@ func TestRESTReaderStripsBodiesAndNeverRetainsCredential(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ContainsProhibitedPacketContent(artifact.CanonicalJSON(), credential, "raw pull body", "raw review body", "raw issue comment", "raw output body") {
-		t.Fatalf("packet retained a credential or body: %s", artifact.CanonicalJSON())
+	if ContainsProhibitedPacketContent(artifact.Artifact.CanonicalJSON(), credential, "raw pull body", "raw review body", "raw issue comment", "raw output body") {
+		t.Fatalf("packet retained a credential or body: %s", artifact.Artifact.CanonicalJSON())
 	}
 }
 

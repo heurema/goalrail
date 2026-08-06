@@ -13,9 +13,11 @@ import (
 	"testing"
 	"time"
 
+	openspecadapter "github.com/heurema/goalrail/internal/adapters/openspec"
 	"github.com/heurema/goalrail/internal/admission"
 	"github.com/heurema/goalrail/internal/domain"
 	"github.com/heurema/goalrail/internal/lineage"
+	"github.com/heurema/goalrail/internal/localrun"
 )
 
 func TestCollectChangesCoversGitKindsAndIgnoresCheckoutPathAndEnvironment(t *testing.T) {
@@ -91,7 +93,8 @@ func TestFrozenCollectorUsesBasePolicyAndValidatesHeadPolicy(t *testing.T) {
 	if frozen.BasePolicy.Rules[0].Classification != domain.MaterialityMaterial || frozen.HeadPolicy.Rules[0].Classification != domain.MaterialityNonMaterial {
 		t.Fatalf("base/head policy fixture was not preserved")
 	}
-	result, err := admission.Verify(admission.Input{Range: frozen, Packet: packet})
+	candidates := testCandidates(base, head, packet.EvaluationTime.UTC())
+	result, err := admission.Verify(admission.Input{Range: frozen, Packet: packet, Candidates: candidates})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +115,7 @@ func TestFrozenCollectorUsesBasePolicyAndValidatesHeadPolicy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cloneResult, err := admission.Verify(admission.Input{Range: cloned, Packet: packet})
+	cloneResult, err := admission.Verify(admission.Input{Range: cloned, Packet: packet, Candidates: candidates})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,7 +153,183 @@ func TestFrozenCollectorReturnsCanonicalInvalidForMalformedHeadPolicy(t *testing
 	}
 }
 
+func TestCTX10EveryDeclarationBoundArtifactIsVerified(t *testing.T) {
+	for _, fixture := range []struct {
+		name string
+		path string
+		raw  []byte
+	}{
+		{name: "bootstrap", path: domain.DefaultProjectBootstrapPath, raw: []byte("# Substituted bootstrap\n")},
+		{name: "setup-profile", path: domain.DefaultProjectSetupProfilePath, raw: []byte("{\"schema\":\"goalrail.setup-profile/v1\"}")},
+	} {
+		t.Run("head-"+fixture.name, func(t *testing.T) {
+			repository, base, _, packet := admissionRepository(t)
+			writeTestBytes(t, repository, fixture.path, fixture.raw, 0o644)
+			runTestGit(t, repository, "add", "-A")
+			runTestGit(t, repository, "commit", "-qm", "drift "+fixture.name)
+			packet.HeadRevision = strings.TrimSpace(runTestGit(t, repository, "rev-parse", "HEAD"))
+
+			frozen, err := CollectFrozenRange(context.Background(), repository, base, packet.HeadRevision, packet)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !frozen.HeadGovernanceInvalid {
+				t.Fatalf("drifted %s was not retained as invalid head governance", fixture.name)
+			}
+			result, err := admission.Verify(admission.Input{
+				Range: frozen, Packet: packet,
+				Candidates: testCandidates(base, packet.HeadRevision, packet.EvaluationTime.UTC()),
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if result.Classification != domain.AdmissionInvalid || result.Reasons[0].Code != domain.ReasonDeclarationInvalid {
+				t.Fatalf("drifted %s result = %+v", fixture.name, result)
+			}
+		})
+	}
+
+	t.Run("base-setup-profile", func(t *testing.T) {
+		repository, base, head, packet := admissionRepository(t)
+		frozen, err := CollectFrozenRange(context.Background(), repository, base, head, packet)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if frozen.BaseGovernanceInvalid || frozen.BaseDeclaration == nil {
+			t.Fatal("intact base governance was reported invalid")
+		}
+		// The same drift in the base revision must deny rather than fall back to
+		// head-defined authority.
+		frozen.BaseGovernanceInvalid = true
+		result, err := admission.Verify(admission.Input{
+			Range: frozen, Packet: packet,
+			Candidates: testCandidates(base, head, packet.EvaluationTime.UTC()),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.Classification != domain.AdmissionInvalid || result.Reasons[0].Code != domain.ReasonDeclarationInvalid {
+			t.Fatalf("drifted base governance result = %+v", result)
+		}
+	})
+}
+
+func TestCTX6NonBootstrapProjectIDChangeIsInvalid(t *testing.T) {
+	repository, base, _, packet := admissionRepository(t)
+	frozen, err := CollectFrozenRange(context.Background(), repository, base, packet.HeadRevision, packet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replacement := *frozen.HeadDeclaration
+	replacement.ProjectID = "prj_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	replacementPolicy := *frozen.HeadPolicy
+	replacementPolicy.ProjectID = replacement.ProjectID
+	policyArtifact, err := domain.FreezeProjectPolicy(replacementPolicy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replacement.Policy.Digest = policyArtifact.Digest()
+	declarationArtifact, err := domain.FreezeProjectDeclaration(replacement)
+	if err != nil {
+		t.Fatal(err)
+	}
+	frozen.HeadDeclaration = &replacement
+	frozen.HeadDeclarationDigest = declarationArtifact.Digest()
+	frozen.HeadPolicy = &replacementPolicy
+	frozen.HeadPolicyDigest = policyArtifact.Digest()
+
+	result, err := admission.Verify(admission.Input{
+		Range: frozen, Packet: packet,
+		Candidates: testCandidates(base, packet.HeadRevision, packet.EvaluationTime.UTC()),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Classification != domain.AdmissionInvalid || result.Reasons[0].Code != domain.ReasonDeclarationInvalid {
+		t.Fatalf("head-minted project identity result = %+v", result)
+	}
+}
+
+func TestCTX7OnlyConfirmedIntentSatisfiesLineage(t *testing.T) {
+	repository, base, head, packet := admissionRepositoryWith(t, fixtureOptions{
+		IntentStatus: "candidate", ReceiptStatus: localrun.StatePassed,
+	})
+	frozen, err := CollectFrozenRange(context.Background(), repository, base, head, packet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasProjection(frozen.Projections, domain.LineageConfirmedIntent, "candidate", false) {
+		t.Fatalf("candidate intent projection = %+v", frozen.Projections)
+	}
+	result, err := admission.Verify(admission.Input{
+		Range: frozen, Packet: packet,
+		Candidates: testCandidates(base, head, packet.EvaluationTime.UTC()),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Classification != domain.AdmissionMissing || result.Reasons[0].Code != domain.ReasonIntentUnconfirmed {
+		t.Fatalf("candidate intent result = %+v", result)
+	}
+}
+
+func TestCTX5OnlyPassedTerminalReceiptSatisfiesLineage(t *testing.T) {
+	for _, status := range []localrun.RunState{
+		localrun.StateFailed, localrun.StateUnlinked, localrun.StateLaunchFailed, localrun.StateVerificationIncomplete,
+	} {
+		t.Run(string(status), func(t *testing.T) {
+			repository, base, head, packet := admissionRepositoryWith(t, fixtureOptions{
+				IntentStatus: "confirmed", ReceiptStatus: status,
+			})
+			frozen, err := CollectFrozenRange(context.Background(), repository, base, head, packet)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !hasProjection(frozen.Projections, domain.LineageTerminalReceipt, string(status), false) {
+				t.Fatalf("%s receipt projection = %+v", status, frozen.Projections)
+			}
+			result, err := admission.Verify(admission.Input{
+				Range: frozen, Packet: packet,
+				Candidates: testCandidates(base, head, packet.EvaluationTime.UTC()),
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if result.Classification != domain.AdmissionMissing || result.Reasons[0].Code != domain.ReasonReceiptMissing {
+				t.Fatalf("%s receipt result = %+v", status, result)
+			}
+		})
+	}
+}
+
+func hasProjection(projections []admission.SemanticProjection, relation domain.LineageRelation, state string, valid bool) bool {
+	for _, projection := range projections {
+		if projection.Relation == relation && projection.State == state && projection.Valid == valid {
+			return true
+		}
+	}
+	return false
+}
+
+// fixtureOptions varies only the semantic state of the exact committed
+// artifacts, so a projection test changes what the bytes mean without changing
+// how they are bound.
+type fixtureOptions struct {
+	IntentStatus          string
+	ReceiptStatus         localrun.RunState
+	IntentDeclaresContext bool
+	// ChangeSchema, when set, writes the change's own .openspec.yaml so the
+	// schema-aware context requirement applies exactly as it does for a real
+	// planning change.
+	ChangeSchema string
+}
+
 func admissionRepository(t *testing.T) (string, string, string, domain.AdmissionPacket) {
+	t.Helper()
+	return admissionRepositoryWith(t, fixtureOptions{IntentStatus: "confirmed", ReceiptStatus: localrun.StatePassed})
+}
+
+func admissionRepositoryWith(t *testing.T, options fixtureOptions) (string, string, string, domain.AdmissionPacket) {
 	t.Helper()
 	repository := t.TempDir()
 	initTestRepository(t, repository)
@@ -160,7 +339,7 @@ func admissionRepository(t *testing.T) (string, string, string, domain.Admission
 		t.Fatal(err)
 	}
 	bootstrap := []byte("# Goalrail bootstrap\n")
-	setup := []byte("{}\n")
+	setup := testSetupProfile(t, basePolicy.ProjectID)
 	baseDeclaration := domain.ProjectDeclaration{
 		Schema: domain.ProjectSchemaV1, ProjectID: basePolicy.ProjectID, ContractVersion: domain.GovernanceContractV1,
 		Policy:       domain.CommittedArtifactReference{Schema: domain.PolicySchemaV1, Path: domain.DefaultProjectPolicyPath, Digest: basePolicyArtifact.Digest()},
@@ -175,8 +354,12 @@ func admissionRepository(t *testing.T) (string, string, string, domain.Admission
 	writeTestBytes(t, repository, domain.DefaultProjectBootstrapPath, bootstrap, 0o644)
 	writeTestBytes(t, repository, domain.DefaultProjectSetupProfilePath, setup, 0o644)
 	writeTestBytes(t, repository, domain.ProjectDeclarationPath, baseDeclarationArtifact.CanonicalJSON(), 0o644)
-	writeTestBytes(t, repository, "openspec/changes/git-fixture/intent.md", []byte("# Confirmed intent\n"), 0o644)
+	writeTestBytes(t, repository, "openspec/changes/git-fixture/intent.md", testIntentArtifactWithContext("git-fixture", options.IntentStatus, options.IntentDeclaresContext), 0o644)
 	writeTestBytes(t, repository, "openspec/changes/git-fixture/tasks.md", []byte("- [x] bounded change\n"), 0o644)
+	if options.ChangeSchema != "" {
+		writeTestBytes(t, repository, "openspec/changes/git-fixture/.openspec.yaml",
+			[]byte("schema: "+options.ChangeSchema+"\n"), 0o644)
+	}
 	runTestGit(t, repository, "add", "-A")
 	runTestGit(t, repository, "commit", "-qm", "initialize governance")
 	base := strings.TrimSpace(runTestGit(t, repository, "rev-parse", "HEAD"))
@@ -202,7 +385,7 @@ func admissionRepository(t *testing.T) (string, string, string, domain.Admission
 	writeTestBytes(t, repository, domain.DefaultProjectPolicyPath, headPolicyArtifact.CanonicalJSON(), 0o644)
 	writeTestBytes(t, repository, domain.ProjectDeclarationPath, headDeclarationArtifact.CanonicalJSON(), 0o644)
 
-	intentRaw := []byte("# Confirmed intent\n")
+	intentRaw := testIntentArtifactWithContext("git-fixture", options.IntentStatus, options.IntentDeclaresContext)
 	writeTestBytes(t, repository, "openspec/changes/git-fixture/intent.md", intentRaw, 0o644)
 	writeTestBytes(t, repository, "openspec/changes/git-fixture/tasks.md", []byte("- [x] bounded change\n"), 0o644)
 	changeDigest, err := lineage.DigestChangeSnapshot(filepath.Join(repository, "openspec", "changes", "git-fixture"))
@@ -244,10 +427,16 @@ func admissionRepository(t *testing.T) (string, string, string, domain.Admission
 		switch event.Relation {
 		case domain.LineageWorkSpec, domain.LineageRunSession, domain.LineagePullRequest,
 			domain.LineageReviewIndex, domain.LineageCheckSet, domain.LineageTerminalReceipt, domain.LineageOwnerDecision:
-			raw, marshalErr := json.Marshal(map[string]any{
-				"identity": event.Targets[0].Identity,
-				"schema":   "goalrail.fixture-evidence/v1",
-			})
+			var raw []byte
+			var marshalErr error
+			if event.Relation == domain.LineageTerminalReceipt {
+				raw = testTerminalReceipt(t, options.ReceiptStatus, intentRef)
+			} else {
+				raw, marshalErr = json.Marshal(map[string]any{
+					"identity": event.Targets[0].Identity,
+					"schema":   "goalrail.fixture-evidence/v1",
+				})
+			}
 			if marshalErr != nil {
 				t.Fatal(marshalErr)
 			}
@@ -335,6 +524,136 @@ func writeTestBytes(t *testing.T, repository, relative string, content []byte, m
 	if err := os.WriteFile(absolute, content, mode); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func testSetupProfile(t *testing.T, project domain.ProjectID) []byte {
+	t.Helper()
+	profile := domain.SetupProfile{
+		Schema: domain.SetupProfileSchemaV1, ProjectID: project,
+		CompatibleGoalrailBundle: ">=0.2.0 <0.3.0",
+		Planning: domain.SetupPlanningAdapter{
+			Adapter: domain.SetupAdapterPin{
+				ID: "openspec", Version: "1.6.0", SourceRef: "npm:fission-ai/openspec@1.6.0",
+				Integrity: domain.DigestCanonicalJSON([]byte("planning")),
+			},
+			Runtime: "node", RuntimeVersion: "22.18.0", Compiler: "openspec", CompilerVersion: "1.6.0",
+		},
+		ScaffoldAdapters: []domain.SetupAdapterPin{{
+			ID: "codex", Version: "1.0.0", SourceRef: "bundle:codex-v1",
+			Integrity: domain.DigestCanonicalJSON([]byte("codex")),
+		}},
+		SharedAdmissionAdapter: &domain.SetupAdapterPin{
+			ID: "github-actions", Version: "1.0.0", SourceRef: "release:github-actions-v1",
+			Integrity: domain.DigestCanonicalJSON([]byte("github-actions")),
+		},
+	}
+	artifact, err := domain.FreezeSetupProfile(profile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return artifact.CanonicalJSON()
+}
+
+// testIntentArtifact writes the exact artifact the intent adapter parses. A
+// placeholder heading is no longer enough: the collector must be able to reach
+// a confirmed snapshot from these bytes.
+func testIntentArtifact(id, status string) []byte {
+	return testIntentArtifactWithContext(id, status, false)
+}
+
+func testIntentArtifactWithContext(id, status string, declaresContext bool) []byte {
+	contextDeclaration := ""
+	if declaresContext {
+		contextDeclaration = "\n- **Context Pack:** " + id + " version 1"
+	}
+	confirmation := "- **Confirmed by:** pending\n- **Confirmed at:** pending\n- **Verification action:** pending"
+	if status == "confirmed" {
+		confirmation = "- **Confirmed by:** owner\n- **Confirmed at:** 2026-08-05\n- **Verification action:** owner-reviewed-three-groups"
+	}
+	return []byte(`# Intent Snapshot
+
+- **Intent ID:** ` + id + `
+- **Version:** 1` + contextDeclaration + `
+- **Status:** ` + status + `
+- **Owner:** owner
+
+## Source Evidence
+
+- **SE-1 — Owner statement:** The owner asked for a bounded result.
+
+## Desired Outcomes
+
+| ID | Confirmed wording | Verification action | Evidence |
+|---|---|---|---|
+| OUT-1 | Produce the bounded result. | Inspect it. | SE-1 |
+
+## Non-Goals
+
+| ID | Confirmed boundary | Evidence |
+|---|---|---|
+| NG-1 | Do not publish. | SE-1 |
+
+## Observable Success Signals
+
+| ID | Signal | Measurement | Evidence |
+|---|---|---|---|
+| SIG-1 | The result is inspectable. | One local artifact exists. | SE-1 |
+
+## Ambiguities and Unknowns
+
+None.
+
+## Confirmation
+
+` + confirmation + `
+`)
+}
+
+func testTerminalReceipt(t *testing.T, status localrun.RunState, intent domain.ContentAddressedEvidenceReference) []byte {
+	t.Helper()
+	moment := time.Date(2026, 8, 5, 11, 0, 0, 0, time.UTC)
+	receipt := localrun.TerminalReceipt{
+		Schema: localrun.TerminalReceiptSchemaV1, WorkSpecID: "ws-git-fixture", WorkSpecVersion: 1,
+		WorkSpecDigest: domain.WorkSpecDigest(domain.DigestCanonicalJSON([]byte("work-spec"))),
+		Intent: &localrun.ReceiptIntentReference{
+			ID: domain.IntentID(strings.TrimPrefix(intent.Identity, "intent:")), Version: 1,
+			Digest: string(intent.Digest),
+		},
+		RunID: "run-git-fixture", Adapter: "codex", AdapterVersion: "1.0.0",
+		BaseRevision: strings.Repeat("a", 40), TerminalHead: strings.Repeat("b", 40),
+		EffectivePaths: []string{"internal/app.go"}, Checks: []domain.WorkSpecCheck{}, CheckResults: []localrun.CheckResult{},
+		Status: status, PreparedAt: moment, LaunchAttemptedAt: moment.Add(time.Minute),
+		ProviderObservedAt: moment.Add(2 * time.Minute), TerminalAt: moment.Add(3 * time.Minute),
+	}
+	raw, err := localrun.CanonicalTerminalReceipt(receipt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return raw
+}
+
+// testCandidates is the same-invocation provider observation a shared check
+// supplies. No repository content can produce it.
+func testCandidates(base, head string, evaluationTime time.Time) []admission.ProviderCandidate {
+	observedAt := evaluationTime.Add(-time.Minute)
+	candidates := []admission.ProviderCandidate{}
+	for _, relation := range []domain.LineageRelation{
+		domain.LineagePullRequest, domain.LineageReviewIndex, domain.LineageCheckSet,
+	} {
+		candidates = append(candidates, admission.ProviderCandidate{
+			Relation: relation, Identity: "github:fixture/" + string(relation),
+			Digest: domain.DigestCanonicalJSON([]byte(relation)), AdapterID: "github-actions",
+			ProviderRef: "github:fixture/" + string(relation), BaseRevision: base, HeadRevision: head,
+			ObservedAt: observedAt, Authenticated: true,
+		})
+	}
+	return append(candidates, admission.ProviderCandidate{
+		Relation: domain.LineageOwnerDecision, Identity: "github:fixture/owner-decision",
+		Digest: domain.DigestCanonicalJSON([]byte("owner-decision")), AdapterID: "github-actions",
+		ProviderRef: "github:fixture/owner-decision", BaseRevision: base, HeadRevision: head,
+		ActorRef: "github-user:owner", AuthorityRef: "user:owner", Outcome: domain.OwnerDecisionAllow,
+		ObservedAt: observedAt, Authenticated: true,
+	})
 }
 
 func testPolicy(t *testing.T) domain.ProjectPolicy {
@@ -483,5 +802,80 @@ func TestPortableReplicaAcceptsKnownCanonicalArtifact(t *testing.T) {
 	}
 	if err := validatePortableReplica(artifact.CanonicalJSON()); err != nil {
 		t.Fatalf("known canonical artifact was rejected: %v", err)
+	}
+}
+
+// An intent that names its context pack is only readable as a pair. Deleting
+// the context at head must not turn it into a readable legacy snapshot, or
+// admission would pass because required evidence was removed.
+func TestAChangeRequiringContextCannotProjectWithoutIt(t *testing.T) {
+	// Both shapes of the same bypass: the declaration still present, and the
+	// declaration deleted along with the context. The requirement comes from the
+	// change's schema, so removing the row cannot remove the requirement.
+	for _, fixture := range []struct {
+		name     string
+		declares bool
+	}{
+		{name: "declaration retained", declares: true},
+		{name: "declaration deleted with the context", declares: false},
+	} {
+		t.Run(fixture.name, func(t *testing.T) {
+			repository, base, head, packet := admissionRepositoryWith(t, fixtureOptions{
+				IntentStatus: "confirmed", ReceiptStatus: localrun.StatePassed,
+				IntentDeclaresContext: fixture.declares,
+				ChangeSchema:          openspecadapter.GoalrailIntentSchema,
+			})
+			frozen, err := CollectFrozenRange(context.Background(), repository, base, head, packet)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !hasProjection(frozen.Projections, domain.LineageConfirmedIntent, admission.ProjectionStateInvalid, false) {
+				t.Fatalf("an intent whose change requires context still projected: %+v", frozen.Projections)
+			}
+			result, err := admission.Verify(admission.Input{
+				Range: frozen, Packet: packet,
+				Candidates: testCandidates(base, head, packet.EvaluationTime.UTC()),
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if result.Classification != domain.AdmissionMissing || result.Reasons[0].Code != domain.ReasonIntentUnconfirmed {
+				t.Fatalf("intent without its required context = %+v", result)
+			}
+		})
+	}
+}
+
+// A change that is not on the planning schema keeps the legacy single-artifact
+// reading; the requirement is the schema's, not this path's invention.
+func TestAChangeWithoutThePlanningSchemaStillProjects(t *testing.T) {
+	repository, base, head, packet := admissionRepositoryWith(t, fixtureOptions{
+		IntentStatus: "confirmed", ReceiptStatus: localrun.StatePassed,
+	})
+	frozen, err := CollectFrozenRange(context.Background(), repository, base, head, packet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasProjection(frozen.Projections, domain.LineageConfirmedIntent, admission.ProjectionStateConfirmed, true) {
+		t.Fatalf("a schema-free change stopped projecting: %+v", frozen.Projections)
+	}
+}
+
+func TestAContextPackDeclarationIsReadFromThePreambleOnly(t *testing.T) {
+	for _, fixture := range []struct {
+		name     string
+		raw      string
+		declares bool
+	}{
+		{name: "declared", raw: "# Intent\n- **Context Pack:** pack-1 version 1\n\n## Body\n", declares: true},
+		{name: "pending", raw: "# Intent\n- **Context Pack:** pending\n\n## Body\n"},
+		{name: "absent", raw: "# Intent\n- **Version:** 1\n\n## Body\n"},
+		{name: "mentioned in the body only", raw: "# Intent\n- **Version:** 1\n\n## Body\n- **Context Pack:** pack-1 version 1\n"},
+	} {
+		t.Run(fixture.name, func(t *testing.T) {
+			if got := declaresContextPack([]byte(fixture.raw)); got != fixture.declares {
+				t.Fatalf("declaresContextPack = %v, want %v", got, fixture.declares)
+			}
+		})
 	}
 }

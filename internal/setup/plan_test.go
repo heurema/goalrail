@@ -161,6 +161,48 @@ func TestGenerateSelectsAnExecutableWhoseBytesMatchButModeDoesNot(t *testing.T) 
 	}
 }
 
+func TestCTX8DifferentExecutableDigestIsPlanningConflict(t *testing.T) {
+	repository := initializedRepository(t)
+	home := t.TempDir()
+	evidence := releaseEvidence(t, "darwin", "arm64")
+	versionRoot := filepath.Join(home, ".local", "share", "goalrail", "bundles", "v0.2.0", "darwin_arm64")
+	materializeFixtureBundle(t, versionRoot, evidence.ManifestRaw)
+	stableExecutable := filepath.Join(home, ".local", "bin", "gr")
+	desired := []byte("fixture gr\n")
+	writeFixtureFile(t, stableExecutable, bytes.Repeat([]byte("x"), len(desired)), 0o755)
+	beforeRepository := snapshotTree(t, repository)
+	beforeHome := snapshotTree(t, home)
+
+	result, err := Generate(context.Background(), PlanOptions{
+		RepositoryRoot: repository,
+		Home:           home,
+		OS:             "darwin",
+		Arch:           "arm64",
+		Scaffold:       ambient.ScaffoldCodex,
+		Evidence:       &evidence,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Plan.State != domain.SetupPlanIncomplete || !contains(result.Plan.IncompleteReasonIDs, "EXECUTABLE_DESTINATION_CONFLICT") {
+		t.Fatalf("state = %s, reasons = %v, issues = %#v", result.Plan.State, result.Plan.IncompleteReasonIDs, result.Issues)
+	}
+	for _, mutation := range result.Plan.Mutations {
+		if mutation.ID == "select-executable" {
+			t.Fatalf("different-digest executable retained an authorizable mutation: %#v", mutation)
+		}
+	}
+	if len(result.Plan.Rollback) != 0 || len(result.Plan.Verification) != 0 || result.Plan.ProjectCodeWrites != 0 {
+		t.Fatalf("incomplete plan retained executable work: %#v", result.Plan)
+	}
+	if after := snapshotTree(t, repository); !reflect.DeepEqual(after, beforeRepository) {
+		t.Fatalf("planner changed repository\nbefore: %v\nafter:  %v", beforeRepository, after)
+	}
+	if after := snapshotTree(t, home); !reflect.DeepEqual(after, beforeHome) {
+		t.Fatalf("planner changed user home\nbefore: %v\nafter:  %v", beforeHome, after)
+	}
+}
+
 func TestGenerateEmitsCanonicalIncompletePlansWithoutExecutableWork(t *testing.T) {
 	repository := initializedRepository(t)
 	home := t.TempDir()

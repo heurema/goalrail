@@ -204,6 +204,9 @@ func ValidateAdmissionPacket(value AdmissionPacket) error {
 			v.add("admission_packet.time_authority_invalid", "time_authority_ref", "evaluation time requires a bounded trusted authority reference")
 		}
 	}
+	if len(value.Provenance) > 0 && (value.EvaluationTime == nil || value.EvaluationTime.IsZero() || !IsEvidenceReference(value.TimeAuthorityRef)) {
+		v.add("admission_packet.provenance_time_required", "evaluation_time", "provider provenance requires a non-zero evaluation time and bounded trusted authority reference")
+	}
 	validateContentAddressedReferenceSet(v, "evidence", value.Evidence, false)
 	if len(value.Evidence) > MaxAdmissionEvidence {
 		v.add("admission_packet.evidence.too_many", "evidence", "admission evidence count exceeds the v1 bound")

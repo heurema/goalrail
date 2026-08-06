@@ -17,7 +17,10 @@ type Completeness struct {
 	ExpiredExceptions []domain.SHA256Digest
 }
 
-func EvaluateCompleteness(graph WorkUnitGraph, evaluatedAt time.Time) (Completeness, error) {
+// EvaluateCompleteness resolves every required relation through the ephemeral
+// effective view: committed relations, semantic projections of the exact
+// committed artifacts, and authenticated same-invocation provider candidates.
+func EvaluateCompleteness(graph WorkUnitGraph, evaluatedAt time.Time, view EffectiveView) (Completeness, error) {
 	if evaluatedAt.IsZero() {
 		return Completeness{}, fmt.Errorf("completeness evaluation time is required")
 	}
@@ -62,12 +65,26 @@ func EvaluateCompleteness(graph WorkUnitGraph, evaluatedAt time.Time) (Completen
 	}
 	var admissionMissing, closedMissing []domain.LineageRelation
 	for _, requirement := range graph.Unit.RequiredRelations {
-		if requirement.Relation != domain.LineageClosure && (!present[requirement.Relation] || unavailable[requirement.Relation]) {
+		effective := view.present(requirement.Relation, present[requirement.Relation], unavailable[requirement.Relation])
+		if requirement.Relation != domain.LineageClosure && !effective {
 			admissionMissing = append(admissionMissing, requirement.Relation)
 		}
-		if !present[requirement.Relation] || unavailable[requirement.Relation] {
+		if !effective {
 			closedMissing = append(closedMissing, requirement.Relation)
 		}
+	}
+	// A relation an authenticated candidate satisfies is not unavailable, and
+	// leaving it in the reported set denies on it later: Verify refuses whenever
+	// that slice is non-empty, so live evidence could never repair an explicitly
+	// unavailable relation.
+	if len(result.Unavailable) > 0 {
+		retained := make([]domain.LineageRelation, 0, len(result.Unavailable))
+		for _, relation := range result.Unavailable {
+			if !view.Satisfied(relation) {
+				retained = append(retained, relation)
+			}
+		}
+		result.Unavailable = retained
 	}
 	sortRelations(admissionMissing)
 	sortRelations(closedMissing)
