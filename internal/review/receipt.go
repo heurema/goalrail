@@ -103,6 +103,11 @@ type Receipt struct {
 	Model        string `json:"model,omitempty"`
 	RefuterModel string `json:"refuter_model,omitempty"`
 
+	// WithoutIntegrations records what the reviewer was run without. A review
+	// with an integration removed is a different review from one with it, and a
+	// consumer that cannot tell them apart cannot judge either.
+	WithoutIntegrations []string `json:"without_integrations,omitempty"`
+
 	// DurationSeconds is measured wall time of the reviewer invocation(s), the
 	// number effort and deadline defaults get tuned against.
 	DurationSeconds int64 `json:"duration_seconds"`
@@ -311,7 +316,8 @@ func latestPath(stateRoot, repositoryRoot, branch string) string {
 // Earlier rounds' files stay: overwriting them would erase the only proof that
 // the start of the branch was ever reviewed.
 func WriteReceipt(stateRoot string, receipt Receipt) (string, error) {
-	path := receiptPath(stateRoot, receipt.Repository, receipt.Branch, receipt.HeadCommit, receipt.ReportSHA256, receipt.Effort+"\x00"+receipt.Model+"\x00"+receipt.Refuter+"\x00"+receipt.RefuterModel)
+	path := receiptPath(stateRoot, receipt.Repository, receipt.Branch, receipt.HeadCommit, receipt.ReportSHA256, receipt.Effort+"\x00"+receipt.Model+"\x00"+receipt.Refuter+"\x00"+receipt.RefuterModel+
+		"\x00"+strings.Join(receipt.WithoutIntegrations, ","))
 	// The same protection the rest of the local state store uses. A receipt
 	// holds a verbatim review of private source; leaving it readable by every
 	// account on a shared machine would make this the one piece of Goalrail

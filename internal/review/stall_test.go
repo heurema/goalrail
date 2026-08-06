@@ -158,34 +158,53 @@ func TestARejectedIntegrationNameNeverReachesAnInvocation(t *testing.T) {
 	for _, name := range []string{
 		"", strings.Repeat("a", 65), "-c model=other", "has space", "with\nnewline",
 		"-leading-dash", ".leading-dot", "quote'injected", "semi;colon",
+		// A dot is a configuration separator for at least one provider, so a
+		// dotted name renders a nested key and removes nothing.
+		"vendor.tool",
 	} {
 		if err := validateIntegrations([]string{name}); err == nil {
 			t.Fatalf("the integration name %q was accepted", name)
 		}
 	}
-	for _, name := range []string{"a", "codebase-x", "server_2", "vendor.tool", "A9"} {
+	for _, name := range []string{"a", "codebase-x", "server_2", "A9"} {
 		if err := validateIntegrations([]string{name}); err != nil {
 			t.Fatalf("the ordinary integration name %q was refused: %v", name, err)
 		}
 	}
 }
 
-// A provider that cannot express the removal refuses it. Accepting the request
-// and keeping the integration would read as isolation that happened.
-func TestAProviderThatCannotRemoveOneIntegrationRefuses(t *testing.T) {
-	if supportsIntegrationRemoval(ambient.ScaffoldClaudeCode) {
-		t.Fatal("claude-code was claimed to support per-integration removal")
+// Both installed providers can remove one integration by name, and the rendered
+// invocation says so per provider. The refusal path remains for a provider that
+// cannot, because accepting a request and keeping the integration would read as
+// isolation that happened.
+func TestEachProviderRendersItsOwnRemoval(t *testing.T) {
+	for _, fixture := range []struct {
+		reviewer ambient.Scaffold
+		expect   string
+	}{
+		{reviewer: ambient.ScaffoldCodex, expect: "mcp_servers.some-integration.enabled=false"},
+		{reviewer: ambient.ScaffoldClaudeCode, expect: `{"deniedMcpServers":[{"serverName":"some-integration"}]}`},
+	} {
+		t.Run(string(fixture.reviewer), func(t *testing.T) {
+			if !supportsIntegrationRemoval(fixture.reviewer) {
+				t.Fatalf("%s was claimed not to support per-integration removal", fixture.reviewer)
+			}
+			_, arguments, _, err := reviewCommand(fixture.reviewer, "base..head", "high", "", []byte("x"), []string{"some-integration"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !containsArgument(arguments, fixture.expect) {
+				t.Fatalf("%s did not render its own removal: %#v", fixture.reviewer, arguments)
+			}
+		})
 	}
-	_, _, _, err := reviewCommand(ambient.ScaffoldClaudeCode, "base..head", "high", "opus", []byte("x"), []string{"some-integration"})
-	if err == nil {
-		t.Fatal("the claude-code invocation accepted an isolation it cannot perform")
-	}
-	if !strings.Contains(err.Error(), "all integrations or none") {
-		t.Fatalf("the refusal does not say why: %v", err)
+	if supportsIntegrationRemoval(ambient.Scaffold("some-future-provider")) {
+		t.Fatal("an unknown provider was claimed to support removal it has never been checked for")
 	}
 }
 
-// The refusal is paid for before the review is, not after the reviewer has run.
+// A refusal that costs nothing: an unusable name is caught before any reviewer
+// is invoked, not after one has been paid for.
 func TestIsolationRefusesBeforeAnythingIsSpent(t *testing.T) {
 	root := branchWithWork(t)
 	stateRoot := t.TempDir()
@@ -196,13 +215,47 @@ func TestIsolationRefusesBeforeAnythingIsSpent(t *testing.T) {
 		RepositoryRoot: root, StateRoot: stateRoot, BaseRef: "main",
 		Author:              ambient.ScaffoldCodex,
 		Selection:           Selection{Reviewer: ambient.ScaffoldClaudeCode, Mode: "cross", Reason: "test"},
-		WithoutIntegrations: []string{"some-integration"},
+		WithoutIntegrations: []string{"vendor.tool"},
 	})
 	if err == nil {
-		t.Fatal("an unsupported isolation request was accepted")
+		t.Fatal("an unusable integration name was accepted")
 	}
 	if _, statErr := os.Stat(marker); statErr == nil {
 		t.Fatal("the reviewer ran before the isolation request was refused")
+	}
+}
+
+// An isolated review is a different review, and its receipt says so.
+func TestAnIsolatedReviewIsRecordedAsOne(t *testing.T) {
+	root := branchWithWork(t)
+	stateRoot := t.TempDir()
+	stubReviewer(t, "codex", `cat >/dev/null; echo "a finding"`)
+
+	result, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: stateRoot, BaseRef: "main",
+		Author:              ambient.ScaffoldClaudeCode,
+		Selection:           Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
+		WithoutIntegrations: []string{"some-integration"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(result.Receipt.WithoutIntegrations, []string{"some-integration"}) {
+		t.Fatalf("the receipt does not record what the reviewer ran without: %#v", result.Receipt.WithoutIntegrations)
+	}
+
+	// The same head, report, model and effort without isolation must not address
+	// the same stored receipt, or one run would erase the other's evidence.
+	plain, err := Run(context.Background(), Input{
+		RepositoryRoot: root, StateRoot: stateRoot, BaseRef: "main",
+		Author: ambient.ScaffoldClaudeCode, Selection: Selection{Reviewer: ambient.ScaffoldCodex, Mode: "cross", Reason: "test"},
+		Full: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plain.ReceiptPath == result.ReceiptPath {
+		t.Fatalf("an isolated and an ordinary review shared one receipt path: %s", plain.ReceiptPath)
 	}
 }
 

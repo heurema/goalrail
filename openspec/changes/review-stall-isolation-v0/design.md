@@ -43,7 +43,7 @@ growing a supervision layer?
 
 | Option | Description | Trade-off | Decision |
 |---|---|---|---|
-| D | Caller names an integration; Goalrail renders the provider's own disable syntax for it | Goalrail knows the *shape* per provider, never a *name*; the argument set stays closed, so no caller input can reach the sandbox, model, or identity settings | **Selected.** It closes the capability question by construction rather than by validation |
+| D | Caller names an integration; Goalrail renders the provider's own disable syntax for it | Goalrail knows the *shape* per provider, never a *name*; the argument set stays closed, so no caller input can reach the sandbox, model, or identity settings | **Selected.** It closes the capability question by construction rather than by validation. Both installed providers can express it — established by running each interface, after an earlier version of this design declared one of them incapable on the strength of its flag listing alone |
 | E | Arbitrary provider-argument passthrough | Maximally general, and the reviewer's read-only boundary becomes a string-filtering problem — exactly the allowance shape that was defeated twice before | Rejected (NG-3) |
 | F | Goalrail keeps a list of known-hostile integrations | Ages immediately, and asserts about other people's machines | Rejected (NG-2) |
 | G | Always isolate | Removes an asset by default and would silently change every existing review | Rejected |

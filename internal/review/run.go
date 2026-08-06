@@ -3,6 +3,7 @@ package review
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -427,22 +428,23 @@ func Run(ctx context.Context, input Input) (Result, error) {
 	}
 
 	receipt := Receipt{
-		Schema:             ReceiptSchema,
-		Repository:         input.RepositoryRoot,
-		Branch:             branch,
-		BaseRef:            base.Ref,
-		BaseCommit:         baseCommit,
-		HeadCommit:         headCommit,
-		ReviewedBase:       reviewedBase,
-		ReviewedDiffSHA256: reviewedDigest,
-		DiffSHA256:         diffDigest,
-		Mode:               mode,
-		ModeReason:         modeReason,
-		Reviewer:           string(input.Selection.Reviewer),
-		Author:             string(input.Author),
-		ReviewedAt:         now().UTC().Format(time.RFC3339),
-		Effort:             effort,
-		Model:              recordedModel(modelFor(input.Selection.Reviewer)),
+		Schema:              ReceiptSchema,
+		WithoutIntegrations: append([]string(nil), input.WithoutIntegrations...),
+		Repository:          input.RepositoryRoot,
+		Branch:              branch,
+		BaseRef:             base.Ref,
+		BaseCommit:          baseCommit,
+		HeadCommit:          headCommit,
+		ReviewedBase:        reviewedBase,
+		ReviewedDiffSHA256:  reviewedDigest,
+		DiffSHA256:          diffDigest,
+		Mode:                mode,
+		ModeReason:          modeReason,
+		Reviewer:            string(input.Selection.Reviewer),
+		Author:              string(input.Author),
+		ReviewedAt:          now().UTC().Format(time.RFC3339),
+		Effort:              effort,
+		Model:               recordedModel(modelFor(input.Selection.Reviewer)),
 		// Only where a refuter actually ran: the marker means "the provider used
 		// its own configuration", and on an ordinary review there was no
 		// provider to have one.
@@ -623,16 +625,23 @@ func reviewCommand(reviewer ambient.Scaffold, baseRef, effort, model string, ins
 		// `git diff --output=<path>` through the per-subcommand rule — and a
 		// race against git's flag surface is one this boundary keeps losing.
 		// The diff travels in the prompt instead; reading files stays allowed.
-		if len(without) > 0 {
-			// Its interface offers all-or-nothing, so honouring "remove this one"
-			// would mean removing more than was asked. Refusing says so; doing
-			// nothing would read as isolation that happened.
-			return "", nil, "", fmt.Errorf(
-				"the claude-code reviewer's interface removes either all integrations or none, so it cannot remove one by name")
-		}
 		claudeArguments := []string{
 			"-p", "--output-format", "text",
 			"--effort", effort,
+		}
+		// Per-server denial, the same shape as the other provider's: the caller
+		// names, this renders. An earlier version of this code refused the
+		// request outright on the claim that the interface removes all
+		// integrations or none. That claim came from reading `--help`, which
+		// lists flags and not settings keys, and it was wrong — measured on
+		// 2.1.221, the named server disappears from the session's tools while
+		// the others remain.
+		if len(without) > 0 {
+			settings, marshalErr := json.Marshal(deniedIntegrations(without))
+			if marshalErr != nil {
+				return "", nil, "", fmt.Errorf("render the claude-code isolation settings: %w", marshalErr)
+			}
+			claudeArguments = append(claudeArguments, "--settings", string(settings))
 		}
 		if strings.TrimSpace(model) != "" {
 			claudeArguments = append(claudeArguments, "--model", model)
@@ -880,13 +889,22 @@ func validateIntegrations(names []string) error {
 			case character >= 'a' && character <= 'z',
 				character >= 'A' && character <= 'Z',
 				character >= '0' && character <= '9':
-			case character == '-' || character == '_' || character == '.':
+			case character == '-' || character == '_':
 				if index == 0 {
 					return fmt.Errorf("the integration name %q must start with a letter or digit", bounded_(name))
 				}
+			case character == '.':
+				// A dot is a configuration separator for at least one provider:
+				// rendering `vendor.tool` produces a nested key and the provider
+				// fails on a transport it was never asked about, rather than
+				// removing anything. Refusing is honest; escaping would be a
+				// syntax this repository would then have to keep true.
+				return fmt.Errorf(
+					"the integration name %q contains a dot, which a provider reads as a configuration separator rather than part of the name",
+					bounded_(name))
 			default:
 				return fmt.Errorf(
-					"the integration name %q may contain only letters, digits, and the separators - _ .", bounded_(name))
+					"the integration name %q may contain only letters, digits, and the separators - and _", bounded_(name))
 			}
 		}
 	}
@@ -897,7 +915,22 @@ func validateIntegrations(names []string) error {
 // remove one named integration. It is a statement about vendor interfaces, not
 // about any integration: Goalrail still knows none of them by name.
 func supportsIntegrationRemoval(reviewer ambient.Scaffold) bool {
-	return reviewer == ambient.ScaffoldCodex
+	switch reviewer {
+	case ambient.ScaffoldCodex, ambient.ScaffoldClaudeCode:
+		return true
+	default:
+		return false
+	}
+}
+
+// deniedIntegrations is the settings document one provider reads. It is built
+// from the validated names and nothing else.
+func deniedIntegrations(names []string) map[string][]map[string]string {
+	denied := make([]map[string]string, 0, len(names))
+	for _, name := range names {
+		denied = append(denied, map[string]string{"serverName": name})
+	}
+	return map[string][]map[string]string{"deniedMcpServers": denied}
 }
 
 // boundedBuffer collects up to limit bytes and refuses the rest, so a flooding

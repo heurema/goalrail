@@ -50,7 +50,15 @@ own machine, not a list this repository maintains and ages. Isolation SHALL be
 off by default, because an integration is ordinarily an asset. A provider whose
 interface cannot express the removal of one named integration SHALL refuse the
 request rather than accept it and do nothing, because a silently ignored
-isolation request reads as isolation that happened.
+isolation request reads as isolation that happened. Whether a provider can
+express it SHALL be established by running its interface, never by reading its
+flag listing: a settings surface does not appear there, and one provider's
+capability was wrongly declared absent on exactly that evidence.
+
+A name SHALL be refused when the rendering cannot carry it unchanged. Where a
+provider reads a character as configuration structure rather than as part of the
+name, that character is refused rather than escaped: an escaping syntax is a
+claim about a vendor's parser that this repository would then have to keep true.
 
 The reviewer SHALL be invoked through the vendor's own documented
 non-interactive interface, so the user's existing subscription is used as its
@@ -75,6 +83,14 @@ makes a provider a candidate.
 #### Scenario: A provider that cannot express the removal
 - **WHEN** a caller names an integration and the reviewer's provider offers no per-integration removal
 - **THEN** the review refuses and says so, rather than running a reviewer that kept the integration
+
+#### Scenario: A name the rendering cannot carry
+- **WHEN** a caller names an integration containing a character a provider reads as configuration structure
+- **THEN** the review refuses the name rather than rendering something that removes nothing
+
+#### Scenario: An isolated review is recorded as one
+- **WHEN** a review completes with an integration removed
+- **THEN** its receipt records what it ran without, and it does not address the same stored receipt as an otherwise identical review that kept it
 
 ### Requirement: A review is bounded, whole tree included
 **Intent IDs:** OUT-1, OUT-2, SIG-1, SIG-2, SIG-5

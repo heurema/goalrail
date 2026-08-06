@@ -1,6 +1,7 @@
 package review
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -10,14 +11,18 @@ import (
 	"github.com/heurema/goalrail/internal/ambient"
 )
 
-// Goalrail ships no integration name, and this is the check behind that claim.
+// The removal syntax appears only where it is rendered.
 //
-// The removal syntax is Goalrail's to know; the thing removed is the caller's.
-// A list of known-hostile integrations would age into a wrong answer nobody
-// revisits, and asserting about other people's machines is not this
-// repository's business. The rendering site is allowed to contain the syntax
-// because that is what renders it; nothing else may.
-func TestNoIntegrationIsNamedInShippedContent(t *testing.T) {
+// This is narrower than "no integration is named anywhere", and deliberately
+// so: a check cannot verify that claim, because a name is an arbitrary string
+// and nothing distinguishes one in prose. What it does verify is that the
+// provider configuration surfaces this repository knows how to write are
+// confined to the code that writes them, so no default, example, or help text
+// can quietly acquire a machine's integration. The earlier version of this test
+// claimed the broader thing while checking this narrower one, in a subset of
+// file extensions; the claim now matches the check, and the scan covers every
+// text file.
+func TestTheRemovalSyntaxAppearsOnlyWhereItIsRendered(t *testing.T) {
 	_, currentFile, _, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatal("resolve test file")
@@ -31,7 +36,7 @@ func TestNoIntegrationIsNamedInShippedContent(t *testing.T) {
 		filepath.Join("internal", "review", "stall_test.go"):           {},
 		filepath.Join("internal", "review", "isolation_scope_test.go"): {},
 	}
-	const syntax = "mcp_servers"
+	syntaxes := []string{"mcp_servers", "deniedMcpServers"}
 
 	err := filepath.WalkDir(repository, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -51,11 +56,6 @@ func TestNoIntegrationIsNamedInShippedContent(t *testing.T) {
 			}
 			return nil
 		}
-		switch filepath.Ext(relative) {
-		case ".go", ".md", ".json", ".yaml", ".yml", ".tmpl":
-		default:
-			return nil
-		}
 		if _, permitted := allowed[relative]; permitted {
 			return nil
 		}
@@ -63,8 +63,16 @@ func TestNoIntegrationIsNamedInShippedContent(t *testing.T) {
 		if readErr != nil {
 			return readErr
 		}
-		if strings.Contains(string(raw), syntax) {
-			t.Errorf("shipped content names a provider integration surface: %s", relative)
+		// Every file, not a chosen set of extensions: a shell script or a
+		// configuration sample is exactly where such a surface would hide, and
+		// choosing extensions is choosing not to look.
+		if bytes.ContainsRune(raw, 0) {
+			return nil
+		}
+		for _, surface := range syntaxes {
+			if strings.Contains(string(raw), surface) {
+				t.Errorf("shipped content carries the %q provider surface: %s", surface, relative)
+			}
 		}
 		return nil
 	})
