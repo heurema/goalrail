@@ -20,9 +20,13 @@ import (
 // released shapes can only be exercised by naming one.
 const installedVersion = "v0.2.0"
 
+// The exact paths and component identifiers the release builder emits, so the
+// fixture exercises the contract rather than a convenient shape of its own.
 const (
+	goalrailEntry = "bin/gr"
 	runtimeEntry  = "runtime/node/bin/node"
-	compilerEntry = "node_modules/@fission-ai/openspec/bin/openspec.js"
+	compilerEntry = "compiler/node_modules/@fission-ai/openspec/bin/openspec.js"
+	compilerOther = "compiler/node_modules/@fission-ai/openspec/LICENSE"
 	compilerID    = "npm:node_modules/@fission-ai/openspec"
 )
 
@@ -153,9 +157,31 @@ func TestManifestRefusals(t *testing.T) {
 	}{
 		{name: "absent", mutate: func(root string) { removeFile(t, filepath.Join(root, "manifest.json")) }},
 		{name: "malformed", mutate: func(root string) { writeFile(t, filepath.Join(root, "manifest.json"), "{") }},
-		{name: "unsupported schema", mutate: func(root string) { rewriteManifest(t, root, "schema", "goalrail.setup-bundle-manifest/v99") }},
-		{name: "other release", mutate: func(root string) { rewriteManifest(t, root, "release_version", "v0.9.9") }},
-		{name: "other platform", mutate: func(root string) { rewriteManifest(t, root, "platform", map[string]string{"os": "plan9", "arch": "sparc"}) }},
+		{name: "unsupported schema", mutate: func(root string) {
+			mutateManifest(t, root, func(m *releasebundle.SetupBundleManifest) { m.Schema = "goalrail.setup-bundle-manifest/v99" })
+		}},
+		{name: "other release", mutate: func(root string) {
+			mutateManifest(t, root, func(m *releasebundle.SetupBundleManifest) { m.ReleaseVersion = "v0.9.9" })
+		}},
+		{name: "other platform", mutate: func(root string) {
+			mutateManifest(t, root, func(m *releasebundle.SetupBundleManifest) {
+				m.Platform = releasebundle.Platform{OS: "plan9", Arch: "sparc"}
+			})
+		}},
+		{name: "not canonical", mutate: func(root string) {
+			path := filepath.Join(root, releasebundle.BundleManifestPath)
+			raw, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			writeFile(t, path, "  "+string(raw))
+		}},
+		{name: "component path escapes the bundle", mutate: func(root string) {
+			mutateManifest(t, root, func(m *releasebundle.SetupBundleManifest) {
+				m.Files[3].Path = "../../../../tmp/node"
+				m.BinaryIdentities[2].Path = "../../../../tmp/node"
+			})
+		}},
 		{name: "not a regular file", mutate: func(root string) {
 			path := filepath.Join(root, "manifest.json")
 			removeFile(t, path)
@@ -174,6 +200,73 @@ func TestManifestRefusals(t *testing.T) {
 				t.Fatalf("a %s manifest was refused without a reason", testCase.name)
 			}
 		})
+	}
+}
+
+// A package owns many files, and only one of them is the entrypoint. Verifying
+// whichever file sorted first would leave the entrypoint replaceable while an
+// intact licence kept the component green.
+func TestReplacedCompilerEntrypointIsCaught(t *testing.T) {
+	home := installBundle(t, installedVersion, func(root string) {
+		writeFile(t, filepath.Join(root, filepath.FromSlash(compilerEntry)), "replaced-entrypoint")
+	})
+
+	observation := defaultPlanningObserver{home: home, version: installedVersion}.
+		ObservePlanning(context.Background(), canonProfile("node"))
+
+	if observation.Compiler.State == ComponentReady {
+		t.Fatalf("a replaced compiler entrypoint stayed ready: %#v", observation.Compiler)
+	}
+	if !strings.HasSuffix(observation.Compiler.Path, filepath.FromSlash(compilerEntry)) {
+		t.Fatalf("the compiler was verified at %q, not at its manifest entrypoint", observation.Compiler.Path)
+	}
+}
+
+// A manifest is a description, not an authority over where the reader may look.
+// One edited to point a component outside the bundle must be refused before any
+// path it carries is opened.
+func TestManifestCannotPointOutsideTheBundle(t *testing.T) {
+	outside := filepath.Join(t.TempDir(), "node")
+	writeFile(t, outside, "planted-outside-the-bundle")
+	home := installBundle(t, installedVersion, func(root string) {
+		mutateManifest(t, root, func(m *releasebundle.SetupBundleManifest) {
+			relative, err := filepath.Rel(root, outside)
+			if err != nil {
+				t.Fatal(err)
+			}
+			m.Files[3].Path = filepath.ToSlash(relative)
+			m.Files[3].SHA256 = digestOf("planted-outside-the-bundle")
+			m.BinaryIdentities[2].Path = filepath.ToSlash(relative)
+			m.BinaryIdentities[2].SHA256 = digestOf("planted-outside-the-bundle")
+		})
+	})
+
+	if installed, reason := loadInstalledBundle(home, installedVersion); installed != nil || reason == "" {
+		t.Fatalf("a manifest pointing outside the bundle was accepted (%v)", installed)
+	}
+}
+
+// O_NOFOLLOW refuses a substituted link only at the last pathname component, so
+// a parent directory replaced by a link to an external tree would otherwise be
+// followed and its bytes verified as if they were the bundle's.
+func TestSymlinkedParentDirectoryIsNotFollowed(t *testing.T) {
+	elsewhere := t.TempDir()
+	writeFile(t, filepath.Join(elsewhere, "bin", "node"), "installed-node-binary")
+	home := installBundle(t, installedVersion, func(root string) {
+		nodeDirectory := filepath.Join(root, "runtime", "node")
+		if err := os.RemoveAll(nodeDirectory); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(elsewhere, nodeDirectory); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	observation := defaultPlanningObserver{home: home, version: installedVersion}.
+		ObservePlanning(context.Background(), canonProfile("node"))
+
+	if observation.Runtime.State == ComponentReady {
+		t.Fatal("a component reached through a symlinked parent directory was reported ready")
 	}
 }
 
@@ -240,73 +333,111 @@ func writeExecutable(t *testing.T, path, marker string) {
 	}
 }
 
-// installBundle lays out what authorized setup leaves behind: the two component
-// files and a manifest that records their digests. The optional mutation runs
-// afterwards, so a case can damage exactly one thing about an otherwise
-// complete installation.
+// installBundle lays out what authorized setup leaves behind: the bundle files
+// and a manifest that satisfies the bundle contract in full, because the reader
+// under test hands the bytes to the contract's own decoder. The optional
+// mutation runs afterwards, so a case can damage exactly one thing about an
+// otherwise complete installation.
 func installBundle(t *testing.T, version string, mutate func(root string)) string {
 	t.Helper()
 	home := t.TempDir()
 	platform := releasebundle.Platform{OS: runtime.GOOS, Arch: runtime.GOARCH}
 	root := filepath.Join(home, ".local", "share", "goalrail", "bundles", version, platform.Key())
 
-	runtimeBytes, compilerBytes := "installed-node-binary", "installed-openspec-entrypoint"
-	writeFile(t, filepath.Join(root, filepath.FromSlash(runtimeEntry)), runtimeBytes)
-	writeFile(t, filepath.Join(root, filepath.FromSlash(compilerEntry)), compilerBytes)
+	contents := map[string]string{
+		goalrailEntry: "installed-gr-binary",
+		runtimeEntry:  "installed-node-binary",
+		// A file of the compiler package that sorts before its entrypoint. A
+		// reader that picked a component's file by any rule of its own would
+		// verify this one and never notice a replaced entrypoint.
+		compilerOther: "installed-openspec-licence",
+		compilerEntry: "installed-openspec-entrypoint",
+	}
+	for relative, body := range contents {
+		writeFile(t, filepath.Join(root, filepath.FromSlash(relative)), body)
+	}
 
+	file := func(relative, component, mode string) releasebundle.ManifestFile {
+		return releasebundle.ManifestFile{
+			Path: relative, ComponentID: component,
+			SizeBytes: int64(len(contents[relative])), SHA256: digestOf(contents[relative]), Mode: mode,
+		}
+	}
+	component := func(id, name, kind, version string) releasebundle.ManifestComponent {
+		return releasebundle.ManifestComponent{
+			ID: id, Name: name, Kind: kind, Version: version,
+			Integrity: digestOf(id), LicenseRef: "bundle:licenses/" + id, ProvenanceRef: "release:" + id,
+			Dependencies: []releasebundle.ManifestDependency{},
+		}
+	}
 	manifest := releasebundle.SetupBundleManifest{
-		Schema:         releasebundle.SetupManifestSchemaV1,
-		ReleaseVersion: version,
-		Platform:       platform,
-		ManifestPath:   releasebundle.BundleManifestPath,
+		Schema:                releasebundle.SetupManifestSchemaV1,
+		ReleaseVersion:        version,
+		Platform:              platform,
+		ArchiveName:           "goalrail-setup_" + version + "_" + platform.Key() + ".tar.gz",
+		ManifestPath:          releasebundle.BundleManifestPath,
+		CompilerLockDigest:    digestOf("compiler-lock"),
+		CompilerInstallPolicy: "never-run-package-scripts",
 		Components: []releasebundle.ManifestComponent{
-			{ID: "node", Name: "node", Kind: "private-runtime", Version: "22.18.0"},
-			{ID: compilerID, Name: "@fission-ai/openspec", Kind: "npm-package", Version: "1.6.0"},
+			component("compiler-lock", "goalrail-private-planning-runtime", "dependency-lock", "1.6.0"),
+			component("goalrail", "gr", "native-binary", version),
+			component("node", "node", "private-runtime", "22.18.0"),
+			component(compilerID, "@fission-ai/openspec", "npm-package", "1.6.0"),
 		},
-		BinaryIdentities: []releasebundle.BinaryIdentity{{
-			ComponentID: "node", Path: runtimeEntry, Kind: "node",
-			Version: "22.18.0", SHA256: digestOf(runtimeBytes),
-		}},
+		BinaryIdentities: []releasebundle.BinaryIdentity{
+			{ComponentID: "goalrail", Path: goalrailEntry, Kind: "go-buildinfo", Version: version,
+				SHA256: digestOf(contents[goalrailEntry]), SourceIntegrity: digestOf("goalrail-source")},
+			{ComponentID: compilerID, Path: compilerEntry, Kind: "npm-bin", Version: "1.6.0",
+				SHA256: digestOf(contents[compilerEntry]), SourceIntegrity: digestOf("compiler-source")},
+			{ComponentID: "node", Path: runtimeEntry, Kind: "node-distribution", Version: "22.18.0",
+				SHA256: digestOf(contents[runtimeEntry]), SourceIntegrity: digestOf("node-source")},
+		},
 		Files: []releasebundle.ManifestFile{
-			{Path: runtimeEntry, ComponentID: "node", SizeBytes: int64(len(runtimeBytes)), SHA256: digestOf(runtimeBytes), Mode: "0755"},
-			{Path: compilerEntry, ComponentID: compilerID, SizeBytes: int64(len(compilerBytes)), SHA256: digestOf(compilerBytes), Mode: "0644"},
+			file(goalrailEntry, "goalrail", "0755"),
+			file(compilerOther, compilerID, "0644"),
+			file(compilerEntry, compilerID, "0755"),
+			file(runtimeEntry, "node", "0755"),
 		},
 	}
-	raw, err := json.Marshal(manifest)
-	if err != nil {
-		t.Fatal(err)
-	}
-	writeFile(t, filepath.Join(root, releasebundle.BundleManifestPath), string(raw))
+	writeFile(t, filepath.Join(root, releasebundle.BundleManifestPath), canonicalManifest(t, manifest))
 	if mutate != nil {
 		mutate(root)
 	}
 	return home
 }
 
-// rewriteManifest changes one field of an otherwise complete manifest, so a
-// refusal case differs from the accepted one in exactly the thing it names.
-func rewriteManifest(t *testing.T, root, field string, value any) {
+// canonicalManifest renders the manifest the way the bundle contract requires it
+// to have been written, because its decoder refuses anything else.
+func canonicalManifest(t *testing.T, manifest releasebundle.SetupBundleManifest) string {
+	t.Helper()
+	raw, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(raw) + "\n"
+}
+
+// mutateManifest rewrites one typed field of an otherwise complete manifest and
+// renders it canonically again, so a refusal case fails for the reason it names
+// rather than for the encoding a hand-edited document would have.
+func mutateManifest(t *testing.T, root string, change func(*releasebundle.SetupBundleManifest)) {
 	t.Helper()
 	path := filepath.Join(root, releasebundle.BundleManifestPath)
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var document map[string]any
-	if err := json.Unmarshal(raw, &document); err != nil {
+	var manifest releasebundle.SetupBundleManifest
+	if err := json.Unmarshal(raw, &manifest); err != nil {
 		t.Fatal(err)
 	}
-	document[field] = value
-	rewritten, err := json.Marshal(document)
-	if err != nil {
-		t.Fatal(err)
-	}
-	writeFile(t, path, string(rewritten))
+	change(&manifest)
+	writeFile(t, path, canonicalManifest(t, manifest))
 }
 
 func digestOf(content string) string {
 	sum := sha256.Sum256([]byte(content))
-	return hex.EncodeToString(sum[:])
+	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
 func writeFile(t *testing.T, path, content string) {

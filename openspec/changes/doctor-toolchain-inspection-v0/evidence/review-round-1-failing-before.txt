@@ -1,0 +1,9 @@
+=== RUN   TestReplacedCompilerEntrypointIsCaught
+--- FAIL: TestReplacedCompilerEntrypointIsCaught (0.00s)
+=== RUN   TestManifestCannotPointOutsideTheBundle
+--- FAIL: TestManifestCannotPointOutsideTheBundle (0.01s)
+=== RUN   TestSymlinkedParentDirectoryIsNotFollowed
+--- FAIL: TestSymlinkedParentDirectoryIsNotFollowed (0.00s)
+FAIL
+FAIL	github.com/heurema/goalrail/internal/doctor	0.296s
+FAIL

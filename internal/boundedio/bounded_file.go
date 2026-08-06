@@ -39,7 +39,21 @@ func ReadRegularFileWithInfo(path string, label string, limit int) ([]byte, os.F
 		return nil, nil, fmt.Errorf("open %s: %w", label, err)
 	}
 	defer file.Close()
+	return ReadOpenFile(file, label, limit)
+}
 
+// ReadOpenFile applies the same discipline to a descriptor the caller already
+// holds.
+//
+// Opening with O_NOFOLLOW refuses a symbolic link at the final pathname
+// component and nothing else: a parent directory replaced by a link is followed
+// before this package is reached. A caller that must stay inside a directory
+// therefore opens through a confined root and hands the descriptor here, rather
+// than composing a pathname this package would open on its behalf.
+func ReadOpenFile(file *os.File, label string, limit int) ([]byte, os.FileInfo, error) {
+	if limit <= 0 {
+		return nil, nil, fmt.Errorf("read %s: size bound must be positive", label)
+	}
 	before, err := file.Stat()
 	if err != nil {
 		return nil, nil, fmt.Errorf("stat %s: %w", label, err)
@@ -83,7 +97,15 @@ func DigestRegularFile(path string, label string, limit int64) (string, int64, e
 		return "", 0, fmt.Errorf("open %s: %w", label, err)
 	}
 	defer file.Close()
+	return DigestOpenFile(file, label, limit)
+}
 
+// DigestOpenFile is the descriptor-taking form, for a caller that opened through
+// a confined root so no path segment could leave it.
+func DigestOpenFile(file *os.File, label string, limit int64) (string, int64, error) {
+	if limit <= 0 {
+		return "", 0, fmt.Errorf("digest %s: size bound must be positive", label)
+	}
 	before, err := file.Stat()
 	if err != nil {
 		return "", 0, fmt.Errorf("stat %s: %w", label, err)

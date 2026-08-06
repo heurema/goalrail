@@ -1,13 +1,15 @@
 package doctor
 
 import (
+	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/heurema/goalrail/internal/boundedio"
 	"github.com/heurema/goalrail/internal/domain"
@@ -108,6 +110,7 @@ func (observer defaultPlanningObserver) ObservePlanning(_ context.Context, profi
 	}
 
 	installed, reason := loadInstalledBundle(observer.home, observer.version)
+	defer installed.close()
 	observation.Runtime = observeRuntime(installed, reason, profile)
 	observation.Compiler = observeCompiler(installed, reason, profile)
 	return observation
@@ -115,9 +118,23 @@ func (observer defaultPlanningObserver) ObservePlanning(_ context.Context, profi
 
 // installedBundle is the record authorized setup left behind: where it
 // installed, and what it installed there.
+//
+// The location is held open as a confined root rather than as a string. Opening
+// with O_NOFOLLOW refuses a substituted symbolic link only at the final pathname
+// component, so a parent directory replaced by a link to an external tree would
+// be followed before any per-file protection applied, and a component could be
+// verified against bytes outside the bundle entirely. Every file this reads is
+// therefore opened through the root, which cannot traverse out of it.
 type installedBundle struct {
-	root     string
+	root     *os.Root
+	path     string
 	manifest releasebundle.SetupBundleManifest
+}
+
+func (bundle *installedBundle) close() {
+	if bundle != nil && bundle.root != nil {
+		_ = bundle.root.Close()
+	}
 }
 
 // loadInstalledBundle resolves and reads the bundle this binary was installed
@@ -138,25 +155,48 @@ func loadInstalledBundle(home, version string) (*installedBundle, string) {
 		return nil, fmt.Sprintf("this build reports %q, which is not a release version, so it corresponds to no installed Goalrail bundle", version)
 	}
 	platform := releasebundle.Platform{OS: runtime.GOOS, Arch: runtime.GOARCH}
-	root := filepath.Join(home, ".local", "share", "goalrail", "bundles", version, platform.Key())
-	raw, err := boundedio.ReadRegularFile(
-		filepath.Join(root, releasebundle.BundleManifestPath), "installed bundle manifest", maxInstalledManifest)
+	path := filepath.Join(home, ".local", "share", "goalrail", "bundles", version, platform.Key())
+	root, err := os.OpenRoot(path)
 	if err != nil {
+		return nil, "no installed Goalrail bundle corresponds to this binary; run the exact Goalrail setup plan"
+	}
+	raw, err := readInRoot(root, releasebundle.BundleManifestPath, "installed bundle manifest", maxInstalledManifest)
+	if err != nil {
+		root.Close()
 		return nil, "the installed bundle manifest could not be read; run the exact Goalrail setup plan"
 	}
-	var manifest releasebundle.SetupBundleManifest
-	if err := json.Unmarshal(raw, &manifest); err != nil {
-		return nil, "the installed bundle manifest is not valid JSON"
+	// The bundle contracts own what a manifest must be, and that decoder checks
+	// far more than this reader could restate: canonical encoding, safe relative
+	// paths, digest shapes, sorted and unique records, and every binary identity
+	// binding an exact file. Accepting a manifest on a schema check alone would
+	// let an edited one name a path that leaves the bundle and still be trusted
+	// to say which bytes are authentic.
+	manifest, err := releasebundle.DecodeSetupBundleManifest(bytes.NewReader(raw))
+	if err != nil {
+		root.Close()
+		return nil, "the installed bundle manifest is not a valid bundle manifest"
 	}
 	switch {
-	case manifest.Schema != releasebundle.SetupManifestSchemaV1:
-		return nil, "the installed bundle manifest carries an unsupported schema"
 	case manifest.ReleaseVersion != version:
+		root.Close()
 		return nil, "the installed bundle manifest names a different release than this binary"
 	case manifest.Platform != platform:
+		root.Close()
 		return nil, "the installed bundle manifest names a different platform than this binary"
 	}
-	return &installedBundle{root: root, manifest: manifest}, ""
+	return &installedBundle{root: root, path: path, manifest: manifest}, ""
+}
+
+// readInRoot reads a bundle file through the confined root, applying the same
+// descriptor discipline the rest of the codebase uses for resolved artifacts.
+func readInRoot(root *os.Root, name, label string, limit int) ([]byte, error) {
+	file, err := root.OpenFile(name, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	raw, _, err := boundedio.ReadOpenFile(file, label, limit)
+	return raw, err
 }
 
 // observeRuntime reports the declared runtime by matching it against the
@@ -183,13 +223,20 @@ func observeRuntime(installed *installedBundle, reason string, profile domain.Se
 	}
 	component.ObservedVersion = identity.Version
 	component.RequiredIntegrity = domain.SHA256Digest(normalizeDigest(identity.SHA256))
-	return verifyInstalledFile(component, installed.root, identity.Path, identity.SHA256, profile.Planning.RuntimeVersion)
+	return verifyInstalledFile(component, installed, identity.Path, identity.SHA256, profile.Planning.RuntimeVersion)
 }
 
-// observeCompiler reports the declared compiler the same way. Its component is
-// named rather than binary-identified, because the planning compiler is a
-// package rather than an executable, so the verified file is the one the
-// manifest records for it.
+// observeCompiler reports the declared compiler the same way. The declared value
+// is a package name rather than a component identifier, so it is matched against
+// component identity first and the exact entrypoint is then taken from that
+// component's binary identity.
+//
+// The entrypoint is named by the manifest rather than chosen from the
+// component's files. A package owns many files, and picking one of them by any
+// rule of this reader's own — the first by path, say — would verify whatever
+// sorted earliest, so a bundle whose compiler package carries a licence or a
+// readme would have its licence checked while the entrypoint could be replaced
+// and still report ready.
 func observeCompiler(installed *installedBundle, reason string, profile domain.SetupProfile) ComponentReadiness {
 	component := ComponentReadiness{
 		Kind: "compiler", ID: profile.Planning.Compiler, RequiredVersion: profile.Planning.CompilerVersion,
@@ -209,15 +256,15 @@ func observeCompiler(installed *installedBundle, reason string, profile domain.S
 		component.Detail = "the installed bundle carries no compiler component with this declared identity"
 		return component
 	}
-	component.ObservedVersion = named.Version
-	file, found := entrypointFor(installed.manifest, named.ID)
+	identity, found := binaryIdentityFor(installed.manifest, named.ID)
 	if !found {
 		component.State = ComponentMissing
-		component.Detail = "the installed bundle records no file for this compiler component"
+		component.Detail = "the installed bundle records no entrypoint for this compiler component"
 		return component
 	}
-	component.RequiredIntegrity = domain.SHA256Digest(normalizeDigest(file.SHA256))
-	return verifyInstalledFile(component, installed.root, file.Path, file.SHA256, profile.Planning.CompilerVersion)
+	component.ObservedVersion = identity.Version
+	component.RequiredIntegrity = domain.SHA256Digest(normalizeDigest(identity.SHA256))
+	return verifyInstalledFile(component, installed, identity.Path, identity.SHA256, profile.Planning.CompilerVersion)
 }
 
 // verifyInstalledFile settles a component's state from the bytes on disk.
@@ -225,15 +272,22 @@ func observeCompiler(installed *installedBundle, reason string, profile domain.S
 // The version comparison comes first because an installation of the wrong
 // version is incompatible whether or not its bytes are intact, and reporting a
 // digest mismatch there would name the wrong problem.
-func verifyInstalledFile(component ComponentReadiness, root, relative, expected, required string) ComponentReadiness {
-	component.Path = filepath.Join(root, filepath.FromSlash(relative))
+func verifyInstalledFile(component ComponentReadiness, installed *installedBundle, relative, expected, required string) ComponentReadiness {
+	component.Path = filepath.Join(installed.path, filepath.FromSlash(relative))
 	if component.ObservedVersion != strings.TrimPrefix(required, "v") &&
 		component.ObservedVersion != required {
 		component.State = ComponentIncompatible
 		component.Detail = "the installed component's version differs from the exact declared version"
 		return component
 	}
-	observed, _, err := boundedio.DigestRegularFile(component.Path, "installed component", maxInstalledComponentFile)
+	file, err := installed.root.OpenFile(relative, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		component.State = ComponentMissing
+		component.Detail = "the file the installed manifest records for this component could not be read inside the bundle"
+		return component
+	}
+	defer file.Close()
+	observed, _, err := boundedio.DigestOpenFile(file, "installed component", maxInstalledComponentFile)
 	if err != nil {
 		component.State = ComponentMissing
 		component.Detail = "the file the installed manifest records for this component could not be read"
@@ -267,24 +321,6 @@ func componentNamed(manifest releasebundle.SetupBundleManifest, declared string)
 		}
 	}
 	return releasebundle.ManifestComponent{}, false
-}
-
-// entrypointFor selects one file to verify for a component that has no binary
-// identity. The bundle's whole tree was verified against this manifest when it
-// was installed and that walk is not repeated here; this states which single
-// record the diagnosis stands behind.
-func entrypointFor(manifest releasebundle.SetupBundleManifest, componentID string) (releasebundle.ManifestFile, bool) {
-	var selected releasebundle.ManifestFile
-	found := false
-	for _, file := range manifest.Files {
-		if file.ComponentID != componentID {
-			continue
-		}
-		if !found || file.Path < selected.Path {
-			selected, found = file, true
-		}
-	}
-	return selected, found
 }
 
 // normalizeDigest accepts both spellings the bundle contracts use — a bare

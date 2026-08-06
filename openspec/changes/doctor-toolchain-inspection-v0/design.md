@@ -62,14 +62,31 @@ maps onto the states the requirement already names (CTX-4, CTX-11): absent file
 is missing, manifest version outside the declared pin is incompatible, digest
 mismatch is unverified integrity, agreement is ready.
 
-**D3 — Only the two declared component entrypoints are hashed, not the tree.**
-The runtime executable and the compiler entrypoint. The accepted limit is
-stated rather than hidden: authorized setup verifies every installed file
-against the manifest at install time, and diagnosis does not repeat that walk,
-so a sibling file inside the bundle altered after installation is outside what
-this verdict claims. Hashing a bundle that carries a full private Node on every
-diagnosis would pay a cost proportional to the whole runtime for a question
-about two files.
+**D3 — Only the two declared component entrypoints are hashed, not the tree,
+and each is the one the manifest names.** The accepted limit is stated rather
+than hidden: authorized setup verifies every installed file against the manifest
+at install time, and diagnosis does not repeat that walk, so a sibling file
+inside the bundle altered after installation is outside what this verdict
+claims. Hashing a bundle that carries a full private Node on every diagnosis
+would pay a cost proportional to the whole runtime for a question about two
+files.
+
+Which file is the entrypoint comes from the manifest's binary identities, for
+both components. Choosing one of a component's files by any rule of the
+reader's own — the first by path, say — verifies whatever sorts earliest, and
+the compiler is an npm package whose licence sorts before its executable: an
+independent review found exactly that, and a regression now pins it. The
+release builder already emits a binary identity per component, and the bundle
+contract requires each identity to bind an exact manifest file, so the reader
+never has to choose.
+
+**D3a — Every bundle file is opened through a confined root.** `O_NOFOLLOW`
+refuses a substituted symbolic link at the final pathname component only, so a
+parent directory replaced by a link to an external tree is followed before any
+per-file protection applies, and a component would be verified against bytes
+outside the bundle. The root is opened once and every read goes through it, so
+no path segment can leave it. This too was an independent review finding with a
+regression of its own.
 
 **D4 — The setup profile keeps declaring, and stops locating.**
 It continues to name the required components and their exact versions, which is
@@ -90,9 +107,9 @@ what is required, the installation says where it is.
 |---|---|---|---|---|---|
 | Running binary's version string | Build stamp of the executing process; trusted as its own identity | A release version equal to a bundle directory name | A pseudo-version, a modified-tree marker, the toolchain development marker, unknown, or empty — each resolves no bundle | Fixed for the process lifetime; cannot change during a run | Unit test over the resolver: each non-release form yields no bundle root and a not-ready component, never a lookup elsewhere |
 | Home directory | Process environment, as the diagnosis already resolves it for attachment | An absolute existing directory | Absent or unresolvable — components report not ready rather than falling back to another root | Read once per diagnosis | Existing diagnosis input plumbing; test with a temporary home |
-| Installed bundle manifest JSON | Written by authorized setup into the bundle root and verified there at install time (CTX-6); trusted only after it parses under its pinned schema | The pinned bundle-manifest schema with components, binary identities, and files | Absent, unreadable, oversized, not a regular file, malformed JSON, unknown schema, or naming a different release or platform — all yield not ready with a stated reason, never a partial read | Re-read on every diagnosis; a manifest replaced between reads only affects the next run, and no decision spans two reads | Table-driven test per refused state; one positive fixture bundle |
-| Runtime executable bytes | Inside the bundle root, path taken from the manifest's binary identities | A regular file whose size and SHA-256 match the manifest record | Absent, non-regular, size mismatch, digest mismatch, or exceeding the existing bundle-file bound | Hashed from the same opened descriptor whose type was checked, so a substitution between check and read cannot redirect the read; no symbolic link is followed out of the bundle root | Test that a modified byte yields unverified integrity and that a symlink at that path is refused rather than followed |
-| Compiler entrypoint bytes | Same bundle root, path taken from the manifest's file records for the declared component | As above | As above | As above | As above |
+| Installed bundle manifest JSON | Written by authorized setup into the bundle root and verified there at install time (CTX-6); trusted only after the bundle contract's own decoder accepts it | Whatever `releasebundle.DecodeSetupBundleManifest` accepts: canonical encoding, pinned schema, safe relative paths, digest shapes, sorted unique records, and every binary identity binding an exact file | Absent, unreadable, oversized, not a regular file, non-canonical, malformed, unknown schema, a path that leaves the bundle, or naming a different release or platform — all yield not ready with a stated reason, never a partial read | Re-read on every diagnosis; a manifest replaced between reads only affects the next run, and no decision spans two reads | Table-driven test per refused state, including an edited path that escapes the bundle; one positive fixture bundle built to the full contract |
+| Runtime executable bytes | Inside the bundle root, path taken from the manifest's binary identity for the declared component | A regular file whose SHA-256 matches the manifest record | Absent, non-regular, digest mismatch, reachable only outside the confined root, or exceeding the existing bundle-file bound | Hashed from the same opened descriptor whose type was checked, so a substitution between check and read cannot redirect the read; opened through the confined root, so no path segment — final or parent — can leave the bundle | Test that a modified byte yields unverified integrity and that a symlinked parent directory is refused rather than followed |
+| Compiler entrypoint bytes | Same bundle root, path taken from the manifest's binary identity for the declared component | As above | As above | As above | As above, plus a test that replacing the entrypoint is caught while an earlier-sorting file of the same package stays intact |
 | Declared setup profile | Repository content already read by the diagnosis; trusted for declaration, never for location | Component identifiers and exact versions | A value used as a path, a lookup name, or any filesystem input — refused by construction, since no code path passes it to a resolver or an open | Repository content can change between runs; each run reads it afresh | Test that a profile whose runtime value is a path to an executable inside the worktree causes no execution and no read of that path |
 | Platform of the running process | Compile-time `GOOS`/`GOARCH` of the executing binary | The `<os>_<arch>` key authorized setup used | No refusal case: a bundle installed for another platform simply does not exist at the derived path | Fixed at build time | Covered by the resolver test's path construction assertion |
 
