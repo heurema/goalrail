@@ -8,6 +8,10 @@ records. The attempt was repeated once with the two configured provider
 integrations removed from the reviewer session, which is what that flag exists
 for. One retry, not a loop.
 
+The bounded execution record for that first attempt — its exit status, the
+reviewer output it had produced when the bound stopped it, and the receipt
+check for it having written none — is in `review-round-3-stall.md`.
+
 - reviewer: codex (mode cross)
 - range: 47d02d13b1a8..ac462c001e82
 - effort: medium, duration: 180s
