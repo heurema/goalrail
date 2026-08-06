@@ -111,8 +111,8 @@ func (observer defaultPlanningObserver) ObservePlanning(_ context.Context, profi
 
 	installed, reason := loadInstalledBundle(observer.home, observer.version)
 	defer installed.close()
-	observation.Runtime = observeRuntime(installed, reason, profile)
-	observation.Compiler = observeCompiler(installed, reason, profile)
+	observation.Runtime = observeComponent(installed, reason, "runtime", profile.Planning.Runtime, profile.Planning.RuntimeVersion)
+	observation.Compiler = observeComponent(installed, reason, "compiler", profile.Planning.Compiler, profile.Planning.CompilerVersion)
 	return observation
 }
 
@@ -199,49 +199,23 @@ func readInRoot(root *os.Root, name, label string, limit int) ([]byte, error) {
 	return raw, err
 }
 
-// observeRuntime reports the declared runtime by matching it against the
-// installed bundle's component identity, then verifying the exact file that
-// component's binary identity names.
-func observeRuntime(installed *installedBundle, reason string, profile domain.SetupProfile) ComponentReadiness {
-	component := ComponentReadiness{
-		Kind: "runtime", ID: profile.Planning.Runtime, RequiredVersion: profile.Planning.RuntimeVersion,
-	}
-	if strings.TrimSpace(profile.Planning.Runtime) == "" {
-		component.State = ComponentNotRequired
-		return component
-	}
-	if installed == nil {
-		component.State = ComponentMissing
-		component.Detail = reason
-		return component
-	}
-	identity, found := binaryIdentityFor(installed.manifest, profile.Planning.Runtime)
-	if !found {
-		component.State = ComponentMissing
-		component.Detail = "the installed bundle carries no runtime component with this declared identity"
-		return component
-	}
-	component.ObservedVersion = identity.Version
-	component.RequiredIntegrity = domain.SHA256Digest(normalizeDigest(identity.SHA256))
-	return verifyInstalledFile(component, installed, identity.Path, identity.SHA256, profile.Planning.RuntimeVersion)
-}
-
-// observeCompiler reports the declared compiler the same way. The declared value
-// is a package name rather than a component identifier, so it is matched against
-// component identity first and the exact entrypoint is then taken from that
-// component's binary identity.
+// observeComponent reports one declared planning component by matching it
+// against the installed bundle's own records.
 //
-// The entrypoint is named by the manifest rather than chosen from the
-// component's files. A package owns many files, and picking one of them by any
-// rule of this reader's own — the first by path, say — would verify whatever
-// sorted earliest, so a bundle whose compiler package carries a licence or a
-// readme would have its licence checked while the entrypoint could be replaced
-// and still report ready.
-func observeCompiler(installed *installedBundle, reason string, profile domain.SetupProfile) ComponentReadiness {
-	component := ComponentReadiness{
-		Kind: "compiler", ID: profile.Planning.Compiler, RequiredVersion: profile.Planning.CompilerVersion,
-	}
-	if strings.TrimSpace(profile.Planning.Compiler) == "" {
+// The declared value is matched against component identity and is never joined
+// onto a path: the path comes from the manifest's binary identity for that
+// component, which the bundle contract requires to bind an exact file.
+//
+// The component's own version and its entrypoint's version must agree. The
+// manifest decoder binds an identity to a file but does not require the two
+// version fields to say the same thing, so an edited manifest could state a
+// component at one version and its entrypoint at the version a profile
+// demands, and a reader that preferred either one would report ready on a
+// description that contradicts itself. Disagreement is the manifest being
+// invalid, not the component being absent or stale, so it is reported as such.
+func observeComponent(installed *installedBundle, reason, kind, declared, required string) ComponentReadiness {
+	component := ComponentReadiness{Kind: kind, ID: declared, RequiredVersion: required}
+	if strings.TrimSpace(declared) == "" {
 		component.State = ComponentNotRequired
 		return component
 	}
@@ -250,21 +224,26 @@ func observeCompiler(installed *installedBundle, reason string, profile domain.S
 		component.Detail = reason
 		return component
 	}
-	named, found := componentNamed(installed.manifest, profile.Planning.Compiler)
+	named, found := componentNamed(installed.manifest, declared)
 	if !found {
 		component.State = ComponentMissing
-		component.Detail = "the installed bundle carries no compiler component with this declared identity"
+		component.Detail = "the installed bundle carries no " + kind + " component with this declared identity"
 		return component
 	}
 	identity, found := binaryIdentityFor(installed.manifest, named.ID)
 	if !found {
 		component.State = ComponentMissing
-		component.Detail = "the installed bundle records no entrypoint for this compiler component"
+		component.Detail = "the installed bundle records no entrypoint for this " + kind + " component"
 		return component
 	}
-	component.ObservedVersion = identity.Version
+	if named.Version != identity.Version {
+		component.State = ComponentInvalid
+		component.Detail = "the installed bundle manifest gives this component and its entrypoint different versions"
+		return component
+	}
+	component.ObservedVersion = named.Version
 	component.RequiredIntegrity = domain.SHA256Digest(normalizeDigest(identity.SHA256))
-	return verifyInstalledFile(component, installed, identity.Path, identity.SHA256, profile.Planning.CompilerVersion)
+	return verifyInstalledFile(component, installed, identity.Path, identity.SHA256, required)
 }
 
 // verifyInstalledFile settles a component's state from the bytes on disk.

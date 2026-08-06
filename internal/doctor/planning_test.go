@@ -270,6 +270,42 @@ func TestSymlinkedParentDirectoryIsNotFollowed(t *testing.T) {
 	}
 }
 
+// The manifest states a version twice: once on the component and once on the
+// entrypoint that belongs to it. The bundle contract binds the entrypoint to a
+// file but lets the two version fields disagree, so a reader that preferred
+// either one would report ready on a description that contradicts itself.
+func TestDisagreeingManifestVersionsAreNotReady(t *testing.T) {
+	for _, testCase := range []struct {
+		name   string
+		change func(*releasebundle.SetupBundleManifest)
+		state  func(PlanningObservation) ComponentState
+	}{
+		{
+			name:   "runtime",
+			change: func(m *releasebundle.SetupBundleManifest) { m.Components[2].Version = "9.9.9" },
+			state:  func(o PlanningObservation) ComponentState { return o.Runtime.State },
+		},
+		{
+			name:   "compiler",
+			change: func(m *releasebundle.SetupBundleManifest) { m.Components[3].Version = "9.9.9" },
+			state:  func(o PlanningObservation) ComponentState { return o.Compiler.State },
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			home := installBundle(t, installedVersion, func(root string) {
+				mutateManifest(t, root, testCase.change)
+			})
+
+			observation := defaultPlanningObserver{home: home, version: installedVersion}.
+				ObservePlanning(context.Background(), canonProfile("node"))
+
+			if state := testCase.state(observation); state != ComponentInvalid {
+				t.Fatalf("a self-contradicting manifest produced %q, want %q", state, ComponentInvalid)
+			}
+		})
+	}
+}
+
 // The prohibition is a property of this package, not of one function. Keeping it
 // as an assertion means a returning execution fails a test rather than depending
 // on a reviewer noticing it.

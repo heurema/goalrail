@@ -88,6 +88,17 @@ outside the bundle. The root is opened once and every read goes through it, so
 no path segment can leave it. This too was an independent review finding with a
 regression of its own.
 
+**D3b — A manifest that contradicts itself is invalid, not stale.** The manifest
+states a component's version twice: on the component and on the entrypoint that
+belongs to it. The bundle contract binds an entrypoint to a file but does not
+require those two fields to agree, so an edited manifest could name a component
+at one version and its entrypoint at the version a profile demands. Both are
+read and required to agree; disagreement is reported as an invalid component
+rather than resolved by preferring either field. A second independent review
+round found this on the compiler, and the runtime path carried the same shape
+without appearing in that round's diff, so the check and its regression cover
+both.
+
 **D4 — The setup profile keeps declaring, and stops locating.**
 It continues to name the required components and their exact versions, which is
 what the comparison is against. It contributes no filesystem path, and no value
