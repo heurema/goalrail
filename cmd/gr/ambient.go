@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -29,8 +30,24 @@ const hookEnvironmentSession = "CODEX_SESSION_ID"
 // managed-project identity never depends on it.
 type initReport struct {
 	projectstate.InitializeReport
-	Adoption *adoptionReport `json:"adoption,omitempty"`
-	Notices  []string        `json:"notices,omitempty"`
+	Adoption    *adoptionReport   `json:"adoption,omitempty"`
+	Attachments []attachmentWrite `json:"attachments,omitempty"`
+	Notices     []string          `json:"notices,omitempty"`
+}
+
+// attachmentWrite is the disclosure initialization owes for a local mutation it
+// performed: the exact path, the events, whether anything changed, what was done
+// to keep the path out of a commit, and what the scaffold still requires of the
+// user.
+type attachmentWrite struct {
+	Scaffold      string   `json:"scaffold"`
+	Scope         string   `json:"scope"`
+	Path          string   `json:"path"`
+	Events        []string `json:"events,omitempty"`
+	Action        string   `json:"action"`
+	IgnoreEntries []string `json:"ignore_entries,omitempty"`
+	Trust         string   `json:"trust,omitempty"`
+	Reason        string   `json:"reason,omitempty"`
 }
 
 func runInit(ctx context.Context, args []string, stdout, stderr io.Writer) error {
@@ -71,6 +88,7 @@ func runInit(ctx context.Context, args []string, stdout, stderr io.Writer) error
 	}
 
 	response := initReport{InitializeReport: report}
+	response.Attachments = registerRepositoryScaffolds(report.Repository, selected, initHome(), initExecutable())
 	adoptionReport, adoption := buildAdoptionReport(report.Repository, report.Config)
 	response.Adoption = adoptionReport
 	if adoption != nil {
@@ -95,6 +113,110 @@ func runInit(ctx context.Context, args []string, stdout, stderr io.Writer) error
 		}
 	}
 	return writeJSON(stdout, response)
+}
+
+// registerRepositoryScaffolds writes the registration for every supported
+// scaffold whose settings layer lives inside the repository.
+//
+// Initialization is the consented command for that scope, and it is the one a
+// health report names as the remedy, so a report that prescribes it and an
+// initialization that writes nothing leave the user following correct advice
+// with no remaining move.
+//
+// It acts for a scaffold present on this machine or named explicitly, and for
+// nothing else: a machine with no supported scaffold has its configuration left
+// alone rather than guessed at.
+func registerRepositoryScaffolds(repositoryRoot, requested, home, executable string) []attachmentWrite {
+	if home == "" || executable == "" {
+		return nil
+	}
+	var writes []attachmentWrite
+	for _, scaffold := range ambient.SupportedScaffolds() {
+		if scope, scopeErr := ambient.ScopeOf(scaffold); scopeErr != nil || scope != ambient.ScopeRepository {
+			continue
+		}
+		if requested != "" {
+			if requested != string(scaffold) {
+				continue
+			}
+		} else if !slices.Contains(ambient.DetectScaffolds(home), scaffold) {
+			continue
+		}
+		writes = append(writes, registerRepositoryScaffold(scaffold, repositoryRoot, executable))
+	}
+	return writes
+}
+
+// initHome and initExecutable are the two facts this needs from the process,
+// resolved here so the registration itself can be exercised against a temporary
+// home and a chosen executable.
+func initHome() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return home
+}
+
+func initExecutable() string {
+	executable, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	if resolved, resolveErr := filepath.EvalSymlinks(executable); resolveErr == nil {
+		return resolved
+	}
+	return executable
+}
+
+func registerRepositoryScaffold(scaffold ambient.Scaffold, repositoryRoot, executable string) attachmentWrite {
+	write := attachmentWrite{Scaffold: string(scaffold), Scope: string(ambient.ScopeRepository)}
+	target, err := ambient.RegistrationTarget(scaffold, "", repositoryRoot)
+	if err != nil {
+		write.Action, write.Reason = "refused", err.Error()
+		return write
+	}
+	write.Path = target.Path
+
+	// Made unshareable first, and through this clone's own rule rather than one a
+	// commit could carry: a registration a teammate could receive would install
+	// this command in their sessions on the strength of one person's decision.
+	relative, relErr := filepath.Rel(repositoryRoot, target.Path)
+	if relErr != nil {
+		write.Action, write.Reason = "refused", relErr.Error()
+		return write
+	}
+	entry := filepath.ToSlash(relative)
+	if added, ignoreErr := ambient.AddCloneIgnoreEntries(repositoryRoot, []string{entry}); ignoreErr == nil {
+		write.IgnoreEntries = added
+	} else {
+		write.Reason = ignoreErr.Error()
+	}
+	if ignored, ignoreErr := ambient.IgnoreState(repositoryRoot, entry); ignoreErr != nil || !ignored {
+		write.Action = "refused"
+		write.Reason = "this path is not ignored by version control, so a commit could hand the registration to a teammate"
+		if source := ambient.IgnoreSource(repositoryRoot, entry); source != "" {
+			write.Reason += "; the deciding rule is in " + source
+		}
+		return write
+	}
+
+	plan, err := ambient.PlanRegistration(target, executable)
+	if err != nil {
+		write.Action, write.Reason = "refused", err.Error()
+		return write
+	}
+	write.Events, write.Trust = plan.Events, ambient.ConnectionNotice(scaffold)
+	changed, err := ambient.Connect(plan)
+	switch {
+	case err != nil:
+		write.Action, write.Reason = "refused", err.Error()
+	case changed:
+		write.Action = "registered"
+	default:
+		write.Action = "unchanged"
+	}
+	return write
 }
 
 func runMigrate(ctx context.Context, args []string, stdout, stderr io.Writer) error {
