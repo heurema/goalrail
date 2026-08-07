@@ -467,7 +467,7 @@ func validateSetupComponents(v *validator, values []SetupComponent, required boo
 	ids := make(map[string]struct{}, len(values))
 	for index, value := range values {
 		path := fmt.Sprintf("components[%d]", index)
-		validateUniqueSetupID(v, ids, "setup_plan.component", path, value.ID)
+		validateUniqueComponentID(v, ids, "setup_plan.component", path, value.ID)
 		validateSetupString(v, "setup_plan.component.version_invalid", path+".version", value.Version, true)
 		validateEvidenceReferenceField(v, "setup_plan.component.source_invalid", path+".source_ref", value.SourceRef, true)
 		validateDigestField(v, "setup_plan.component.integrity_invalid", path+".integrity", value.Integrity)
@@ -603,7 +603,7 @@ func validateSetupComponentResults(v *validator, values []SetupComponentResult) 
 	ids := make(map[string]struct{}, len(values))
 	for index, value := range values {
 		path := fmt.Sprintf("components[%d]", index)
-		validateUniqueSetupID(v, ids, "setup_receipt.component", path, value.ID)
+		validateUniqueComponentID(v, ids, "setup_receipt.component", path, value.ID)
 		validateSetupString(v, "setup_receipt.component.version_invalid", path+".version", value.Version, true)
 		validateDigestField(v, "setup_receipt.component.integrity_invalid", path+".integrity", value.Integrity)
 		validateSetupActionStatus(v, path+".status", value.Status)
@@ -630,6 +630,18 @@ func validateSetupActionStatus(v *validator, path string, status SetupActionStat
 	default:
 		v.add("setup_receipt.action_status_invalid", path, "unsupported setup action status")
 	}
+}
+
+// validateUniqueComponentID applies the component rule rather than the
+// canonical one. Only a component may carry an ecosystem's own identity; every
+// other identifier in a plan is minted by Goalrail and stays canonical.
+func validateUniqueComponentID(v *validator, seen map[string]struct{}, prefix, path, id string) {
+	if !IsComponentID(id) {
+		v.add(prefix+".id_invalid", path+".id", "component ID must be canonical or a bounded namespaced package identity")
+	} else if _, exists := seen[id]; exists {
+		v.add(prefix+".id_duplicate", path+".id", "IDs must be unique")
+	}
+	seen[id] = struct{}{}
 }
 
 func validateUniqueSetupID(v *validator, seen map[string]struct{}, prefix, path, id string) {

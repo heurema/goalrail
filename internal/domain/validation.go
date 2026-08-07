@@ -8,8 +8,14 @@ import (
 )
 
 var (
-	canonicalIDPattern       = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
-	evidenceReferencePattern = regexp.MustCompile(`^[a-z][a-z0-9_-]{1,31}:[A-Za-z0-9][A-Za-z0-9._/@:+-]{0,223}$`)
+	canonicalIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
+	// A component installed from an ecosystem carries that ecosystem's own
+	// identity: `npm:node_modules/@scope/name`, nested once per deduplicated
+	// copy. Canonical IDs cannot express it — no colon, no slash, no `@` — and
+	// flattening it would either lose which installed copy is meant or replace
+	// a readable identity with a hash.
+	namespacedComponentIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}:[A-Za-z0-9@][A-Za-z0-9@._/-]{0,159}$`)
+	evidenceReferencePattern     = regexp.MustCompile(`^[a-z][a-z0-9_-]{1,31}:[A-Za-z0-9][A-Za-z0-9._/@:+-]{0,223}$`)
 )
 
 // ValidationViolation is stable machine-readable validation evidence.
@@ -76,6 +82,30 @@ func validCanonicalID(value string) bool {
 // stable identifier in canonical records.
 func IsCanonicalID(value string) bool {
 	return canonicalIDPattern.MatchString(value)
+}
+
+// IsComponentID reports whether value identifies one installed setup component.
+//
+// It accepts a canonical ID, which is what Goalrail's own components carry, and
+// the namespaced form an ecosystem supplies for the packages inside a bundle.
+// The second is deliberately narrow: one lowercase namespace, then a bounded
+// identity that cannot climb out of anything it is later joined to. This is not
+// IsCanonicalID widened — that rule identifies projects, runs, checks and
+// lineage across the domain, and loosening it there to admit a package path
+// would weaken every one of them.
+func IsComponentID(value string) bool {
+	if IsCanonicalID(value) {
+		return true
+	}
+	if !namespacedComponentIDPattern.MatchString(value) {
+		return false
+	}
+	for _, segment := range strings.Split(value, "/") {
+		if segment == ".." || segment == "." || segment == "" {
+			return false
+		}
+	}
+	return true
 }
 
 // IsEvidenceReference reports whether value is a bounded provider-neutral
