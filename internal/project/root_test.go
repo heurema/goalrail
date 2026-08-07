@@ -70,3 +70,27 @@ func TestResolveWorktreeRootRejectsBareAndUnrelatedDirectories(t *testing.T) {
 		t.Fatalf("unrelated directory error = %v, want ErrNotRepository", err)
 	}
 }
+
+// Only Git's own verdict means "not a repository".
+//
+// Every other failure — Git absent above all — used to be reported as one, so a
+// caller that branches on the distinction was told a working machine had no
+// repository at the path, and a diagnosis would report an ordinary condition
+// where its check had actually broken.
+func TestOnlyGitsOwnVerdictMeansNotARepository(t *testing.T) {
+	outside := t.TempDir()
+	if _, err := ResolveWorktreeRoot(context.Background(), outside); !errors.Is(err, ErrNotRepository) {
+		t.Fatalf("a directory outside version control gave %v, want ErrNotRepository", err)
+	}
+
+	// A PATH with no Git at all: the command cannot run, so nothing said this
+	// is not a repository.
+	t.Setenv("PATH", t.TempDir())
+	_, err := ResolveWorktreeRoot(context.Background(), outside)
+	if err == nil {
+		t.Fatal("a missing Git resolved a worktree root")
+	}
+	if errors.Is(err, ErrNotRepository) {
+		t.Fatalf("a missing Git was reported as an absent repository: %v", err)
+	}
+}
