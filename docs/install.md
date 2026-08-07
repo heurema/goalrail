@@ -34,6 +34,33 @@ Windows is not currently supported. The release contains:
 The setup archive is not a convenience archive to unpack globally. It is an
 input to the exact-plan authorization and verification flow.
 
+## Prerequisites
+
+This document assumes `curl`, `tar`, `jq`, and a SHA-256 tool. They are the
+agent's own prerequisites, not Goalrail components: a machine missing one cannot
+reach the setup plan at all, and discovering that later is exactly the kind of
+unlisted prerequisite that invalidates an authorization. Check first and report
+the missing one rather than installing it:
+
+```sh
+for tool in curl tar jq; do
+  command -v "${tool}" >/dev/null || { echo "missing prerequisite: ${tool}" >&2; exit 1; }
+done
+```
+
+The SHA-256 tool differs between the supported platforms — `sha256sum` on Linux,
+`shasum` on macOS — so bind it once and use it everywhere below:
+
+```sh
+if command -v sha256sum >/dev/null; then
+  sha256() { sha256sum "$@"; }
+elif command -v shasum >/dev/null; then
+  sha256() { shasum -a 256 "$@"; }
+else
+  echo "missing prerequisite: a SHA-256 tool" >&2; exit 1
+fi
+```
+
 ## Resolving this machine's platform
 
 The metadata names an operating system and an architecture; the machine reports
@@ -131,6 +158,20 @@ size="$(printf '%s' "${entry}" | jq -r .minimal_archive.size_bytes)"
 digest="$(printf '%s' "${entry}" | jq -r .minimal_archive.sha256 | sed 's/^sha256://')"
 ```
 
+These values come from a mutable pointer that nothing has verified yet, so treat
+every one of them as untrusted input before it reaches a filesystem path or a
+URL. A name carrying a slash or a leading dot would make the download below
+write wherever it pointed, long before any checksum could object:
+
+```sh
+case "${archive}" in
+  ''|*/*|.*) echo "the metadata names an unusable archive: ${archive}" >&2; exit 1 ;;
+esac
+case "${version}" in v[0-9]*) ;; *) echo "unusable version: ${version}" >&2; exit 1 ;; esac
+expr "${size}" + 0 >/dev/null 2>&1 || { echo "unusable size: ${size}" >&2; exit 1; }
+printf '%s' "${digest}" | grep -Eq '^[0-9a-f]{64}$' || { echo "unusable digest" >&2; exit 1; }
+```
+
 Download that archive and the checksum file from the exact immutable release
 URL. Do not substitute `latest`:
 
@@ -146,13 +187,19 @@ and `checksums.txt`. The checksum file covers every published asset, so verify
 only what was downloaded — otherwise the command fails over archives that were
 never fetched:
 
+`--ignore-missing` skips the entries whose files are absent, which is what makes
+the command usable here — but it also succeeds when the file being verified has
+no entry at all, as long as some other listed file does. Isolate the archive's
+own line so its absence is a failure rather than a pass:
+
 ```sh
 [ "$(wc -c < "${archive}")" = "${size}" ] || { echo "size disagrees with metadata" >&2; exit 1; }
 
-sha256sum --ignore-missing -c checksums.txt   # Linux
-shasum -a 256 --ignore-missing -c checksums.txt   # macOS
+grep -F " ${archive}" checksums.txt > archive.sha256 || { echo "no checksum line for ${archive}" >&2; exit 1; }
+[ "$(wc -l < archive.sha256)" = "1" ] || { echo "ambiguous checksum lines for ${archive}" >&2; exit 1; }
+sha256 -c archive.sha256 || exit 1
 
-sha256sum "${archive}" | grep -q "^${digest} " || { echo "digest disagrees with metadata" >&2; exit 1; }
+sha256 "${archive}" | grep -q "^${digest} " || { echo "digest disagrees with metadata" >&2; exit 1; }
 ```
 
 Extract and check the binary before choosing a durable destination. The archive
@@ -164,13 +211,27 @@ tar -xzf "${archive}"
 ./gr version   # {"canon":"sha256:…","version":"<version>"}
 ```
 
+Placing it is a durable change to the machine, and it happens before any setup
+plan exists, so it cannot be covered by the plan authorization asked for later.
+It is its own owner decision: ask before creating or replacing the destination,
+and do not replace an existing installation because setup was merely discovered.
+
 Place it at a durable user-local path, creating the directory if it does not
 exist and keeping any previous binary until the new one is verified. Without
 that copy there is nothing for the rollback below to restore:
 
+A destination that is a symbolic link would be written through, changing a file
+outside the directory this decision named. Refuse it rather than following it:
+
 ```sh
 mkdir -p ~/.local/bin
-[ -e ~/.local/bin/gr ] && cp -p ~/.local/bin/gr "${work}/gr.previous"
+if [ -L ~/.local/bin/gr ]; then
+  echo "~/.local/bin/gr is a symbolic link; resolve it before replacing it" >&2; exit 1
+fi
+if [ -e ~/.local/bin/gr ] && [ ! -f ~/.local/bin/gr ]; then
+  echo "~/.local/bin/gr is not a regular file" >&2; exit 1
+fi
+[ -f ~/.local/bin/gr ] && cp -p ~/.local/bin/gr "${work}/gr.previous"
 cp gr ~/.local/bin/gr
 ~/.local/bin/gr version   # if this disagrees, restore "${work}/gr.previous"
 ```
@@ -180,7 +241,9 @@ separate explicit user configuration decision. Every command below therefore
 invokes `~/.local/bin/gr` by its full path: a bare `gr` would fail, or resolve
 some other installation that happens to be on `PATH`.
 
-Delete the temporary directory only after verification and durable placement.
+Keep `work` until the managed setup below has completed: it holds the discovery
+metadata, the checksum file and the previous binary, all of which the later steps
+and the rollback still need.
 
 If any name, size, digest, platform, version, or archive member disagrees, stop.
 Do not try another unplanned source or execute the bytes.
@@ -190,8 +253,11 @@ Do not try another unplanned source or execute the bytes.
 On a machine that already has a Go toolchain:
 
 ```sh
-go install github.com/heurema/goalrail/cmd/gr@latest
+GOBIN=~/.local/bin go install github.com/heurema/goalrail/cmd/gr@latest
 ```
+
+`GOBIN` is set because `go install` otherwise writes to `$GOPATH/bin` or
+`$HOME/go/bin`, while every command below invokes `~/.local/bin/gr`.
 
 Once a release tag exists this installs that release rather than the branch tip.
 It performs no checksum verification of its own beyond the Go module checksum
@@ -278,7 +344,7 @@ The plan digest is the SHA-256 of the plan's own canonical bytes, which is what
 `gr setup plan` wrote:
 
 ```sh
-plan_digest="sha256:$(sha256sum plan.json | cut -d' ' -f1)"
+plan_digest="sha256:$(sha256 plan.json | cut -d' ' -f1)"
 ```
 
 Present the plan's components, mutations, destinations, network access and
@@ -306,12 +372,24 @@ Download the setup archive the plan pinned, extract it to a temporary directory,
 and verify it against the plan and the authorization before anything durable
 happens:
 
+The archive is verified against both identities before it is opened. The checksum
+file alone would not catch a publication where it and the metadata disagree, and
+`verify-plan` receives the extracted directory rather than the archive, so it
+cannot see the difference either:
+
 ```sh
 bundle_archive="$(printf '%s' "${entry}" | jq -r .setup_archive.name)"
+bundle_size="$(printf '%s' "${entry}" | jq -r .setup_archive.size_bytes)"
+bundle_digest="$(printf '%s' "${entry}" | jq -r .setup_archive.sha256 | sed 's/^sha256://')"
+case "${bundle_archive}" in ''|*/*|.*) echo "unusable setup archive name" >&2; exit 1 ;; esac
+
 curl --fail --location --proto '=https' --proto-redir '=https' --output "${bundle_archive}" \
   "https://github.com/heurema/goalrail/releases/download/${version}/${bundle_archive}"
-sha256sum --ignore-missing -c checksums.txt        # Linux
-shasum -a 256 --ignore-missing -c checksums.txt   # macOS
+
+[ "$(wc -c < "${bundle_archive}")" = "${bundle_size}" ] || { echo "setup archive size disagrees" >&2; exit 1; }
+sha256 "${bundle_archive}" | grep -q "^${bundle_digest} " || { echo "setup archive digest disagrees" >&2; exit 1; }
+grep -F " ${bundle_archive}" checksums.txt > bundle.sha256 || { echo "no checksum line" >&2; exit 1; }
+sha256 -c bundle.sha256 || exit 1
 
 mkdir -p bundle && tar -xzf "${bundle_archive}" -C bundle
 
@@ -369,8 +447,14 @@ durable installation, and setup never writes project code.
 
 ## Verification and trust boundaries
 
-After apply, `~/.local/bin/gr doctor --json` must report each layer
-independently:
+After apply, the diagnosis must report each layer independently. It takes the
+repository explicitly, because the shell is still in `work` and its default would
+diagnose that directory instead:
+
+```sh
+~/.local/bin/gr doctor --repo "${repo}" --json
+```
+
 
 - `managed`: committed project declaration is valid;
 - `locally_ready`: exact bundle, compiler/runtime, project canon, schema, and at
@@ -389,6 +473,18 @@ Managed project identity does not prove provider trust or protected admission.
 Provider authentication, trust confirmation, workflow activation, required-check
 configuration, and branch protection are separate owner-authorized external
 actions.
+
+## Cleaning up
+
+Only once apply has completed and its receipt is captured:
+
+```sh
+cd "${repo}"
+rm -rf "${work}"
+```
+
+Keep the recovery artifact apply produced for as long as the installation may
+need rolling back; it does not live in `work`.
 
 ## What the owner sees
 
