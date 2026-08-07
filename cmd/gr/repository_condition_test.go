@@ -18,35 +18,88 @@ import (
 // than because anything required it. A survey rather than three separate cases,
 // so a command added later is covered without being remembered.
 func TestNoCommandRelaysAForeignFailure(t *testing.T) {
-	outside := t.TempDir()
-	// The seam is command and subcommand: `setup plan` resolves a repository as
-	// surely as `init` does, and a survey that stopped at the top level passed
-	// while it still relayed.
-	for _, command := range [][]string{
-		{"init", "--repo", outside},
-		{"migrate", "--repo", outside},
-		{"update", "--repo", outside},
-		{"doctor", "--repo", outside},
-		{"setup", "plan", "--repo", outside},
+	// Both shapes of failure Git can hand back after actually running. The
+	// first version of this survey used only an absent repository, and a
+	// repository Git ran against and refused — the disputed-ownership case a
+	// shared or container-mounted checkout produces — still relayed `fatal:`,
+	// its exit status, and the `git config` line it suggests pasting.
+	for _, condition := range []struct {
+		name  string
+		repo  func(*testing.T) string
+		named []string
+	}{
+		{
+			name:  "absent repository",
+			repo:  func(t *testing.T) string { return t.TempDir() },
+			named: []string{"not inside a Git repository", "unmanaged"},
+		},
+		{
+			name:  "repository Git refuses",
+			repo:  refusedRepository,
+			named: []string{"Git refused to resolve"},
+		},
 	} {
-		t.Run(strings.Join(command[:len(command)-2], " "), func(t *testing.T) {
-			var stdout, stderr bytes.Buffer
-			err := run(t.Context(), command, strings.NewReader(""), &stdout, &stderr, productionService)
+		t.Run(condition.name, func(t *testing.T) {
+			repository := condition.repo(t)
+			// The seam is command and subcommand: `setup plan` resolves a
+			// repository as surely as `init` does, and a survey that stopped at
+			// the top level passed while it still relayed.
+			for _, command := range [][]string{
+				{"init", "--repo", repository},
+				{"migrate", "--repo", repository},
+				{"update", "--repo", repository},
+				{"doctor", "--repo", repository},
+				{"setup", "plan", "--repo", repository},
+			} {
+				t.Run(strings.Join(command[:len(command)-2], " "), func(t *testing.T) {
+					var stdout, stderr bytes.Buffer
+					err := run(t.Context(), command, strings.NewReader(""), &stdout, &stderr, productionService)
 
-			said := stdout.String() + stderr.String()
-			if err != nil {
-				said += err.Error()
-			}
-			for _, foreign := range []string{"fatal:", "exit status"} {
-				if strings.Contains(said, foreign) {
-					t.Fatalf("%v relays what another program said: %q", command, said)
-				}
-			}
-			if !strings.Contains(said, "not inside a Git repository") && !strings.Contains(said, "unmanaged") {
-				t.Fatalf("%v did not name the condition: %q", command, said)
+					said := stdout.String() + stderr.String()
+					if err != nil {
+						said += err.Error()
+					}
+					for _, foreign := range []string{"fatal:", "exit status", "git config"} {
+						if strings.Contains(said, foreign) {
+							t.Fatalf("%v relays what another program said: %q", command, said)
+						}
+					}
+					if !containsAny(said, condition.named) {
+						t.Fatalf("%v did not name the condition: %q", command, said)
+					}
+				})
 			}
 		})
 	}
+}
+
+// refusedRepository is a repository Git runs against and declines to resolve.
+// Disputed ownership is the refusal users actually meet, but it needs a second
+// account to stage; an unreadable format version reaches the same branch — Git
+// ran, and said no for a reason that is not the path being outside a
+// repository — without a privileged test.
+func refusedRepository(t *testing.T) string {
+	t.Helper()
+	repository := t.TempDir()
+	for _, arguments := range [][]string{
+		{"init", "-q"},
+		{"config", "core.repositoryformatversion", "99"},
+	} {
+		command := exec.Command("git", append([]string{"-C", repository}, arguments...)...)
+		if output, err := command.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", arguments, err, output)
+		}
+	}
+	return repository
+}
+
+func containsAny(said string, phrases []string) bool {
+	for _, phrase := range phrases {
+		if strings.Contains(said, phrase) {
+			return true
+		}
+	}
+	return false
 }
 
 // Naming the condition must not become a way of losing a failure. A discovery

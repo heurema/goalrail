@@ -41,14 +41,29 @@ func (notARepositoryError) ExitCode() int     { return exitUnmanaged }
 const exitUnmanaged = 3
 
 func statedRepositoryCondition(err error, path string) error {
-	if !errors.Is(err, projectstate.ErrNotRepository) {
+	switch {
+	case errors.Is(err, projectstate.ErrNotRepository):
+	case errors.Is(err, projectstate.ErrDiscoveryRefused):
+		// Git ran and said no for a reason of its own — disputed ownership is
+		// the one users meet. The condition is named and the remedy is Git's to
+		// give, so the reader is sent to Git rather than handed its sentence
+		// second-hand along with a command to paste.
+		return fmt.Errorf("Git refused to resolve %s, so its repository could not be identified; "+
+			"run a Git command there yourself to see what it objects to", absolutePath(path))
+	case errors.Is(err, projectstate.ErrDiscoveryUnavailable):
+		return fmt.Errorf("Git could not be run, so whether %s is inside a repository was never established", absolutePath(path))
+	default:
 		return err
 	}
-	// The absolute path, because the caller may have passed `.` and a sentence
-	// naming a dot tells a reader nothing about which directory was meant.
-	if absolute, absErr := filepath.Abs(path); absErr == nil {
-		path = absolute
-	}
 	return notARepositoryError{message: fmt.Sprintf(
-		"%s is not inside a Git repository, so there is no worktree root to resolve a Goalrail project from", path)}
+		"%s is not inside a Git repository, so there is no worktree root to resolve a Goalrail project from", absolutePath(path))}
+}
+
+// absolutePath resolves what the caller passed, because a sentence naming `.`
+// tells a reader nothing about which directory was meant.
+func absolutePath(path string) string {
+	if absolute, err := filepath.Abs(path); err == nil {
+		return absolute
+	}
+	return path
 }

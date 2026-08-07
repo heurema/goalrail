@@ -16,6 +16,22 @@ import (
 var (
 	ErrNotRepository = errors.New("not a Git repository")
 	ErrNoWorktree    = errors.New("Git repository has no worktree")
+
+	// ErrDiscoveryUnavailable is the discovery command failing to run at all —
+	// absent, not executable, cancelled. Nothing was learned about the path.
+	ErrDiscoveryUnavailable = errors.New("Git could not be run")
+
+	// ErrDiscoveryRefused is the discovery command running and refusing for a
+	// reason that is not the path being outside a repository. Disputed
+	// ownership is the one users meet.
+	//
+	// Git's own sentence is deliberately not carried on this error. A caller
+	// that prints the error it was handed then prints `fatal:`, an exit status,
+	// and whatever command Git suggests pasting — which is how `doctor` was
+	// found still relaying after the other commands had been corrected. Stating
+	// the category and stopping there makes the boundary structural rather than
+	// something each command has to remember.
+	ErrDiscoveryRefused = errors.New("Git ran and refused to resolve this path")
 )
 
 const maxGitDiscoveryOutput = 16 << 10
@@ -54,7 +70,13 @@ func ResolveWorktreeRoot(ctx context.Context, start string) (string, error) {
 		if errors.As(err, &failure) && failure.ran && mentionsNoRepository(failure.message) {
 			return "", fmt.Errorf("%w: %s", ErrNotRepository, failure.message)
 		}
-		return "", fmt.Errorf("resolve Git worktree root: %w", err)
+		if errors.As(err, &failure) && failure.ran {
+			return "", ErrDiscoveryRefused
+		}
+		// The unavailable case keeps its cause: nothing ran, so nothing here is
+		// another program's account of the directory — it is Go reporting that
+		// the program is missing, not executable, or was cancelled.
+		return "", fmt.Errorf("%w: %w", ErrDiscoveryUnavailable, err)
 	}
 	if strings.TrimSpace(inside) != "true" {
 		return "", ErrNoWorktree
