@@ -322,10 +322,14 @@ private recovery locator, runs the diagnosis, and returns to the original
 request at the Intent Snapshot gate. Setup success confirms no intent and
 authorizes no implementation.
 
-The receipt's terminal status reflects the diagnosis taken by the binary that
-applied it. A development build reports a version that corresponds to no
-published bundle, so an apply performed by one records a failure even where every
-mutation succeeded.
+The receipt's terminal status reflects the diagnosis taken after the mutations,
+not whether the mutations succeeded. Two ordinary situations produce a failure
+status over a setup that did everything it was authorized to do: a scaffold whose
+own trust step the user has not yet completed, which Goalrail is forbidden from
+performing on their behalf; and an apply run by a development build, whose
+version corresponds to no published bundle. Read the receipt's mutation statuses
+and the diagnosis reasons rather than the terminal status alone, and report the
+pending user action rather than an installation failure.
 
 The committed bootstrap contract contains the full protocol. An agent that
 cannot or will not follow it must not be allowed to improvise installation or
