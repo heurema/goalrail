@@ -1,14 +1,27 @@
 {
-  "schema": "goalrail.setup-source-lock/v1",
+  "schema": "goalrail.setup-source-lock/v2",
+  "closure": {
+    "package_count": 80,
+    "install_script_count": 1,
+    "compiler_lock_digest": "sha256:4747445041009a8484c7a880f25512c515b2e05bfa95236f6c32f11c0ebd3bd5"
+  },
   "runtime": {
     "id": "node",
     "version": "22.18.0",
+    "adoption": {
+      "published_at": "2025-07-31T00:00:00Z",
+      "adopted_at": "2026-08-05T00:00:00Z"
+    },
     "license_ref": "https://github.com/nodejs/node/blob/v22.18.0/LICENSE",
     "provenance_ref": "https://nodejs.org/dist/v22.18.0/SHASUMS256.txt"
   },
   "compiler": {
     "id": "@fission-ai/openspec",
     "version": "1.6.0",
+    "adoption": {
+      "published_at": "2026-07-10T00:00:00Z",
+      "adopted_at": "2026-08-05T00:00:00Z"
+    },
     "lock_path": "release/setup/compiler/package-lock.json",
     "entrypoint": "node_modules/@fission-ai/openspec/bin/openspec.js",
     "license_ref": "npm:@fission-ai/openspec@1.6.0#MIT",

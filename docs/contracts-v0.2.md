@@ -22,7 +22,7 @@ semantic boundaries are the automation contract.
 | Schema | Owner and purpose |
 |---|---|
 | `goalrail.release-metadata/v1` | Public bounded current-release discovery metadata; discovery only, never an artifact integrity identity by itself |
-| `goalrail.setup-source-lock/v1` | Release-build source lock for runtime/compiler inputs and supported platforms |
+| `goalrail.setup-source-lock/v2` | Release-build source lock for runtime/compiler inputs and supported platforms, the reviewed dependency closure (package count, install-script count, digest), and the upstream publication and adoption dates of each pin. Supersedes v1, which carried neither the closure nor the dates; the document is a build input and is not published in a release |
 | `goalrail.setup-bundle-manifest/v1` | Immutable per-release/per-platform setup archive manifest with component, file, license, provenance, and binary identities |
 | `goalrail.setup-plan/v1` | Canonical read-only plan binding exact components, mutations, prerequisites, trust steps, network, rollback, verification, and zero project-code writes |
 | `goalrail.plan-authorization/v1` | Explicit owner decision bound to one complete setup-plan digest |

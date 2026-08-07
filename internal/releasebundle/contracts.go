@@ -13,10 +13,16 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 )
 
 const (
-	SourceLockSchemaV1    = "goalrail.setup-source-lock/v1"
+	// SourceLockSchemaV2 adds the recorded closure and the adoption dates. It is
+	// a new identifier rather than a widened v1: the fields are mandatory and
+	// decoding is strict, so a v1 reader rejects a v2 document and a v2 validator
+	// rejects a v1 one. One identifier describing both would make the schema a
+	// claim neither side could rely on.
+	SourceLockSchemaV2    = "goalrail.setup-source-lock/v2"
 	SetupManifestSchemaV1 = "goalrail.setup-bundle-manifest/v1"
 	ReleaseMetadataSchema = "goalrail.release-metadata/v1"
 
@@ -54,25 +60,55 @@ func (platform Platform) Key() string {
 
 type SourceLock struct {
 	Schema    string           `json:"schema"`
+	Closure   ClosureRecord    `json:"closure"`
 	Runtime   RuntimeSource    `json:"runtime"`
 	Compiler  CompilerSource   `json:"compiler"`
 	Platforms []PlatformSource `json:"platforms"`
 }
 
+// ClosureRecord is what the pinned dependency set was when somebody last looked
+// at it. Verification compares the computed set against it, so a pin that moves
+// — or a transitive package that appears, disappears or gains an install script
+// — fails rather than passing inside lock-file churn.
+//
+// The counts are recorded beside the digest deliberately. A digest tells a
+// reviewer that something changed; the counts tell them what, which is the
+// difference between a diff they can judge and one they will wave through.
+type ClosureRecord struct {
+	PackageCount       int    `json:"package_count"`
+	InstallScriptCount int    `json:"install_script_count"`
+	Digest             string `json:"compiler_lock_digest"`
+}
+
+// PinAdoption records when a pinned version was published upstream and when this
+// repository adopted it.
+//
+// It is disclosure rather than a gate. A pin adopted days after its publication
+// is the exposure a quarantine window exists to avoid, and these two dates make
+// that visible to whoever reviews the move — but both are supplied by the same
+// person making the move, so nothing here can enforce the window on itself. The
+// rule lives with the reviewer; this is the evidence they need to apply it.
+type PinAdoption struct {
+	PublishedAt string `json:"published_at"`
+	AdoptedAt   string `json:"adopted_at"`
+}
+
 type RuntimeSource struct {
-	ID            string `json:"id"`
-	Version       string `json:"version"`
-	LicenseRef    string `json:"license_ref"`
-	ProvenanceRef string `json:"provenance_ref"`
+	ID            string      `json:"id"`
+	Version       string      `json:"version"`
+	Adoption      PinAdoption `json:"adoption"`
+	LicenseRef    string      `json:"license_ref"`
+	ProvenanceRef string      `json:"provenance_ref"`
 }
 
 type CompilerSource struct {
-	ID            string `json:"id"`
-	Version       string `json:"version"`
-	LockPath      string `json:"lock_path"`
-	Entrypoint    string `json:"entrypoint"`
-	LicenseRef    string `json:"license_ref"`
-	ProvenanceRef string `json:"provenance_ref"`
+	ID            string      `json:"id"`
+	Version       string      `json:"version"`
+	Adoption      PinAdoption `json:"adoption"`
+	LockPath      string      `json:"lock_path"`
+	Entrypoint    string      `json:"entrypoint"`
+	LicenseRef    string      `json:"license_ref"`
+	ProvenanceRef string      `json:"provenance_ref"`
 }
 
 type PlatformSource struct {
@@ -298,12 +334,41 @@ func canonicalJSON(value any) ([]byte, error) {
 	return append(raw, '\n'), nil
 }
 
+// validateAdoption requires both dates and requires the adoption not to precede
+// the publication, which is the one inconsistency the record can catch on its
+// own. Whether enough time passed is the reviewer's judgement.
+func validateAdoption(name string, adoption PinAdoption) error {
+	published, err := time.Parse(time.RFC3339, adoption.PublishedAt)
+	if err != nil {
+		return fmt.Errorf("%s adoption is missing the upstream publication date", name)
+	}
+	adopted, err := time.Parse(time.RFC3339, adoption.AdoptedAt)
+	if err != nil {
+		return fmt.Errorf("%s adoption is missing the date this repository pinned it", name)
+	}
+	if adopted.Before(published) {
+		return fmt.Errorf("%s claims to have been adopted before it was published", name)
+	}
+	return nil
+}
+
 func validateSourceLock(value SourceLock) error {
-	if value.Schema != SourceLockSchemaV1 {
-		return fmt.Errorf("source lock schema = %q, want %q", value.Schema, SourceLockSchemaV1)
+	if value.Schema != SourceLockSchemaV2 {
+		return fmt.Errorf("source lock schema = %q, want %q", value.Schema, SourceLockSchemaV2)
 	}
 	if value.Runtime.ID != "node" || !validVersion(value.Runtime.Version) {
 		return fmt.Errorf("runtime identity is not the pinned node version")
+	}
+	if err := validateAdoption("runtime", value.Runtime.Adoption); err != nil {
+		return err
+	}
+	if err := validateAdoption("compiler", value.Compiler.Adoption); err != nil {
+		return err
+	}
+	if value.Closure.PackageCount <= 0 || value.Closure.InstallScriptCount < 0 ||
+		!strings.HasPrefix(value.Closure.Digest, "sha256:") ||
+		!sha256Pattern.MatchString(strings.TrimPrefix(value.Closure.Digest, "sha256:")) {
+		return fmt.Errorf("the recorded closure is incomplete")
 	}
 	if !validReference(value.Runtime.LicenseRef) || !validReference(value.Runtime.ProvenanceRef) {
 		return fmt.Errorf("runtime license or provenance reference is invalid")
