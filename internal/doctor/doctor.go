@@ -210,6 +210,10 @@ func Diagnose(ctx context.Context, input DiagnoseInput) (Diagnosis, error) {
 	diagnoseProjectCanon(&diagnosis)
 	diagnoseOverlay(&diagnosis)
 	diagnosePlanning(ctx, &diagnosis, input.PlanningObserver, input.Home)
+	// The invocation is reported as a fact, never prescribed — and after setup
+	// has run, the true fact is the toolchain sitting on this machine, verified
+	// by digest, rather than a package name a registry would resolve again.
+	diagnosis.Invocation = plannedInvocation(diagnosis.Planning)
 	diagnoseAttachments(&diagnosis, input)
 	diagnosePreparedAdmission(ctx, &diagnosis, input.ActivationObserver)
 
@@ -274,6 +278,25 @@ func notARepository(root string) Diagnosis {
 		Detail: "this path is not inside a Git repository, so there is no worktree root to resolve a Goalrail project from",
 	})
 	return diagnosis
+}
+
+// plannedInvocation names the compiler this machine would actually run.
+//
+// Where the declared runtime and compiler both verify against the installed
+// bundle, it is that bundle's own executables: the whole point of an authorized
+// setup is that the planning toolchain is fetched once and pinned by digest, and
+// reporting a package name instead would send every later planning command back
+// to the registry it was installed to avoid.
+//
+// Where no bundle answers for them, the stock invocation is still the honest
+// answer, because that is what the agent would have to reach for.
+func plannedInvocation(planning PlanningState) string {
+	runtime, compiler := planning.Runtime, planning.Compiler
+	if !componentReady(runtime) || !componentReady(compiler) ||
+		runtime.Path == "" || compiler.Path == "" {
+		return harness.PinnedNewChange
+	}
+	return harness.InstalledNewChange(runtime.Path, compiler.Path)
 }
 
 func diagnoseGoverningArtifacts(diagnosis *Diagnosis) {
