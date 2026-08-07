@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -92,5 +94,46 @@ func TestOnlyGitsOwnVerdictMeansNotARepository(t *testing.T) {
 	}
 	if errors.Is(err, ErrNotRepository) {
 		t.Fatalf("a missing Git was reported as an absent repository: %v", err)
+	}
+}
+
+// A refusal Git makes after actually running is its own answer, and Git's
+// sentence is not part of it.
+//
+// The distinction is what a caller reports: "this is not a project" is a fact
+// about the directory, while "Git declined" is a fact about the attempt, and a
+// disputed-ownership refusal — a shared or container-mounted checkout — is the
+// second wearing the shape of the first. Carrying Git's own text on the error
+// is how a caller ends up printing `fatal:` and a `git config` line to paste,
+// so the text stops here.
+func TestAGitRefusalIsNeitherAnAbsentRepositoryNorGitsOwnWords(t *testing.T) {
+	// Disputed ownership needs a second account to stage; an unreadable format
+	// version reaches the same branch — Git ran, and declined for a reason that
+	// is not the path being outside a repository — without a privileged test.
+	refused := t.TempDir()
+	for _, arguments := range [][]string{
+		{"init", "-q"},
+		{"config", "core.repositoryformatversion", "99"},
+	} {
+		command := exec.Command("git", append([]string{"-C", refused}, arguments...)...)
+		if output, err := command.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", arguments, err, output)
+		}
+	}
+
+	_, err := ResolveWorktreeRoot(context.Background(), refused)
+	if err == nil {
+		t.Fatal("a repository Git refuses resolved a worktree root")
+	}
+	if !errors.Is(err, ErrDiscoveryRefused) {
+		t.Fatalf("a refusal gave %v, want ErrDiscoveryRefused", err)
+	}
+	if errors.Is(err, ErrNotRepository) {
+		t.Fatalf("a refusal was reported as an absent repository: %v", err)
+	}
+	for _, foreign := range []string{"fatal:", "exit status", "git config"} {
+		if strings.Contains(err.Error(), foreign) {
+			t.Fatalf("the refusal carries Git's own words: %q", err.Error())
+		}
 	}
 }

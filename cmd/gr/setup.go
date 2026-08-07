@@ -93,7 +93,7 @@ func runSetupPlan(ctx context.Context, args []string, stdout, stderr io.Writer) 
 		Evidence:       evidence,
 	})
 	if err != nil {
-		return err
+		return statedRepositoryCondition(err, *repository)
 	}
 	_, err = stdout.Write(result.Artifact.CanonicalJSON())
 	return err
@@ -177,7 +177,7 @@ func runSetupRollback(ctx context.Context, args []string, stdout, stderr io.Writ
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
 		}
-		return err
+		return statedRepositoryCondition(err, *repository)
 	}
 	if set.NArg() != 0 {
 		return fmt.Errorf("setup rollback accepts flags only")

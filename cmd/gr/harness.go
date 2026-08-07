@@ -77,7 +77,11 @@ func runDoctor(args []string, stdout, stderr io.Writer) error {
 	}
 	diagnosis, err := diagnose(*repository, *scaffold, *stateDirectory)
 	if err != nil {
-		return doctorFailure{cause: err}
+		// A diagnosis that could not resolve the repository is a broken check,
+		// which is what this exit status already says. The condition still goes
+		// through the shared wording: `doctor` was the last command found
+		// relaying Git's own sentence after the other four had been corrected.
+		return doctorFailure{cause: statedRepositoryCondition(err, *repository)}
 	}
 	if *asJSON {
 		if err := writeJSON(stdout, diagnosis); err != nil {
@@ -192,7 +196,7 @@ func runUpdate(args []string, stdout, stderr io.Writer) error {
 				return writeErr
 			}
 		}
-		return err
+		return statedRepositoryCondition(err, root)
 	}
 	overlayReport, err := harness.Update(harness.UpdateInput{
 		RepositoryRoot:    projectReport.Repository,

@@ -90,7 +90,7 @@ func runInit(ctx context.Context, args []string, stdout, stderr io.Writer) error
 		RequestedScaffold:    selected,
 	})
 	if err != nil {
-		return err
+		return statedRepositoryCondition(err, *repository)
 	}
 
 	response := initReport{InitializeReport: report}
@@ -267,7 +267,7 @@ func runMigrate(ctx context.Context, args []string, stdout, stderr io.Writer) er
 	}
 	report, err := projectstate.Migrate(ctx, *repository, projectstate.InitializeOptions{RequestedScaffold: selected})
 	if err != nil {
-		return err
+		return statedRepositoryCondition(err, *repository)
 	}
 	return writeJSON(stdout, report)
 }
