@@ -1,0 +1,16 @@
+--- FAIL: TestDuplicateEntrypointsForOneComponentAreInvalid (0.00s)
+--- FAIL: TestCorruptInstallationIsInvalidNotMissing (0.00s)
+FAIL
+FAIL	github.com/heurema/goalrail/internal/doctor	0.301s
+FAIL
+
+Two of the four regressions cannot be run against the pre-fix code: the bundle
+loader gained a classification return, so the test file does not compile against
+it. Their evidence is elsewhere.
+
+  symlinked ancestor inside home  -> evidence/symlink-inside-home.md, a
+                                     standalone probe showing the planted tree
+                                     being read through the redirected directory
+  mode read from a stale snapshot -> closed by construction; a timing window is
+                                     not reliably reproducible and no regression
+                                     claims to cover it (design D3c)

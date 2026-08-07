@@ -109,10 +109,10 @@ func (observer defaultPlanningObserver) ObservePlanning(_ context.Context, profi
 		observation.Bundle.Detail = "the running Goalrail release is outside the declared compatible bundle range"
 	}
 
-	installed, reason := loadInstalledBundle(observer.home, observer.version)
+	installed, absent, reason := loadInstalledBundle(observer.home, observer.version)
 	defer installed.close()
-	observation.Runtime = observeComponent(installed, reason, "runtime", profile.Planning.Runtime, profile.Planning.RuntimeVersion)
-	observation.Compiler = observeComponent(installed, reason, "compiler", profile.Planning.Compiler, profile.Planning.CompilerVersion)
+	observation.Runtime = observeComponent(installed, absent, reason, "runtime", profile.Planning.Runtime, profile.Planning.RuntimeVersion)
+	observation.Compiler = observeComponent(installed, absent, reason, "compiler", profile.Planning.Compiler, profile.Planning.CompilerVersion)
 	return observation
 }
 
@@ -147,35 +147,49 @@ func (bundle *installedBundle) close() {
 // no need for a pointer file, and the alternatives are closed: the stable
 // executable is a byte copy that carries no link back, and enumerating sibling
 // bundle directories would have to guess which one installed this process.
-func loadInstalledBundle(home, version string) (*installedBundle, string) {
+func loadInstalledBundle(home, version string) (*installedBundle, ComponentState, string) {
 	if strings.TrimSpace(home) == "" {
-		return nil, "no home directory was resolved, so no installed Goalrail bundle could be located"
+		return nil, ComponentMissing, "no home directory was resolved, so no installed Goalrail bundle could be located"
 	}
 	if !harness.IsReleaseVersion(version) {
-		return nil, fmt.Sprintf("this build reports %q, which is not a release version, so it corresponds to no installed Goalrail bundle", version)
+		return nil, ComponentMissing, fmt.Sprintf("this build reports %q, which is not a release version, so it corresponds to no installed Goalrail bundle", version)
 	}
 	platform := releasebundle.Platform{OS: runtime.GOOS, Arch: runtime.GOARCH}
-	relative := strings.Join([]string{".local", "share", "goalrail", "bundles", version, platform.Key()}, "/")
-	path := filepath.Join(home, filepath.FromSlash(relative))
+	segments := []string{".local", "share", "goalrail", "bundles", version, platform.Key()}
+	path := filepath.Join(append([]string{home}, segments...)...)
 	// Descending from the home directory rather than opening the bundle path
-	// outright is what confines the ancestors. Opening the bundle path directly
-	// resolves it the ordinary way first, so a bundle directory — or any
-	// directory above it — replaced by a link to an external tree would become
-	// the confined root itself, and every later read would be confined to
-	// somewhere else entirely.
+	// outright is what confines the ancestors, and refusing a symbolic link at
+	// every segment is what makes that confinement mean what it says. A root
+	// permits a link whose target stays inside it, so a version directory
+	// repointed at another tree under the same home would otherwise be followed
+	// and a planted bundle presented as the installed one.
 	homeRoot, err := os.OpenRoot(home)
 	if err != nil {
-		return nil, "no installed Goalrail bundle corresponds to this binary; run the exact Goalrail setup plan"
+		return nil, ComponentMissing, "no installed Goalrail bundle corresponds to this binary; run the exact Goalrail setup plan"
 	}
 	defer homeRoot.Close()
-	root, err := homeRoot.OpenRoot(relative)
-	if err != nil {
-		return nil, "no installed Goalrail bundle corresponds to this binary; run the exact Goalrail setup plan"
+	root := homeRoot
+	for _, segment := range segments {
+		info, statErr := root.Lstat(segment)
+		if statErr != nil {
+			closeUnless(root, homeRoot)
+			return nil, ComponentMissing, "no installed Goalrail bundle corresponds to this binary; run the exact Goalrail setup plan"
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			closeUnless(root, homeRoot)
+			return nil, ComponentInvalid, "a directory on the way to the installed bundle is a symbolic link, so the bundle at that location is not the one setup installed"
+		}
+		next, openErr := root.OpenRoot(segment)
+		closeUnless(root, homeRoot)
+		if openErr != nil {
+			return nil, ComponentMissing, "no installed Goalrail bundle corresponds to this binary; run the exact Goalrail setup plan"
+		}
+		root = next
 	}
 	raw, err := readInRoot(root, releasebundle.BundleManifestPath, "installed bundle manifest", maxInstalledManifest)
 	if err != nil {
 		root.Close()
-		return nil, "the installed bundle manifest could not be read; run the exact Goalrail setup plan"
+		return nil, ComponentInvalid, "the installed bundle manifest could not be read"
 	}
 	// The bundle contracts own what a manifest must be, and that decoder checks
 	// far more than this reader could restate: canonical encoding, safe relative
@@ -186,17 +200,25 @@ func loadInstalledBundle(home, version string) (*installedBundle, string) {
 	manifest, err := releasebundle.DecodeSetupBundleManifest(bytes.NewReader(raw))
 	if err != nil {
 		root.Close()
-		return nil, "the installed bundle manifest is not a valid bundle manifest"
+		return nil, ComponentInvalid, "the installed bundle manifest is not a valid bundle manifest"
 	}
 	switch {
 	case manifest.ReleaseVersion != version:
 		root.Close()
-		return nil, "the installed bundle manifest names a different release than this binary"
+		return nil, ComponentInvalid, "the installed bundle manifest names a different release than this binary"
 	case manifest.Platform != platform:
 		root.Close()
-		return nil, "the installed bundle manifest names a different platform than this binary"
+		return nil, ComponentInvalid, "the installed bundle manifest names a different platform than this binary"
 	}
-	return &installedBundle{root: root, path: path, manifest: manifest}, ""
+	return &installedBundle{root: root, path: path, manifest: manifest}, "", ""
+}
+
+// closeUnless releases an intermediate root while leaving the one the caller
+// still owns open.
+func closeUnless(root, keep *os.Root) {
+	if root != keep {
+		_ = root.Close()
+	}
 }
 
 // readInRoot reads a bundle file through the confined root, applying the same
@@ -225,14 +247,17 @@ func readInRoot(root *os.Root, name, label string, limit int) ([]byte, error) {
 // demands, and a reader that preferred either one would report ready on a
 // description that contradicts itself. Disagreement is the manifest being
 // invalid, not the component being absent or stale, so it is reported as such.
-func observeComponent(installed *installedBundle, reason, kind, declared, required string) ComponentReadiness {
+func observeComponent(installed *installedBundle, absent ComponentState, reason, kind, declared, required string) ComponentReadiness {
 	component := ComponentReadiness{Kind: kind, ID: declared, RequiredVersion: required}
 	if strings.TrimSpace(declared) == "" {
 		component.State = ComponentNotRequired
 		return component
 	}
 	if installed == nil {
-		component.State = ComponentMissing
+		// A bundle that is absent and one that is corrupt are different facts,
+		// and collapsing both into "missing" would tell a machine consumer that
+		// something was never installed when it was installed and then damaged.
+		component.State = absent
 		component.Detail = reason
 		return component
 	}
@@ -242,10 +267,10 @@ func observeComponent(installed *installedBundle, reason, kind, declared, requir
 		component.Detail = reason
 		return component
 	}
-	identity, found := binaryIdentityFor(installed.manifest, named.ID)
-	if !found {
-		component.State = ComponentMissing
-		component.Detail = "the installed bundle records no entrypoint for this " + kind + " component"
+	identity, identityReason := binaryIdentityFor(installed.manifest, named.ID)
+	if identityReason != "" {
+		component.State = ComponentInvalid
+		component.Detail = identityReason
 		return component
 	}
 	if named.Version != identity.Version {
@@ -291,7 +316,12 @@ func verifyInstalledFile(component ComponentReadiness, installed *installedBundl
 	// says whether the file can still be run. A runtime whose bytes are intact
 	// but whose executable bit was cleared is not ready by any reading a user
 	// would recognise, and nothing here executes it to find out.
-	info, err := file.Stat()
+	//
+	// The mode is read from the identity the digest itself verified, not from a
+	// separate earlier stat. A snapshot taken before the read is already stale
+	// when the digest exists, so a change inside that window would pass the mode
+	// check against the old metadata while the digest described the new bytes.
+	observed, info, err := boundedio.DigestOpenFile(file, "installed component", maxInstalledComponentFile)
 	if err != nil {
 		component.State = ComponentMissing
 		component.Detail = "the file the installed manifest records for this component could not be read"
@@ -300,12 +330,6 @@ func verifyInstalledFile(component ComponentReadiness, installed *installedBundl
 	if observedMode := fmt.Sprintf("%04o", info.Mode().Perm()); observedMode != record.Mode {
 		component.State = ComponentUnverifiedIntegrity
 		component.Detail = "the installed component's mode is " + observedMode + ", not the " + record.Mode + " its manifest records"
-		return component
-	}
-	observed, _, err := boundedio.DigestOpenFile(file, "installed component", maxInstalledComponentFile)
-	if err != nil {
-		component.State = ComponentMissing
-		component.Detail = "the file the installed manifest records for this component could not be read"
 		return component
 	}
 	if observed != normalizeDigest(record.SHA256) {
@@ -320,29 +344,24 @@ func verifyInstalledFile(component ComponentReadiness, installed *installedBundl
 // binaryIdentityFor finds the manifest's binary identity for a declared
 // component. The declared value is matched against component identity and is
 // never joined onto a path: the path comes from the manifest.
-func binaryIdentityFor(manifest releasebundle.SetupBundleManifest, declared string) (releasebundle.BinaryIdentity, bool) {
+func binaryIdentityFor(manifest releasebundle.SetupBundleManifest, componentID string) (releasebundle.BinaryIdentity, string) {
+	var selected releasebundle.BinaryIdentity
+	matches := 0
 	for _, identity := range manifest.BinaryIdentities {
-		if identity.ComponentID == declared {
-			return identity, true
+		if identity.ComponentID == componentID {
+			selected, matches = identity, matches+1
 		}
 	}
-	return releasebundle.BinaryIdentity{}, false
+	switch matches {
+	case 1:
+		return selected, ""
+	case 0:
+		return releasebundle.BinaryIdentity{}, "the installed bundle records no entrypoint for this component"
+	default:
+		return releasebundle.BinaryIdentity{}, "the installed bundle records more than one entrypoint for this component"
+	}
 }
 
-// componentFor resolves a declared component against the manifest. The empty
-// reason means it was found.
-//
-// An exact identifier wins outright, and a name is consulted only when no
-// identifier matches. The bundle contract requires component identifiers to be
-// unique and sorted but says nothing about names, so an accepted manifest may
-// carry two components sharing one name — and a scan that took the first match
-// in either field would resolve the declared runtime to whichever component
-// sorted earlier, then report the entrypoint of something else. An independent
-// review found exactly that after this lookup was shared between the runtime
-// and the compiler; the runtime had previously matched an identifier alone.
-//
-// A name that matches more than one component is ambiguous rather than
-// resolvable, and saying so is the only honest answer available.
 func componentFor(manifest releasebundle.SetupBundleManifest, declared string) (releasebundle.ManifestComponent, string) {
 	for _, component := range manifest.Components {
 		if component.ID == declared {

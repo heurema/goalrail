@@ -80,7 +80,7 @@ func ReadOpenFile(file *os.File, label string, limit int) ([]byte, os.FileInfo, 
 	return raw, after, nil
 }
 
-// DigestRegularFile reports an artifact's SHA-256 and size under the same
+// DigestRegularFile reports an artifact's SHA-256 and verified identity under the same
 // descriptor discipline, without holding its bytes in memory.
 //
 // An installed runtime is large enough that reading it whole to hash it would
@@ -88,13 +88,13 @@ func ReadOpenFile(file *os.File, label string, limit int) ([]byte, os.FileInfo, 
 // and only the digest is retained. Everything else is deliberately identical to
 // ReadRegularFile: the regular-file check, the symlink and FIFO refusals, and
 // the identity comparison all apply to the descriptor that produced the digest.
-func DigestRegularFile(path string, label string, limit int64) (string, int64, error) {
+func DigestRegularFile(path string, label string, limit int64) (string, os.FileInfo, error) {
 	if limit <= 0 {
-		return "", 0, fmt.Errorf("digest %s: size bound must be positive", label)
+		return "", nil, fmt.Errorf("digest %s: size bound must be positive", label)
 	}
 	file, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
 	if err != nil {
-		return "", 0, fmt.Errorf("open %s: %w", label, err)
+		return "", nil, fmt.Errorf("open %s: %w", label, err)
 	}
 	defer file.Close()
 	return DigestOpenFile(file, label, limit)
@@ -102,36 +102,42 @@ func DigestRegularFile(path string, label string, limit int64) (string, int64, e
 
 // DigestOpenFile is the descriptor-taking form, for a caller that opened through
 // a confined root so no path segment could leave it.
-func DigestOpenFile(file *os.File, label string, limit int64) (string, int64, error) {
+//
+// It returns the identity it verified rather than only the size. A caller that
+// also checks metadata — a mode, say — must check the snapshot this comparison
+// covered: one taken before the read is stale by the time the digest exists, so
+// a change inside that window would be accepted against the old metadata and
+// hashed against the new bytes.
+func DigestOpenFile(file *os.File, label string, limit int64) (string, os.FileInfo, error) {
 	if limit <= 0 {
-		return "", 0, fmt.Errorf("digest %s: size bound must be positive", label)
+		return "", nil, fmt.Errorf("digest %s: size bound must be positive", label)
 	}
 	before, err := file.Stat()
 	if err != nil {
-		return "", 0, fmt.Errorf("stat %s: %w", label, err)
+		return "", nil, fmt.Errorf("stat %s: %w", label, err)
 	}
 	if !before.Mode().IsRegular() {
-		return "", 0, fmt.Errorf("%s is not a regular file", label)
+		return "", nil, fmt.Errorf("%s is not a regular file", label)
 	}
 	if before.Size() > limit {
-		return "", 0, fmt.Errorf("%s exceeds %d bytes", label, limit)
+		return "", nil, fmt.Errorf("%s exceeds %d bytes", label, limit)
 	}
 
 	sum := sha256.New()
 	written, err := io.Copy(sum, io.LimitReader(file, limit+1))
 	if err != nil {
-		return "", 0, fmt.Errorf("read %s: %w", label, err)
+		return "", nil, fmt.Errorf("read %s: %w", label, err)
 	}
 	if written > limit {
-		return "", 0, fmt.Errorf("%s exceeds %d bytes", label, limit)
+		return "", nil, fmt.Errorf("%s exceeds %d bytes", label, limit)
 	}
 	after, err := file.Stat()
 	if err != nil {
-		return "", 0, fmt.Errorf("stat %s after read: %w", label, err)
+		return "", nil, fmt.Errorf("stat %s after read: %w", label, err)
 	}
 	if !os.SameFile(before, after) || before.Mode() != after.Mode() ||
 		before.Size() != after.Size() || !before.ModTime().Equal(after.ModTime()) {
-		return "", 0, fmt.Errorf("%s changed while it was read", label)
+		return "", nil, fmt.Errorf("%s changed while it was read", label)
 	}
-	return hex.EncodeToString(sum.Sum(nil)), written, nil
+	return hex.EncodeToString(sum.Sum(nil)), after, nil
 }

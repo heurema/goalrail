@@ -89,8 +89,13 @@ read goes through it, so no path segment can leave it. Establishing that root by
 path outright would not confine its ancestors — the path resolves the ordinary
 way first, so a bundle directory replaced by a link becomes the root, and the
 confinement then holds around the wrong tree. The root is therefore descended
-from the home directory. Both halves were independent review findings, each
-with a regression of its own.
+from the home directory — and every segment of that descent is inspected with
+lstat and refused if it is a symbolic link. Confinement alone is not enough: a
+root permits a link whose target stays inside it, so a version directory
+repointed at another tree under the same home is followed and a planted bundle
+presented as the installed one. That was measured rather than reasoned about,
+and the probe is retained in `evidence/symlink-inside-home.md`. All three parts
+were independent review findings, each with a regression or a retained probe.
 
 **D3b — A manifest that contradicts itself is invalid, not stale.** The manifest
 states a component's version twice: on the component and on the entrypoint that
@@ -109,6 +114,28 @@ runtime whose bytes are intact and whose executable bit was cleared fails to
 execute while its digest still matches, and nothing here runs it to find out,
 so the mode is compared too. Reported as an unverified integrity identity: the
 installation no longer matches its own record.
+
+The mode is read from the identity the digest itself verified rather than from a
+separate earlier stat, because a snapshot taken before the read is already stale
+when the digest exists: a change inside that window would pass the mode check
+against the old metadata while the digest described the new bytes. This is
+closed by construction rather than by a regression — a timing window is not
+something a test can reliably reproduce, and stating that is better than
+implying coverage that does not exist.
+
+**D3d — One entrypoint per component, or none.** The bundle contract requires
+binary identities to be unique by path, not by component, so a canonically valid
+manifest can carry two entrypoints for one component. Taking the first match
+would bind an intact alternate file while the component's real entrypoint is
+damaged, and report ready. Exactly one match is required; more is the manifest
+being ambiguous rather than the reader's choice to make.
+
+**D3e — Absent and corrupt are different facts.** A bundle that was never
+installed and one that is installed but damaged are not the same state, and
+collapsing both into a missing component would tell a machine consumer that
+something was never installed when it was installed and then broken. The loader
+carries its failure classification out with its reason: absent resolves to
+missing, unreadable or invalid resolves to invalid.
 
 **D4 — The setup profile keeps declaring, and stops locating.**
 It continues to name the required components and their exact versions, which is

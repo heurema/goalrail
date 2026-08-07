@@ -132,17 +132,17 @@ func TestOnlyAReleaseVersionResolvesABundle(t *testing.T) {
 	for _, version := range []string{
 		"", "unknown", "(devel)", "v0.2.0+dirty", "v0.2.1-0.20260806090733-23e30a5c8f6d", "0.2.0",
 	} {
-		if installed, reason := loadInstalledBundle(home, version); installed != nil || reason == "" {
+		if installed, _, reason := loadInstalledBundle(home, version); installed != nil || reason == "" {
 			t.Fatalf("version %q resolved a bundle (%v) or gave no reason", version, installed)
 		}
 	}
-	if installed, reason := loadInstalledBundle(home, installedVersion); installed == nil {
+	if installed, _, reason := loadInstalledBundle(home, installedVersion); installed == nil {
 		t.Fatalf("the installed release version resolved nothing: %s", reason)
 	}
 }
 
 func TestAbsentHomeResolvesNoBundle(t *testing.T) {
-	if installed, reason := loadInstalledBundle("", installedVersion); installed != nil || reason == "" {
+	if installed, _, reason := loadInstalledBundle("", installedVersion); installed != nil || reason == "" {
 		t.Fatalf("an empty home resolved a bundle (%v) or gave no reason", installed)
 	}
 }
@@ -192,7 +192,7 @@ func TestManifestRefusals(t *testing.T) {
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			home := installBundle(t, installedVersion, testCase.mutate)
-			installed, reason := loadInstalledBundle(home, installedVersion)
+			installed, _, reason := loadInstalledBundle(home, installedVersion)
 			if installed != nil {
 				t.Fatalf("a %s manifest was accepted", testCase.name)
 			}
@@ -241,7 +241,7 @@ func TestManifestCannotPointOutsideTheBundle(t *testing.T) {
 		})
 	})
 
-	if installed, reason := loadInstalledBundle(home, installedVersion); installed != nil || reason == "" {
+	if installed, _, reason := loadInstalledBundle(home, installedVersion); installed != nil || reason == "" {
 		t.Fatalf("a manifest pointing outside the bundle was accepted (%v)", installed)
 	}
 }
@@ -376,7 +376,7 @@ func TestSymlinkedBundleRootIsNotFollowed(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if installed, reason := loadInstalledBundle(home, installedVersion); installed != nil || reason == "" {
+	if installed, _, reason := loadInstalledBundle(home, installedVersion); installed != nil || reason == "" {
 		t.Fatalf("a symlinked bundle ancestor was followed (%v)", installed)
 	}
 }
@@ -393,6 +393,83 @@ func TestReportedIntegrityKeepsItsCanonicalForm(t *testing.T) {
 		if !domain.IsSHA256Digest(component.RequiredIntegrity) {
 			t.Fatalf("%s reported %q, which is not a canonical digest", component.Kind, component.RequiredIntegrity)
 		}
+	}
+}
+
+// The bundle contract requires binary identities to be unique by path, not by
+// component, so a manifest can carry two entrypoints for one component and stay
+// canonically valid. Taking the first match binds an intact alternate file while
+// the component's real entrypoint is damaged.
+func TestDuplicateEntrypointsForOneComponentAreInvalid(t *testing.T) {
+	const alternate = "runtime/node/bin/alternate"
+	home := installBundle(t, installedVersion, func(root string) {
+		// An intact copy under a path that sorts before the real entrypoint,
+		// and a real entrypoint that no longer matches its digest.
+		writeFileMode(t, filepath.Join(root, filepath.FromSlash(alternate)), "installed-node-binary", 0o755)
+		writeFileMode(t, filepath.Join(root, filepath.FromSlash(runtimeEntry)), "damaged", 0o755)
+		mutateManifest(t, root, func(m *releasebundle.SetupBundleManifest) {
+			node := m.BinaryIdentities[2]
+			second := node
+			second.Path = alternate
+			// Exactly three, uniquely sorted by path, each binding a file: the
+			// shape the contract accepts, with the goalrail identity dropped so
+			// the count still holds.
+			m.BinaryIdentities = []releasebundle.BinaryIdentity{m.BinaryIdentities[1], second, node}
+			record := m.Files[3]
+			record.Path = alternate
+			m.Files = append(m.Files[:3], record, m.Files[3])
+		})
+	})
+
+	observation := defaultPlanningObserver{home: home, version: installedVersion}.
+		ObservePlanning(context.Background(), canonProfile("node"))
+
+	if observation.Runtime.State == ComponentReady {
+		t.Fatalf("a component with two entrypoints was reported ready: %#v", observation.Runtime)
+	}
+}
+
+// A confined root permits a link whose target stays inside it, so confinement
+// alone does not establish that the bundle is the one setup installed.
+func TestSymlinkedAncestorInsideHomeIsRefused(t *testing.T) {
+	home := installBundle(t, installedVersion, nil)
+	bundles := filepath.Join(home, ".local", "share", "goalrail", "bundles")
+	planted := filepath.Join(home, "planted")
+	if err := os.Rename(filepath.Join(bundles, installedVersion), planted); err != nil {
+		t.Fatal(err)
+	}
+	// A relative target, which stays inside the home root and is therefore not
+	// an escape by the root own rule.
+	if err := os.Symlink("../../../../planted", filepath.Join(bundles, installedVersion)); err != nil {
+		t.Fatal(err)
+	}
+
+	installed, state, reason := loadInstalledBundle(home, installedVersion)
+	if installed != nil {
+		t.Fatal("a symlinked ancestor inside home was followed")
+	}
+	if state != ComponentInvalid || reason == "" {
+		t.Fatalf("state = %q, reason = %q; want an invalid installation with a reason", state, reason)
+	}
+}
+
+// An installation that is present but corrupt is a different fact from one that
+// was never made, and a machine consumer must be able to tell them apart.
+func TestCorruptInstallationIsInvalidNotMissing(t *testing.T) {
+	corrupt := installBundle(t, installedVersion, func(root string) {
+		writeFile(t, filepath.Join(root, releasebundle.BundleManifestPath), "{")
+	})
+	observation := defaultPlanningObserver{home: corrupt, version: installedVersion}.
+		ObservePlanning(context.Background(), canonProfile("node"))
+	if observation.Runtime.State != ComponentInvalid || observation.Compiler.State != ComponentInvalid {
+		t.Fatalf("a corrupt installation reported %q/%q, want invalid",
+			observation.Runtime.State, observation.Compiler.State)
+	}
+
+	absent := defaultPlanningObserver{home: t.TempDir(), version: installedVersion}.
+		ObservePlanning(context.Background(), canonProfile("node"))
+	if absent.Runtime.State != ComponentMissing {
+		t.Fatalf("an absent installation reported %q, want missing", absent.Runtime.State)
 	}
 }
 
