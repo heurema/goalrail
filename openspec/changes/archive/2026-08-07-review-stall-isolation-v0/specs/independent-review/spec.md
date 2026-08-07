@@ -68,6 +68,30 @@ tool. A vendor's refusal surfaces to the caller unchanged, and being runnable â€
 the executable resolving, not a configuration directory existing â€” is what
 makes a provider a candidate.
 
+#### Scenario: One provider is installed
+- **WHEN** the command runs where only the author's own provider can be run
+- **THEN** it reviews in fresh mode with that provider in a clean session, writes a receipt naming the mode, and asks nothing
+
+#### Scenario: Two providers are installed
+- **WHEN** the command runs where the provider that did not author the change can be run
+- **THEN** it reviews in cross mode with that provider
+
+#### Scenario: Cross falls back to fresh, loudly
+- **WHEN** two providers are installed but the non-author's command does not resolve
+- **THEN** the review runs in fresh mode and the receipt records the fallback and its reason
+
+#### Scenario: Nothing can review
+- **WHEN** no reviewer executable resolves at all
+- **THEN** the command refuses and names what is missing, and this is the only reviewer-selection refusal
+
+#### Scenario: The reviewer cannot write
+- **WHEN** a reviewer is invoked
+- **THEN** it is given no editing tool and no write-capable sandbox, whatever the machine's own configuration says
+
+#### Scenario: The vendor CLI refuses
+- **WHEN** the reviewer's own command exits non-zero or reports an unusable invocation
+- **THEN** the failure is reported as the reviewer's own, no receipt is written, and Goalrail does not retry with altered arguments
+
 #### Scenario: An integration the provider cannot switch off blocks the reviewer
 - **WHEN** a caller names an integration to remove and the reviewer's provider can express that removal
 - **THEN** the reviewer runs without it and the review completes, while Goalrail names no integration of its own
