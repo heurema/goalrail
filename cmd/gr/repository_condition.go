@@ -23,6 +23,23 @@ import (
 // classifies only Git's own verdict as an absent repository, so an absent Git or
 // a refused directory arrives here as something else and is passed through as
 // the failure it is.
+// notARepositoryError carries the exit status the condition deserves.
+//
+// A path outside version control is a state the command found; a discovery that
+// could not run is the command failing to look. A caller reading only the status
+// must be able to tell them apart, so the condition takes the status the command
+// surface already assigns to "unmanaged" rather than the generic failure the
+// broken discovery keeps.
+type notARepositoryError struct{ message string }
+
+func (err notARepositoryError) Error() string { return err.message }
+func (notARepositoryError) ExitCode() int     { return exitUnmanaged }
+
+// exitUnmanaged is the status a diagnosis already returns for a repository that
+// declares no Goalrail project; a path that is not a repository at all is the
+// same kind of answer and shares it.
+const exitUnmanaged = 3
+
 func statedRepositoryCondition(err error, path string) error {
 	if !errors.Is(err, projectstate.ErrNotRepository) {
 		return err
@@ -32,5 +49,6 @@ func statedRepositoryCondition(err error, path string) error {
 	if absolute, absErr := filepath.Abs(path); absErr == nil {
 		path = absolute
 	}
-	return fmt.Errorf("%s is not inside a Git repository, so there is no worktree root to resolve a Goalrail project from", path)
+	return notARepositoryError{message: fmt.Sprintf(
+		"%s is not inside a Git repository, so there is no worktree root to resolve a Goalrail project from", path)}
 }

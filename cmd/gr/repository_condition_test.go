@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,13 +19,17 @@ import (
 // so a command added later is covered without being remembered.
 func TestNoCommandRelaysAForeignFailure(t *testing.T) {
 	outside := t.TempDir()
+	// The seam is command and subcommand: `setup plan` resolves a repository as
+	// surely as `init` does, and a survey that stopped at the top level passed
+	// while it still relayed.
 	for _, command := range [][]string{
 		{"init", "--repo", outside},
 		{"migrate", "--repo", outside},
 		{"update", "--repo", outside},
 		{"doctor", "--repo", outside},
+		{"setup", "plan", "--repo", outside},
 	} {
-		t.Run(command[0], func(t *testing.T) {
+		t.Run(strings.Join(command[:len(command)-2], " "), func(t *testing.T) {
 			var stdout, stderr bytes.Buffer
 			err := run(t.Context(), command, strings.NewReader(""), &stdout, &stderr, productionService)
 
@@ -34,11 +39,11 @@ func TestNoCommandRelaysAForeignFailure(t *testing.T) {
 			}
 			for _, foreign := range []string{"fatal:", "exit status"} {
 				if strings.Contains(said, foreign) {
-					t.Fatalf("%s relays what another program said: %q", command[0], said)
+					t.Fatalf("%v relays what another program said: %q", command, said)
 				}
 			}
 			if !strings.Contains(said, "not inside a Git repository") && !strings.Contains(said, "unmanaged") {
-				t.Fatalf("%s did not name the condition: %q", command[0], said)
+				t.Fatalf("%v did not name the condition: %q", command, said)
 			}
 		})
 	}
@@ -49,8 +54,12 @@ func TestNoCommandRelaysAForeignFailure(t *testing.T) {
 // a repository, and a caller reads the difference.
 func TestABrokenDiscoveryIsNotReportedAsAnAbsentRepository(t *testing.T) {
 	outside := t.TempDir()
-	t.Setenv("PATH", t.TempDir())
+	// The absent-repository answer is taken first, while Git is still available:
+	// with it gone, every run produces the other outcome and the comparison
+	// would compare a thing with itself.
+	absent := absentRepositoryError(t, outside)
 
+	t.Setenv("PATH", t.TempDir())
 	var stdout, stderr bytes.Buffer
 	err := run(t.Context(), []string{"init", "--repo", outside}, strings.NewReader(""), &stdout, &stderr, productionService)
 	if err == nil {
@@ -59,6 +68,31 @@ func TestABrokenDiscoveryIsNotReportedAsAnAbsentRepository(t *testing.T) {
 	if strings.Contains(err.Error(), "not inside a Git repository") {
 		t.Fatalf("a discovery that could not run was reported as an absent repository: %v", err)
 	}
+
+	// Wording alone is half the requirement. A caller reading only the status
+	// must be able to tell the two apart, and the first version of this change
+	// left both at the same code while its test checked only the sentence.
+	if exitStatusOf(err) == exitStatusOf(absent) {
+		t.Fatalf("a broken discovery and an absent repository share exit status %d", exitStatusOf(err))
+	}
+}
+
+func absentRepositoryError(t *testing.T, outside string) error {
+	t.Helper()
+	var stdout, stderr bytes.Buffer
+	err := run(t.Context(), []string{"init", "--repo", outside}, strings.NewReader(""), &stdout, &stderr, productionService)
+	if err == nil {
+		t.Fatal("initialization succeeded outside a repository")
+	}
+	return err
+}
+
+func exitStatusOf(err error) int {
+	var coded interface{ ExitCode() int }
+	if errors.As(err, &coded) {
+		return coded.ExitCode()
+	}
+	return 1
 }
 
 // A repository with no work tree keeps its own sentence, which the condition
