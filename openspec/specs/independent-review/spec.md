@@ -6,10 +6,9 @@ Define independent branch review as a bounded, non-interactive, read-only
 process whose provider selection, reviewed range, reviewer instructions, and
 receipts remain deterministic, auditable, and independent from the author's
 session.
-
 ## Requirements
 ### Requirement: One command reviews the current branch in a fresh session
-**Intent IDs:** OUT-1, OUT-3, SIG-1
+**Intent IDs:** OUT-1, OUT-3, SIG-1, SIG-3, SIG-4
 
 Goalrail SHALL provide a command that reviews the current branch's changes
 against a base ref by running a reviewer in a fresh session that never sees the
@@ -37,6 +36,37 @@ subcommand. Where a provider's sandbox is configurable, the invocation SHALL set
 it to read-only and override whatever the machine configures; where tools are
 enumerated, no editing tool SHALL appear.
 
+A fresh session is fresh in what it inherits, and the machine's provider
+integrations are inherited. Stripping the author's environment does not reach
+them: they are named in the provider's own configuration, and one of them was
+measured blocking a reviewer indefinitely while the environment was already
+stripped and the sandbox already read-only. The command SHALL therefore accept
+integration names from the caller and remove each named integration from the
+reviewer's session. The caller supplies only a name; Goalrail renders that name
+into the provider's own documented removal syntax and adds nothing else. An
+arbitrary argument passthrough SHALL NOT be offered: it would turn the reviewer's
+read-only boundary back into a filtering problem, and that boundary has already
+been defeated twice while it lived in an allowance. Because the rendering is
+fixed and the only caller input is a bounded identifier, no caller input can
+reach the sandbox mode, the model, the effort, or the reviewer identity recorded
+in the receipt.
+
+Goalrail MUST NOT name, enumerate, detect, or special-case any provider
+integration, server, or tool: what to remove is the caller's knowledge of their
+own machine, not a list this repository maintains and ages. Isolation SHALL be
+off by default, because an integration is ordinarily an asset. A provider whose
+interface cannot express the removal of one named integration SHALL refuse the
+request rather than accept it and do nothing, because a silently ignored
+isolation request reads as isolation that happened. Whether a provider can
+express it SHALL be established by running its interface, never by reading its
+flag listing: a settings surface does not appear there, and one provider's
+capability was wrongly declared absent on exactly that evidence.
+
+A name SHALL be refused when the rendering cannot carry it unchanged. Where a
+provider reads a character as configuration structure rather than as part of the
+name, that character is refused rather than escaped: an escaping syntax is a
+claim about a vendor's parser that this repository would then have to keep true.
+
 The reviewer SHALL be invoked through the vendor's own documented
 non-interactive interface, so the user's existing subscription is used as its
 vendor intends. Goalrail MUST NOT vendor, pin, or wrap a reviewer, MUST NOT
@@ -44,11 +74,6 @@ require any provider's plugin, and MUST NOT depend on a third-party review
 tool. A vendor's refusal surfaces to the caller unchanged, and being runnable —
 the executable resolving, not a configuration directory existing — is what
 makes a provider a candidate.
-
-Reviewer selection SHALL refuse in exactly one case: no reviewer can be run at
-all. Repository and base-resolution failures remain input errors, and a
-configured budget gate remains the separate policy refusal defined below;
-neither is a reviewer-selection decision.
 
 #### Scenario: One provider is installed
 - **WHEN** the command runs where only the author's own provider can be run
@@ -73,6 +98,30 @@ neither is a reviewer-selection decision.
 #### Scenario: The vendor CLI refuses
 - **WHEN** the reviewer's own command exits non-zero or reports an unusable invocation
 - **THEN** the failure is reported as the reviewer's own, no receipt is written, and Goalrail does not retry with altered arguments
+
+#### Scenario: An integration the provider cannot switch off blocks the reviewer
+- **WHEN** a caller names an integration to remove and the reviewer's provider can express that removal
+- **THEN** the reviewer runs without it and the review completes, while Goalrail names no integration of its own
+
+#### Scenario: Isolation is not the default
+- **WHEN** a review runs with no integration named
+- **THEN** the reviewer keeps the machine's ordinary integrations
+
+#### Scenario: A name cannot reach another setting
+- **WHEN** a caller supplies a name that is empty, oversized, or carries characters that could alter the invocation's structure
+- **THEN** the review refuses before any reviewer starts, and the sandbox, model, effort, and reviewer identity arguments are what they would have been without isolation
+
+#### Scenario: A provider that cannot express the removal
+- **WHEN** a caller names an integration and the reviewer's provider offers no per-integration removal
+- **THEN** the review refuses and says so, rather than running a reviewer that kept the integration
+
+#### Scenario: A name the rendering cannot carry
+- **WHEN** a caller names an integration containing a character a provider reads as configuration structure
+- **THEN** the review refuses the name rather than rendering something that removes nothing
+
+#### Scenario: An isolated review is recorded as one
+- **WHEN** a review completes with an integration removed
+- **THEN** its receipt records what it ran without, and it does not address the same stored receipt as an otherwise identical review that kept it
 
 ### Requirement: Authorship is inferred, and not knowing it refuses nothing
 **Intent IDs:** OUT-1, OUT-5
@@ -335,7 +384,7 @@ complete or when it could never be read back within the receipt bound.
 - **THEN** nothing is stored, and the failure names its cause
 
 ### Requirement: A review is bounded, whole tree included
-**Intent IDs:** OUT-3, SIG-1
+**Intent IDs:** OUT-1, OUT-2, SIG-1, SIG-2, SIG-5
 
 Every review SHALL run under a deadline, and the deadline SHALL bound the whole
 process tree the reviewer spawns, not its direct child alone. The reviewers are
@@ -343,6 +392,23 @@ wrappers whose descendants inherit the pipes; a deadline that kills the parent
 and then waits on the pipes was measured letting a twenty-minute limit run to
 fifty-three. A review that exceeds its deadline SHALL be reported as such,
 write no receipt, and leave no reviewer processes behind.
+
+A deadline bounds total cost; it does not bound waste. A reviewer that stops
+entirely pays the whole deadline and returns nothing, and the caller cannot tell
+it apart from one still working — measured twice on one branch, at 25 and then
+50 minutes, each run recording no reviewer event whatever for the remainder after
+a single blocking call. Every review SHALL therefore also run under a progress
+bound: where the reviewer produces no observable output for a bounded period, the
+review SHALL stop, report a stalled reviewer as an outcome distinct from an
+exceeded deadline, write no receipt, and leave no reviewer processes behind. The
+report SHALL name the reviewer's last observed activity, taken from output
+already captured, because the alternative is reading provider session files to
+learn what a command already knew. The progress bound SHALL be shorter than the
+deadline it accompanies and SHALL be nameable by the caller; doubling a deadline
+does not diagnose a stall, which is what the second measured run established.
+
+A stalled review MUST NOT be recorded, reported, or counted as a completed
+review, a finding-free review, or a passing one. It reviewed nothing.
 
 The reviewer's model SHALL be stated on the invocation rather than inherited
 from the authoring session, which chose its model for writing code and not for
@@ -379,6 +445,18 @@ durations and reproduction command in
 `openspec/changes/archive/2026-08-04-pre-pr-review-v0/evidence/effort-experiment-2026-08-01.md`. The deadline travels with the
 effort because raising one without the other only moves the failure from a false
 clean verdict to an unfinished review.
+
+#### Scenario: A reviewer stops producing output
+- **WHEN** a reviewer emits nothing for longer than the progress bound while its deadline still has time left
+- **THEN** the review stops within that bound, reports a stalled reviewer distinctly from a deadline overrun, names its last observed activity, writes no receipt, and leaves no reviewer processes behind
+
+#### Scenario: A slow reviewer is not a stalled one
+- **WHEN** a reviewer keeps producing output but is still working as the deadline approaches
+- **THEN** the progress bound does not stop it, and exceeding the deadline is reported as a deadline overrun
+
+#### Scenario: A stalled review is not a clean one
+- **WHEN** a review stopped for lack of progress is read back by any caller or receipt consumer
+- **THEN** it is not presented as completed, finding-free, or passing
 
 #### Scenario: A full pass is thorough by default
 - **WHEN** a full pass runs with no effort and no deadline named by the caller
@@ -442,3 +520,4 @@ receipt contents, or success and failure semantics.
 #### Scenario: Review input fails without a terminal
 - **WHEN** `gr review` receives malformed or ambiguous repository input through a process with no terminal attached
 - **THEN** it fails with the same input-error semantics as an attached invocation and does not attempt to prompt
+
