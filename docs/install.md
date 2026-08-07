@@ -99,9 +99,13 @@ redirect, or replace a missing checksum with a transport-success assumption.
 This installs only standalone `gr`. It does not satisfy a managed project's
 setup profile; it is what makes the commands below available.
 
-Work in a temporary directory, and keep it until placement is verified:
+Two paths are used throughout. `repo` is the managed clone being set up; `work`
+is a temporary directory that holds downloads until placement is verified. Every
+command below names one of them explicitly, because the shell stays in `work`
+and `.` would name the wrong one:
 
 ```sh
+repo="$(pwd)"          # the managed clone, before changing directory
 work="$(mktemp -d)"
 cd "${work}"
 ```
@@ -161,17 +165,20 @@ tar -xzf "${archive}"
 ```
 
 Place it at a durable user-local path, creating the directory if it does not
-exist and preserving any previous binary until the new one is verified:
+exist and keeping any previous binary until the new one is verified. Without
+that copy there is nothing for the rollback below to restore:
 
 ```sh
 mkdir -p ~/.local/bin
+[ -e ~/.local/bin/gr ] && cp -p ~/.local/bin/gr "${work}/gr.previous"
 cp gr ~/.local/bin/gr
-~/.local/bin/gr version
+~/.local/bin/gr version   # if this disagrees, restore "${work}/gr.previous"
 ```
 
 `~/.local/bin` is not on `PATH` on every machine, and putting it there is a
-separate explicit user configuration decision. Until it is made, invoke `gr` by
-its full path.
+separate explicit user configuration decision. Every command below therefore
+invokes `~/.local/bin/gr` by its full path: a bare `gr` would fail, or resolve
+some other installation that happens to be on `PATH`.
 
 Delete the temporary directory only after verification and durable placement.
 
@@ -245,12 +252,17 @@ produces an incomplete plan naming what is missing, so fetch the two inputs
 first. The release metadata is the file already downloaded above; the setup
 manifest is named by this machine's entry in it:
 
+The scaffold must be named. It defaults to `codex`, so omitting it while setting
+up for another agent plans and attaches the wrong one and then reports it ready:
+
 ```sh
+scaffold=claude-code   # or codex — the agent performing this setup
+
 manifest="$(printf '%s' "${entry}" | jq -r .setup_manifest.name)"
 curl --fail --location --proto '=https' --proto-redir '=https' --output "${manifest}" \
   "https://github.com/heurema/goalrail/releases/download/${version}/${manifest}"
 
-gr setup plan --repo . \
+~/.local/bin/gr setup plan --repo "${repo}" --scaffold "${scaffold}" \
   --release-metadata current-release.json \
   --setup-manifest "${manifest}" > plan.json
 ```
@@ -298,11 +310,12 @@ happens:
 bundle_archive="$(printf '%s' "${entry}" | jq -r .setup_archive.name)"
 curl --fail --location --proto '=https' --proto-redir '=https' --output "${bundle_archive}" \
   "https://github.com/heurema/goalrail/releases/download/${version}/${bundle_archive}"
-sha256sum --ignore-missing -c checksums.txt
+sha256sum --ignore-missing -c checksums.txt        # Linux
+shasum -a 256 --ignore-missing -c checksums.txt   # macOS
 
 mkdir -p bundle && tar -xzf "${bundle_archive}" -C bundle
 
-gr setup verify-plan --repo . --bundle bundle \
+~/.local/bin/gr setup verify-plan --repo "${repo}" --scaffold "${scaffold}" --bundle bundle \
   --plan plan.json --authorization authorization.json \
   --release-metadata current-release.json
 ```
@@ -311,7 +324,7 @@ Verification returns `"verified":true` with the plan, authorization and manifest
 digests it bound. Only then:
 
 ```sh
-gr setup apply --repo . --bundle bundle \
+~/.local/bin/gr setup apply --repo "${repo}" --scaffold "${scaffold}" --bundle bundle \
   --plan plan.json --authorization authorization.json \
   --release-metadata current-release.json \
   --continuation-ref 'task:<bounded id of the request this interrupted>'
@@ -356,7 +369,8 @@ durable installation, and setup never writes project code.
 
 ## Verification and trust boundaries
 
-After apply, `gr doctor --json` must report each layer independently:
+After apply, `~/.local/bin/gr doctor --json` must report each layer
+independently:
 
 - `managed`: committed project declaration is valid;
 - `locally_ready`: exact bundle, compiler/runtime, project canon, schema, and at
@@ -393,7 +407,7 @@ Every apply attempt retains one private bounded `goalrail.setup-recovery/v1`
 artifact. Roll back only that attempt:
 
 ```sh
-gr setup rollback \
+~/.local/bin/gr setup rollback \
   --repo '<repository>' \
   --home '<planned-home>' \
   --recovery '<private-recovery.json>'
