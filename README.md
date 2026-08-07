@@ -52,9 +52,12 @@ init or migrate -> doctor -> exact setup consent -> confirmed intent/change
 -> protected admission
 ```
 
-- `gr init` creates portable v0.2 governance for a new managed project. It does
-  not install local dependencies, attach a scaffold, create a commit, or enable
-  a remote required check.
+- `gr init` creates portable v0.2 governance for a new managed project. Where a
+  supported scaffold keeps its settings inside the repository, it also registers
+  the session hooks there and adds this clone's own ignore rule so no commit can
+  carry them to a teammate. It does not install local dependencies, attach a
+  scaffold that registers at user scope, create a commit, or enable a remote
+  required check.
 - `gr migrate` is the explicit one-project transition from exact v0.1.8
   evidence. There is no automatic migration and no `gr init` per worktree.
 - `gr doctor --json` keeps managed identity, local readiness, lineage readiness,
@@ -126,7 +129,7 @@ rollback boundaries.
 
 | Command | What it does |
 |---|---|
-| `gr init` | Create committed v0.2 project governance; no local setup or external activation |
+| `gr init` | Create committed v0.2 project governance; register a scaffold whose settings live in this repository; no other local setup or external activation |
 | `gr migrate` | Convert one exact v0.1.8 project to committed v0.2 governance |
 | `gr doctor` | Diagnose project identity, governance, local readiness, lineage, and independently observed shared admission |
 | `gr setup plan|verify-plan|apply|rollback` | Plan and execute exact authorized local setup with receipts and recovery |
