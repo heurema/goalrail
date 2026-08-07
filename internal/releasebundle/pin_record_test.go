@@ -119,3 +119,30 @@ func rewriteLock(t *testing.T, repository string, change func(*SourceLock)) {
 		t.Fatal(err)
 	}
 }
+
+// The check belongs on the path every release path shares, not in one command.
+// Building and verifying load their inputs the same way, so neither can proceed
+// against a closure nobody looked at.
+func TestBuildAndVerifyRefuseAnUnreviewedClosure(t *testing.T) {
+	repository := lockFixture(t)
+	rewriteLock(t, repository, func(l *SourceLock) { l.Closure.PackageCount++ })
+
+	if _, err := loadReleaseInputs(repository); err == nil {
+		t.Fatal("the shared input path accepted an unreviewed closure")
+	} else if !strings.Contains(err.Error(), "packages") {
+		t.Fatalf("the refusal does not name what disagreed: %v", err)
+	}
+}
+
+// The expanded document carries its own schema identifier, because strict
+// decoding makes the two shapes mutually unreadable rather than compatible.
+func TestTheExpandedSourceLockCarriesItsOwnSchema(t *testing.T) {
+	repository := lockFixture(t)
+	rewriteLock(t, repository, func(l *SourceLock) { l.Schema = "goalrail.setup-source-lock/v1" })
+
+	if _, err := CheckSourceLock(repository); err == nil {
+		t.Fatal("a document claiming the previous schema was accepted")
+	} else if !strings.Contains(err.Error(), "schema") {
+		t.Fatalf("the refusal does not name the schema: %v", err)
+	}
+}

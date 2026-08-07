@@ -1,5 +1,5 @@
 {
-  "schema": "goalrail.setup-source-lock/v1",
+  "schema": "goalrail.setup-source-lock/v2",
   "closure": {
     "package_count": 80,
     "install_script_count": 1,

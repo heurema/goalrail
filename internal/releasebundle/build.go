@@ -77,28 +77,8 @@ func CheckSourceLock(repoRoot string) (LockSummary, error) {
 		}
 	}
 	sortPlatforms(platforms)
-	// The recorded closure is what somebody last reviewed. Comparing the computed
-	// one against it is what makes a pin move a decision rather than a diff that
-	// scrolls past: eighty packages change their digest for any reason at all,
-	// and without this the change arrives as lock-file churn.
-	recorded := inputs.sourceLock.Closure
-	if recorded.PackageCount != len(inputs.closure.Packages) {
-		return LockSummary{}, fmt.Errorf(
-			"the compiler closure holds %d packages; the source lock records %d — update the record with the reason for the change",
-			len(inputs.closure.Packages), recorded.PackageCount)
-	}
-	if recorded.InstallScriptCount != installScripts {
-		return LockSummary{}, fmt.Errorf(
-			"the compiler closure holds %d packages with an install script; the source lock records %d — a package gaining one is worth reading before it is adopted",
-			installScripts, recorded.InstallScriptCount)
-	}
-	if recorded.Digest != inputs.closure.Digest {
-		return LockSummary{}, fmt.Errorf(
-			"the compiler closure digest is %s; the source lock records %s — update the record with the reason for the change",
-			inputs.closure.Digest, recorded.Digest)
-	}
 	return LockSummary{
-		Schema:             SourceLockSchemaV1,
+		Schema:             SourceLockSchemaV2,
 		Runtime:            inputs.sourceLock.Runtime.ID + "@" + inputs.sourceLock.Runtime.Version,
 		Compiler:           inputs.sourceLock.Compiler.ID + "@" + inputs.sourceLock.Compiler.Version,
 		PackageCount:       len(inputs.closure.Packages),
@@ -296,6 +276,36 @@ func validateBuildPaths(repoRoot, distDir, cacheDir string) (resolvedBuildPaths,
 	return resolvedBuildPaths{repoRoot: resolvedRepo, distDir: resolvedDist, cacheDir: resolvedCache}, nil
 }
 
+// compareRecordedClosure refuses a computed dependency set that disagrees with
+// the one the source lock records, naming which of the three facts disagreed.
+//
+// A digest alone tells a reviewer that something changed; the counts tell them
+// what, which is the difference between a diff they can judge and one they will
+// wave through.
+func compareRecordedClosure(recorded ClosureRecord, computed compilerClosure) error {
+	installScripts := 0
+	for _, packageEntry := range computed.Packages {
+		if packageEntry.HasInstallScript {
+			installScripts++
+		}
+	}
+	switch {
+	case recorded.PackageCount != len(computed.Packages):
+		return fmt.Errorf(
+			"the compiler closure holds %d packages; the source lock records %d — update the record with the reason for the change",
+			len(computed.Packages), recorded.PackageCount)
+	case recorded.InstallScriptCount != installScripts:
+		return fmt.Errorf(
+			"the compiler closure holds %d packages with an install script; the source lock records %d — a package gaining one is worth reading before it is adopted",
+			installScripts, recorded.InstallScriptCount)
+	case recorded.Digest != computed.Digest:
+		return fmt.Errorf(
+			"the compiler closure digest is %s; the source lock records %s — update the record with the reason for the change",
+			computed.Digest, recorded.Digest)
+	}
+	return nil
+}
+
 func loadReleaseInputs(repoRoot string) (releaseInputs, error) {
 	sourceRaw, err := os.ReadFile(filepath.Join(repoRoot, filepath.FromSlash(SourceLockPath)))
 	if err != nil {
@@ -333,6 +343,14 @@ func loadReleaseInputs(repoRoot string) (releaseInputs, error) {
 	licenseRaw, err := os.ReadFile(filepath.Join(repoRoot, "LICENSE"))
 	if err != nil {
 		return releaseInputs{}, fmt.Errorf("read Goalrail license: %w", err)
+	}
+	// The recorded closure is what somebody last reviewed. Comparing the computed
+	// one against it here rather than in one command puts the check on the path
+	// every release path shares: building, verifying and checking the lock all
+	// load their inputs through this, so none of them can proceed against a
+	// closure nobody looked at.
+	if err := compareRecordedClosure(source.Closure, closure); err != nil {
+		return releaseInputs{}, err
 	}
 	return releaseInputs{sourceLock: source, packageJSONRaw: packageRaw, closure: closure, licenseRaw: licenseRaw}, nil
 }

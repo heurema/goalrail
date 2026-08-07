@@ -227,7 +227,7 @@ func TestBuildAndVerifyReleaseBundleFromExactCachedSources(t *testing.T) {
 		writeTestArtifact(t, filepath.Join(dist, minimalArchiveName("v0.2.0", platform)), minimal, 0o644)
 	}
 	sourceLock := SourceLock{
-		Schema: SourceLockSchemaV1,
+		Schema: SourceLockSchemaV2,
 		Runtime: RuntimeSource{
 			ID: "node", Version: runtimeVersion,
 			Adoption:      PinAdoption{PublishedAt: "2025-07-31T00:00:00Z", AdoptedAt: "2026-08-05T00:00:00Z"},

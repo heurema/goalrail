@@ -17,7 +17,12 @@ import (
 )
 
 const (
-	SourceLockSchemaV1    = "goalrail.setup-source-lock/v1"
+	// SourceLockSchemaV2 adds the recorded closure and the adoption dates. It is
+	// a new identifier rather than a widened v1: the fields are mandatory and
+	// decoding is strict, so a v1 reader rejects a v2 document and a v2 validator
+	// rejects a v1 one. One identifier describing both would make the schema a
+	// claim neither side could rely on.
+	SourceLockSchemaV2    = "goalrail.setup-source-lock/v2"
 	SetupManifestSchemaV1 = "goalrail.setup-bundle-manifest/v1"
 	ReleaseMetadataSchema = "goalrail.release-metadata/v1"
 
@@ -348,8 +353,8 @@ func validateAdoption(name string, adoption PinAdoption) error {
 }
 
 func validateSourceLock(value SourceLock) error {
-	if value.Schema != SourceLockSchemaV1 {
-		return fmt.Errorf("source lock schema = %q, want %q", value.Schema, SourceLockSchemaV1)
+	if value.Schema != SourceLockSchemaV2 {
+		return fmt.Errorf("source lock schema = %q, want %q", value.Schema, SourceLockSchemaV2)
 	}
 	if value.Runtime.ID != "node" || !validVersion(value.Runtime.Version) {
 		return fmt.Errorf("runtime identity is not the pinned node version")
