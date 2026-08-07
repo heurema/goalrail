@@ -192,7 +192,7 @@ func runUpdate(args []string, stdout, stderr io.Writer) error {
 				return writeErr
 			}
 		}
-		return err
+		return statedRepositoryCondition(err, root)
 	}
 	overlayReport, err := harness.Update(harness.UpdateInput{
 		RepositoryRoot:    projectReport.Repository,
