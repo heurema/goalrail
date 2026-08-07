@@ -121,3 +121,59 @@ func attachmentFixture(t *testing.T) (repository, home, executable string) {
 	}
 	return repository, home, executable
 }
+
+// A refusal must not carry a success claim. The trust notice states that the
+// hooks are registered and apply from the next session.
+func TestARefusedRegistrationCarriesNoTrustNotice(t *testing.T) {
+	repository, home, executable := attachmentFixture(t)
+	// A file where the settings directory belongs: the write cannot succeed.
+	if err := os.WriteFile(filepath.Join(repository, ".claude"), []byte("not a directory"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	writes := registerRepositoryScaffolds(repository, string(ambient.ScaffoldClaudeCode), home, executable)
+
+	if len(writes) != 1 || writes[0].Action != "refused" {
+		t.Fatalf("an impossible write was not refused: %#v", writes)
+	}
+	if writes[0].Trust != "" {
+		t.Fatalf("a refusal claims the hooks are registered: %q", writes[0].Trust)
+	}
+	if writes[0].Reason == "" {
+		t.Fatal("a refusal named no reason")
+	}
+}
+
+// The home directory answers only whether this machine carries the scaffold. A
+// repository-scope registration never reads it, so an unresolvable home must
+// not swallow a scaffold the caller named outright.
+func TestAnExplicitScaffoldDoesNotDependOnTheHomeDirectory(t *testing.T) {
+	repository, _, executable := attachmentFixture(t)
+
+	writes := registerRepositoryScaffolds(repository, string(ambient.ScaffoldClaudeCode), "", executable)
+
+	if len(writes) != 1 || writes[0].Action != "registered" {
+		t.Fatalf("an explicitly named scaffold was skipped with no home: %#v", writes)
+	}
+}
+
+// A repair changes the hook definition, so whatever review the scaffold applies
+// to it applies again. Reporting it as an ordinary registration would hide that
+// existing behaviour was replaced.
+func TestARepairIsReportedAsOneAndNamesWhatItReplaced(t *testing.T) {
+	repository, home, executable := attachmentFixture(t)
+	registerRepositoryScaffolds(repository, string(ambient.ScaffoldClaudeCode), home, executable)
+
+	moved := filepath.Join(t.TempDir(), "gr")
+	if err := os.WriteFile(moved, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writes := registerRepositoryScaffolds(repository, string(ambient.ScaffoldClaudeCode), home, moved)
+
+	if len(writes) != 1 || writes[0].Action != "repaired" {
+		t.Fatalf("replacing a registration that names another executable was not reported as a repair: %#v", writes)
+	}
+	if !strings.Contains(writes[0].ReplacedExecutable, filepath.Base(executable)) {
+		t.Fatalf("the repair does not name what it replaced: %#v", writes[0])
+	}
+}

@@ -48,6 +48,12 @@ type attachmentWrite struct {
 	IgnoreEntries []string `json:"ignore_entries,omitempty"`
 	Trust         string   `json:"trust,omitempty"`
 	Reason        string   `json:"reason,omitempty"`
+
+	// Superseded and ReplacedExecutable describe what a repair replaced: a
+	// handler of ours on an event this arrangement no longer writes, and a
+	// registration naming an executable other than this one.
+	Superseded         []string `json:"superseded_events,omitempty"`
+	ReplacedExecutable string   `json:"replaced_executable,omitempty"`
 }
 
 func runInit(ctx context.Context, args []string, stdout, stderr io.Writer) error {
@@ -58,7 +64,7 @@ func runInit(ctx context.Context, args []string, stdout, stderr io.Writer) error
 	confirmSchema := set.Bool("confirm-schema-switch", false,
 		"switch an OpenSpec configuration that names another custom schema")
 	fixIgnore := set.Bool("fix-gitignore", false,
-		"deprecated; v1 initialization does not write checkout-local ignore rules")
+		"deprecated; the only ignore rule initialization writes is the one that keeps a scaffold registration out of a commit")
 	if err := set.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
@@ -69,7 +75,7 @@ func runInit(ctx context.Context, args []string, stdout, stderr io.Writer) error
 		return fmt.Errorf("init accepts no positional arguments")
 	}
 	if *fixIgnore {
-		return fmt.Errorf("--fix-gitignore is not part of v1 project initialization; no marker or local registration is created")
+		return fmt.Errorf("--fix-gitignore is not part of v1 project initialization; the only ignore rule it writes is the clone-local one that keeps a scaffold registration out of a commit")
 	}
 	selected := ""
 	if strings.TrimSpace(*scaffold) != "" {
@@ -127,8 +133,15 @@ func runInit(ctx context.Context, args []string, stdout, stderr io.Writer) error
 // nothing else: a machine with no supported scaffold has its configuration left
 // alone rather than guessed at.
 func registerRepositoryScaffolds(repositoryRoot, requested, home, executable string) []attachmentWrite {
-	if home == "" || executable == "" {
+	if executable == "" {
 		return nil
+	}
+	// The home directory answers only "does this machine carry the scaffold".
+	// A repository-scope registration never reads it, so an unresolvable home
+	// must not silently swallow a scaffold the caller named outright.
+	var detected []ambient.Scaffold
+	if home != "" {
+		detected = ambient.DetectScaffolds(home)
 	}
 	var writes []attachmentWrite
 	for _, scaffold := range ambient.SupportedScaffolds() {
@@ -139,7 +152,7 @@ func registerRepositoryScaffolds(repositoryRoot, requested, home, executable str
 			if requested != string(scaffold) {
 				continue
 			}
-		} else if !slices.Contains(ambient.DetectScaffolds(home), scaffold) {
+		} else if !slices.Contains(detected, scaffold) {
 			continue
 		}
 		writes = append(writes, registerRepositoryScaffold(scaffold, repositoryRoot, executable))
@@ -206,11 +219,22 @@ func registerRepositoryScaffold(scaffold ambient.Scaffold, repositoryRoot, execu
 		write.Action, write.Reason = "refused", err.Error()
 		return write
 	}
-	write.Events, write.Trust = plan.Events, ambient.ConnectionNotice(scaffold)
+	write.Events = plan.Events
+	write.Superseded = plan.SupersededPresent
 	changed, err := ambient.Connect(plan)
-	switch {
-	case err != nil:
+	if err != nil {
+		// The notice says the hooks are registered and apply from the next
+		// session, which is a success claim. A refusal must not carry it.
 		write.Action, write.Reason = "refused", err.Error()
+		return write
+	}
+	write.Trust = ambient.ConnectionNotice(scaffold)
+	switch {
+	case changed && plan.Repair:
+		// A repair changed the hook definition, so whatever review the scaffold
+		// applies to it applies again. Reporting it as an ordinary registration
+		// would hide that existing behaviour was replaced.
+		write.Action, write.ReplacedExecutable = "repaired", plan.RegisteredExecutable
 	case changed:
 		write.Action = "registered"
 	default:
