@@ -16,6 +16,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/heurema/goalrail/internal/domain"
 )
 
 type VerifyOptions struct {
@@ -210,8 +212,8 @@ func validateSetupManifestShape(manifest SetupBundleManifest) error {
 	}
 	componentIDs := make(map[string]struct{}, len(manifest.Components))
 	for index, component := range manifest.Components {
-		if component.ID == "" || component.Name == "" || component.Kind == "" || component.Version == "" || component.Integrity == "" || !validReference(component.LicenseRef) || !validReference(component.ProvenanceRef) {
-			return fmt.Errorf("component %d is incomplete", index)
+		if !domain.IsComponentID(component.ID) || component.Name == "" || component.Kind == "" || component.Version == "" || component.Integrity == "" || !validReference(component.LicenseRef) || !validReference(component.ProvenanceRef) {
+			return fmt.Errorf("component %d is incomplete or carries an identity a setup plan cannot express", index)
 		}
 		if index > 0 && manifest.Components[index-1].ID >= component.ID {
 			return fmt.Errorf("components are not uniquely sorted")
