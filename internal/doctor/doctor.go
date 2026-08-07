@@ -3,6 +3,7 @@ package doctor
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -128,6 +129,14 @@ type DiagnoseInput struct {
 
 func Diagnose(ctx context.Context, input DiagnoseInput) (Diagnosis, error) {
 	inspection, err := project.Inspect(ctx, input.RepositoryRoot)
+	if errors.Is(err, project.ErrNotRepository) {
+		// A directory outside version control is a state to report, not a
+		// failure of the check. Returning the error instead leaves a caller
+		// with an empty result, this repository's own release workflow among
+		// them, and surfaces Git's raw message and exit status where a bounded
+		// report belongs.
+		return notARepository(input.RepositoryRoot), nil
+	}
 	if err != nil {
 		return Diagnosis{}, err
 	}
@@ -243,6 +252,28 @@ func Diagnose(ctx context.Context, input DiagnoseInput) (Diagnosis, error) {
 		diagnosis.Category = CategoryWorking
 	}
 	return diagnosis, nil
+}
+
+// notARepository is the bounded report for a path Git does not track. It stays
+// inside the unmanaged category rather than adding a state, because that is what
+// it is — no declaration was found and nothing was observed — while its own
+// reason code keeps it distinguishable from a repository that simply never
+// declared Goalrail.
+func notARepository(root string) Diagnosis {
+	diagnosis := Diagnosis{
+		Schema: SchemaV2, Repository: root, Version: harness.Version,
+		Category:              CategoryUnmanaged,
+		Claim:                 ClaimDiagnosis{State: project.ClaimUnmanaged},
+		InitializedDeprecated: true,
+		InitializedSemantics:  "deprecated for one release: mirrors managed valid-declaration presence; it no longer reads a checkout-local marker",
+		Invocation:            harness.PinnedNewChange,
+		Update:                harness.InspectUpdateAvailability(nil, harness.Version),
+	}
+	addReason(&diagnosis, Reason{
+		Code: "PROJECT_NOT_A_REPOSITORY", Layer: "claim", State: string(project.ClaimUnmanaged),
+		Detail: "this path is not inside a Git repository, so there is no worktree root to resolve a Goalrail project from",
+	})
+	return diagnosis
 }
 
 func diagnoseGoverningArtifacts(diagnosis *Diagnosis) {
