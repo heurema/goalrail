@@ -238,7 +238,10 @@ func buildApplyEmission(
 	}
 	rollbackRef := "setup-rollback:none-required"
 	if result.RecoveryDigest != "" {
-		rollbackRef = "setup-recovery:sha256:" + string(result.RecoveryDigest)
+		// The digest already names its algorithm — SHA256Digest is a complete
+		// prefixed reference by the domain's own rule — so the scheme carries
+		// only the kind of thing being referenced.
+		rollbackRef = "setup-recovery:" + string(result.RecoveryDigest)
 	}
 	receipt := domain.SetupReceipt{
 		Schema:          domain.SetupReceiptSchemaV1,
@@ -328,7 +331,7 @@ func diagnosisReference(value SetupDiagnosisSummary) string {
 	if err != nil {
 		return "doctor:summary-invalid"
 	}
-	return "doctor:sha256:" + string(domain.DigestCanonicalJSON(raw))
+	return "doctor:" + string(domain.DigestCanonicalJSON(raw))
 }
 
 func applyBlockerRefs(result ApplyResult) []string {
