@@ -245,3 +245,25 @@ func TestNoWriteReceiptDoesNotDependOnProcessHome(t *testing.T) {
 		t.Fatalf("no-write receipt changed with process HOME\nfirst:  %#v\nsecond: %#v", first, second)
 	}
 }
+
+// A digest names its own algorithm. SHA256Digest is a complete prefixed
+// reference by the domain's own rule, so a scheme that adds the algorithm again
+// produces setup-recovery:sha256:sha256:… — a reference that passes the shape
+// check while saying the same thing twice.
+func TestReceiptReferencesNameTheirDigestOnce(t *testing.T) {
+	digest := domain.DigestCanonicalJSON([]byte("{}"))
+	if !strings.HasPrefix(string(digest), "sha256:") {
+		t.Fatalf("the domain digest no longer carries its algorithm: %q", digest)
+	}
+
+	reference := diagnosisReference(SetupDiagnosisSummary{Schema: "goalrail.setup-diagnosis-summary/v1"})
+	if strings.Contains(reference, "sha256:sha256:") {
+		t.Fatalf("the diagnosis reference names its algorithm twice: %q", reference)
+	}
+	if !domain.IsEvidenceReference(reference) {
+		t.Fatalf("the diagnosis reference is not a bounded evidence reference: %q", reference)
+	}
+	if !strings.HasPrefix(reference, "doctor:sha256:") {
+		t.Fatalf("the diagnosis reference lost its scheme or its digest: %q", reference)
+	}
+}
