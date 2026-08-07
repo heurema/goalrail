@@ -1,0 +1,6 @@
+=== RUN   TestPlanningObservationExecutesNothing
+--- PASS: TestPlanningObservationExecutesNothing (0.00s)
+=== RUN   TestDeclaredRuntimePathIsNeverResolvedOrRun
+--- PASS: TestDeclaredRuntimePathIsNeverResolvedOrRun (0.00s)
+PASS
+ok  	github.com/heurema/goalrail/internal/doctor	0.283s

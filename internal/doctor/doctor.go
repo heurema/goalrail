@@ -200,7 +200,7 @@ func Diagnose(ctx context.Context, input DiagnoseInput) (Diagnosis, error) {
 	diagnoseGoverningArtifacts(&diagnosis)
 	diagnoseProjectCanon(&diagnosis)
 	diagnoseOverlay(&diagnosis)
-	diagnosePlanning(ctx, &diagnosis, input.PlanningObserver)
+	diagnosePlanning(ctx, &diagnosis, input.PlanningObserver, input.Home)
 	diagnoseAttachments(&diagnosis, input)
 	diagnosePreparedAdmission(ctx, &diagnosis, input.ActivationObserver)
 
@@ -308,7 +308,7 @@ func diagnoseOverlay(diagnosis *Diagnosis) {
 	}
 }
 
-func diagnosePlanning(ctx context.Context, diagnosis *Diagnosis, observer PlanningObserver) {
+func diagnosePlanning(ctx context.Context, diagnosis *Diagnosis, observer PlanningObserver, home string) {
 	profileFinding := diagnosis.GoverningArtifacts.SetupProfile
 	diagnosis.Planning.ProfilePath = profileFinding.Path
 	diagnosis.Planning.ProfileState = profileFinding.State
@@ -321,7 +321,7 @@ func diagnosePlanning(ctx context.Context, diagnosis *Diagnosis, observer Planni
 	}
 	profile := diagnosis.GoverningArtifacts.SetupValue
 	if observer == nil {
-		observer = defaultPlanningObserver{}
+		observer = defaultPlanningObserver{home: home, version: harness.Version}
 	}
 	observation := observer.ObservePlanning(ctx, profile)
 	observation.Bundle.Kind, observation.Bundle.ID = "goalrail_bundle", "goalrail"

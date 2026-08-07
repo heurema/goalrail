@@ -1,6 +1,22 @@
 package harness
 
-import "runtime/debug"
+import (
+	"runtime/debug"
+
+	"github.com/heurema/goalrail/internal/updatecheck"
+)
+
+// IsReleaseVersion reports whether a version string is a plain release tag,
+// which is the question "was this binary published, and under which name".
+//
+// It is one line because the rule already exists and must not be written twice:
+// the release channel owns what counts as a release, and a second predicate that
+// drifted from it would let one part of the diagnosis believe a build was
+// released while another did not. Re-exporting it here also keeps the transport
+// confined — this package is already one of the two the confinement check
+// allows, so callers that need the rule do not have to reach the package that
+// can open a connection.
+func IsReleaseVersion(version string) bool { return updatecheck.IsRelease(version) }
 
 // Version is this binary's own version, as the build carries it.
 //

@@ -1,0 +1,9 @@
+=== RUN   TestPlanningObservationExecutesNothing
+    planning_test.go:26: diagnosis executed 2 program(s): [node --version openspec --version]
+--- FAIL: TestPlanningObservationExecutesNothing (0.59s)
+=== RUN   TestDeclaredRuntimePathIsNeverResolvedOrRun
+    planning_test.go:46: a repository-supplied path was executed: [probe.sh --version openspec --version]
+--- FAIL: TestDeclaredRuntimePathIsNeverResolvedOrRun (0.63s)
+FAIL
+FAIL	github.com/heurema/goalrail/internal/doctor	2.152s
+FAIL
