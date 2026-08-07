@@ -1,0 +1,31 @@
+# Context Pack
+
+- **Context Pack ID:** pin-closure-record-v0
+- **Version:** 1
+- **Previous version:** pending
+- **Artifact Contract:** goalrail-context-intent
+- **Artifact Contract Version:** 1
+- **Started at:** 2026-08-07T13:00:00Z
+- **Completed at:** 2026-08-07T15:20:00Z
+- **Outcome:** sufficient
+
+## Context Items
+
+| ID | Kind | Claim | Source | Verification recipe | Observed at | Relevance |
+|---|---|---|---|---|---|---|
+| CTX-1 | repository | The pinned dependency closure was computed and reported and compared against nothing, so a pin could move with no verdict attached. | `internal/releasebundle/build.go` at `c30bd84` | Read `CheckSourceLock` at that revision; expect `package_count`, `install_script_count` and `compiler_lock_digest` to be assembled into the summary and never compared. | 2026-08-07T13:05:00Z | Establishes that the check this change adds did not exist rather than existed and was weak. |
+| CTX-2 | repository | The pinned compiler closure holds 80 packages, one of which carries an install script, and that one is `@fission-ai/openspec` itself rather than a transitive dependency. | `go run ./cmd/goalrail-release lock-check --repo .` | Run it; expect `package_count` 80 and `install_script_count` 1. Cross-read `release/setup/compiler/package-lock.json` for `hasInstallScript`. | 2026-08-07T13:10:00Z | These are the values the record has to hold, and the one install script is the fact a reviewer most needs to see move. |
+| CTX-3 | external | The pinned runtime is a year behind its own LTS line and the pinned compiler two minors behind: node 22.18.0 was published 2025-07-31 against 22.23.2 on 2026-07-28, and `@fission-ai/openspec` 1.6.0 on 2026-07-10 against 1.8.0 on 2026-08-05. | `https://nodejs.org/dist/index.json`; `https://registry.npmjs.org/@fission-ai%2Fopenspec` | Read both endpoints and compare publication dates with `release/setup/source-lock.json`. A refresh measures the present rather than reproducing this observation. | 2026-08-07T14:05:00Z | Shows the pins were not chosen but left, which is what makes a move need a record rather than a preference. |
+| CTX-4 | repository | `release/setup/source-lock.json` appears in no published release asset. | `gh release view v0.2.1 --json assets` | Run it and filter asset names for `source-lock`; expect zero of fourteen. | 2026-08-07T15:05:00Z | Bounds the blast radius of an incompatible schema change to this repository. |
+| CTX-5 | repository | Its only readers are this repository's release tooling and two workflow steps that read `.platforms[]` with `jq`, so every reader moves in the same commit. | `internal/releasebundle`; `.github/workflows/ci.yml:61`; `.github/workflows/release.yml:149` | Grep the repository for `source-lock`; expect those and no other consumer. | 2026-08-07T15:06:00Z | The same bounding, from the consumer side rather than the artefact side. |
+| CTX-6 | repository | The operator registry declares that schema identifiers and their semantic boundaries are the automation contract, and it listed only v1. | `docs/contracts-v0.2.md:3,25` | Read both lines at `c30bd84`. | 2026-08-07T15:08:00Z | Makes an unversioned incompatible change a contract violation rather than an implementation detail. |
+| CTX-7 | repository | Contract decoding rejects unknown fields, so a v1 reader cannot read a document carrying the new fields and the new validator cannot accept a document without them. | `decodeStrictJSON` in `internal/releasebundle` | Read the decoder; expect `DisallowUnknownFields`. | 2026-08-07T15:09:00Z | Establishes that the two shapes are mutually unreadable, which is why one identifier could not describe both. |
+| CTX-8 | repository | The comparison, when first written, lived only in `CheckSourceLock`, while `Build` and `Verify` load their inputs through `loadReleaseInputs` and would have proceeded against an unreviewed closure. | `internal/releasebundle/build.go` at `1a3bb4a` | Read `Build`, `Verify` and `CheckSourceLock` at that revision; expect all three to call `loadReleaseInputs` and only the third to compare. | 2026-08-07T15:12:00Z | The guarantee has to sit on the shared path or the commands that produce a release can bypass it. |
+| CTX-9 | external | A supply-chain compromise on 2026-08-04 published malicious versions of 440 npm packages through the maintainers' own release workflow with valid signed provenance, executing its payload during installation. | `https://www.microsoft.com/en-us/security/blog/2026/08/04/chaindrop-supply-chain-compromise-anatomy-self-propagating-worm/` | Not independently reproducible — a past external event; retained evidence: the cited publication and the others linked from issue #71. | 2026-08-07T14:00:00Z | Shows that signatures and provenance do not distinguish a compromised release, so what a reviewer can act on is the closure changing, not its attestations. |
+| CTX-10 | repository | Goalrail never invokes npm's installer: packages are fetched as tarballs and extracted directly, and `internal/setup` contains no process execution at all. | `internal/releasebundle/sources.go:38-43`; `internal/setup` | Read the extraction path; grep `internal/setup` for `exec.`; expect no match. | 2026-08-07T14:10:00Z | Bounds what this record can protect against: install-time execution is structurally absent, so the exposure is what the closure becomes, not what it does while being installed. |
+| CTX-11 | repository | Both adoption dates are supplied by whoever moves the pin, and nothing in the repository can establish either independently. | `release/setup/source-lock.json`; `internal/releasebundle/contracts.go` | Read the fields and their validation; expect no external source consulted. | 2026-08-07T15:15:00Z | Decides that the dates are disclosure rather than a gate, and forbids the intent from claiming a waiting period is enforced. |
+| CTX-12 | repository | The governing contract requires a versioned Intent Snapshot before a significant change, defines neither "significant" nor any defect-class exception, and forbids rewriting recorded history. | `AGENTS.md:6,10,12,34` | Read those lines. | 2026-08-07T15:18:00Z | Governs what this snapshot may claim about its own provenance. |
+
+## Material Unknowns
+
+None.
