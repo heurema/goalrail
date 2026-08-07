@@ -61,7 +61,35 @@ const pinnedPackage = "@fission-ai/openspec@1.6.0"
 
 // PinnedNewChange is the invocation whose omission the pinned version's defect
 // punishes.
+//
+// It names the stock CLI resolved from the registry, which is what a machine
+// carrying no installed bundle would have to reach for. Where authorized setup
+// has placed the pinned toolchain, InstalledNewChange names that instead: the
+// bundle exists so the compiler is fetched once, pinned by digest and verified
+// per file, and an invocation that resolves the package again would discard
+// that at the moment it was established.
 const PinnedNewChange = PinnedInvocation + " new change <name> --schema " + SchemaName
+
+// NewChangeArguments is the part of the invocation that does not depend on how
+// the compiler was obtained.
+const NewChangeArguments = " new change <name> --schema " + SchemaName
+
+// InstalledNewChange renders the invocation for a verified installed toolchain:
+// the bundle's own runtime executing the bundle's own compiler entrypoint, with
+// no name left for a package manager to resolve.
+func InstalledNewChange(runtimePath, compilerPath string) string {
+	return "OPENSPEC_TELEMETRY=0 " + shellArgument(runtimePath) + " " + shellArgument(compilerPath) + NewChangeArguments
+}
+
+// shellArgument quotes a path so the reported command survives a home directory
+// carrying a space or a quote. A reported command a reader cannot paste is a
+// command they will retype wrongly.
+func shellArgument(value string) string {
+	if value != "" && !strings.ContainsAny(value, " \t\n'\"\\$`&;|<>()*?[]#~=%!{}") {
+		return value
+	}
+	return "'" + strings.ReplaceAll(value, "'", `'"'"'`) + "'"
+}
 
 // CanonFile is one file of the overlay, with the digest it must have to be
 // current.

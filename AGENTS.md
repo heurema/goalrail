@@ -23,13 +23,14 @@
 ## OpenSpec
 
 - Use the project-local `goalrail-intent` schema for Goalrail changes.
-- OpenSpec 1.6.0 currently resolves the repository default as `spec-driven` in `new change`, even though `openspec/config.yaml` names the custom schema. Always create changes explicitly with:
+- OpenSpec 1.6.0 currently resolves the repository default as `spec-driven` in `new change`, even though `openspec/config.yaml` names the custom schema. Always pass `--schema goalrail-intent` explicitly.
+- Take the invocation from `gr doctor`, which reports the compiler this machine would actually run. Where authorized setup has installed the pinned bundle, that is the bundle's own runtime and compiler entrypoint — fetched once, pinned by digest, verified per file, and resolving nothing. Where no bundle is installed it is the stock command:
 
   ```sh
   OPENSPEC_TELEMETRY=0 npx --yes @fission-ai/openspec@1.6.0 new change <name> --schema goalrail-intent
   ```
 
-- Use the same pinned, telemetry-disabled CLI prefix for status, instructions, validation, and schema commands until the project adopts a different verified installation contract.
+- Use whichever of those two the diagnosis reported, with the same telemetry-disabled prefix, for status, instructions, validation, and schema commands. Do not resolve the package again when a verified bundle is installed: that returns every planning command to the registry the bundle exists to stop consulting.
 - Follow the artifact dependency order reported by `openspec status`; do not bypass `intent.md` or generate a proposal from candidate intent.
 - OpenSpec is a replaceable development-time compiler/provider. Do not leak OpenSpec types into Goalrail's canonical domain.
 - Planning completion is not permission to apply, commit, push, publish, deploy, or start a real canary. Each action keeps its normal owner gate.
