@@ -77,6 +77,26 @@ func CheckSourceLock(repoRoot string) (LockSummary, error) {
 		}
 	}
 	sortPlatforms(platforms)
+	// The recorded closure is what somebody last reviewed. Comparing the computed
+	// one against it is what makes a pin move a decision rather than a diff that
+	// scrolls past: eighty packages change their digest for any reason at all,
+	// and without this the change arrives as lock-file churn.
+	recorded := inputs.sourceLock.Closure
+	if recorded.PackageCount != len(inputs.closure.Packages) {
+		return LockSummary{}, fmt.Errorf(
+			"the compiler closure holds %d packages; the source lock records %d — update the record with the reason for the change",
+			len(inputs.closure.Packages), recorded.PackageCount)
+	}
+	if recorded.InstallScriptCount != installScripts {
+		return LockSummary{}, fmt.Errorf(
+			"the compiler closure holds %d packages with an install script; the source lock records %d — a package gaining one is worth reading before it is adopted",
+			installScripts, recorded.InstallScriptCount)
+	}
+	if recorded.Digest != inputs.closure.Digest {
+		return LockSummary{}, fmt.Errorf(
+			"the compiler closure digest is %s; the source lock records %s — update the record with the reason for the change",
+			inputs.closure.Digest, recorded.Digest)
+	}
 	return LockSummary{
 		Schema:             SourceLockSchemaV1,
 		Runtime:            inputs.sourceLock.Runtime.ID + "@" + inputs.sourceLock.Runtime.Version,

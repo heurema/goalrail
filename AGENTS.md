@@ -35,6 +35,13 @@
 - OpenSpec is a replaceable development-time compiler/provider. Do not leak OpenSpec types into Goalrail's canonical domain.
 - Planning completion is not permission to apply, commit, push, publish, deploy, or start a real canary. Each action keeps its normal owner gate.
 
+## Pinned toolchain
+
+- The private runtime and compiler are pinned in `release/setup/source-lock.json`, and their transitive closure is recorded there: package count, install-script count, and closure digest. `lock-check` fails when the computed set disagrees, so a pin cannot move inside lock-file churn.
+- Moving a pin means updating that record and the adoption dates in the same act, with the reason in the commit. The dates are disclosure, not a gate: both are supplied by whoever moves the pin, so nothing can enforce a waiting period on itself.
+- Prefer the newest version that has been public long enough to have been looked at by others. A version published days ago carries the exposure a supply-chain compromise arrives through, and adopting one needs a stated reason.
+- The runtime and the compiler do not deserve the same treatment. The runtime is executed, so its patch level is a security property and falling a year behind its own LTS line is a cost. The compiler is a development-time dependency whose schema stability matters more than its version, and moving it changes how every change in every managed repository compiles.
+
 ## Scope Discipline
 
 - Prefer the smallest reversible vertical slice and stop at its owner gate.
