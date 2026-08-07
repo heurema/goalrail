@@ -230,16 +230,36 @@ func TestBuildAndVerifyReleaseBundleFromExactCachedSources(t *testing.T) {
 		Schema: SourceLockSchemaV1,
 		Runtime: RuntimeSource{
 			ID: "node", Version: runtimeVersion,
+			Adoption:      PinAdoption{PublishedAt: "2025-07-31T00:00:00Z", AdoptedAt: "2026-08-05T00:00:00Z"},
 			LicenseRef:    "https://github.com/nodejs/node/blob/v1.2.3/LICENSE",
 			ProvenanceRef: "https://nodejs.org/dist/v1.2.3/SHASUMS256.txt",
 		},
 		Compiler: CompilerSource{
 			ID: "@fission-ai/openspec", Version: "1.6.0", LockPath: CompilerLockPath,
+			Adoption:      PinAdoption{PublishedAt: "2026-07-10T00:00:00Z", AdoptedAt: "2026-08-05T00:00:00Z"},
 			Entrypoint:    "node_modules/@fission-ai/openspec/bin/openspec.js",
 			LicenseRef:    "npm:@fission-ai/openspec@1.6.0#MIT",
 			ProvenanceRef: "npm:@fission-ai/openspec@1.6.0#" + compilerIntegrity,
 		},
 		Platforms: platformSources,
+	}
+	// The recorded closure is what a reviewer last looked at, so the fixture
+	// records what its own compiler lock actually holds rather than a number
+	// chosen to pass.
+	fixtureClosure, err := loadCompilerClosure(compilerLockRaw, sourceLock.Compiler)
+	if err != nil {
+		t.Fatal(err)
+	}
+	installScripts := 0
+	for _, packageEntry := range fixtureClosure.Packages {
+		if packageEntry.HasInstallScript {
+			installScripts++
+		}
+	}
+	sourceLock.Closure = ClosureRecord{
+		PackageCount:       len(fixtureClosure.Packages),
+		InstallScriptCount: installScripts,
+		Digest:             fixtureClosure.Digest,
 	}
 	sourceLockRaw, err := json.MarshalIndent(sourceLock, "", "  ")
 	if err != nil {
