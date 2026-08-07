@@ -48,7 +48,13 @@ type FrozenRange struct {
 	HeadGovernanceInvalid bool
 	Changes               []ChangedPath
 	Commits               []string
-	Graph                 WorkUnitGraph
+	// CommitParents carries each frozen commit's parents. Order alone cannot
+	// answer ancestry: reverse topological order puts an ancestor earlier, but
+	// two commits on parallel branches also have an order and no ancestry
+	// relation, so a claim anchored on a side branch would pass a position
+	// comparison. Reachability needs the edges.
+	CommitParents map[string][]string
+	Graph         WorkUnitGraph
 	// Projections are bounded semantic parses of the exact committed artifacts
 	// whose state affects admission. They are produced by the collector at the
 	// evaluated revision and never serialized with the range.
@@ -89,6 +95,16 @@ type exceptionEnvelope struct {
 	EffectScopes []string              `json:"effect_scopes"`
 	IssuedAt     time.Time             `json:"issued_at"`
 	ExpiresAt    time.Time             `json:"expires_at"`
+	// The three fields a restoration claim adds. RequirementRef names the
+	// artifact whose requirement is claimed to be restored and RequirementDigest
+	// is that artifact's exact digest, so the claim is a reference rather than a
+	// name. AnchorCommit is where the claim was recorded, which is the only
+	// field the ordering condition reads — IssuedAt is written by the actor
+	// making the claim, and PR #85 is a well-ordered set of honest timestamps
+	// that still records the code first.
+	RequirementRef    string              `json:"requirement_ref"`
+	RequirementDigest domain.SHA256Digest `json:"requirement_digest"`
+	AnchorCommit      string              `json:"anchor_commit"`
 }
 
 // Verify evaluates only its explicit input. It does not read environment,
@@ -180,7 +196,7 @@ func Verify(input Input) (domain.AdmissionResult, error) {
 		return denyMany(result, domain.AdmissionAmbiguous, domain.ReasonLineageConflict, refs), nil
 	}
 
-	exceptionClass, exceptionAllowed, exceptionObserved := authorizedException(input.Range.Graph, *policy, result.MaterialPaths, evaluatedAt)
+	exceptionClass, exceptionAllowed, exceptionObserved, restorationDenial := authorizedException(input.Range, *policy, result.MaterialPaths, evaluatedAt)
 	if exceptionAllowed {
 		if !view.Satisfied(domain.LineageOwnerDecision) {
 			return deny(result, domain.AdmissionMissing, domain.ReasonOwnerDecisionMissing, "lineage:owner_decision"), nil
@@ -193,6 +209,9 @@ func Verify(input Input) (domain.AdmissionResult, error) {
 		result.Outcome = domain.AdmissionAllow
 		result.Reasons = []domain.AdmissionReason{{Code: domain.ReasonExceptionApplied, EvidenceRefs: []string{"lineage:exception"}}}
 		return result, nil
+	}
+	if restorationDenial != "" {
+		return deny(result, domain.AdmissionInvalid, restorationDenial, "lineage:exception"), nil
 	}
 	if exceptionObserved {
 		return deny(result, domain.AdmissionInvalid, domain.ReasonExceptionScopeMismatch, "lineage:exception"), nil
@@ -497,8 +516,10 @@ func missingEvidenceKinds(required []string, graph WorkUnitGraph, packet domain.
 	return missing
 }
 
-func authorizedException(graph WorkUnitGraph, policy domain.ProjectPolicy, materialPaths []string, evaluatedAt time.Time) (domain.ExceptionClass, bool, bool) {
+func authorizedException(frozen FrozenRange, policy domain.ProjectPolicy, materialPaths []string, evaluatedAt time.Time) (domain.ExceptionClass, bool, bool, domain.AdmissionReasonCode) {
+	graph := frozen.Graph
 	observed := false
+	var restorationDenial domain.AdmissionReasonCode
 	for _, event := range graph.Events {
 		if event.Relation != domain.LineageException {
 			continue
@@ -523,11 +544,25 @@ func authorizedException(graph WorkUnitGraph, policy domain.ProjectPolicy, mater
 				if !subset(envelope.EffectScopes, authority.EffectScopes) || !pathsCovered(materialPaths, authority.PathPrefixes) || !pathsCovered(materialPaths, envelope.PathPrefixes) {
 					continue
 				}
-				return envelope.Class, true, true
+				if envelope.Class == domain.ExceptionRestoration {
+					// A restoration claim that matched its authority is still
+					// refused on its own two conditions, and refused by name:
+					// a claim made too late and a claim bound to the wrong
+					// artifact are different defects with different remedies,
+					// and falling through to a generic scope mismatch would
+					// tell the author neither.
+					if failure := restorationFailure(frozen, envelope, materialPaths); failure != "" {
+						if restorationDenial == "" {
+							restorationDenial = failure
+						}
+						continue
+					}
+				}
+				return envelope.Class, true, true, ""
 			}
 		}
 	}
-	return "", false, observed
+	return "", false, observed, restorationDenial
 }
 
 func exceptionMayBypass(missing []domain.LineageRelation) bool {
@@ -548,6 +583,10 @@ func admissionClass(class domain.ExceptionClass) domain.AdmissionClassification 
 		return domain.AdmissionExempted
 	case domain.ExceptionBreakGlass:
 		return domain.AdmissionBreakGlass
+	case domain.ExceptionRestoration:
+		// Visibly non-VALID, like every other exception: the direct route is an
+		// exception with a recorded claim, not a second ordinary lane.
+		return domain.AdmissionExempted
 	default:
 		return domain.AdmissionBootstrap
 	}
@@ -771,6 +810,124 @@ func uniqueRelations(values []domain.LineageRelation) []domain.LineageRelation {
 		result = append(result, value)
 	}
 	return result
+}
+
+// restorationFailure reports why a restoration claim cannot stand, or the empty
+// code when it stands. It decides two questions and deliberately not a third:
+// whether the claim binds the exact artifact it names, and whether it was
+// recorded before the work it excuses. Whether the diff restores that
+// requirement or moves its boundary is semantic, is reserved to review, and an
+// empty return here must not be read as having settled it.
+func restorationFailure(frozen FrozenRange, envelope exceptionEnvelope, materialPaths []string) domain.AdmissionReasonCode {
+	// The artifact must be carried as retained evidence under exactly the
+	// claimed digest. A claim naming a requirement in prose alone has nothing to
+	// bind, whatever the prose says.
+	if envelope.RequirementDigest == "" || envelope.RequirementRef == "" ||
+		len(frozen.Graph.Replicas[envelope.RequirementDigest]) == 0 {
+		return domain.ReasonRestorationUnbound
+	}
+	// A claim cannot amend what it binds. If the requirement artifact is itself
+	// changed inside this range, there is no unchanged prior requirement to
+	// restore — which is the issue's own diagnostic expressed as a binding
+	// failure rather than as advice: a change that needs a governing contract
+	// to move in the same act is not a defect fix.
+	if amendsBoundRequirement(frozen, envelope.RequirementRef) {
+		return domain.ReasonRestorationUnbound
+	}
+	first, found := firstMaterialCommit(frozen, materialPaths, envelope.PathPrefixes)
+	if !found {
+		// Nothing material in scope, so there is no work for the claim to
+		// precede. Scope coverage is decided by the caller.
+		return ""
+	}
+	if envelope.AnchorCommit == "" || envelope.AnchorCommit == first ||
+		!ancestorWithinRange(frozen, envelope.AnchorCommit, first) {
+		return domain.ReasonRestorationNotAnchored
+	}
+	return ""
+}
+
+// amendsBoundRequirement reports whether the artifact a claim binds is changed
+// within the same frozen range. The reference is repository-relative behind a
+// `repo:root/` prefix; a reference in any other form binds nothing this can
+// compare, and the caller has already refused it.
+func amendsBoundRequirement(frozen FrozenRange, requirementRef string) bool {
+	path := strings.TrimPrefix(requirementRef, "repo:root/")
+	if path == requirementRef || path == "" {
+		return false
+	}
+	for _, change := range frozen.Changes {
+		if change.Path == path || change.PreviousPath == path {
+			return true
+		}
+	}
+	return false
+}
+
+// firstMaterialCommit returns the earliest frozen commit touching a material
+// path inside the claimed scope. The frozen commit list is in reverse
+// topological order, so the first match is the earliest.
+func firstMaterialCommit(frozen FrozenRange, materialPaths, prefixes []string) (string, bool) {
+	inScope := make(map[string]struct{}, len(materialPaths))
+	for _, path := range materialPaths {
+		if pathsCovered([]string{path}, prefixes) {
+			inScope[path] = struct{}{}
+		}
+	}
+	if len(inScope) == 0 {
+		return "", false
+	}
+	touching := make(map[string]struct{}, len(frozen.Changes))
+	for _, change := range frozen.Changes {
+		if _, ok := inScope[change.Path]; !ok {
+			if _, previous := inScope[change.PreviousPath]; !previous {
+				continue
+			}
+		}
+		for _, revision := range change.Commits {
+			touching[revision] = struct{}{}
+		}
+	}
+	for _, revision := range frozen.Commits {
+		if _, ok := touching[revision]; ok {
+			return revision, true
+		}
+	}
+	return "", false
+}
+
+// ancestorWithinRange reports whether anchor is reachable from descendant by
+// walking parents inside the frozen range. A walk that leaves the range ends
+// there: the verifier was never given those commits, so it cannot establish
+// ancestry for them, and an unprovable claim is not accepted on trust.
+func ancestorWithinRange(frozen FrozenRange, anchor, descendant string) bool {
+	known := make(map[string]struct{}, len(frozen.Commits))
+	for _, revision := range frozen.Commits {
+		known[revision] = struct{}{}
+	}
+	if _, ok := known[anchor]; !ok {
+		return false
+	}
+	seen := map[string]struct{}{descendant: {}}
+	queue := []string{descendant}
+	for len(queue) > 0 {
+		current := queue[0]
+		queue = queue[1:]
+		for _, parent := range frozen.CommitParents[current] {
+			if parent == anchor {
+				return true
+			}
+			if _, ok := known[parent]; !ok {
+				continue
+			}
+			if _, visited := seen[parent]; visited {
+				continue
+			}
+			seen[parent] = struct{}{}
+			queue = append(queue, parent)
+		}
+	}
+	return false
 }
 
 func pathsCovered(paths, prefixes []string) bool {

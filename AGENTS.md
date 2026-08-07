@@ -4,6 +4,7 @@
 
 - Treat owner statements and verified repository facts as evidence, not as an automatically correct interpretation.
 - For every significant change, create or update a versioned Intent Snapshot before compiling a proposal.
+- A change made outside this cycle on the grounds that it only restores an existing requirement is a `restoration` exception in the lineage model, not a judgement recorded here. The requirement it binds and the order it must be claimed in are stated in `openspec/specs/work-unit-lineage/spec.md`; this file adds no rule of its own and no second materiality policy.
 - Treat OpenSpec exploration as evidence gathering and ambiguity reduction. It may propose candidate intent items, but it cannot confirm them on the owner's behalf.
 - When exploration changes the understood outcome or boundary, update `intent.md` before proposal, specs, design, or tasks.
 - Keep semantic intent to three groups: desired outcomes, non-goals, and observable success signals.

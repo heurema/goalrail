@@ -84,7 +84,7 @@ func CollectPacketSeed(ctx context.Context, repository, base, head string) (doma
 }
 
 func collectTrailerIndex(ctx context.Context, repository, base, head string) (domain.WorkUnitID, error) {
-	commits, err := collectCommits(ctx, repository, base, head)
+	commits, _, err := collectCommits(ctx, repository, base, head)
 	if err != nil {
 		return "", err
 	}

@@ -43,6 +43,13 @@ const (
 	ExceptionBreakGlass ExceptionClass = "break_glass"
 	ExceptionBootstrap  ExceptionClass = "bootstrap"
 
+	// ExceptionRestoration is the claim that a change alters no requirement but
+	// returns behaviour to one already recorded. Unlike the other classes it
+	// carries an ordering obligation: the claim constrains what an author
+	// decided before implementing, so a claim written afterwards describes the
+	// diff instead of conditioning it.
+	ExceptionRestoration ExceptionClass = "restoration"
+
 	OwnerDecisionAllow  OwnerDecisionOutcome = "allow"
 	OwnerDecisionReject OwnerDecisionOutcome = "reject"
 )
@@ -165,7 +172,7 @@ func ValidateProjectPolicy(policy ProjectPolicy) error {
 			exceptionIDs[authority.ID] = struct{}{}
 		}
 		switch authority.Class {
-		case ExceptionExempted, ExceptionBreakGlass, ExceptionBootstrap:
+		case ExceptionExempted, ExceptionBreakGlass, ExceptionBootstrap, ExceptionRestoration:
 		default:
 			v.add("policy.exception.class_invalid", path+".class", "unsupported exception class")
 		}

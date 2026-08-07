@@ -2,8 +2,12 @@ package domain
 
 import (
 	"bytes"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 )
@@ -157,5 +161,60 @@ func validAdmissionResult() AdmissionResult {
 		Classification:  AdmissionValid,
 		Outcome:         AdmissionAllow,
 		VerifierVersion: "0.2.0",
+	}
+}
+
+// Every declared reason code must be registered.
+//
+// The registry is searched with a binary search, so an unregistered code is not
+// merely undiscoverable — it is invisible. A new code compiles, is emitted by
+// the verifier, and reaches a caller that asks whether it is a known reason and
+// is told no. This was not hypothetical: `RESTORATION_NOT_ANCHORED` and
+// `RESTORATION_UNBOUND` were declared, used and tested before anyone noticed
+// they were absent here, because nothing failed. The sortedness check above
+// cannot catch it — a registry missing an entry is still sorted.
+//
+// Reading the declarations rather than restating them is deliberate: a second
+// hand-maintained list would need the same discipline it exists to enforce.
+func TestEveryDeclaredReasonCodeIsRegistered(t *testing.T) {
+	fileSet := token.NewFileSet()
+	packages, err := parser.ParseDir(fileSet, ".", nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	declared := 0
+	for _, parsed := range packages {
+		for _, file := range parsed.Files {
+			for _, declaration := range file.Decls {
+				group, ok := declaration.(*ast.GenDecl)
+				if !ok || group.Tok != token.CONST {
+					continue
+				}
+				for _, specification := range group.Specs {
+					value, ok := specification.(*ast.ValueSpec)
+					if !ok {
+						continue
+					}
+					name, ok := value.Type.(*ast.Ident)
+					if !ok || name.Name != "AdmissionReasonCode" {
+						continue
+					}
+					for _, expression := range value.Values {
+						literal, ok := expression.(*ast.BasicLit)
+						if !ok || literal.Kind != token.STRING {
+							continue
+						}
+						declared++
+						code := AdmissionReasonCode(strings.Trim(literal.Value, `"`))
+						if !IsAdmissionReasonCode(code) {
+							t.Errorf("reason code %s is declared but not registered", code)
+						}
+					}
+				}
+			}
+		}
+	}
+	if declared != len(KnownAdmissionReasonCodes()) {
+		t.Fatalf("%d reason codes declared, %d registered", declared, len(KnownAdmissionReasonCodes()))
 	}
 }

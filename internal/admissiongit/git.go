@@ -62,7 +62,7 @@ func CollectFrozenRange(ctx context.Context, repository, base, head string, pack
 	if err != nil {
 		return admission.FrozenRange{}, err
 	}
-	commits, err := collectCommits(ctx, root, base, head)
+	commits, commitParents, err := collectCommits(ctx, root, base, head)
 	if err != nil {
 		return admission.FrozenRange{}, err
 	}
@@ -80,7 +80,7 @@ func CollectFrozenRange(ctx context.Context, repository, base, head string, pack
 		BasePolicy: basePolicy, BasePolicyDigest: basePolicyDigest, BaseGovernanceInvalid: baseInvalid,
 		HeadDeclaration: headDeclaration, HeadDeclarationDigest: headDeclarationDigest,
 		HeadPolicy: headPolicy, HeadPolicyDigest: headPolicyDigest, HeadGovernanceInvalid: headInvalid,
-		Changes: changes, Commits: commits, Graph: graph, Projections: projections,
+		Changes: changes, Commits: commits, CommitParents: commitParents, Graph: graph, Projections: projections,
 	}
 	return frozen, nil
 }
@@ -291,24 +291,40 @@ func projectTerminalReceipt(replica []byte, target domain.ContentAddressedEviden
 	return projection
 }
 
-func collectCommits(ctx context.Context, repository, base, head string) ([]string, error) {
+func collectCommits(ctx context.Context, repository, base, head string) ([]string, map[string][]string, error) {
 	if _, err := runGit(ctx, repository, 1024, "merge-base", "--is-ancestor", base, head); err != nil {
-		return nil, fmt.Errorf("base commit is not an ancestor of head")
+		return nil, nil, fmt.Errorf("base commit is not an ancestor of head")
 	}
-	raw, err := runGit(ctx, repository, 4096*65, "rev-list", "--reverse", "--topo-order", base+".."+head)
+	// --parents so the verifier can decide ancestry rather than position. In
+	// reverse topological order an ancestor always appears earlier, but two
+	// commits on parallel branches also have an order and no ancestry relation,
+	// so position alone would accept a claim anchored on a side branch.
+	raw, err := runGit(ctx, repository, 4096*65*8, "rev-list", "--reverse", "--topo-order", "--parents", base+".."+head)
 	if err != nil {
-		return nil, fmt.Errorf("collect frozen commit set: %w", err)
+		return nil, nil, fmt.Errorf("collect frozen commit set: %w", err)
 	}
-	lines := strings.Fields(string(raw))
-	if len(lines) == 0 || len(lines) > 4096 {
-		return nil, fmt.Errorf("frozen commit set is empty or exceeds the 4096-commit bound")
+	rows := strings.Split(strings.TrimSpace(string(raw)), "\n")
+	if len(rows) == 0 || len(rows) > 4096 {
+		return nil, nil, fmt.Errorf("frozen commit set is empty or exceeds the 4096-commit bound")
 	}
-	for _, revision := range lines {
-		if !fullGitOID(revision) {
-			return nil, fmt.Errorf("Git returned a non-canonical commit ID")
+	lines := make([]string, 0, len(rows))
+	parents := make(map[string][]string, len(rows))
+	for _, row := range rows {
+		fields := strings.Fields(row)
+		if len(fields) == 0 {
+			return nil, nil, fmt.Errorf("frozen commit set is empty or exceeds the 4096-commit bound")
+		}
+		for _, revision := range fields {
+			if !fullGitOID(revision) {
+				return nil, nil, fmt.Errorf("Git returned a non-canonical commit ID")
+			}
+		}
+		lines = append(lines, fields[0])
+		if len(fields) > 1 {
+			parents[fields[0]] = fields[1:]
 		}
 	}
-	return lines, nil
+	return lines, parents, nil
 }
 
 func readGovernance(ctx context.Context, repository, revision string) (*domain.ProjectDeclaration, domain.SHA256Digest, *domain.ProjectPolicy, domain.SHA256Digest, error) {
