@@ -54,7 +54,13 @@ jobs:
         id: pin
         run: |
           set -euo pipefail
-          report="$(go run ./cmd/gr doctor -json -repo "$(mktemp -d)" || true)"
+          # A Git repository, because the diagnosis resolves a project from a
+          # worktree root and an ordinary directory has none. Empty and
+          # uninitialized on purpose: this reads the pin the binary carries, not
+          # anything about a project.
+          probe="$(mktemp -d)"
+          git -C "${probe}" init --quiet
+          report="$(go run ./cmd/gr doctor -json -repo "${probe}" || true)"
           package="$(printf '%s' "${report}" \
             | jq -r '.invocation // ""' \
             | awk '{for (i = 1; i < NF; i++) if ($i == "--yes") { print $(i + 1); exit }}')"

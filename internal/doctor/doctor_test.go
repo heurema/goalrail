@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -318,4 +319,34 @@ func hasReason(diagnosis Diagnosis, code string) bool {
 		}
 	}
 	return false
+}
+
+// A path outside version control is a condition, not a broken check.
+//
+// The release workflow reads the pinned planning invocation out of a diagnosis
+// run in a throwaway directory, so an error there returns an empty result and
+// stops a release before anything is built. It also surfaced Git's own message
+// and exit status, which is not a report.
+func TestDiagnosisReportsAPathOutsideVersionControl(t *testing.T) {
+	diagnosis, err := Diagnose(context.Background(), DiagnoseInput{RepositoryRoot: t.TempDir()})
+	if err != nil {
+		t.Fatalf("a directory outside version control failed the check: %v", err)
+	}
+	if diagnosis.Category != CategoryUnmanaged || diagnosis.Managed {
+		t.Fatalf("category = %q managed = %t, want unmanaged", diagnosis.Category, diagnosis.Managed)
+	}
+	if !hasReason(diagnosis, "PROJECT_NOT_A_REPOSITORY") {
+		t.Fatalf("the report does not distinguish this from a repository that never declared: %#v", diagnosis.Reasons)
+	}
+	if diagnosis.Invocation == "" || diagnosis.Schema != SchemaV2 {
+		t.Fatalf("the report is not usable by a machine: schema=%q invocation=%q", diagnosis.Schema, diagnosis.Invocation)
+	}
+	for _, reason := range diagnosis.Reasons {
+		if strings.Contains(reason.Detail, "exit status") || strings.Contains(reason.Detail, "fatal:") {
+			t.Fatalf("the report carries Git's own error text: %q", reason.Detail)
+		}
+	}
+	if len(diagnosis.Attachments) != 0 {
+		t.Fatalf("an unrelated directory was observed: %#v", diagnosis.Attachments)
+	}
 }
