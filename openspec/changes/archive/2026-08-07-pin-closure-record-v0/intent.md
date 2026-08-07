@@ -4,7 +4,7 @@
 - **Version:** 1
 - **Artifact Contract:** goalrail-context-intent
 - **Artifact Contract Version:** 1
-- **Status:** candidate
+- **Status:** confirmed
 - **Owner:** role:repository-owner
 - **Context Pack:** pin-closure-record-v0 version 1
 - **Run references:** pending
@@ -79,11 +79,17 @@ procedural departure is a question the governing contract does not answer
 
 | ID | Question | Evidence |
 |---|---|---|
-| AMB-1 | Whether confirming this snapshot after the implementation settles the departure from the intent-first order, or only records it. The governing contract requires the snapshot before the work and forbids rewriting history, and says nothing about the case where the order was not followed. This is the owner's to decide, and the answer determines whether the branch merges as it stands or is reworked. | CTX-12 |
+| AMB-1 | Resolved by the owner at confirmation: confirming this snapshot lifts the governance blocker for merging this branch, but is not evidence that the intent-first order was followed. The recorded procedural departure stays part of the provenance. The contract's silence on the case is unchanged; this settles the decision, not the rule. | CTX-12 |
 
 ## Confirmation
 
-- **Confirmed by:** pending
-- **Confirmed at:** pending
-- **Verification action:** pending
+- **Confirmed by:** role:repository-owner
+- **Confirmed at:** 2026-08-07
+- **Verification action:** The owner was shown a plain-language view of this
+  exact version in the conversation language, covering every outcome, boundary
+  and success signal, the provenance stating that the snapshot was composed
+  after the implementation, and the open question recorded as AMB-1. They were
+  asked one question naming the version and the proposed resolution of AMB-1,
+  and answered affirmatively to both. The answer was a single instruction to
+  proceed rather than a line-by-line review, and is recorded as what it was.
 - **Amendment rule:** A material change to outcomes, non-goals, or success signals creates a new version; wording-only edits preserve this version.
