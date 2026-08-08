@@ -79,6 +79,17 @@ question, so answering this one anywhere else would be the parallel authority
 the governance contract forbids. The field is omitted when unset, so a policy
 declaring none keeps the exact bytes and digest it had before.
 
+**Only confirmed intent states a requirement.** Recorded after a second review.
+Every target the lineage records carries a reference and a digest, so comparing
+only that pair let a claim bind a commit, a receipt or the work unit itself and
+call it the requirement being restored. The relation is now checked too.
+
+**An undeclared normative set fails closed.** Also from the second review. A
+policy could authorize restoration while declaring no normative path, and the
+amendment check then treated every path as non-normative — the prohibition
+turned itself off exactly where the policy had said least. A policy that cannot
+answer the question refuses the claim instead.
+
 **Ancestry needs parents, which the frozen range does not carry.** Recorded
 during implementation, because the first version of this design asserted the
 question was decidable from what the verifier already receives and that was not

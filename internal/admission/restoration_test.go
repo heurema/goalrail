@@ -131,6 +131,10 @@ func TestBindingComparesTheNamedArtifact(t *testing.T) {
 		{"digest of an unrelated artifact", claimFixture{claimCommit: commitBeforeWork, bindUnrelatedDigest: true}},
 		{"reference naming nothing recorded", claimFixture{claimCommit: commitBeforeWork, bindUnrecordedRef: true}},
 		{"no binding at all", claimFixture{claimCommit: commitBeforeWork, bindNothing: true}},
+		// Every target carries a reference and a digest, so accepting any of
+		// them let a claim bind the work unit itself and call that the
+		// requirement it restores.
+		{"a commit target, which states no requirement", claimFixture{claimCommit: commitBeforeWork, bindWorkUnit: true}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			result, err := Verify(restorationInput(t, test.fixture))
@@ -181,6 +185,21 @@ func TestARestorationCannotAmendANormativePathInItsScope(t *testing.T) {
 				t.Fatalf("a claim amended %s and stood: %s %v", amended, result.Outcome, result.Reasons)
 			}
 		})
+	}
+}
+
+// A policy that authorizes restoration but declares no normative path cannot
+// answer the amendment question. Treating that as "nothing is normative" turned
+// the prohibition off exactly where the policy had said least, so the claim is
+// refused instead.
+func TestRestorationIsRefusedWhereNoNormativePathIsDeclared(t *testing.T) {
+	input := restorationInput(t, claimFixture{claimCommit: commitBeforeWork, noNormativePaths: true})
+	result, err := Verify(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Outcome != domain.AdmissionDeny || result.Reasons[0].Code != domain.ReasonRestorationUnbound {
+		t.Fatalf("restoration stood under a policy declaring no normative path: %s %v", result.Outcome, result.Reasons)
 	}
 }
 
@@ -259,6 +278,8 @@ type claimFixture struct {
 	claimCommit         string
 	bindUnrelatedDigest bool
 	bindUnrecordedRef   bool
+	bindWorkUnit        bool
+	noNormativePaths    bool
 	bindNothing         bool
 	amend               string
 	parallelBranch      bool
@@ -273,6 +294,9 @@ func claimInput(t *testing.T, class domain.ExceptionClass, authorityID string, f
 	t.Helper()
 	policy := testPolicy(t)
 	policy.NormativePathPrefixes = []string{"openspec"}
+	if fixture.noNormativePaths {
+		policy.NormativePathPrefixes = nil
+	}
 	policy.ExceptionAuthorities = append(policy.ExceptionAuthorities, domain.PolicyExceptionAuthority{
 		ID: "owner-restoration", Class: domain.ExceptionRestoration,
 		ActorRefs: []string{"user:owner"},
@@ -349,6 +373,11 @@ func addClaim(t *testing.T, input *Input, class domain.ExceptionClass, authority
 		// A digest that resolves to a retained artifact, but not to the one the
 		// reference names.
 		envelope.RequirementDigest = input.Packet.WorkUnitRef.Digest
+	case fixture.bindWorkUnit:
+		// A commit target: recorded by the lineage, with a reference and digest
+		// on one target, and stating no requirement whatsoever.
+		commit := recordedTarget(t, input.Range.Graph, "git:"+commitOfWork)
+		envelope.RequirementRef, envelope.RequirementDigest = commit.SourceRef, commit.Digest
 	case fixture.bindUnrecordedRef:
 		envelope.RequirementRef = "repo:root/openspec/changes/never-recorded/intent.md"
 	}

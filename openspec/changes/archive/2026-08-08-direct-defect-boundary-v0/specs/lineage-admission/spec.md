@@ -52,3 +52,23 @@ Equivalent semantic inputs SHALL produce byte-identical canonical results. Wall-
 #### Scenario: The work amends a normative path in the claim's scope
 - **WHEN** the range adds or amends a path the committed policy declares normative, inside the claim's effect scope
 - **THEN** admission is denied, and the outcome does not depend on whether that path is the artifact the claim names
+
+#### Scenario: Evidence conflicts
+- **WHEN** the packet contains incompatible bindings for a required single-valued relation
+- **THEN** the verifier emits `AMBIGUOUS`, admission denied, and retains references to every claimant
+
+#### Scenario: Provider evidence completes late relations
+- **WHEN** the committed work unit and one authenticated packet together provide every required repository and provider relation for the frozen range
+- **THEN** the verifier evaluates the effective complete evidence set and may emit `VALID` without requiring provider observations to have been precommitted
+
+#### Scenario: Provenance has no trusted evaluation time
+- **WHEN** a domain-valid packet supplies non-repository provenance but no evaluation time usable under the adapter contract
+- **THEN** the verifier returns a canonical non-valid result identifying missing trusted-time evidence and does not panic
+
+#### Scenario: Authorized exception permits integration
+- **WHEN** committed policy permits the exact current exception evidence and scope
+- **THEN** admission may be allowed while classification remains `EXEMPTED`, `BREAK_GLASS`, or `BOOTSTRAP` and never becomes `VALID`
+
+#### Scenario: Verification is repeated elsewhere
+- **WHEN** local and shared invocations receive semantically identical frozen inputs
+- **THEN** their canonical result bytes and process admission outcome are identical

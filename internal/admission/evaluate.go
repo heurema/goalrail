@@ -825,6 +825,14 @@ func restorationFailure(frozen FrozenRange, policy domain.ProjectPolicy, event d
 	if !boundToRecordedArtifact(frozen.Graph, envelope) {
 		return domain.ReasonRestorationUnbound
 	}
+	// A policy that authorizes restoration without declaring which paths are
+	// normative cannot answer the amendment question, and a question that
+	// cannot be answered is refused rather than passed. Treating an empty
+	// declaration as "nothing is normative" turned the prohibition off exactly
+	// where the policy had said least.
+	if len(policy.NormativePathPrefixes) == 0 {
+		return domain.ReasonRestorationUnbound
+	}
 	// A claim cannot stand where the work amends a normative artifact inside
 	// its own scope: there is no unchanged prior requirement left to restore.
 	// The scope is any normative path the policy declares, not only the one the
@@ -865,12 +873,21 @@ func restorationFailure(frozen FrozenRange, policy domain.ProjectPolicy, event d
 }
 
 // boundToRecordedArtifact reports whether the claim names a reference and
-// digest that the work unit's lineage records together on one target.
+// digest that the work unit's lineage records together on a target that states
+// requirements.
+//
+// The relation is checked, not merely the pairing: every target in the graph is
+// recorded with a reference and a digest, so accepting any of them let a claim
+// bind the work unit itself, a commit, or a receipt and call that the
+// requirement it restores. Only confirmed intent states a requirement here.
 func boundToRecordedArtifact(graph WorkUnitGraph, envelope exceptionEnvelope) bool {
 	if envelope.RequirementDigest == "" || envelope.RequirementRef == "" {
 		return false
 	}
 	for _, event := range graph.Events {
+		if event.Relation != domain.LineageConfirmedIntent {
+			continue
+		}
 		for _, target := range event.Targets {
 			if target.SourceRef == envelope.RequirementRef && target.Digest == envelope.RequirementDigest {
 				return true
@@ -884,9 +901,6 @@ func boundToRecordedArtifact(graph WorkUnitGraph, envelope exceptionEnvelope) bo
 // is one the policy declares normative. The policy owns which paths those are,
 // as it owns every other path question; this adds no second classifier.
 func amendsNormativePath(frozen FrozenRange, policy domain.ProjectPolicy, prefixes []string) bool {
-	if len(policy.NormativePathPrefixes) == 0 {
-		return false
-	}
 	for _, change := range frozen.Changes {
 		for _, path := range []string{change.Path, change.PreviousPath} {
 			if path == "" || !pathsCovered([]string{path}, prefixes) {

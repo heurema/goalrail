@@ -46,3 +46,10 @@
 - [x] 8.3 Binding compares a reference and digest recorded together on one lineage target, rather than the presence of any replica under the claimed digest
 - [x] 8.4 Any policy-declared normative path amended inside the claim's scope invalidates it, not only the artifact the claim names
 - [x] 8.5 Each new check is shown to fail when disabled, so a passing test is not mistaken for a load-bearing one
+
+## 9. Recorded after the second review
+
+- [x] 9.1 Binding checks the relation as well as the pair: every target carries a reference and digest, so a claim could otherwise bind a commit or receipt and call it a requirement
+- [x] 9.2 A policy authorizing restoration without declaring normative paths refuses the claim rather than treating every path as non-normative
+- [x] 9.3 The `AGENTS.md` pointer is made true by archiving the delta into the canonical specification, not by softening what it claims
+- [x] 9.4 A mutation showed the first binding test proved nothing — the work unit is a lineage source, not a target, so it was refused either way; the fixture now binds a real commit target
