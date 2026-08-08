@@ -937,7 +937,23 @@ func TestExceptionMayBypassAdmissionReadyClosure(t *testing.T) {
 
 func validInput(t *testing.T) Input {
 	t.Helper()
-	policy := testPolicy(t)
+	return validInputWithPolicy(t, testPolicy(t))
+}
+
+// validInputWithPolicy builds the same fixture from a caller-supplied policy.
+// The declaration, the work unit, the packet and the events all pin the policy
+// digest, so a test that needs a different policy cannot patch one field.
+func validInputWithPolicy(t *testing.T, policy domain.ProjectPolicy) Input {
+	t.Helper()
+	return validInputWithPolicyAndCommit(t, policy, testHead)
+}
+
+// validInputWithPolicyAndCommit also chooses which commit carries the material
+// change, so a test can build a history longer than one commit. The lineage
+// commit event and the changed path must name the same revision or the binding
+// check refuses the range before anything else is examined.
+func validInputWithPolicyAndCommit(t *testing.T, policy domain.ProjectPolicy, materialCommit string) Input {
+	t.Helper()
 	policyArtifact, err := domain.FreezeProjectPolicy(policy)
 	if err != nil {
 		t.Fatal(err)
@@ -970,7 +986,7 @@ func validInput(t *testing.T) Input {
 		SourceRef: "repo:root/.goalrail/work-units/" + string(unit.ID) + "/unit.json", AdapterID: "goalrail",
 	}
 	evaluationTime := time.Date(2026, 8, 5, 12, 0, 0, 0, time.UTC)
-	events := testEvents(t, unit, unitRef, declaration, declarationArtifact.Digest(), policyArtifact.Digest(), testHead)
+	events := testEvents(t, unit, unitRef, declaration, declarationArtifact.Digest(), policyArtifact.Digest(), materialCommit)
 	packet := domain.AdmissionPacket{
 		Schema: domain.AdmissionPacketSchemaV1, ProjectID: policy.ProjectID,
 		DeclarationDigest: declarationArtifact.Digest(), PolicyDigest: policyArtifact.Digest(),
@@ -985,8 +1001,8 @@ func validInput(t *testing.T) Input {
 			BasePolicy: &policy, BasePolicyDigest: policyArtifact.Digest(),
 			HeadDeclaration: &declaration, HeadDeclarationDigest: declarationArtifact.Digest(),
 			HeadPolicy: &policy, HeadPolicyDigest: policyArtifact.Digest(),
-			Changes: []ChangedPath{{Path: "internal/app.go", Kind: domain.ChangeModify}},
-			Commits: []string{testHead},
+			Changes: []ChangedPath{{Path: "internal/app.go", Kind: domain.ChangeModify, Commits: []string{materialCommit}}},
+			Commits: []string{materialCommit},
 			Graph:   WorkUnitGraph{Unit: unit, Events: events, Replicas: map[domain.SHA256Digest][]byte{}},
 		},
 		Packet:     packet,

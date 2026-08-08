@@ -57,6 +57,12 @@ const (
 	ReasonProvenanceUntrusted      AdmissionReasonCode = "PROVENANCE_UNTRUSTED"
 	ReasonRangeMismatch            AdmissionReasonCode = "RANGE_MISMATCH"
 	ReasonGeneratedEvidenceMissing AdmissionReasonCode = "GENERATED_EVIDENCE_MISSING"
+	// The two restoration failures are separate codes because they have
+	// different remedies: one is a claim made too late, which nothing can
+	// repair after the fact, and the other is a claim pointing at the wrong
+	// artifact, which is corrected by binding the right digest.
+	ReasonRestorationNotAnchored AdmissionReasonCode = "RESTORATION_NOT_ANCHORED"
+	ReasonRestorationUnbound     AdmissionReasonCode = "RESTORATION_UNBOUND"
 )
 
 var admissionReasonRegistry = []AdmissionReasonCode{
@@ -79,6 +85,8 @@ var admissionReasonRegistry = []AdmissionReasonCode{
 	ReasonPullRequestMissing,
 	ReasonRangeMismatch,
 	ReasonReceiptMissing,
+	ReasonRestorationNotAnchored,
+	ReasonRestorationUnbound,
 	ReasonReviewMissing,
 	ReasonRunSessionMissing,
 	ReasonTrustedTimeMissing,

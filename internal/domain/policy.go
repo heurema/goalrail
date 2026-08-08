@@ -43,6 +43,13 @@ const (
 	ExceptionBreakGlass ExceptionClass = "break_glass"
 	ExceptionBootstrap  ExceptionClass = "bootstrap"
 
+	// ExceptionRestoration is the claim that a change alters no requirement but
+	// returns behaviour to one already recorded. Unlike the other classes it
+	// carries an ordering obligation: the claim constrains what an author
+	// decided before implementing, so a claim written afterwards describes the
+	// diff instead of conditioning it.
+	ExceptionRestoration ExceptionClass = "restoration"
+
 	OwnerDecisionAllow  OwnerDecisionOutcome = "allow"
 	OwnerDecisionReject OwnerDecisionOutcome = "reject"
 )
@@ -84,6 +91,15 @@ type ProjectPolicy struct {
 	Rules                []PolicyPathRule           `json:"rules"`
 	ExceptionAuthorities []PolicyExceptionAuthority `json:"exception_authorities"`
 	OwnerDecision        PolicyOwnerDecision        `json:"owner_decision"`
+	// NormativePathPrefixes are the paths whose contents state requirements.
+	// Only a restoration claim reads them, to refuse a claim whose own work
+	// amends a requirement inside its scope. They are declared here because the
+	// policy already owns every path question; a second place to answer it
+	// would be the parallel authority the governance contract forbids.
+	//
+	// Omitted when unset, so a policy that declares none keeps the exact bytes
+	// and digest it had before this field existed.
+	NormativePathPrefixes []string `json:"normative_path_prefixes,omitempty"`
 }
 
 func DecodeProjectPolicy(reader io.Reader) (ProjectPolicy, error) {
@@ -154,6 +170,9 @@ func ValidateProjectPolicy(policy ProjectPolicy) error {
 	if len(policy.ExceptionAuthorities) > MaxPolicyEffects {
 		v.add("policy.exceptions.too_many", "exception_authorities", "exception authority count exceeds the v1 bound")
 	}
+	if len(policy.NormativePathPrefixes) > 0 {
+		validateRepositoryPathSet(v, "normative_path_prefixes", policy.NormativePathPrefixes, MaxPolicyPaths, true)
+	}
 	exceptionIDs := make(map[string]struct{}, len(policy.ExceptionAuthorities))
 	for index, authority := range policy.ExceptionAuthorities {
 		path := fmt.Sprintf("exception_authorities[%d]", index)
@@ -165,7 +184,7 @@ func ValidateProjectPolicy(policy ProjectPolicy) error {
 			exceptionIDs[authority.ID] = struct{}{}
 		}
 		switch authority.Class {
-		case ExceptionExempted, ExceptionBreakGlass, ExceptionBootstrap:
+		case ExceptionExempted, ExceptionBreakGlass, ExceptionBootstrap, ExceptionRestoration:
 		default:
 			v.add("policy.exception.class_invalid", path+".class", "unsupported exception class")
 		}
@@ -211,6 +230,14 @@ func normalizeProjectPolicy(policy ProjectPolicy) ProjectPolicy {
 		}
 		return policy.Rules[first].ID < policy.Rules[second].ID
 	})
+
+	if len(policy.NormativePathPrefixes) > 0 {
+		policy.NormativePathPrefixes = append([]string(nil), policy.NormativePathPrefixes...)
+		for index := range policy.NormativePathPrefixes {
+			policy.NormativePathPrefixes[index] = normalizeRelativePath(policy.NormativePathPrefixes[index])
+		}
+		sort.Strings(policy.NormativePathPrefixes)
+	}
 
 	policy.ExceptionAuthorities = append([]PolicyExceptionAuthority(nil), policy.ExceptionAuthorities...)
 	for index := range policy.ExceptionAuthorities {
