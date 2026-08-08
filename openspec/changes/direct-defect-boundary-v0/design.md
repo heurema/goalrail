@@ -41,6 +41,44 @@ that still records the code first. Commit ancestry is a property of the history
 being admitted rather than of the record describing it, and it is what the
 verifier already has in a frozen range.
 
+**The claim must not state its own position.** Recorded after an independent
+review found the first implementation bypassable. That version put an
+`anchor_commit` field in the exception envelope and checked ancestry from it.
+The evidence is collected at the head of the range, so nothing established that
+the claim existed at the commit it named: a claim written after the work could
+name an earlier commit and pass. The gate was defeated by typing a string.
+
+The mistake is the one this design had already diagnosed for timestamps — "a
+timestamp is written by the actor making the claim" — and then repeated with a
+different field. Precedence is now derived from where the claim's own artifact
+appears among the range's changed paths, which is a property of the history
+rather than of the record describing it. The field is gone, so the check cannot
+regress to reading it. Where the artifact is not in the changed paths at all it
+was committed before the range began, which is the strongest form of the claim
+rather than a missing one.
+
+**Precedence is checked against every material touch, not the earliest.** Also
+recorded after review. Reverse topological order is a partial order: two commits
+on parallel branches have an order and no ancestry, so checking the first
+in-scope touch accepted a claim ancestral to one branch and not the other.
+
+**Binding compares the pair, not the digest.** Also recorded after review.
+Checking that some replica existed under the claimed digest proved nothing —
+any unrelated retained artifact satisfied it while the reference went
+uncompared, and a legitimate artifact verified as a direct target was rejected
+for not being a replica. The claim must name a reference and digest that appear
+together on one target the work unit's lineage records. This narrows what is
+bindable: the artifact must already be lineage evidence, which the confirmed
+Intent Snapshot is.
+
+**Normative paths are declared by the policy.** Also recorded after review. The
+first amendment check compared only against the bound artifact's path, so a
+claim restoring requirement A while amending requirement B beside it stood. The
+policy gains a declared set of normative prefixes — it already owns every path
+question, so answering this one anywhere else would be the parallel authority
+the governance contract forbids. The field is omitted when unset, so a policy
+declaring none keeps the exact bytes and digest it had before.
+
 **Ancestry needs parents, which the frozen range does not carry.** Recorded
 during implementation, because the first version of this design asserted the
 question was decidable from what the verifier already receives and that was not
@@ -53,12 +91,15 @@ would pass a position comparison. The collector therefore emits each commit's
 parents, and the verifier decides reachability over that bounded graph. The
 collector gains a `--parents` read; it decides nothing.
 
-**An anchor outside the frozen range is not accepted.** The verifier cannot see
-past `base`, so it cannot establish ancestry for a commit it was never given. A
-claim must be anchored inside the range it excuses. This is stricter than the
-prose alone implies and it is the honest limit of a verifier that reads only its
-input: a claim recorded in an earlier merged branch is real, but unprovable
-here, and an unprovable claim must not be accepted on trust.
+**A claim already committed before the range precedes everything in it.** This
+reverses what the first version decided, and the reversal comes from deriving
+precedence rather than declaring it. When the anchor was a self-reported commit
+id, one outside the range was unprovable and had to be refused. Now the question
+is whether the claim's own artifact appears among the range's changed paths: if
+it does not, it was already committed when the range began, and that is a fact
+about the range rather than an assertion. A claim whose artifact is not
+repository-addressable at all stays refused, because nothing then establishes
+when it entered the history.
 
 **Ordering binds the restoration class only.** Break-glass is invoked during an
 emergency; a bootstrap path exists precisely where prior lineage does not.
@@ -67,18 +108,12 @@ happen. Restoration is different in kind: its whole content is a claim about
 what the author knew beforehand.
 
 **The claim is falsifiable but not self-proving.** A valid event establishes
-that the claim was made in the required form, bound to a digest, before the
-work. It does not establish that the claim is true — that is the boundary
+that the claim was made in the required form, bound to a recorded artifact,
+before the work. It does not establish that the claim is true — that is the boundary
 question, and the specification says plainly that an affirmative verifier result
 must not be reported as having settled it. Making that explicit is deliberate:
 the failure mode of a check like this is that its green result gets read as
 approval of the reasoning it never examined.
-
-**A restoration cannot amend.** If the same work unit both claims restoration
-and adds or amends a requirement in its scope, there is no unchanged prior
-requirement to bind. This is the issue's own diagnostic — a change that needs a
-governing contract to move in the same act is not a defect fix — expressed as a
-binding failure rather than as advice.
 
 ## Consumed Inputs
 

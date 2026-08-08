@@ -95,16 +95,14 @@ type exceptionEnvelope struct {
 	EffectScopes []string              `json:"effect_scopes"`
 	IssuedAt     time.Time             `json:"issued_at"`
 	ExpiresAt    time.Time             `json:"expires_at"`
-	// The three fields a restoration claim adds. RequirementRef names the
-	// artifact whose requirement is claimed to be restored and RequirementDigest
-	// is that artifact's exact digest, so the claim is a reference rather than a
-	// name. AnchorCommit is where the claim was recorded, which is the only
-	// field the ordering condition reads — IssuedAt is written by the actor
-	// making the claim, and PR #85 is a well-ordered set of honest timestamps
-	// that still records the code first.
+	// The two fields a restoration claim adds: the artifact whose requirement
+	// is claimed to be restored, and that artifact's exact digest, so the claim
+	// is a reference rather than a name. There is deliberately no anchor field.
+	// When the claim was made is read from where its own artifact entered the
+	// history, because any field the claim carries about itself is written by
+	// the actor making it — the same reason `IssuedAt` is not read here.
 	RequirementRef    string              `json:"requirement_ref"`
 	RequirementDigest domain.SHA256Digest `json:"requirement_digest"`
-	AnchorCommit      string              `json:"anchor_commit"`
 }
 
 // Verify evaluates only its explicit input. It does not read environment,
@@ -551,7 +549,7 @@ func authorizedException(frozen FrozenRange, policy domain.ProjectPolicy, materi
 					// artifact are different defects with different remedies,
 					// and falling through to a generic scope mismatch would
 					// tell the author neither.
-					if failure := restorationFailure(frozen, envelope, materialPaths); failure != "" {
+					if failure := restorationFailure(frozen, policy, event, envelope, materialPaths); failure != "" {
 						if restorationDenial == "" {
 							restorationDenial = failure
 						}
@@ -813,61 +811,122 @@ func uniqueRelations(values []domain.LineageRelation) []domain.LineageRelation {
 }
 
 // restorationFailure reports why a restoration claim cannot stand, or the empty
-// code when it stands. It decides two questions and deliberately not a third:
-// whether the claim binds the exact artifact it names, and whether it was
-// recorded before the work it excuses. Whether the diff restores that
-// requirement or moves its boundary is semantic, is reserved to review, and an
-// empty return here must not be read as having settled it.
-func restorationFailure(frozen FrozenRange, envelope exceptionEnvelope, materialPaths []string) domain.AdmissionReasonCode {
-	// The artifact must be carried as retained evidence under exactly the
-	// claimed digest. A claim naming a requirement in prose alone has nothing to
-	// bind, whatever the prose says.
-	if envelope.RequirementDigest == "" || envelope.RequirementRef == "" ||
-		len(frozen.Graph.Replicas[envelope.RequirementDigest]) == 0 {
+// code when it stands. It decides three questions and deliberately not a
+// fourth: whether the claim binds an artifact the lineage already carries,
+// whether the work it excuses amends a normative artifact in its own scope, and
+// whether the claim was recorded before that work. Whether the diff restores
+// the bound requirement or moves its boundary is semantic, is reserved to
+// review, and an empty return here must not be read as having settled it.
+func restorationFailure(frozen FrozenRange, policy domain.ProjectPolicy, event domain.LineageEvent, envelope exceptionEnvelope, materialPaths []string) domain.AdmissionReasonCode {
+	// The bound artifact must be one the work unit's own lineage records, with
+	// its reference and digest recorded together. Checking that a replica
+	// merely exists under the claimed digest proved nothing: any unrelated
+	// retained artifact satisfied it while the reference went uncompared.
+	if !boundToRecordedArtifact(frozen.Graph, envelope) {
 		return domain.ReasonRestorationUnbound
 	}
-	// A claim cannot amend what it binds. If the requirement artifact is itself
-	// changed inside this range, there is no unchanged prior requirement to
-	// restore — which is the issue's own diagnostic expressed as a binding
-	// failure rather than as advice: a change that needs a governing contract
-	// to move in the same act is not a defect fix.
-	if amendsBoundRequirement(frozen, envelope.RequirementRef) {
+	// A claim cannot stand where the work amends a normative artifact inside
+	// its own scope: there is no unchanged prior requirement left to restore.
+	// The scope is any normative path the policy declares, not only the one the
+	// claim binds — a claim that restores requirement A while amending
+	// requirement B beside it is the case this exists to refuse, and comparing
+	// against the bound path alone let it through.
+	if amendsNormativePath(frozen, policy, envelope.PathPrefixes) {
 		return domain.ReasonRestorationUnbound
 	}
-	first, found := firstMaterialCommit(frozen, materialPaths, envelope.PathPrefixes)
-	if !found {
+	touches := materialTouches(frozen, materialPaths, envelope.PathPrefixes)
+	if len(touches) == 0 {
 		// Nothing material in scope, so there is no work for the claim to
 		// precede. Scope coverage is decided by the caller.
 		return ""
 	}
-	if envelope.AnchorCommit == "" || envelope.AnchorCommit == first ||
-		!ancestorWithinRange(frozen, envelope.AnchorCommit, first) {
-		return domain.ReasonRestorationNotAnchored
+	// The anchor is derived from where the claim actually entered the history,
+	// never from what the claim says about itself. An `anchor_commit` field
+	// would be written by the same actor making the claim, which is precisely
+	// the self-report the claim exists to replace: the evidence is read at
+	// head, so a claim added afterwards could simply name an earlier commit.
+	anchor, inRange := claimAnchor(frozen, event)
+	if !inRange {
+		// The claim's artifact is not among the changed paths, so it was
+		// already committed before this range began and precedes every commit
+		// in it. That is the strongest form of the claim, not a missing one.
+		return ""
+	}
+	// Every minimal touch, not the earliest one in the list. Reverse
+	// topological order is a partial order: with two parallel branches touching
+	// in-scope paths, an anchor ancestral to one of them is not thereby
+	// ancestral to the other.
+	for _, touch := range touches {
+		if anchor == touch || !ancestorWithinRange(frozen, anchor, touch) {
+			return domain.ReasonRestorationNotAnchored
+		}
 	}
 	return ""
 }
 
-// amendsBoundRequirement reports whether the artifact a claim binds is changed
-// within the same frozen range. The reference is repository-relative behind a
-// `repo:root/` prefix; a reference in any other form binds nothing this can
-// compare, and the caller has already refused it.
-func amendsBoundRequirement(frozen FrozenRange, requirementRef string) bool {
-	path := strings.TrimPrefix(requirementRef, "repo:root/")
-	if path == requirementRef || path == "" {
+// boundToRecordedArtifact reports whether the claim names a reference and
+// digest that the work unit's lineage records together on one target.
+func boundToRecordedArtifact(graph WorkUnitGraph, envelope exceptionEnvelope) bool {
+	if envelope.RequirementDigest == "" || envelope.RequirementRef == "" {
 		return false
 	}
-	for _, change := range frozen.Changes {
-		if change.Path == path || change.PreviousPath == path {
-			return true
+	for _, event := range graph.Events {
+		for _, target := range event.Targets {
+			if target.SourceRef == envelope.RequirementRef && target.Digest == envelope.RequirementDigest {
+				return true
+			}
 		}
 	}
 	return false
 }
 
-// firstMaterialCommit returns the earliest frozen commit touching a material
-// path inside the claimed scope. The frozen commit list is in reverse
-// topological order, so the first match is the earliest.
-func firstMaterialCommit(frozen FrozenRange, materialPaths, prefixes []string) (string, bool) {
+// amendsNormativePath reports whether any changed path inside the claimed scope
+// is one the policy declares normative. The policy owns which paths those are,
+// as it owns every other path question; this adds no second classifier.
+func amendsNormativePath(frozen FrozenRange, policy domain.ProjectPolicy, prefixes []string) bool {
+	if len(policy.NormativePathPrefixes) == 0 {
+		return false
+	}
+	for _, change := range frozen.Changes {
+		for _, path := range []string{change.Path, change.PreviousPath} {
+			if path == "" || !pathsCovered([]string{path}, prefixes) {
+				continue
+			}
+			if pathsCovered([]string{path}, policy.NormativePathPrefixes) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// claimAnchor reports the earliest frozen commit that touched the claim's own
+// artifact, and whether the artifact was touched inside the range at all.
+func claimAnchor(frozen FrozenRange, event domain.LineageEvent) (string, bool) {
+	paths := make(map[string]struct{}, len(event.Targets))
+	for _, target := range event.Targets {
+		if path := repositoryPath(target.SourceRef); path != "" {
+			paths[path] = struct{}{}
+		}
+	}
+	if len(paths) == 0 {
+		// The claim's artifact is not repository-addressable, so nothing
+		// establishes when it entered the history. Treating that as "before the
+		// work" would accept exactly the unprovable claim.
+		return "", true
+	}
+	touching := commitsTouching(frozen, paths)
+	for _, revision := range frozen.Commits {
+		if _, ok := touching[revision]; ok {
+			return revision, true
+		}
+	}
+	return "", false
+}
+
+// materialTouches returns every frozen commit touching a material path inside
+// the claimed scope, in frozen order.
+func materialTouches(frozen FrozenRange, materialPaths, prefixes []string) []string {
 	inScope := make(map[string]struct{}, len(materialPaths))
 	for _, path := range materialPaths {
 		if pathsCovered([]string{path}, prefixes) {
@@ -875,25 +934,41 @@ func firstMaterialCommit(frozen FrozenRange, materialPaths, prefixes []string) (
 		}
 	}
 	if len(inScope) == 0 {
-		return "", false
+		return nil
 	}
+	touching := commitsTouching(frozen, inScope)
+	ordered := make([]string, 0, len(touching))
+	for _, revision := range frozen.Commits {
+		if _, ok := touching[revision]; ok {
+			ordered = append(ordered, revision)
+		}
+	}
+	return ordered
+}
+
+func commitsTouching(frozen FrozenRange, paths map[string]struct{}) map[string]struct{} {
 	touching := make(map[string]struct{}, len(frozen.Changes))
 	for _, change := range frozen.Changes {
-		if _, ok := inScope[change.Path]; !ok {
-			if _, previous := inScope[change.PreviousPath]; !previous {
-				continue
-			}
+		_, current := paths[change.Path]
+		_, previous := paths[change.PreviousPath]
+		if !current && !previous {
+			continue
 		}
 		for _, revision := range change.Commits {
 			touching[revision] = struct{}{}
 		}
 	}
-	for _, revision := range frozen.Commits {
-		if _, ok := touching[revision]; ok {
-			return revision, true
-		}
+	return touching
+}
+
+// repositoryPath extracts the repository-relative path from a reference, or
+// empty when the reference does not address one.
+func repositoryPath(reference string) string {
+	path := strings.TrimPrefix(reference, "repo:root/")
+	if path == reference {
+		return ""
 	}
-	return "", false
+	return path
 }
 
 // ancestorWithinRange reports whether anchor is reachable from descendant by

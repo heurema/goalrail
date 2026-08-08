@@ -38,3 +38,11 @@
 
 - [x] 7.1 The frozen range did not carry commit parents, so ancestry was not decidable from what the verifier received; the collector now emits them and the design records why position is not ancestry
 - [x] 7.2 An anchor outside the frozen range is refused rather than trusted, which is stricter than the prose alone implies
+
+## 8. Recorded after independent review
+
+- [x] 8.1 The anchor was self-reported: an `anchor_commit` field the author writes, checked against a graph read at head, so a late claim could name an early commit. Precedence is now derived from where the claim's own artifact entered the history, and the field is removed
+- [x] 8.2 Precedence is checked against every material touch in scope, because reverse topological order is a partial order and parallel branches admit an order that is not ancestry
+- [x] 8.3 Binding compares a reference and digest recorded together on one lineage target, rather than the presence of any replica under the claimed digest
+- [x] 8.4 Any policy-declared normative path amended inside the claim's scope invalidates it, not only the artifact the claim names
+- [x] 8.5 Each new check is shown to fail when disabled, so a passing test is not mistaken for a load-bearing one

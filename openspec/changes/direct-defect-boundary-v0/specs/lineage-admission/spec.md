@@ -5,7 +5,9 @@
 
 Goalrail SHALL expose one deterministic verifier over an explicit repository, immutable base and head revisions or an equivalently frozen local range, committed policy identity, work-unit identity, and bounded provider-neutral evidence packet. It SHALL verify the diff, materiality classification, declaration and policy digests, every required lineage edge, semantic validity of evidence whose state affects admission, exception evidence, and lifecycle phase without reaching a provider or mutating repository, user, or external state.
 
-Where exception evidence declares the `restoration` class, the verifier SHALL decide two further questions from the frozen range: whether the claim is anchored in an ancestor of the first commit touching a material path within its effect scope, and whether it binds the exact digest of the requirement artifact it names. Both are decidable from commit ancestry and digests; neither requires reading what the change means. A claim failing either SHALL deny admission with a stable reason identifier, and the two failures SHALL carry distinct identifiers, because a claim recorded too late and a claim bound to the wrong artifact are different defects with different remedies.
+Where exception evidence declares the `restoration` class, the verifier SHALL decide three further questions from the frozen range: whether the reference and digest the claim names appear together on one target the lineage records, whether the range adds or amends a policy-declared normative path inside the claim's effect scope, and whether the claim's own artifact entered the history before every commit touching a material path in that scope. The verifier MUST derive that last answer from the changed paths and commit ancestry of the range, and MUST NOT read it from a field carried by the claim. Ancestry SHALL be decided by reachability over commit parents rather than by position in an ordering.
+
+All three are decidable from references, digests, changed paths and commit ancestry; none requires reading what the change means. A claim failing any SHALL deny admission with a stable reason identifier, and a claim recorded too late SHALL carry a different identifier from one that binds nothing valid, because the two are different defects with different remedies: the second can be corrected, and the first cannot.
 
 The verifier MUST NOT attempt to decide whether a diff restores the bound requirement or moves its boundary. That question is semantic, is reserved to review, and an affirmative verifier result MUST NOT be reported as having settled it.
 
@@ -31,14 +33,22 @@ Equivalent semantic inputs SHALL produce byte-identical canonical results. Wall-
 - **WHEN** the required confirmed-intent target is malformed, candidate, or not bound to the exact retained snapshot digest
 - **THEN** the intent relation remains non-satisfying and normal admission is denied with a stable intent reason
 
-#### Scenario: Restoration claim precedes the first material commit
-- **WHEN** a `restoration` exception is anchored in an ancestor of the first commit touching a material path in its effect scope, and binds the exact digest of the requirement artifact it names
-- **THEN** the verifier accepts the ordering and the binding, and the result is classified by the exception rather than as `VALID`
+#### Scenario: Restoration claim precedes the work
+- **WHEN** the commit that introduced a `restoration` claim's artifact is an ancestor of every commit touching a material path in its effect scope, and the reference and digest it names appear together on a recorded target
+- **THEN** the verifier accepts the precedence and the binding, and the result is classified by the exception rather than as `VALID`
+
+#### Scenario: Restoration claim was committed before the range
+- **WHEN** the claim's artifact is not among the changed paths of the range under admission
+- **THEN** it was committed before the range began, precedence holds for every commit in it, and no field of the claim is consulted to establish that
 
 #### Scenario: Restoration claim follows the work it excuses
-- **WHEN** the claim's anchor is not an ancestor of that first material commit
-- **THEN** admission is denied with the stable ordering reason, and the observation timestamp recorded on the event does not change the outcome
+- **WHEN** the commit that introduced the claim's artifact is not an ancestor of some commit touching a material path in its effect scope
+- **THEN** admission is denied with the stable ordering reason, and no timestamp or self-declared position recorded on the event changes the outcome
 
-#### Scenario: Restoration claim binds the wrong artifact
-- **WHEN** the claim's bound digest does not match the requirement artifact it names, or that artifact is absent at the recorded revision
+#### Scenario: Restoration claim binds nothing the lineage records
+- **WHEN** the reference and digest the claim names do not appear together on any target the work unit's lineage records
 - **THEN** admission is denied with the stable binding reason, which is distinct from the ordering reason
+
+#### Scenario: The work amends a normative path in the claim's scope
+- **WHEN** the range adds or amends a path the committed policy declares normative, inside the claim's effect scope
+- **THEN** admission is denied, and the outcome does not depend on whether that path is the artifact the claim names
